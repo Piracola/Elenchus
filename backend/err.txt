@@ -1,0 +1,36 @@
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import asyncio; from app.db.database import init_db; asyncio.run(init_db()); print('DB init OK')
+                                                         ~~~~~~~~~~~^^^^^^^^^^^
+  File "Y:\Python313\Lib\asyncio\runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "Y:\Python313\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "Y:\Python313\Lib\asyncio\base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "I:\JBCode\AI Tools\Elenchus\backend\app\db\database.py", line 54, in init_db
+    async with engine.begin() as conn:
+               ~~~~~~~~~~~~^^
+  File "Y:\Python313\Lib\contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "I:\JBCode\AI Tools\Elenchus\backend\venv\Lib\site-packages\sqlalchemy\ext\asyncio\engine.py", line 1063, in begin
+    async with conn:
+               ^^^^
+  File "I:\JBCode\AI Tools\Elenchus\backend\venv\Lib\site-packages\sqlalchemy\ext\asyncio\base.py", line 121, in __aenter__
+    return await self.start(is_ctxmanager=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "I:\JBCode\AI Tools\Elenchus\backend\venv\Lib\site-packages\sqlalchemy\ext\asyncio\engine.py", line 273, in start
+    await greenlet_spawn(self.sync_engine.connect)
+          ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "I:\JBCode\AI Tools\Elenchus\backend\venv\Lib\site-packages\sqlalchemy\util\concurrency.py", line 99, in greenlet_spawn
+    _not_implemented()
+    ~~~~~~~~~~~~~~~~^^
+  File "I:\JBCode\AI Tools\Elenchus\backend\venv\Lib\site-packages\sqlalchemy\util\concurrency.py", line 79, in _not_implemented
+    raise ValueError(
+    ...<4 lines>...
+    )
+ValueError: the greenlet library is required to use this function. No module named 'greenlet'
