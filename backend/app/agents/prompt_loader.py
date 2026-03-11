@@ -32,6 +32,13 @@ def get_debater_system_prompt(role: str) -> str:
     # Load role-specific supplement
     role_file = f"debater_{role}.md"
     supplement = load_prompt(role_file)
+    
+    # Fallback to generic `proposer` or `opposer` if specific `_1, _2` missing
+    if not supplement:
+        if role.startswith("proposer"):
+            supplement = load_prompt("debater_proposer.md")
+        elif role.startswith("opposer"):
+            supplement = load_prompt("debater_opposer.md")
 
     if supplement:
         return f"{base}\n\n---\n\n{supplement}"

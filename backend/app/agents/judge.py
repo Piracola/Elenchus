@@ -29,7 +29,7 @@ def _build_judge_instruction(
     topic: str,
     role_to_judge: str,
     dialogue_history: list[dict[str, Any]],
-    search_context: list[dict[str, Any]],
+    shared_knowledge: list[dict[str, Any]],
     current_turn: int,
 ) -> str:
     """Build the user message for the judge."""
@@ -46,11 +46,12 @@ def _build_judge_instruction(
         marker = " ← (being judged)" if role == role_to_judge else ""
         parts.append(f"\n### [{role}]{marker}\n{content}")
 
-    # Search context
-    if search_context:
+    # Search context / Shared Knowledge Facts
+    facts = [k for k in shared_knowledge if k.get("type", "") == "fact"]
+    if facts:
         parts.append("\n## Fact-Check Search Results (use to verify evidence quality)")
-        for r in search_context:
-            parts.append(f"- **{r.get('title', '')}** ({r.get('url', '')})\n  {r.get('snippet', '')}")
+        for r in facts:
+            parts.append(f"- **Query:** {r.get('query', '')}\n  **Result:** {r.get('result', '')}")
 
     parts.append(
         "\n## Instructions\n"
@@ -91,13 +92,13 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
     """
     LangGraph node: Judge evaluates each debater for the current turn.
 
-    Reads: topic, participants, dialogue_history, search_context, current_turn, cumulative_scores
+    Reads: topic, participants, dialogue_history, shared_knowledge, current_turn, cumulative_scores
     Writes: current_scores, cumulative_scores
     """
     topic = state["topic"]
     participants = state["participants"]
     dialogue_history = state.get("dialogue_history", [])
-    search_context = state.get("search_context", [])
+    shared_knowledge = state.get("shared_knowledge", [])
     current_turn = state.get("current_turn", 0)
     cumulative_scores = dict(state.get("cumulative_scores", {}))
 
@@ -115,7 +116,7 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
             topic=topic,
             role_to_judge=role,
             dialogue_history=dialogue_history,
-            search_context=search_context,
+            shared_knowledge=shared_knowledge,
             current_turn=current_turn,
         )
 

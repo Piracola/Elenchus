@@ -2,7 +2,7 @@
  * API client — typed fetch wrappers for the Elenchus REST API.
  */
 
-import type { Session, SessionListItem, SessionCreatePayload } from '../types';
+import type { Session, SessionListItem, SessionCreatePayload, ModelConfig, ModelConfigCreatePayload } from '../types';
 
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
@@ -48,10 +48,30 @@ export const api = {
         },
     },
 
+    models: {
+        list: (): Promise<ModelConfig[]> =>
+            request('/models'),
+
+        create: (payload: ModelConfigCreatePayload): Promise<ModelConfig> =>
+            request('/models', {
+                method: 'POST',
+                body: JSON.stringify(payload),
+            }),
+
+        update: (id: string, payload: Partial<ModelConfigCreatePayload>): Promise<ModelConfig> =>
+            request(`/models/${id}`, {
+                method: 'PUT',
+                body: JSON.stringify(payload),
+            }),
+
+        delete: (id: string): Promise<void> =>
+            request(`/models/${id}`, { method: 'DELETE' }),
+    },
+
     health: {
         check: (): Promise<{ status: string; service: string }> =>
-            request('/health').catch(() => ({ status: 'error', service: 'elenchus' })),
+            request<{ status: string; service: string }>('/health').catch(() => ({ status: 'error', service: 'elenchus' })),
         searchCheck: (): Promise<{ status: string; provider: string | null }> =>
-            request('/health/search').catch(() => ({ status: 'error', provider: null })),
+            request<{ status: string; provider: string | null }>('/health/search').catch(() => ({ status: 'error', provider: null })),
     },
 };

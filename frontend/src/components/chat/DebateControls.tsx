@@ -2,11 +2,13 @@
  * DebateControls — The input bar to start/stop debates.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDebateStore } from '../../stores/debateStore';
 import { useDebateWebSocket } from '../../hooks/useDebateWebSocket';
 import { api } from '../../api/client';
+import ModelConfigManager from '../sidebar/ModelConfigManager';
+import type { ModelConfig } from '../../types';
 
 export default function DebateControls() {
     const {
@@ -22,20 +24,35 @@ export default function DebateControls() {
     const [topic, setTopic] = useState('');
     const [isCreating, setIsCreating] = useState(false);
     const [showAdvanced, setShowAdvanced] = useState(false);
+    const [showConfigManager, setShowConfigManager] = useState(false);
+    const [savedConfigs, setSavedConfigs] = useState<ModelConfig[]>([]);
 
-    // Advanced config state
-    const [configs, setConfigs] = useState<Record<string, { model: string, api_key: string, api_base_url: string }>>({
-        proposer: { model: '', api_key: '', api_base_url: '' },
-        opposer: { model: '', api_key: '', api_base_url: '' },
-        judge: { model: '', api_key: '', api_base_url: '' },
-        fact_checker: { model: '', api_key: '', api_base_url: '' },
+    // Advanced config state - now holding selected ModelConfig ID or purely the base properties if customizing further.
+    // For simplicity, we just hold the ID of the selected config for each agent.
+    const [selectedConfigIds, setSelectedConfigIds] = useState<Record<string, string>>({
+        proposer: '',
+        opposer: '',
+        judge: '',
+        fact_checker: '',
     });
 
-    const handleConfigChange = (agent: string, field: 'model' | 'api_key' | 'api_base_url', value: string) => {
-        setConfigs(prev => ({
-            ...prev,
-            [agent]: { ...prev[agent], [field]: value }
-        }));
+    useEffect(() => {
+        if (showAdvanced) {
+            loadConfigs();
+        }
+    }, [showAdvanced, showConfigManager]);
+
+    const loadConfigs = async () => {
+        try {
+            const data = await api.models.list();
+            setSavedConfigs(data);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleConfigSelect = (agent: string, configId: string) => {
+        setSelectedConfigIds(prev => ({ ...prev, [agent]: configId }));
     };
 
     const handleStart = async () => {
@@ -43,28 +60,29 @@ export default function DebateControls() {
 
         try {
             setIsCreating(true);
-            // 1. Process agent configurations
             const agentConfigs: Record<string, any> = {};
-            for (const [key, val] of Object.entries(configs)) {
-                const clean: any = {};
-                if (val.model.trim()) clean.model = val.model.trim();
-                if (val.api_key.trim()) clean.api_key = val.api_key.trim();
-                if (val.api_base_url.trim()) clean.api_base_url = val.api_base_url.trim();
-                if (Object.keys(clean).length > 0) agentConfigs[key] = clean;
+            for (const [key, selectedKey] of Object.entries(selectedConfigIds)) {
+                if (!selectedKey) continue;
+                // selectedKey is `providerId::modelString`
+                const [providerId, modelStr] = selectedKey.split('::');
+                const configDef = savedConfigs.find(c => c.id === providerId);
+                if (configDef) {
+                    agentConfigs[key] = {
+                        model: modelStr,
+                        provider_type: configDef.provider_type,
+                        api_key: configDef.api_key || undefined,
+                        api_base_url: configDef.api_base_url || undefined,
+                    };
+                }
             }
 
-            // 2. Create session via REST map
             const session = await api.sessions.create({
                 topic: topic.trim(),
-                max_turns: 3, // Default for now
+                max_turns: 3,
                 agent_configs: Object.keys(agentConfigs).length > 0 ? agentConfigs : undefined,
             });
-            // 2. Set current session in store
             setCurrentSession(session);
             setCurrentSessionId(session.id);
-            // 3. Start debate over WS logic belongs to a useEffect listening to sessionId
-            // Wait a tick for WS to connect, or we trigger it via a "Begin" button once joined.
-            // For smoother UX, we'll let ChatPanel handle starting via the hook once connected.
         } catch (err) {
             console.error('Failed to create session:', err);
         } finally {
@@ -75,8 +93,9 @@ export default function DebateControls() {
 
     if (currentSessionId) {
         return (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
             <div className="glass" style={{
-                padding: '16px 24px',
+                padding: '12px 24px',
                 borderTop: '1px solid var(--border-subtle)',
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -105,6 +124,7 @@ export default function DebateControls() {
                             color: 'var(--color-opposer)',
                             fontWeight: 600,
                             cursor: 'pointer',
+                            whiteSpace: 'nowrap'
                         }}
                     >
                         终止辩论
@@ -119,17 +139,61 @@ export default function DebateControls() {
                             padding: '8px 24px',
                             borderRadius: 'var(--radius-md)',
                             border: 'none',
-                            background: 'linear-gradient(135deg, var(--accent-indigo), #818cf8)',
-                            color: '#fff',
+                            background: 'var(--text-primary)',
+                            color: 'var(--bg-primary)',
                             fontWeight: 600,
                             cursor: isConnected ? 'pointer' : 'not-allowed',
                             opacity: isConnected ? 1 : 0.5,
+                            whiteSpace: 'nowrap'
                         }}
                     >
                         执行辩论
                     </motion.button>
                 )}
             </div>
+            
+            <div className="glass" style={{
+                padding: '16px 24px',
+                borderTop: '1px solid var(--border-subtle)',
+                display: 'flex',
+                gap: '12px',
+                alignItems: 'center'
+            }}>
+                <input
+                    type="text"
+                    placeholder="你可以对当前的观点提出质疑，进行补充发言..."
+                    disabled={true} 
+                    style={{
+                        flex: 1,
+                        padding: '12px 16px',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--border-subtle)',
+                        background: 'var(--bg-tertiary)',
+                        color: 'var(--text-primary)',
+                        outline: 'none',
+                        cursor: 'not-allowed',
+                        opacity: 0.6
+                    }}
+                    title="观众介入功能开发中..."
+                />
+                <motion.button
+                    disabled={true}
+                    style={{
+                        padding: '12px 24px',
+                        borderRadius: 'var(--radius-md)',
+                        border: 'none',
+                        background: 'var(--bg-secondary)',
+                        color: 'var(--text-muted)',
+                        fontWeight: 600,
+                        cursor: 'not-allowed',
+                        opacity: 0.6,
+                        whiteSpace: 'nowrap'
+                    }}
+                >
+                    发送介入
+                </motion.button>
+            </div>
+        </div>
         );
     }
 
@@ -156,34 +220,49 @@ export default function DebateControls() {
                             boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
                         }}
                     >
-                        <h4 style={{ margin: '0 0 16px', fontSize: '15px' }}>✨ 进阶模型配置 (LiteLLM 规范)</h4>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                            <h4 style={{ margin: 0, fontSize: '15px' }}>进阶模型配置</h4>
+                            <button onClick={() => setShowConfigManager(true)} style={{ background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}>
+                                管理预设库
+                            </button>
+                        </div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
                             {['proposer', 'opposer', 'judge', 'fact_checker'].map(agent => (
                                 <div key={agent} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                     <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
-                                        {agent === 'proposer' ? '🔵 正方 (Proposer)' : agent === 'opposer' ? '🔴 反方 (Opposer)' : agent === 'judge' ? '⚖️ 裁判 (Judge)' : '🔍 事实核查员 (Fact Checker)'}
+                                        {agent === 'proposer' ? '正方 (Proposer)' : agent === 'opposer' ? '反方 (Opposer)' : agent === 'judge' ? '裁判 (Judge)' : '事实核查员 (Fact Checker)'}
                                     </div>
-                                    <input
-                                        type="text" placeholder="Model (e.g. openai/gpt-4o)"
-                                        value={configs[agent].model} onChange={e => handleConfigChange(agent, 'model', e.target.value)}
-                                        style={{ padding: '8px', borderRadius: '4px', background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)', color: '#fff', fontSize: '13px' }}
-                                    />
-                                    <input
-                                        type="password" placeholder="API Key (Optional)"
-                                        value={configs[agent].api_key} onChange={e => handleConfigChange(agent, 'api_key', e.target.value)}
-                                        style={{ padding: '8px', borderRadius: '4px', background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)', color: '#fff', fontSize: '13px' }}
-                                    />
-                                    <input
-                                        type="text" placeholder="Base URL (Optional)"
-                                        value={configs[agent].api_base_url} onChange={e => handleConfigChange(agent, 'api_base_url', e.target.value)}
-                                        style={{ padding: '8px', borderRadius: '4px', background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)', color: '#fff', fontSize: '13px' }}
-                                    />
+                                    <select
+                                        value={selectedConfigIds[agent]}
+                                        onChange={e => handleConfigSelect(agent, e.target.value)}
+                                        style={{
+                                            padding: '8px',
+                                            borderRadius: '4px',
+                                            background: 'var(--bg-tertiary)',
+                                            border: '1px solid var(--border-subtle)',
+                                            color: 'var(--text-primary)',
+                                            fontSize: '13px',
+                                            outline: 'none',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        <option value="">默认配置 (.env)</option>
+                                        {savedConfigs.map(c => 
+                                            c.models && c.models.map(m => (
+                                                <option key={`${c.id}::${m}`} value={`${c.id}::${m}`}>
+                                                    {c.name} - {m}
+                                                </option>
+                                            ))
+                                        )}
+                                    </select>
                                 </div>
                             ))}
                         </div>
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            <ModelConfigManager isOpen={showConfigManager} onClose={() => setShowConfigManager(false)} />
 
             <div className="glass" style={{
                 padding: '16px 24px',
@@ -206,7 +285,22 @@ export default function DebateControls() {
                     }}
                     title="进阶模型配置"
                 >
-                    ✨
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16v0Z"></path>
+                        <path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4v0Z"></path>
+                        <path d="M12 2v2"></path>
+                        <path d="M12 22v-2"></path>
+                        <path d="m17 20.66-1-1.73"></path>
+                        <path d="M11 10.27 7 3.34"></path>
+                        <path d="m20.66 17-1.73-1"></path>
+                        <path d="m3.34 7 1.73 1"></path>
+                        <path d="M14 12h8"></path>
+                        <path d="M2 12h2"></path>
+                        <path d="m20.66 7-1.73 1"></path>
+                        <path d="m3.34 17 1.73-1"></path>
+                        <path d="m17 3.34-1 1.73"></path>
+                        <path d="m11 13.73-4 6.93"></path>
+                    </svg>
                 </button>
                 <input
                     type="text"
@@ -234,8 +328,8 @@ export default function DebateControls() {
                         padding: '12px 24px',
                         borderRadius: 'var(--radius-md)',
                         border: 'none',
-                        background: 'linear-gradient(135deg, var(--accent-indigo), #818cf8)',
-                        color: '#fff',
+                        background: 'var(--text-primary)',
+                        color: 'var(--bg-primary)',
                         fontWeight: 600,
                         cursor: (isCreating || !topic.trim()) ? 'not-allowed' : 'pointer',
                         opacity: (isCreating || !topic.trim()) ? 0.7 : 1,

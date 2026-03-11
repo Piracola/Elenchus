@@ -75,6 +75,14 @@ export function useDebateWebSocket(sessionId: string | null) {
             case 'error':
                 store.setPhase('error', msg.content ?? '出现错误');
                 store.setDebating(false);
+                // Also push an error message to history so it's visible on screen
+                store.currentSession?.dialogue_history.push({
+                    role: 'error',
+                    content: msg.content ?? '出现错误',
+                    timestamp: new Date().toISOString(),
+                    citations: [],
+                    agent_name: '系统错误'
+                });
                 break;
 
             case 'pong':

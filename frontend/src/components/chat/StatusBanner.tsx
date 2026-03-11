@@ -12,12 +12,6 @@ export default function StatusBanner() {
         return null;
     }
 
-    // Determine icon based on phase
-    let icon = '⚡';
-    if (phase === 'fact_checking') icon = '🔍';
-    if (phase === 'judging') icon = '⚖️';
-    if (phase === 'context') icon = '📚';
-
     return (
         <AnimatePresence>
             <motion.div
@@ -40,7 +34,13 @@ export default function StatusBanner() {
                     animate={{ opacity: [1, 0.5, 1] }}
                     transition={{ repeat: Infinity, duration: 1.5 }}
                 >
-                    {icon}
+                    <span style={{ 
+                        display: 'inline-block',
+                        width: '8px', 
+                        height: '8px', 
+                        borderRadius: '50%', 
+                        background: 'currentColor' 
+                    }} />
                 </motion.span>
                 <span>{currentStatus}</span>
             </motion.div>

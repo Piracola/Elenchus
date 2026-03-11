@@ -65,6 +65,7 @@ export interface Session {
 
 export interface AgentConfig {
     model?: string;
+    provider_type?: string;
     api_key?: string;
     api_base_url?: string;
 }
@@ -83,6 +84,27 @@ export interface SessionCreatePayload {
     participants?: string[];
     max_turns?: number;
     agent_configs?: Record<string, AgentConfig>;
+}
+
+// ── Model Configurations ──────────────────────────────────────────
+
+export interface ModelConfig {
+    id: string;
+    name: string;
+    provider_type: string;
+    api_key: string | null;
+    api_base_url: string | null;
+    models: string[];
+    created_at: string;
+    updated_at: string;
+}
+
+export interface ModelConfigCreatePayload {
+    name: string;
+    provider_type: string;
+    api_key?: string | null;
+    api_base_url?: string | null;
+    models: string[];
 }
 
 // ── WebSocket messages ──────────────────────────────────────────

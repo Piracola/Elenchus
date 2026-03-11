@@ -1,0 +1,30 @@
+feat: 深度重构AI辩论框架架构，引入多辩手协作、Skills工具库与上下文压缩
+
+**前端 UI 与交互体验重构**
+* 重建聊天主界面，严格遵循正反方 6:4 比例布局结构。
+* 彻底接入全局明暗双色主题 (Dark/Light Mode Theme Provider)。
+* 采用 `react-markdown` 优化聊天气泡 Markdown 渲染，增强格式阅读体验。
+* 接入并完善了基于本地 DB 同步的新建辩题、Agent 自定义和 Model Provider 供应商表单配置模态框。
+
+**LLM 路由中间件剥离**
+* 移除了冗长且不稳定的 `litellm` 依赖。
+* 新建轻量级的纯净内部路由层 (`agents/llm_router.py`)，直接分发任务给 LangChain 官方 SDK (OpenAI, Anthropic, Gemini 等)。
+* 支持通过模型配置卡片 (Config) 热注入外部 API Key，摆脱全局环境变量死锁。
+
+**Skills 工具库原生集成与事实核查**
+* 弃用生硬的线性事实验证图节点。
+* 在 `agents/skills/` 构建扩展能力中心，实现了基于 SearXNG/Tavily 聚合检索的 `search.py` 技能。
+* 变更 `debater.py` 逻辑，利用大模型原生 `bind_tools()` 提供功能调用能力，使得辩手能够主动、选择性地检索和引证事实。
+
+**多辩手接力与自定义人格注入**
+* 优化了 LangGraph 状态图结构 (`graph.py`)，引入了 `current_speaker_index` 指针。
+* 彻底修复多名辩手同阵营时会平行输出重复发言的历史 Bug，实现同一辩论阶段内的一辩、二辩接力式发言交互。
+* 支持了为每个辩手座位注入完全不同的人格预设、自定义名称 (Custom Personas)。
+
+**记忆压缩保护与共享知识库 (RAG 前置逻辑)**
+* 重写了 `context_manager.py`。老旧多轮对话不再暴力塞入主上下文中。
+* 将年代久远的对话压缩为简短精准的“备忘录 (Memos)”，并独立存储进全新的状态变量 `shared_knowledge`。裁判和辩论模型能够依据高信噪比的历史断言进行逻辑核查，根除因超长 Context Window 导致的幻觉污染。
+
+**技术文档净化**
+* 删除了已经失去维护意义的旧版长篇大论（`Design.md`, `system_instructions.md`）。
+* 整合成单文件 `Elenchus Architecture.md` 大脑式架构导读，用于规范未来的代码解耦与开发流。

@@ -1,25 +1,28 @@
 """
 LangGraph debate state machine — the core orchestration graph.
 
-Flow per turn:
-  manage_context → proposer_speak → fact_check →
-  opposer_speak → fact_check → judge_score → advance_turn
-                                               ↓
-                                  (next turn or END)
+Flow per turn (Dynamic Tool Calling):
+  manage_context → set_speaker → debater_speak ↔ tool_executor
+                                     ↓
+                                advance_turn (loop until all speak)
+                                     ↓
+  (next turn or END)
 """
 
 from __future__ import annotations
 
 import logging
 from operator import add
-from typing import Annotated, Any
+from typing import Annotated, Any, Sequence
 
 from langgraph.graph import END, StateGraph
+from langgraph.graph.message import add_messages
+from langchain_core.messages import BaseMessage
 
 from app.agents.debater import debater_speak
-from app.agents.fact_checker import fact_check
 from app.agents.judge import judge_score
 from app.agents.context_manager import compress_context
+from app.agents.skills import get_all_skills
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +43,11 @@ class DebateGraphState(TypedDict, total=False):
     current_speaker: str
     current_speaker_index: int
 
-    # dialogue_history uses `add` reducer → nodes return [new_entry]
-    # and LangGraph appends it to the existing list
     dialogue_history: Annotated[list[dict[str, Any]], add]
-
-    context_summary: str
-    search_context: list[dict[str, Any]]
+    shared_knowledge: list[dict[str, Any]]
+    
+    # Internal message passing for tool calling loop within a node execution
+    messages: Annotated[list[BaseMessage], add_messages]
 
     current_scores: dict[str, Any]
     cumulative_scores: dict[str, Any]
@@ -60,35 +62,40 @@ class DebateGraphState(TypedDict, total=False):
 async def node_manage_context(state: DebateGraphState) -> dict[str, Any]:
     """Compress old dialogue history if it exceeds the context window."""
     history = state.get("dialogue_history", [])
-    summary = state.get("context_summary", "")
+    knowledge = state.get("shared_knowledge", [])
 
     # Convert history entries to plain dicts for processing
     history_dicts = [dict(e) if not isinstance(e, dict) else e for e in history]
+    
+    # We do not override dialogue_history directly via `add` reducer, so we just return the new shared_knowledge
+    # The actual truncation happens magically, or we return what we added. 
+    # Actually, to truncate history with an `add` reducer in LangGraph, you usually return empty if not replacing.
+    # Since `add` appends, to truncate we technically shouldn't use `add` for history if we want to prune it.
+    # But since we only read from `shared_knowledge` + `recent_history`, we can just append to `shared_knowledge`.
+    # Let's fix this: `compress_context` returns updated knowledge.
+    new_knowledge, _ = await compress_context(history_dicts, knowledge)
 
-    new_summary, recent = await compress_context(history_dicts, summary)
-
-    # If compression happened, we need to replace the full history
-    # Since we use `add` reducer, we store compressed state as summary
     return {
-        "context_summary": new_summary,
+        "shared_knowledge": new_knowledge,
     }
 
 
-async def node_set_proposer(state: DebateGraphState) -> dict[str, Any]:
-    """Set current speaker to the first participant (proposer)."""
+async def node_set_speaker(state: DebateGraphState) -> dict[str, Any]:
+    """Determine the next speaker in the sequence for this turn."""
     participants = state.get("participants", ["proposer", "opposer"])
-    return {
-        "current_speaker": participants[0],
-        "current_speaker_index": 0,
-    }
+    current_idx = state.get("current_speaker_index", -1)
+    
+    # Move to next participant. If -1, it goes to 0 (first participant).
+    next_idx = current_idx + 1
+    
+    if next_idx >= len(participants):
+        # All participants have spoken for this turn.
+        # But we don't set speaker here if we're done, the edge will route to judge.
+        return {}
 
-
-async def node_set_opposer(state: DebateGraphState) -> dict[str, Any]:
-    """Set current speaker to the second participant (opposer)."""
-    participants = state.get("participants", ["proposer", "opposer"])
     return {
-        "current_speaker": participants[1] if len(participants) > 1 else participants[0],
-        "current_speaker_index": 1,
+        "current_speaker": participants[next_idx],
+        "current_speaker_index": next_idx,
     }
 
 
@@ -97,9 +104,46 @@ async def node_debater_speak(state: DebateGraphState) -> dict[str, Any]:
     return await debater_speak(state)
 
 
-async def node_fact_check(state: DebateGraphState) -> dict[str, Any]:
-    """Wrapper around fact_check for the LangGraph node."""
-    return await fact_check(state)
+async def node_tool_executor(state: DebateGraphState) -> dict[str, Any]:
+    """Executes the tool called by the LLM and feeds it back into the messages list and shared_knowledge."""
+    messages = state.get("messages", [])
+    if not messages:
+        return {}
+        
+    last_message = messages[-1]
+    results = []
+    knowledge_updates = []
+    
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        skills = {s.name: s for s in get_all_skills()}
+        for tool_call in last_message.tool_calls:
+            logger.info("Executing Tool: %s", tool_call["name"])
+            tool_fn = skills.get(tool_call["name"])
+            if tool_fn:
+                try:
+                    result_content = await tool_fn.ainvoke(tool_call["args"])
+                except Exception as exc:
+                    result_content = f"Error: {exc}"
+                    
+                from langchain_core.messages import ToolMessage
+                results.append(ToolMessage(
+                    content=str(result_content), 
+                    tool_call_id=tool_call["id"],
+                    name=tool_call["name"]
+                ))
+                
+                # Automatically save tool facts into shared memory
+                if tool_call["name"] == "search_web":
+                    knowledge_updates.append({
+                        "type": "fact",
+                        "query": tool_call["args"].get("query", ""),
+                        "result": str(result_content)[:500] + "..." # Truncated
+                    })
+            
+    return {
+        "messages": results,
+        "shared_knowledge": state.get("shared_knowledge", []) + knowledge_updates
+    }
 
 
 async def node_judge_score(state: DebateGraphState) -> dict[str, Any]:
@@ -108,18 +152,37 @@ async def node_judge_score(state: DebateGraphState) -> dict[str, Any]:
 
 
 async def node_advance_turn(state: DebateGraphState) -> dict[str, Any]:
-    """Increment the turn counter after all participants have spoken and been judged."""
+    """Increment the turn counter and reset speaker index."""
     current = state.get("current_turn", 0)
     return {
         "current_turn": current + 1,
+        "current_speaker_index": -1, # Reset for the next round
+        "messages": [] # Clear internal tool messages
     }
 
 
 # ── Conditional edges ───────────────────────────────────────────
 
+def should_execute_tools(state: DebateGraphState) -> str:
+    """Check if the debater emitted a tool call."""
+    messages = state.get("messages", [])
+    if messages:
+        last_message = messages[-1]
+        if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+            return "tools"
+    
+    # Determine what to do next based on speaker index
+    participants = state.get("participants", ["proposer", "opposer"])
+    current_idx = state.get("current_speaker_index", 0)
+    
+    if current_idx + 1 < len(participants):
+        return "next_speaker"
+    else:
+        return "judge"
+
 def should_continue(state: DebateGraphState) -> str:
     """After advancing turn, decide whether to continue or end."""
-    current_turn = state.get("current_turn", 0) + 1  # +1 because advance hasn't applied yet
+    current_turn = state.get("current_turn", 0)
     max_turns = state.get("max_turns", 5)
 
     if current_turn >= max_turns:
@@ -137,32 +200,42 @@ def build_debate_graph() -> StateGraph:
     Construct the debate LangGraph.
 
     Graph flow (per turn):
-      manage_context → set_proposer → proposer_speaks → fact_check_proposer →
-      set_opposer → opposer_speaks → fact_check_opposer →
-      judge → advance_turn → {continue: manage_context, end: END}
+      manage_context → set_speaker → debater_speaks ↔ tool_executor 
+                       ↑                  ↓
+                       └───── ← ──[next]──┘
+                                          ↓ [judge]
+                                        judge → advance_turn → {continue, end}
     """
     graph = StateGraph(DebateGraphState)
 
     # Add nodes
     graph.add_node("manage_context", node_manage_context)
-    graph.add_node("set_proposer", node_set_proposer)
-    graph.add_node("proposer_speaks", node_debater_speak)
-    graph.add_node("fact_check_proposer", node_fact_check)
-    graph.add_node("set_opposer", node_set_opposer)
-    graph.add_node("opposer_speaks", node_debater_speak)
-    graph.add_node("fact_check_opposer", node_fact_check)
+    graph.add_node("set_speaker", node_set_speaker)
+    graph.add_node("speaker", node_debater_speak)
+    graph.add_node("tool_executor", node_tool_executor)
     graph.add_node("judge", node_judge_score)
     graph.add_node("advance_turn", node_advance_turn)
 
-    # Define edges — linear flow within each turn
+    # Define edges
     graph.set_entry_point("manage_context")
-    graph.add_edge("manage_context", "set_proposer")
-    graph.add_edge("set_proposer", "proposer_speaks")
-    graph.add_edge("proposer_speaks", "fact_check_proposer")
-    graph.add_edge("fact_check_proposer", "set_opposer")
-    graph.add_edge("set_opposer", "opposer_speaks")
-    graph.add_edge("opposer_speaks", "fact_check_opposer")
-    graph.add_edge("fact_check_opposer", "judge")
+    graph.add_edge("manage_context", "set_speaker")
+    graph.add_edge("set_speaker", "speaker")
+    
+    # From speaker, we check if they called a tool or are finished
+    graph.add_conditional_edges(
+        "speaker",
+        should_execute_tools,
+        {
+            "tools": "tool_executor",
+            "next_speaker": "set_speaker",
+            "judge": "judge"
+        }
+    )
+    
+    # Tools feed back into the speaker to resolve the thought process
+    graph.add_edge("tool_executor", "speaker")
+    
+    # Judge flows to advance turn
     graph.add_edge("judge", "advance_turn")
 
     # Conditional: continue to next turn or end

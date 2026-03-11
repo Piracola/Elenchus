@@ -1,29 +1,49 @@
-import { Header, ChatPanel, ScorePanel } from './components';
+import { useEffect } from 'react';
+import { ChatPanel, ScorePanel } from './components';
+import HomeView from './components/HomeView';
 import SessionList from './components/sidebar/SessionList';
+import { useThemeStore } from './stores/themeStore';
+import { useDebateStore } from './stores/debateStore';
 
 function App() {
+  const { theme, setTheme } = useThemeStore();
+  const { currentSessionId } = useDebateStore();
+
+  useEffect(() => {
+    // Ensure the HTML class matches the persisted theme on load
+    setTheme(theme);
+  }, [theme, setTheme]);
+
   return (
     <div
       style={{
         display: 'flex',
-        flexDirection: 'column',
+        flexDirection: 'row',
         height: '100vh',
+        width: '100vw',
         overflow: 'hidden',
         background: 'var(--bg-primary)',
         color: 'var(--text-primary)',
       }}
     >
-      <Header />
+      <SessionList />
+
       <main
         style={{
           flex: 1,
           display: 'flex',
-          minHeight: 0,
+          flexDirection: 'column',
+          minWidth: 0,
         }}
       >
-        <SessionList />
-        <ChatPanel />
-        <ScorePanel />
+        {!currentSessionId ? (
+          <HomeView />
+        ) : (
+          <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+            <ChatPanel />
+            <ScorePanel />
+          </div>
+        )}
       </main>
     </div>
   );

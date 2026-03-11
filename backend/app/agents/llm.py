@@ -24,10 +24,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from langchain_litellm import ChatLiteLLM
 from langchain_core.language_models import BaseChatModel
 
 from app.config import AgentModelConfig, get_settings
+from app.agents.llm_router import router as llm_router
 
 logger = logging.getLogger(__name__)
 
@@ -61,23 +61,26 @@ def create_llm(
         if api_base_override is not None:
             api_base_url = api_base_override if api_base_override else None
 
-    # ── Build kwargs ─────────────────────────────────────────────
+    # Extract provider type from overrides if present
+    provider_type = override.get("provider_type", "openai") if override else "openai"
+
+    # ── Build router kwargs ──────────────────────────────────────
     kwargs: dict[str, Any] = {
-        "model": model,
         "temperature": agent_config.temperature,
         "max_tokens": agent_config.max_tokens,
         "streaming": streaming,
     }
 
-    if api_key:
-        kwargs["api_key"] = api_key
-    if api_base_url:
-        kwargs["api_base"] = api_base_url
-
     log_base = api_base_url or "(provider default / env)"
-    logger.info("[LLM] model=%s  api_base=%s", model, log_base)
+    logger.info("[LLM Router] route=%s model=%s api_base=%s kwargs=%s", provider_type, model, log_base, {**kwargs, "api_key": "***"})
 
-    return ChatLiteLLM(**kwargs)
+    return llm_router.get_client(
+        provider_type=provider_type,
+        model=model,
+        api_key=api_key,
+        api_base_url=api_base_url,
+        **kwargs
+    )
 
 
 # ── Convenience getters ───────────────────────────────────────────

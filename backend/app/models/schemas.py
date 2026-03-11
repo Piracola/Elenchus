@@ -38,8 +38,28 @@ class SessionCreate(BaseModel):
     max_turns: int = Field(default=5, ge=1, le=20)
     agent_configs: dict[str, dict[str, Any]] | None = Field(
         default=None,
-        description="Optional overrides for each agent's LLM config (model, api_key, api_base_url). Keys can be roles (proposer/opposer) or agent types (judge/fact_checker)."
+        description="Optional overrides. Keys can be roles (proposer_1/opposer_1). Values: {model, api_key, api_base_url, custom_name, custom_prompt}"
     )
+
+
+class ModelConfigCreate(BaseModel):
+    """Payload to create a new reusable model configuration (Provider settings)."""
+
+    name: str = Field(..., min_length=1, max_length=100)
+    provider_type: str = Field(default="openai", description="Protocol: openai, anthropic, or gemini")
+    api_key: str | None = Field(default=None, max_length=255)
+    api_base_url: str | None = Field(default=None, max_length=255)
+    models: list[str] = Field(default_factory=list)
+
+
+class ModelConfigUpdate(BaseModel):
+    """Payload to update an existing model configuration (Provider settings)."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    provider_type: str | None = Field(default=None)
+    api_key: str | None = Field(default=None, max_length=255)
+    api_base_url: str | None = Field(default=None, max_length=255)
+    models: list[str] | None = Field(default=None)
 
 
 # ── Response models ──────────────────────────────────────────────
@@ -56,6 +76,7 @@ class SessionResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     dialogue_history: list[dict[str, Any]] = Field(default_factory=list)
+    shared_knowledge: list[dict[str, Any]] = Field(default_factory=list)
     current_scores: dict[str, Any] = Field(default_factory=dict)
     cumulative_scores: dict[str, Any] = Field(default_factory=dict)
     agent_configs: dict[str, dict[str, Any]] | None = Field(default=None)
@@ -77,3 +98,17 @@ class SessionListResponse(BaseModel):
 
     sessions: list[SessionListItem]
     total: int
+
+
+class ModelConfigResponse(BaseModel):
+    """Detail of a persisted model configuration."""
+
+    id: str
+    name: str
+    provider_type: str
+    api_key: str | None
+    api_base_url: str | None
+    models: list[str]
+    created_at: datetime
+    updated_at: datetime
+

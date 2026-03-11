@@ -1,33 +1,35 @@
 @import "tailwindcss";
 
-/* ─── Design Tokens ──────────────────────────────────────────── */
+:root, :root.light {
+  /* Light theme palette */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F7F7F8;
+  --bg-tertiary: #EAEAEA;
+  --bg-card: #FFFFFF;
 
-:root {
-  /* Dark theme palette */
-  --bg-primary: #0a0a0f;
-  --bg-secondary: #12121a;
-  --bg-tertiary: #1a1a28;
-  --bg-card: #16162280;
+  --border-subtle: #E5E7EB;
+  --border-accent: #6366F1;
 
-  --border-subtle: #2a2a3e;
-  --border-accent: #6366f1;
-
-  --text-primary: #e8e8f0;
-  --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
+  --text-primary: #1A1A1A;
+  --text-secondary: #666666;
+  --text-muted: #9CA3AF;
 
   /* Accent palette */
-  --accent-indigo: #6366f1;
-  --accent-cyan: #22d3ee;
-  --accent-emerald: #34d399;
-  --accent-rose: #f43f5e;
-  --accent-amber: #fbbf24;
+  --accent-indigo: #6366F1;
+  --accent-cyan: #22D3EE;
+  --accent-emerald: #10B981;
+  --accent-rose: #EF4444;
+  --accent-amber: #F59E0B;
 
   /* Proposer / Opposer colors */
-  --color-proposer: #6366f1;
-  --color-opposer: #f43f5e;
-  --color-judge: #fbbf24;
-  --color-system: #22d3ee;
+  --color-proposer: #76D672;
+  --color-opposer: #F08A8A;
+  --color-judge: #EEDABC;
+  --color-system: #3B82F6;
+
+  /* Glassmorphism */
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(0, 0, 0, 0.05);
 
   /* Spacing & sizing */
   --radius-sm: 6px;
@@ -38,11 +40,39 @@
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+  --glass-blur: 16px;
+}
+
+:root.dark {
+  /* Dark theme palette */
+  --bg-primary: #121212;
+  --bg-secondary: #2A2A2D;
+  --bg-tertiary: #1A1A28;
+  --bg-card: #252528;
+
+  --border-subtle: #333333;
+  --border-accent: #6366f1;
+
+  --text-primary: #FFFFFF;
+  --text-secondary: #A0A0A0;
+  --text-muted: #6b7280;
+
+  /* Accent palette */
+  --accent-indigo: #818cf8;
+  --accent-cyan: #67e8f9;
+  --accent-emerald: #34d399;
+  --accent-rose: #fb7185;
+  --accent-amber: #fbbf24;
+
+  /* Proposer / Opposer colors */
+  --color-proposer: #4A8C4A;
+  --color-opposer: #A65353;
+  --color-judge: #9C8A70;
+  --color-system: #60a5fa;
 
   /* Glassmorphism */
-  --glass-bg: rgba(22, 22, 34, 0.6);
-  --glass-border: rgba(255, 255, 255, 0.06);
-  --glass-blur: 16px;
+  --glass-bg: rgba(37, 37, 40, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.05);
 }
 
 /* ─── Global Styles ──────────────────────────────────────────── */

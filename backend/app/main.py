@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.api.sessions import router as sessions_router
 from app.api.websocket import router as ws_router
+from app.api.models import router as models_router
 from app.db.database import init_db
 from app.search.factory import SearchProviderFactory
 
@@ -48,7 +49,12 @@ app = FastAPI(
 # CORS — allow the Vite dev server during development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:5173", 
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -57,6 +63,7 @@ app.add_middleware(
 # Register routers
 app.include_router(sessions_router, prefix="/api")
 app.include_router(ws_router, prefix="/api")
+app.include_router(models_router, prefix="/api/models", tags=["models"])
 
 
 # ── Health / diagnostic endpoints ────────────────────────────────

@@ -6,14 +6,13 @@
 import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useDebateStore } from '../stores/debateStore';
-import MessageBubble from './chat/MessageBubble';
+import MessageRow from './chat/MessageRow';
 import DebateControls from './chat/DebateControls';
 import StatusBanner from './chat/StatusBanner';
 
 export default function ChatPanel() {
     const {
         currentSession,
-        currentSessionId,
         streamingRole,
         streamingContent
     } = useDebateStore();
@@ -37,7 +36,7 @@ export default function ChatPanel() {
                 flexDirection: 'column',
                 borderRight: '1px solid var(--border-subtle)',
                 minHeight: 0,
-                background: 'rgba(10, 10, 15, 0.4)',
+                background: 'var(--bg-primary)',
             }}
         >
             {/* Top header indicator */}
@@ -62,7 +61,6 @@ export default function ChatPanel() {
             {/* Dynamic Status Banner */}
             <StatusBanner />
 
-            {/* Scrollable messages area */}
             <div
                 ref={scrollRef}
                 style={{
@@ -74,42 +72,61 @@ export default function ChatPanel() {
                     scrollBehavior: 'smooth',
                 }}
             >
-                {!currentSessionId ? (
-                    // Empty state
-                    <div style={{
-                        flex: 1, display: 'flex', flexDirection: 'column',
-                        alignItems: 'center', justifyContent: 'center', gap: '16px',
-                        color: 'var(--text-muted)',
-                    }}>
-                        <div style={{
-                            width: 72, height: 72, borderRadius: 'var(--radius-lg)',
-                            background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px',
-                        }}>
-                            ⚔️
-                        </div>
-                        <p style={{ fontSize: '14px' }}>从左侧选择或在下方创建一个新的辩论 Session</p>
-                    </div>
-                ) : (
-                    <>
-                        {/* History */}
-                        {currentSession?.dialogue_history.map((entry, idx) => (
-                            <MessageBubble key={idx} entry={entry} />
-                        ))}
+                {(() => {
+                    const allEntries = [...(currentSession?.dialogue_history || [])];
+                    if (streamingRole && !['system', 'error'].includes(streamingRole)) {
+                        allEntries.push({
+                            role: streamingRole,
+                            content: streamingContent,
+                            citations: [],
+                            timestamp: '',
+                            agent_name: streamingRole,
+                            isStreaming: true,
+                            streamingContent: streamingContent
+                        } as any);
+                    }
 
-                        {/* Active Streaming Bubble */}
-                        {streamingRole && (
-                            <MessageBubble
-                                isStreaming
-                                streamingRole={streamingRole}
-                                streamingContent={streamingContent}
-                            />
-                        )}
+                    const rows = [];
+                    let currentAgent = null;
 
-                        {/* Fact-check spacer if it's currently searching but no agent speaking */}
-                        <div style={{ height: '20px' }} />
-                    </>
-                )}
+                    for (const entry of allEntries) {
+                        if (entry.role === 'proposer' || entry.role === 'opposer') {
+                            if (currentAgent) {
+                                rows.push({ agent: currentAgent, judge: null });
+                            }
+                            currentAgent = entry;
+                        } else if (entry.role === 'judge') {
+                            if (currentAgent) {
+                                rows.push({ agent: currentAgent, judge: entry });
+                                currentAgent = null;
+                            } else {
+                                rows.push({ agent: null, judge: entry });
+                            }
+                        } else {
+                            // System or error roles
+                            if (currentAgent) {
+                                rows.push({ agent: currentAgent, judge: null });
+                                currentAgent = null;
+                            }
+                            rows.push({ system: entry });
+                        }
+                    }
+                    if (currentAgent) {
+                        rows.push({ agent: currentAgent, judge: null });
+                    }
+
+                    return rows.map((row, idx) => (
+                        <MessageRow
+                            key={idx}
+                            agentEntry={row.agent}
+                            judgeEntry={row.judge}
+                            systemEntry={row.system}
+                        />
+                    ));
+                })()}
+
+                {/* Fact-check spacer if it's currently searching but no agent speaking */}
+                <div style={{ height: '20px' }} />
             </div>
 
             {/* Bottom Controls */}
