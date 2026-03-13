@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { ChatPanel, ScorePanel } from './components';
+import { ChatPanel } from './components';
 import HomeView from './components/HomeView';
 import SessionList from './components/sidebar/SessionList';
 import { useThemeStore } from './stores/themeStore';
@@ -39,10 +39,7 @@ function App() {
         {!currentSessionId ? (
           <HomeView />
         ) : (
-          <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-            <ChatPanel />
-            <ScorePanel />
-          </div>
+          <ChatPanel />
         )}
       </main>
     </div>

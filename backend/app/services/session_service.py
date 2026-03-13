@@ -49,6 +49,21 @@ def _record_to_dict(record: SessionRecord) -> dict[str, Any]:
 async def create_session(db: AsyncSession, body: SessionCreate) -> dict[str, Any]:
     """Create a new debate session in the database."""
     now = _utcnow()
+    from app.services.provider_service import provider_service
+    agent_configs = body.agent_configs or {}
+    default_provider = provider_service.get_default_config()
+
+    roles_needed = set(body.participants + ["judge", "fact_checker"])
+    for role in roles_needed:
+        if role not in agent_configs and default_provider:
+            default_model = default_provider.models[0] if default_provider.models else ""
+            agent_configs[role] = {
+                "model": default_model,
+                "provider_type": default_provider.provider_type,
+                "api_key": default_provider.api_key,
+                "api_base_url": default_provider.api_base_url,
+            }
+
     record = SessionRecord(
         id=_gen_id(),
         topic=body.topic,
@@ -62,7 +77,7 @@ async def create_session(db: AsyncSession, body: SessionCreate) -> dict[str, Any
             "cumulative_scores": {},
             "search_context": [],
             "context_summary": "",
-            "agent_configs": body.agent_configs or {},
+            "agent_configs": agent_configs,
         },
         created_at=now,
         updated_at=now,

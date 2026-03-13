@@ -35,6 +35,8 @@ export interface DialogueEntry {
     content: string;
     citations: string[];
     timestamp: string;
+    target_role?: string;
+    scores?: TurnScore;
 }
 
 export interface SearchResult {
@@ -95,6 +97,7 @@ export interface ModelConfig {
     api_key: string | null;
     api_base_url: string | null;
     models: string[];
+    is_default: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -105,6 +108,7 @@ export interface ModelConfigCreatePayload {
     api_key?: string | null;
     api_base_url?: string | null;
     models: string[];
+    is_default?: boolean;
 }
 
 // ── WebSocket messages ──────────────────────────────────────────

@@ -133,7 +133,7 @@ async def node_tool_executor(state: DebateGraphState) -> dict[str, Any]:
                 ))
                 
                 # Automatically save tool facts into shared memory
-                if tool_call["name"] == "search_web":
+                if tool_call["name"] in ["search_searxng", "search_tavily"]:
                     knowledge_updates.append({
                         "type": "fact",
                         "query": tool_call["args"].get("query", ""),
@@ -151,13 +151,21 @@ async def node_judge_score(state: DebateGraphState) -> dict[str, Any]:
     return await judge_score(state)
 
 
+from langchain_core.messages import RemoveMessage
+
 async def node_advance_turn(state: DebateGraphState) -> dict[str, Any]:
     """Increment the turn counter and reset speaker index."""
     current = state.get("current_turn", 0)
+    messages = state.get("messages", [])
+    
+    # We must explicitly return RemoveMessage for each message to clear the state,
+    # because `add_messages` reducer requires this to delete items.
+    remove_msgs = [RemoveMessage(id=m.id) for m in messages if m.id]
+    
     return {
         "current_turn": current + 1,
         "current_speaker_index": -1, # Reset for the next round
-        "messages": [] # Clear internal tool messages
+        "messages": remove_msgs # Clear internal tool messages
     }
 
 

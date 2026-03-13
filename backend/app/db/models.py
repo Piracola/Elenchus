@@ -42,19 +42,4 @@ class SessionRecord(Base):
     )
 
 
-class ModelConfig(Base):
-    """User-saved reusable LLM provider configuration."""
 
-    __tablename__ = "model_configs"
-
-    id: Mapped[str] = mapped_column(String(12), primary_key=True, default=_gen_id)
-    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    provider_type: Mapped[str] = mapped_column(String(50), default="openai") # e.g. openai, anthropic, gemini
-    api_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    api_base_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    models: Mapped[list[str]] = mapped_column(JSON, default=list)
-
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
-    )

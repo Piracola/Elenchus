@@ -24,6 +24,7 @@ export default function ModelConfigManager({ isOpen, onClose }: Props) {
     const [apiBaseUrl, setApiBaseUrl] = useState('');
     const [models, setModels] = useState<string[]>([]);
     const [newModelInput, setNewModelInput] = useState('');
+    const [isDefault, setIsDefault] = useState(false);
 
     const fetchConfigs = async () => {
         try {
@@ -64,6 +65,7 @@ export default function ModelConfigManager({ isOpen, onClose }: Props) {
         setApiKey(p.api_key || '');
         setApiBaseUrl(p.api_base_url || '');
         setModels(p.models || []);
+        setIsDefault(p.is_default || false);
         setIsCreatingNew(false);
     };
 
@@ -74,6 +76,7 @@ export default function ModelConfigManager({ isOpen, onClose }: Props) {
         setApiKey('');
         setApiBaseUrl('');
         setModels([]);
+        setIsDefault(false);
     };
 
     const handleSelectProvider = (idx: number) => {
@@ -105,6 +108,7 @@ export default function ModelConfigManager({ isOpen, onClose }: Props) {
             api_key: apiKey.trim() || null,
             api_base_url: apiBaseUrl.trim() || null,
             models: models,
+            is_default: isDefault,
         };
 
         try {
@@ -208,7 +212,10 @@ export default function ModelConfigManager({ isOpen, onClose }: Props) {
                                                         fontWeight: (!isCreatingNew && activeIndex === idx) ? 600 : 400,
                                                     }}
                                                 >
-                                                    <span style={{ fontSize: '13px' }}>{p.name}</span>
+                                                    <span style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                        {p.name}
+                                                        {p.is_default && <span title="默认服务商" style={{ fontSize: '11px', color: '#f59e0b' }}>⭐</span>}
+                                                    </span>
                                                     {(!isCreatingNew && activeIndex === idx) && (
                                                         <button 
                                                             onClick={(e) => handleDeleteProvider(p.id, e)}
@@ -286,8 +293,20 @@ export default function ModelConfigManager({ isOpen, onClose }: Props) {
                                     </div>
 
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px', color: 'var(--text-secondary)' }}>API 地址 (Base URL)</label>
                                         <input type="text" value={apiBaseUrl} onChange={e => setApiBaseUrl(e.target.value)} placeholder="https://api.example.com/v1" style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', fontSize: '14px', outline: 'none' }} />
+                                    </div>
+                                    
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            id="isDefaultToggle"
+                                            checked={isDefault}
+                                            onChange={e => setIsDefault(e.target.checked)}
+                                            style={{ cursor: 'pointer' }}
+                                        />
+                                        <label htmlFor="isDefaultToggle" style={{ fontSize: '13px', color: 'var(--text-primary)', cursor: 'pointer' }}>
+                                            设为全局默认服务商
+                                        </label>
                                     </div>
                                 </div>
 

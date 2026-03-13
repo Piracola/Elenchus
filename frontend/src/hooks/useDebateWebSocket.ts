@@ -57,6 +57,15 @@ export function useDebateWebSocket(sessionId: string | null) {
             case 'judge_score':
                 if (msg.role && msg.scores) {
                     store.updateCurrentScores(msg.role, msg.scores);
+                    store.appendDialogueEntry({
+                        role: 'judge',
+                        target_role: msg.role,
+                        agent_name: '裁判组视角',
+                        content: msg.scores.overall_comment || '',
+                        scores: msg.scores,
+                        timestamp: new Date().toISOString(),
+                        citations: []
+                    });
                 }
                 break;
 
@@ -113,6 +122,7 @@ export function useDebateWebSocket(sessionId: string | null) {
         };
 
         socket.onmessage = (evt) => {
+            if (!isMounted.current) return;
             try {
                 const msg: WSMessage = JSON.parse(evt.data);
                 handleMessage(msg);

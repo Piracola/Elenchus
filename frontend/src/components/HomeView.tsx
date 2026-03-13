@@ -193,11 +193,11 @@ export default function HomeView() {
                                                         cursor: 'pointer'
                                                     }}
                                                 >
-                                                    <option value="">默认配置 (.env)</option>
+                                                    <option value="">默认配置 (应用全局设置)</option>
                                                     {savedConfigs.map(c => 
                                                         c.models && c.models.map(m => (
                                                             <option key={`${c.id}::${m}`} value={`${c.id}::${m}`}>
-                                                                {c.name} - {m}
+                                                                {c.is_default ? '⭐ ' : ''}{c.name} - {m}
                                                             </option>
                                                         ))
                                                     )}

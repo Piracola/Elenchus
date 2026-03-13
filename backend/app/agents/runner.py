@@ -63,7 +63,7 @@ async def run_debate(
         "current_turn": session_db.get("current_turn", 0),
         "max_turns": max_turns,
         "current_speaker": "",
-        "current_speaker_index": 0,
+        "current_speaker_index": -1,
         "dialogue_history": state_snap.get("dialogue_history", []),
         "shared_knowledge": state_snap.get("shared_knowledge", []),
         "messages": [],

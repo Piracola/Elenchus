@@ -29,21 +29,6 @@ def _load_yaml_config() -> dict[str, Any]:
         return yaml.safe_load(f) or {}
 
 
-# ── Agent-level model configuration ──────────────────────────────
-
-class AgentModelConfig:
-    """Configuration for a single agent's LLM."""
-
-    def __init__(self, data: dict[str, Any] | None = None):
-        data = data or {}
-        self.model: str = data.get("model", "gpt-4o")
-        self.temperature: float = data.get("temperature", 0.7)
-        self.max_tokens: int = data.get("max_tokens", 1500)
-        # Optional per-agent overrides — takes priority over global .env values
-        self.api_base_url: str | None = data.get("api_base_url") or None
-        self.api_key: str | None = data.get("api_key") or None
-
-
 # ── Search configuration ─────────────────────────────────────────
 
 class SearchConfig:
@@ -114,11 +99,6 @@ class Settings:
     def __init__(self) -> None:
         self.env = EnvSettings()
         yaml_cfg = _load_yaml_config()
-
-        agents_cfg = yaml_cfg.get("agents", {})
-        self.debater = AgentModelConfig(agents_cfg.get("debater"))
-        self.judge = AgentModelConfig(agents_cfg.get("judge"))
-        self.fact_checker = AgentModelConfig(agents_cfg.get("fact_checker"))
 
         self.search = SearchConfig(yaml_cfg.get("search"))
         self.debate = DebateConfig(yaml_cfg.get("debate"))

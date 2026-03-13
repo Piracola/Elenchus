@@ -73,3 +73,8 @@ class DebateGraphState(TypedDict):
 * **Vector Memory (RAG):** Introduce ChromaDB/Qdrant to embed `shared_knowledge` into vectors, allowing agents to accurately retrieve and refute claims from round 1 during round N.
 * **Human-in-the-Loop:** Use LangGraph's `interrupt_before` to pause execution, allowing real human judges to manually dock points or inject overriding logic via the UI.
 * **Async Event Bus:** Decouple the WebSocket layer from LangGraph's heavy computation using Redis Pub/Sub + Celery workers to support high concurrency SaaS access.
+
+---
+
+## 6. Technical Design Principles
+* **Storage Philosophy:** Use human-readable JSON files (e.g., `providers.json`, `config.json`) for simple, flat configurations like LLM provider credentials or system rules. Reserve the SQLite/PostgreSQL Database strictly for complex, relational, or high-volume data like debate session histories, node state snapshots, and agent dialogue tracking.

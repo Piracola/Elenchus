@@ -110,6 +110,7 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
     llm = get_judge_llm(streaming=False, override=override)
 
     current_scores: dict[str, Any] = {}
+    dialogue_history_updates: list[dict[str, Any]] = []
 
     for role in participants:
         instruction = _build_judge_instruction(
@@ -149,16 +150,40 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
                 "Judge scored [%s]: avg=%.1f",
                 role, score.average_score,
             )
+
+            # --- Inject Judge response directly into dialogue history ---
+            from datetime import datetime, timezone
+            dialogue_history_updates.append({
+                "role": "judge",
+                "target_role": role,
+                "agent_name": "裁判长",
+                "content": score.overall_comment,
+                "scores": score_dict,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
+
         else:
             logger.error("Judge failed to score [%s] after retries", role)
             # Use placeholder scores
-            current_scores[role] = {
+            fallback_scores: dict[str, Any] = {
                 dim: {"score": 5, "rationale": "Scoring failed — using default"}
                 for dim in _SCORE_DIMS
             }
-            current_scores[role]["overall_comment"] = "评分过程出现错误，使用默认分数。"
+            fallback_scores["overall_comment"] = "评分过程出现错误，使用默认分数。"
+            current_scores[role] = fallback_scores
+            
+            from datetime import datetime, timezone
+            dialogue_history_updates.append({
+                "role": "judge",
+                "target_role": role,
+                "agent_name": "裁判长",
+                "content": fallback_scores["overall_comment"],
+                "scores": fallback_scores,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
 
     return {
         "current_scores": current_scores,
         "cumulative_scores": cumulative_scores,
+        "dialogue_history": dialogue_history_updates,
     }

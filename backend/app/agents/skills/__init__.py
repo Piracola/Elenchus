@@ -2,11 +2,13 @@ from typing import Sequence
 
 from langchain_core.tools import BaseTool
 
-from app.agents.skills.search import search_web
+from app.agents.skills.searxng_tool import search_searxng
+from app.agents.skills.tavily_tool import search_tavily
 
 # Registry mapping skill names to their LangChain Tool instances
 _SKILL_REGISTRY = {
-    "search_web": search_web,
+    "search_searxng": search_searxng,
+    "search_tavily": search_tavily,
 }
 
 def get_all_skills() -> Sequence[BaseTool]:

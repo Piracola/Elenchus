@@ -86,33 +86,29 @@ export default function ChatPanel() {
                         } as any);
                     }
 
-                    const rows = [];
-                    let currentAgent = null;
+                    const rows: any[] = [];
 
                     for (const entry of allEntries) {
                         if (entry.role === 'proposer' || entry.role === 'opposer') {
-                            if (currentAgent) {
-                                rows.push({ agent: currentAgent, judge: null });
-                            }
-                            currentAgent = entry;
+                            rows.push({ agent: entry, judge: null });
                         } else if (entry.role === 'judge') {
-                            if (currentAgent) {
-                                rows.push({ agent: currentAgent, judge: entry });
-                                currentAgent = null;
-                            } else {
+                            let matched = false;
+                            // Search backwards for the last row matching target_role that doesn't have a judge yet
+                            for (let i = rows.length - 1; i >= 0; i--) {
+                                if (rows[i].agent && rows[i].agent.role === entry.target_role && !rows[i].judge) {
+                                    rows[i].judge = entry;
+                                    matched = true;
+                                    break;
+                                }
+                            }
+                            // If no matching agent was found (rare edge case), render standalone
+                            if (!matched) {
                                 rows.push({ agent: null, judge: entry });
                             }
                         } else {
-                            // System or error roles
-                            if (currentAgent) {
-                                rows.push({ agent: currentAgent, judge: null });
-                                currentAgent = null;
-                            }
+                            // System or error
                             rows.push({ system: entry });
                         }
-                    }
-                    if (currentAgent) {
-                        rows.push({ agent: currentAgent, judge: null });
                     }
 
                     return rows.map((row, idx) => (

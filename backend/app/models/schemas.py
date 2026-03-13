@@ -50,6 +50,7 @@ class ModelConfigCreate(BaseModel):
     api_key: str | None = Field(default=None, max_length=255)
     api_base_url: str | None = Field(default=None, max_length=255)
     models: list[str] = Field(default_factory=list)
+    is_default: bool = Field(default=False)
 
 
 class ModelConfigUpdate(BaseModel):
@@ -60,6 +61,7 @@ class ModelConfigUpdate(BaseModel):
     api_key: str | None = Field(default=None, max_length=255)
     api_base_url: str | None = Field(default=None, max_length=255)
     models: list[str] | None = Field(default=None)
+    is_default: bool | None = Field(default=None)
 
 
 # ── Response models ──────────────────────────────────────────────
@@ -109,6 +111,7 @@ class ModelConfigResponse(BaseModel):
     api_key: str | None
     api_base_url: str | None
     models: list[str]
+    is_default: bool
     created_at: datetime
     updated_at: datetime
 

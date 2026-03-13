@@ -26,48 +26,36 @@ from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 
-from app.config import AgentModelConfig, get_settings
 from app.agents.llm_router import router as llm_router
 
 logger = logging.getLogger(__name__)
 
 
 def create_llm(
-    agent_config: AgentModelConfig,
     *,
     streaming: bool = True,
     override: dict[str, Any] | None = None,
 ) -> BaseChatModel:
     """
-    Build a ChatLiteLLM instance from an AgentModelConfig.
-
-    LiteLLM automatically reads API keys and base URLs natively from os.environ.
-    Per-agent config overrides (`api_key`, `api_base_url`) take precedence.
-    Dynamic `override` dict (from frontend requests) takes highest precedence.
+    Build an LLM client pure from DB/JSON override payload.
+    If api_key is missing, throw an exception guiding the user to configure the backend.
     """
-    model = agent_config.model
-    api_key = agent_config.api_key
-    api_base_url = agent_config.api_base_url
+    override = override or {}
+    model = override.get("model", "gpt-4o")
+    api_key = override.get("api_key")
+    api_base_url = override.get("api_base_url")
+    provider_type = override.get("provider_type", "openai")
+    
+    # Static defaults
+    temperature = 0.7
+    max_tokens = 1500
 
-    # Apply runtime dynamic overrides
-    if override:
-        model = override.get("model", model)
-        # Empty string in override should reset key/base to use env vars
-        api_key_override = override.get("api_key")
-        if api_key_override is not None:
-            api_key = api_key_override if api_key_override else None
-        
-        api_base_override = override.get("api_base_url")
-        if api_base_override is not None:
-            api_base_url = api_base_override if api_base_override else None
+    if not api_key:
+        raise ValueError("模型调用拦截：当前辩手/裁判缺少必需的 API Key 金钥。请点击左下角【设置】选择或创建一个默认的模型服务商配置！")
 
-    # Extract provider type from overrides if present
-    provider_type = override.get("provider_type", "openai") if override else "openai"
-
-    # ── Build router kwargs ──────────────────────────────────────
     kwargs: dict[str, Any] = {
-        "temperature": agent_config.temperature,
-        "max_tokens": agent_config.max_tokens,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
         "streaming": streaming,
     }
 
@@ -86,12 +74,12 @@ def create_llm(
 # ── Convenience getters ───────────────────────────────────────────
 
 def get_debater_llm(streaming: bool = True, override: dict[str, Any] | None = None) -> BaseChatModel:
-    return create_llm(get_settings().debater, streaming=streaming, override=override)
+    return create_llm(streaming=streaming, override=override)
 
 
 def get_judge_llm(streaming: bool = True, override: dict[str, Any] | None = None) -> BaseChatModel:
-    return create_llm(get_settings().judge, streaming=streaming, override=override)
+    return create_llm(streaming=streaming, override=override)
 
 
 def get_fact_checker_llm(streaming: bool = True, override: dict[str, Any] | None = None) -> BaseChatModel:
-    return create_llm(get_settings().fact_checker, streaming=streaming, override=override)
+    return create_llm(streaming=streaming, override=override)
