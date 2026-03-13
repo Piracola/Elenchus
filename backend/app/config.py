@@ -1,6 +1,10 @@
 """
 Configuration loader for Elenchus.
-Reads from .env (secrets) and config.yaml (application settings).
+Reads from .env (secrets/environment) and config.yaml (application behaviour).
+
+Secret split:
+  .env                    — search keys, DB URL, server params, encryption key
+  backend/data/providers.json — LLM provider API keys (Fernet-encrypted, managed via UI)
 """
 
 from __future__ import annotations
@@ -49,29 +53,17 @@ class ContextWindowConfig:
         self.enable_summary_compression: bool = data.get("enable_summary_compression", True)
 
 
-class RetryConfig:
-    def __init__(self, data: dict[str, Any] | None = None):
-        data = data or {}
-        self.max_retries: int = data.get("max_retries", 3)
-        self.base_delay_seconds: float = data.get("base_delay_seconds", 1.0)
-
-
 class DebateConfig:
     def __init__(self, data: dict[str, Any] | None = None):
         data = data or {}
         self.default_max_turns: int = data.get("default_max_turns", 5)
         self.context_window = ContextWindowConfig(data.get("context_window"))
-        self.retry = RetryConfig(data.get("retry"))
 
 
 # ── Environment-based settings (.env) ────────────────────────────
 
 class EnvSettings(BaseSettings):
     """Sensitive / environment-specific values loaded from .env"""
-
-    # ── LLM Authentication ───────────────────────────────────────
-    # We load .env using load_dotenv() so LiteLLM can pick up keys
-    # natively from the environment. No Pydantic wrappers needed here!
 
     # ── Search ───────────────────────────────────────────────────
     searxng_base_url: str = Field(default="http://localhost:8080", alias="SEARXNG_BASE_URL")
@@ -87,6 +79,11 @@ class EnvSettings(BaseSettings):
     host: str = Field(default="0.0.0.0", alias="HOST")
     port: int = Field(default=8000, alias="PORT")
     debug: bool = Field(default=False, alias="DEBUG")
+    cors_origins: str = Field(
+        default="http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174",
+        alias="CORS_ORIGINS",
+        description="Comma-separated list of allowed CORS origins",
+    )
 
     model_config = {"env_file": str(_PROJECT_ROOT / ".env"), "extra": "ignore"}
 

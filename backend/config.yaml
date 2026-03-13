@@ -1,58 +1,16 @@
 # =============================================
-# Elenchus — Configuration File
+# Elenchus — 应用行为配置
 # =============================================
 #
-# LiteLLM model naming: "provider/model-name"
-#   openai/gpt-4o                  → OpenAI
-#   anthropic/claude-opus-4-5      → Anthropic
-#   ollama/qwen2.5:32b             → Ollama (local)
-#   azure/<deployment-name>        → Azure OpenAI
-#   groq/llama-3.3-70b-versatile  → Groq
-#   deepseek/deepseek-chat         → DeepSeek
-#   vertex_ai/gemini-2.0-flash     → Google Vertex AI
-#
-# Per-agent api_base_url / api_key override global .env values.
-# Leave absent to fall back to LiteLLM's native OS environment variables (e.g., OPENAI_API_KEY, DEEPSEEK_API_KEY, OLLAMA_API_BASE).
-#
-# Examples — mixed local+cloud setup:
-#
-#   debater:
-#     model: "ollama/qwen2.5:32b"
-#     api_base_url: "http://localhost:11434"
-#     api_key: "ollama"
-#
-#   judge:
-#     model: "openai/gpt-4o"
-#     # uses OPENAI_API_KEY from .env
+# 此文件控制应用行为，可安全提交到 git。
+# 敏感密钥（API keys）通过 .env 和 UI 面板管理，不在此处配置。
 
-agents:
-  debater:
-    model: "openai/gpt-4o"
-    temperature: 0.7
-    max_tokens: 1500
-    # api_base_url: ""
-    # api_key: ""
-
-  judge:
-    model: "anthropic/claude-sonnet-4-20250514"
-    temperature: 0.2
-    max_tokens: 2000
-    # api_base_url: ""
-    # api_key: ""
-
-  fact_checker:
-    model: "openai/gpt-4o-mini"
-    temperature: 0.1
-    max_tokens: 1000
-    # api_base_url: ""
-    # api_key: ""
-
-# ── Search ────────────────────────────────────────────────────────
+# ── 搜索 ──────────────────────────────────────────────────────────
 search:
   provider: "searxng"            # searxng | tavily
   max_results_per_query: 5
 
-# ── Debate ────────────────────────────────────────────────────────
+# ── 辩论 ──────────────────────────────────────────────────────────
 debate:
   default_max_turns: 5
   context_window:

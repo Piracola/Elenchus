@@ -13,7 +13,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     });
     if (!res.ok) {
         const text = await res.text();
-        throw new Error(`API ${res.status}: ${text}`);
+        let message = `API ${res.status}`;
+        try {
+            const json = JSON.parse(text);
+            message = json.detail ?? json.message ?? text;
+        } catch {
+            message = text || message;
+        }
+        throw new Error(message);
     }
     // 204 No Content
     if (res.status === 204) return undefined as T;
@@ -24,8 +31,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
     sessions: {
-        list: (): Promise<{ sessions: SessionListItem[]; total: number }> =>
-            request('/sessions'),
+        list: (offset = 0, limit = 50): Promise<{ sessions: SessionListItem[]; total: number }> =>
+            request(`/sessions?offset=${offset}&limit=${limit}`),
 
         create: (payload: SessionCreatePayload): Promise<Session> =>
             request('/sessions', {

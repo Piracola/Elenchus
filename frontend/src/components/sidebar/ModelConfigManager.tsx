@@ -124,7 +124,7 @@ export default function ModelConfigManager({ isOpen, onClose }: Props) {
             }
         } catch (err) {
             console.error("Save failed", err);
-            alert("保存失败，请检查名称是否重复。");
+            alert(`保存失败：${err instanceof Error ? err.message : "未知错误"}`);
         }
     };
     

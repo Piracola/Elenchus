@@ -257,6 +257,30 @@ if [[ "$FRONTEND_ONLY" != true ]]; then
         print_success ".env 配置文件已存在"
     fi
 
+    # ── Encryption key setup ──────────────────────────────────────────
+    if ! grep -q "^PROVIDERS_ENCRYPTION_KEY=" "$ENV_FILE" 2>/dev/null || \
+       grep -q "^PROVIDERS_ENCRYPTION_KEY=your-generated-fernet-key-here" "$ENV_FILE" 2>/dev/null; then
+        print_info "生成 Provider 加密主密钥..."
+        FERNET_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+        if grep -q "^PROVIDERS_ENCRYPTION_KEY=" "$ENV_FILE" 2>/dev/null; then
+            sed -i "s|^PROVIDERS_ENCRYPTION_KEY=.*|PROVIDERS_ENCRYPTION_KEY=$FERNET_KEY|" "$ENV_FILE"
+        else
+            echo "PROVIDERS_ENCRYPTION_KEY=$FERNET_KEY" >> "$ENV_FILE"
+        fi
+        print_success "加密主密钥已写入 .env"
+    else
+        print_success "加密主密钥已配置"
+    fi
+
+    # ── Migrate existing plaintext keys ──────────────────────────────
+    PROVIDERS_JSON="$BACKEND_DIR/data/providers.json"
+    if [[ -f "$PROVIDERS_JSON" ]]; then
+        print_info "检查并加密 providers.json 中的明文密钥..."
+        python3 "$BACKEND_DIR/migrate_encrypt_providers.py" 2>/dev/null && \
+            print_success "providers.json 密钥加密完成" || \
+            print_warning "providers.json 迁移跳过（可能已加密）"
+    fi
+
     cd "$SCRIPT_DIR"
 fi
 

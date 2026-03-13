@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ── Enums ────────────────────────────────────────────────────────
@@ -114,4 +114,13 @@ class ModelConfigResponse(BaseModel):
     is_default: bool
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("api_key", mode="before")
+    @classmethod
+    def mask_api_key(cls, v: str | None) -> str | None:
+        if not v:
+            return v
+        if len(v) <= 8:
+            return "****"
+        return v[:3] + "..." + v[-4:]
 

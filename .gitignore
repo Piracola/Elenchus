@@ -2,3 +2,10 @@
 .agents/
 .gemini/
 .docs/
+.opencode/
+
+# Sensitive files — never commit
+.env
+.env.*
+!.env.example
+**/data/providers.json

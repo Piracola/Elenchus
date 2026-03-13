@@ -150,6 +150,35 @@ if (-not $FrontendOnly) {
         Print-OK ".env config file already exists"
     }
 
+    # ── Encryption key setup ──────────────────────────────────────────
+    $envContent = if (Test-Path $EnvFile) { Get-Content $EnvFile -Raw } else { "" }
+    $needsKey = $envContent -notmatch "^PROVIDERS_ENCRYPTION_KEY=(?!your-generated-fernet-key-here).+"
+    if ($needsKey) {
+        Print-Info "Generating Provider encryption master key..."
+        $fernetKey = & "$VenvDir\Scripts\python.exe" -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+        if ($envContent -match "^PROVIDERS_ENCRYPTION_KEY=") {
+            $envContent = $envContent -replace "(?m)^PROVIDERS_ENCRYPTION_KEY=.*", "PROVIDERS_ENCRYPTION_KEY=$fernetKey"
+            Set-Content $EnvFile $envContent -NoNewline
+        } else {
+            Add-Content $EnvFile "`nPROVIDERS_ENCRYPTION_KEY=$fernetKey"
+        }
+        Print-OK "Encryption master key written to .env"
+    } else {
+        Print-OK "Encryption master key already configured"
+    }
+
+    # ── Migrate existing plaintext keys ──────────────────────────────
+    $ProvidersJson = Join-Path $BackendDir "data\providers.json"
+    if (Test-Path $ProvidersJson) {
+        Print-Info "Checking and encrypting plaintext keys in providers.json..."
+        & "$VenvDir\Scripts\python.exe" "$BackendDir\migrate_encrypt_providers.py" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Print-OK "providers.json keys encrypted"
+        } else {
+            Print-Warn "providers.json migration skipped (may already be encrypted)"
+        }
+    }
+
     Pop-Location
 }
 
