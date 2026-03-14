@@ -1,11 +1,11 @@
 """
-LangGraph GraphState — the single source of truth flowing through the debate graph.
+LangGraph GraphState — reusable Pydantic models for dialogue entries.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Literal, TypedDict
 from pydantic import BaseModel, Field
 
 
@@ -19,51 +19,39 @@ class DialogueEntry(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
-class SearchResult(BaseModel):
-    """A single search result from the fact-checker."""
-
-    title: str = ""
-    url: str = ""
-    snippet: str = ""
-    source_engine: str = ""
+DialogueRole = Literal['proposer', 'opposer', 'judge', 'system', 'error', 'audience', 'fact_checker']
 
 
-class GraphState(BaseModel):
-    """
-    Core state that travels through every node in the LangGraph debate graph.
-    """
+class DialogueEntryDict(TypedDict, total=False):
+    """TypedDict for dialogue history entries in LangGraph state."""
+    role: DialogueRole
+    agent_name: str
+    content: str
+    citations: list[str]
+    timestamp: str
+    target_role: str | None
+    scores: dict | None
 
-    session_id: str = Field(default="", description="Unique session identifier")
-    topic: str = Field(default="", description="The debate topic / thesis")
-    participants: list[str] = Field(
-        default_factory=lambda: ["proposer", "opposer"],
-        description="Ordered list of participant role identifiers",
-    )
-    current_turn: int = Field(default=0)
-    max_turns: int = Field(default=5)
-    current_speaker: str = Field(default="", description="Role ID of the current speaker")
 
-    dialogue_history: list[DialogueEntry] = Field(default_factory=list)
-    context_summary: str = Field(
-        default="",
-        description="Compressed summary of older turns (context window management)",
-    )
-    search_context: list[SearchResult] = Field(
-        default_factory=list,
-        description="Search results for the current turn (visible to debaters & judge)",
-    )
+class SharedKnowledgeEntry(TypedDict, total=False):
+    """TypedDict for shared knowledge entries."""
+    type: Literal['fact', 'memo', 'context']
+    query: str
+    result: str
+    timestamp: str | None
 
-    current_scores: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Scores for the current turn, keyed by participant role",
-    )
-    cumulative_scores: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Accumulated scores across all turns, keyed by participant role",
-    )
 
-    status: str = Field(
-        default="pending",
-        description="Session status: pending | in_progress | completed | error",
-    )
-    error: str | None = Field(default=None)
+class TurnScore(TypedDict, total=False):
+    """TypedDict for turn scores."""
+    score: float
+    reasoning: str
+    improvement_suggestions: list[str]
+
+
+class RoleScores(TypedDict, total=False):
+    """TypedDict for scores by dimension."""
+    logic: TurnScore
+    evidence: TurnScore
+    relevance: TurnScore
+    persuasion: TurnScore
+    rebuttal: TurnScore

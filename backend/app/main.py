@@ -4,7 +4,6 @@ FastAPI application entry point.
 
 from __future__ import annotations
 
-import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -12,16 +11,16 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.api.sessions import router as sessions_router
-from app.api.websocket import router as ws_router
+from app.api.websocket import router as ws_router, manager as ws_manager
 from app.api.models import router as models_router
+from app.api.log import router as log_router
 from app.db.database import init_db
 from app.search.factory import SearchProviderFactory
+from app.services.log_service import setup_logging, get_logger
+from app.agents.events import set_broadcaster
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
-)
-logger = logging.getLogger(__name__)
+setup_logging(level="DEBUG" if get_settings().env.debug else "INFO", log_dir="logs")
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -29,9 +28,9 @@ async def lifespan(app: FastAPI):
     """Application startup / shutdown lifecycle."""
     logger.info("Elenchus starting up...")
     await init_db()
-    logger.info("Database initialized.")
+    set_broadcaster(ws_manager)
+    logger.info("Database initialized. Event broadcaster configured.")
     yield
-    # Shutdown
     await SearchProviderFactory.close()
     logger.info("Elenchus shut down.")
 
@@ -46,15 +45,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow the Vite dev server during development
+# CORS — configurable via CORS_ORIGINS env var
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173", 
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174"
-    ],
+    allow_origins=[o.strip() for o in settings.env.cors_origins.split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -64,6 +58,7 @@ app.add_middleware(
 app.include_router(sessions_router, prefix="/api")
 app.include_router(ws_router, prefix="/api")
 app.include_router(models_router, prefix="/api/models", tags=["models"])
+app.include_router(log_router, prefix="/api")
 
 
 # ── Health / diagnostic endpoints ────────────────────────────────

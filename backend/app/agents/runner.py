@@ -8,17 +8,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
-from app.api.websocket import manager as ws_manager
+from app.agents.events import broadcast_event
 from app.db.database import get_session_factory
 from app.services import session_service
 
 logger = logging.getLogger(__name__)
 
 
-# Node-to-phase mapping: Since stream_mode="updates" yields AFTER a node completes,
-# we map the completed node to the user-friendly status of the *next* operation.
 _NODE_STATUS = {
     "manage_context": ("正在整理上下文...", "preparing"),
     "set_speaker": ("切换发言人...", "preparing"),
@@ -27,6 +26,38 @@ _NODE_STATUS = {
     "judge": ("裁判长考核评估中...", "judging"),
     "advance_turn": ("准备下一回合...", "context"),
 }
+
+_NODE_SIGNATURES: list[tuple[str, list[str]]] = [
+    ("advance_turn", ["current_turn"]),
+    ("judge", ["current_scores", "cumulative_scores"]),
+    ("tool_executor", ["shared_knowledge"]),
+    ("speaker", ["dialogue_history", "messages"]),
+    ("set_speaker", ["current_speaker", "current_speaker_index"]),
+    ("manage_context", ["shared_knowledge"]),
+]
+
+
+def _infer_node(prev: dict, curr: dict) -> str:
+    """Heuristic: compare two full-state snapshots to guess which node ran."""
+    if curr.get("current_turn") != prev.get("current_turn"):
+        return "advance_turn"
+    if curr.get("current_scores") != prev.get("current_scores"):
+        return "judge"
+    curr_msgs = curr.get("messages", [])
+    prev_msgs = prev.get("messages", [])
+    if len(curr_msgs) > len(prev_msgs) and curr_msgs:
+        last = curr_msgs[-1]
+        if hasattr(last, "tool_call_id"):
+            return "tool_executor"
+    if len(curr.get("dialogue_history", [])) != len(prev.get("dialogue_history", [])):
+        return "speaker"
+    if curr_msgs != prev_msgs:
+        return "speaker"
+    if curr.get("current_speaker") != prev.get("current_speaker"):
+        return "set_speaker"
+    if curr.get("shared_knowledge") != prev.get("shared_knowledge"):
+        return "manage_context"
+    return ""
 
 
 async def run_debate(
@@ -42,7 +73,6 @@ async def run_debate(
     from app.agents.graph import DebateGraphState, compile_debate_graph
     participants = participants or ["proposer", "opposer"]
 
-    # Fetch existing session state to permit resumption
     factory = get_session_factory()
     async with factory() as db:
         session_db = await session_service.get_session(db, session_id)
@@ -55,7 +85,6 @@ async def run_debate(
         session_id, topic, max_turns,
     )
 
-    # Build initial state from previous snapshot if available
     initial_state: DebateGraphState = {
         "session_id": session_id,
         "topic": topic,
@@ -74,15 +103,13 @@ async def run_debate(
         "agent_configs": agent_configs or {},
     }
 
-    # Compile the graph
     app = compile_debate_graph()
 
-    # Notify clients
-    await ws_manager.broadcast(session_id, {
+    await broadcast_event(session_id, {
         "type": "system",
         "content": f"辩论开始: {topic}",
     })
-    await ws_manager.broadcast(session_id, {
+    await broadcast_event(session_id, {
         "type": "status",
         "content": "正在整理上下文...",
         "phase": "context",
@@ -90,78 +117,57 @@ async def run_debate(
     })
 
     final_state = dict(initial_state)
+    prev_history_len = len(initial_state.get("dialogue_history", []))
 
     try:
-        # Stream through the graph node-by-node
-        async for event in app.astream(initial_state, stream_mode="updates"):
-            for node_name, node_output in event.items():
-                # Send status update
+        last_node = ""
+        async for state_snapshot in app.astream(initial_state, stream_mode="values"):
+            node_name = _infer_node(final_state, state_snapshot)
+            final_state = dict(state_snapshot)
+
+            if node_name and node_name != last_node:
+                last_node = node_name
                 status_msg, phase = _NODE_STATUS.get(
                     node_name, (f"处理中: {node_name}", "processing")
                 )
-                await ws_manager.broadcast(session_id, {
+                await broadcast_event(session_id, {
                     "type": "status",
                     "content": status_msg,
                     "phase": phase,
                     "node": node_name,
                 })
 
-                # Merge node output into our tracking state
-                if isinstance(node_output, dict):
-                    for key, value in node_output.items():
-                        if key == "dialogue_history" and isinstance(value, list):
-                            # Accumulate dialogue entries
-                            current_val = final_state.get(key)
-                            if isinstance(current_val, list):
-                                current_val.extend(value)
-                            else:
-                                final_state[key] = list(value)
-                        elif key == "shared_knowledge" and isinstance(value, list):
-                            current_val = final_state.get(key)
-                            if isinstance(current_val, list):
-                                # It's a full replacement for our simplified state tracker, or extension depending on graph reducer. 
-                                # Actually `add` reducer means LangGraph appends it, but here we just replace it because 
-                                # the LangGraph state is complete. Actually node_output might just be the delta.
-                                # Let's just track the delta by extending.
-                                current_val.extend(value)
-                            else:
-                                final_state[key] = list(value)
-                        elif key == "messages" and isinstance(value, list):
-                            final_state["messages"] = list(value)
-                        else:
-                            final_state[key] = value
-
-                # Send specific events based on node type
                 if node_name == "speaker":
                     history = final_state.get("dialogue_history", [])
-                    msgs = final_state.get("messages", [])
-                    # If messages is NOT empty and contains tool calling, wait.
-                    # If it's empty, speech is done and pushed to history.
-                    if not msgs and history:
+                    curr_history_len = len(history)
+                    if curr_history_len > prev_history_len and history:
                         latest = history[-1]
-                        await ws_manager.broadcast(session_id, {
+                        await broadcast_event(session_id, {
+                            "type": "speech_start",
+                            "role": latest.get("role", ""),
+                        })
+                        await broadcast_event(session_id, {
                             "type": "speech_end",
                             "role": latest.get("role", ""),
                             "content": latest.get("content", ""),
                             "citations": latest.get("citations", []),
                         })
+                        prev_history_len = curr_history_len
 
                 elif node_name == "tool_executor":
                     knowledge = final_state.get("shared_knowledge", [])
-                    # Just broadcast the most recent additions or a generic tool pulse
-                    # We broadcast the last fact if available
                     recent_facts = [k for k in knowledge if k.get("type") == "fact"]
                     if recent_facts:
-                        await ws_manager.broadcast(session_id, {
+                        await broadcast_event(session_id, {
                             "type": "fact_check_result",
-                            "results": [recent_facts[-1]], # Broadcast the latest fact just grabbed
+                            "results": [recent_facts[-1]],
                             "count": len(knowledge),
                         })
 
                 elif node_name == "judge":
                     scores = final_state.get("current_scores", {})
                     for role, score_data in scores.items():
-                        await ws_manager.broadcast(session_id, {
+                        await broadcast_event(session_id, {
                             "type": "judge_score",
                             "role": role,
                             "scores": score_data,
@@ -169,21 +175,19 @@ async def run_debate(
 
                 elif node_name == "advance_turn":
                     turn = final_state.get("current_turn", 0)
-                    await ws_manager.broadcast(session_id, {
+                    await broadcast_event(session_id, {
                         "type": "turn_complete",
                         "turn": turn,
                         "current_scores": final_state.get("current_scores", {}),
                         "cumulative_scores": final_state.get("cumulative_scores", {}),
                     })
 
-            # Persist state snapshot after each event batch
             await _persist_state(session_id, final_state)
 
-        # Debate completed successfully
         final_state["status"] = "completed"
         await _persist_state(session_id, final_state)
 
-        await ws_manager.broadcast(session_id, {
+        await broadcast_event(session_id, {
             "type": "debate_complete",
             "final_scores": final_state.get("cumulative_scores", {}),
             "total_turns": final_state.get("current_turn", 0),
@@ -196,24 +200,22 @@ async def run_debate(
         final_state["status"] = "error"
         final_state["error"] = str(exc)
         
-        # Also inject an error message into dialogue history so frontends can render it easily
-        import datetime
         dh = final_state.get("dialogue_history")
         if not isinstance(dh, list):
             dh = []
             final_state["dialogue_history"] = dh
-            
+
         dh.append({
             "role": "error",
             "content": f"系统运行出错: {str(exc)}",
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
             "agent_name": "系统",
             "citations": []
         })
         
         await _persist_state(session_id, final_state)
 
-        await ws_manager.broadcast(session_id, {
+        await broadcast_event(session_id, {
             "type": "error",
             "content": f"辩论出错: {exc}",
         })

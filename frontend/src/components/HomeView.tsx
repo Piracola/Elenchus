@@ -1,77 +1,61 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, ChevronDown } from 'lucide-react';
+import { ArrowRight, ChevronDown, Sparkles, Settings2 } from 'lucide-react';
 import { useDebateStore } from '../stores/debateStore';
 import { api } from '../api/client';
-import type { ModelConfig } from '../types';
-import ModelConfigManager from './sidebar/ModelConfigManager';
+import AgentConfigPanel from './shared/AgentConfigPanel';
+import { useAgentConfigs } from '../hooks/useAgentConfigs';
+
+const DEFAULT_MAX_TURNS = 5;
 
 export default function HomeView() {
     const [topic, setTopic] = useState('');
     const [isCreating, setIsCreating] = useState(false);
+    const [error, setError] = useState('');
+    const [maxTurnsInput, setMaxTurnsInput] = useState('');
     const { setCurrentSessionId, setCurrentSession } = useDebateStore();
 
-    const [showAdvanced, setShowAdvanced] = useState(false);
-    const [showConfigManager, setShowConfigManager] = useState(false);
-    const [savedConfigs, setSavedConfigs] = useState<ModelConfig[]>([]);
-    const [selectedConfigIds, setSelectedConfigIds] = useState<Record<string, string>>({
-        proposer: '',
-        opposer: '',
-        judge: '',
-        fact_checker: '',
-    });
+    const {
+        showAdvanced, setShowAdvanced,
+        buildAgentConfigs,
+    } = useAgentConfigs();
 
-    useEffect(() => {
-        if (showAdvanced) {
-            loadConfigs();
-        }
-    }, [showAdvanced, showConfigManager]);
-
-    const loadConfigs = async () => {
-        try {
-            const data = await api.models.list();
-            setSavedConfigs(data);
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
-    const handleConfigSelect = (agent: string, configId: string) => {
-        setSelectedConfigIds(prev => ({ ...prev, [agent]: configId }));
-    };
+    const maxTurns = maxTurnsInput.trim() ? parseInt(maxTurnsInput, 10) || DEFAULT_MAX_TURNS : DEFAULT_MAX_TURNS;
 
     const handleCreateDebate = async () => {
         if (!topic.trim() || isCreating) return;
 
         try {
             setIsCreating(true);
-            const agentConfigs: Record<string, any> = {};
-            for (const [key, selectedKey] of Object.entries(selectedConfigIds)) {
-                if (!selectedKey) continue;
-                const [providerId, modelStr] = selectedKey.split('::');
-                const configDef = savedConfigs.find(c => c.id === providerId);
-                if (configDef) {
-                    agentConfigs[key] = {
-                        model: modelStr,
-                        provider_type: configDef.provider_type,
-                        api_key: configDef.api_key || undefined,
-                        api_base_url: configDef.api_base_url || undefined,
-                    };
-                }
-            }
-
+            setError('');
+            const agentConfigs = buildAgentConfigs();
             const session = await api.sessions.create({
                 topic: topic.trim(),
-                max_turns: 3,
-                agent_configs: Object.keys(agentConfigs).length > 0 ? agentConfigs : undefined,
+                max_turns: maxTurns,
+                agent_configs: agentConfigs,
             });
             setCurrentSession(session);
             setCurrentSessionId(session.id);
         } catch (err) {
             console.error('Failed to create session:', err);
+            setError(err instanceof Error ? err.message : '创建会话失败，请检查后端服务是否正常运行');
         } finally {
             setIsCreating(false);
         }
+    };
+
+    const controlStyle = {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        background: 'var(--bg-tertiary)',
+        border: '1px solid var(--border-subtle)',
+        color: 'var(--text-secondary)',
+        padding: '8px 14px',
+        borderRadius: 'var(--radius-md)',
+        fontSize: '13px',
+        fontWeight: 500,
+        boxShadow: 'var(--shadow-xs)',
     };
 
     return (
@@ -82,180 +66,293 @@ export default function HomeView() {
             alignItems: 'center',
             justifyContent: 'center',
             padding: '24px',
-            background: 'var(--bg-primary)'
+            background: 'var(--bg-primary)',
+            position: 'relative',
         }}>
+            <div style={{
+                position: 'absolute',
+                top: '5%',
+                left: '5%',
+                width: '400px',
+                height: '400px',
+                background: 'radial-gradient(circle, var(--glass-bg) 0%, transparent 70%)',
+                borderRadius: '50%',
+                pointerEvents: 'none',
+                opacity: 0.6,
+            }} />
+            <div style={{
+                position: 'absolute',
+                bottom: '10%',
+                right: '8%',
+                width: '300px',
+                height: '300px',
+                background: 'radial-gradient(circle, var(--glass-bg) 0%, transparent 70%)',
+                borderRadius: '50%',
+                pointerEvents: 'none',
+                opacity: 0.4,
+            }} />
+
             <motion.div
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6 }}
+                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
                 style={{
                     width: '100%',
-                    maxWidth: '680px',
+                    maxWidth: '640px',
                     display: 'flex',
                     flexDirection: 'column',
-                    alignItems: 'center'
+                    alignItems: 'center',
+                    position: 'relative',
+                    zIndex: 1,
                 }}
             >
-                {/* Title */}
-                <h1 style={{
-                    fontSize: '48px',
-                    fontWeight: 600,
-                    marginBottom: '40px',
-                    color: 'var(--text-primary)',
-                    letterSpacing: '-0.02em'
-                }}>
-                    Elenchus
-                </h1>
+                <motion.div
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.1, duration: 0.5 }}
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        marginBottom: '32px',
+                    }}
+                >
+                    <div style={{
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: 'var(--radius-lg)',
+                        background: 'linear-gradient(135deg, var(--accent-indigo) 0%, var(--accent-cyan) 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 4px 20px rgba(99, 102, 241, 0.3)',
+                    }}>
+                        <Sparkles size={22} color="white" />
+                    </div>
+                    <h1 style={{
+                        fontSize: '36px',
+                        fontWeight: 700,
+                        color: 'var(--text-primary)',
+                        letterSpacing: '-0.02em',
+                    }}>
+                        Elenchus
+                    </h1>
+                </motion.div>
 
-                {/* Input Area */}
-                <div style={{
-                    width: '100%',
-                    background: 'var(--bg-secondary)',
-                    borderRadius: 'var(--radius-lg)',
-                    border: '1px solid var(--border-subtle)',
-                    padding: '16px',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '12px'
-                }}>
-                    <textarea
-                        value={topic}
-                        onChange={(e) => setTopic(e.target.value)}
-                        placeholder="输入辩题......"
-                        rows={4}
-                        style={{
-                            width: '100%',
-                            background: 'transparent',
-                            border: 'none',
-                            outline: 'none',
-                            color: 'var(--text-primary)',
-                            fontSize: '15px',
-                            resize: 'none',
-                            lineHeight: 1.5
-                        }}
-                    />
+                <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.2 }}
+                    style={{
+                        fontSize: '15px',
+                        color: 'var(--text-secondary)',
+                        marginBottom: '28px',
+                        textAlign: 'center',
+                        fontWeight: 400,
+                    }}
+                >
+                    AI 多智能体辩论平台 — 让观点碰撞产生智慧火花
+                </motion.p>
 
-                    {/* Bottom Controls */}
+                <AnimatePresence>
+                    {showAdvanced && (
+                        <motion.div
+                            initial={{ opacity: 0, marginBottom: 0 }}
+                            animate={{ opacity: 1, marginBottom: 12 }}
+                            exit={{ opacity: 0, marginBottom: 0 }}
+                            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+                            style={{ width: '100%' }}
+                        >
+                            <AgentConfigPanel show={showAdvanced} onToggle={() => setShowAdvanced(!showAdvanced)} />
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                <motion.div
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3, duration: 0.5 }}
+                    style={{
+                        width: '100%',
+                        background: 'var(--bg-card)',
+                        borderRadius: 'var(--radius-xl)',
+                        boxShadow: 'var(--shadow-md)',
+                        border: '1px solid var(--border-subtle)',
+                    }}
+                >
+                    <div style={{ padding: '20px 24px 16px' }}>
+                        <textarea
+                            value={topic}
+                            onChange={(e) => setTopic(e.target.value)}
+                            placeholder="输入辩题，开启一场深度辩论..."
+                            rows={3}
+                            style={{
+                                width: '100%',
+                                background: 'transparent',
+                                border: 'none',
+                                outline: 'none',
+                                color: 'var(--text-primary)',
+                                fontSize: '16px',
+                                resize: 'none',
+                                lineHeight: 1.6,
+                                fontWeight: 500,
+                            }}
+                        />
+                    </div>
+
                     <div style={{
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
                         gap: '12px',
+                        padding: '12px 16px 16px',
                         borderTop: '1px solid var(--border-subtle)',
-                        paddingTop: '12px',
-                        position: 'relative'
                     }}>
-                        
-                        <AnimatePresence>
-                            {showAdvanced && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: 10 }}
-                                    style={{
-                                        position: 'absolute',
-                                        bottom: '100%',
-                                        left: 0,
-                                        right: 0,
-                                        marginBottom: '16px',
-                                        padding: '20px',
-                                        background: 'var(--bg-secondary)',
-                                        border: '1px solid var(--border-subtle)',
-                                        borderRadius: 'var(--radius-lg)',
-                                        zIndex: 10,
-                                        boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-                                    }}
-                                >
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                                        <h4 style={{ margin: 0, fontSize: '15px' }}>进阶模型配置</h4>
-                                        <button onClick={() => setShowConfigManager(true)} style={{ background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}>
-                                            管理预设库
-                                        </button>
-                                    </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-                                        {['proposer', 'opposer', 'judge', 'fact_checker'].map(agent => (
-                                            <div key={agent} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
-                                                    {agent === 'proposer' ? '正方 (Proposer)' : agent === 'opposer' ? '反方 (Opposer)' : agent === 'judge' ? '裁判 (Judge)' : '事实核查员 (Fact Checker)'}
-                                                </div>
-                                                <select
-                                                    value={selectedConfigIds[agent]}
-                                                    onChange={e => handleConfigSelect(agent, e.target.value)}
-                                                    style={{
-                                                        padding: '8px',
-                                                        borderRadius: '4px',
-                                                        background: 'var(--bg-tertiary)',
-                                                        border: '1px solid var(--border-subtle)',
-                                                        color: 'var(--text-primary)',
-                                                        fontSize: '13px',
-                                                        outline: 'none',
-                                                        cursor: 'pointer'
-                                                    }}
-                                                >
-                                                    <option value="">默认配置 (应用全局设置)</option>
-                                                    {savedConfigs.map(c => 
-                                                        c.models && c.models.map(m => (
-                                                            <option key={`${c.id}::${m}`} value={`${c.id}::${m}`}>
-                                                                {c.is_default ? '⭐ ' : ''}{c.name} - {m}
-                                                            </option>
-                                                        ))
-                                                    )}
-                                                </select>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-
-                        <ModelConfigManager isOpen={showConfigManager} onClose={() => setShowConfigManager(false)} />
-
-                        {/* Agent Selector */}
-                        <div style={{ display: 'flex', justifyContent: 'flex-start', flex: 1 }}>
-                            <button
+                        <div style={{ 
+                            display: 'flex', 
+                            justifyContent: 'flex-start', 
+                            flex: 1, 
+                            alignItems: 'center', 
+                            gap: '10px' 
+                        }}>
+                            <motion.button
+                                whileHover={{ scale: 1.02, background: 'var(--bg-hover)' }}
+                                whileTap={{ scale: 0.98 }}
                                 onClick={() => setShowAdvanced(!showAdvanced)}
                                 style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    background: showAdvanced ? 'var(--bg-primary)' : 'var(--bg-tertiary)',
-                                    border: '1px solid var(--border-subtle)',
-                                    color: 'var(--text-secondary)',
-                                    padding: '6px 12px',
-                                    borderRadius: 'var(--radius-sm)',
-                                    fontSize: '12px',
+                                    ...controlStyle,
                                     cursor: 'pointer',
-                                    transition: 'background var(--transition-fast)'
+                                    borderColor: showAdvanced ? 'var(--accent-indigo)' : 'var(--border-subtle)',
+                                    color: showAdvanced ? 'var(--accent-indigo)' : 'var(--text-secondary)',
                                 }}
-                                onMouseOver={(e) => { if (!showAdvanced) e.currentTarget.style.background = 'var(--bg-primary)' }}
-                                onMouseOut={(e) => { if (!showAdvanced) e.currentTarget.style.background = 'var(--bg-tertiary)' }}
                             >
-                                选择Agent <ChevronDown size={14} style={{ transform: showAdvanced ? 'rotate(180deg)' : 'none', transition: 'transform var(--transition-fast)' }} />
-                            </button>
+                                <Settings2 size={14} />
+                                Agent
+                                <motion.div
+                                    animate={{ rotate: showAdvanced ? 180 : 0 }}
+                                    transition={{ duration: 0.2 }}
+                                >
+                                    <ChevronDown size={14} />
+                                </motion.div>
+                            </motion.button>
+
+                            <div style={controlStyle}>
+                                <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>轮数</span>
+                                <input
+                                    type="number"
+                                    value={maxTurnsInput}
+                                    onChange={(e) => setMaxTurnsInput(e.target.value)}
+                                    placeholder="5"
+                                    min={1}
+                                    max={100}
+                                    style={{
+                                        width: '36px',
+                                        background: 'transparent',
+                                        border: 'none',
+                                        outline: 'none',
+                                        color: 'var(--text-primary)',
+                                        fontSize: '13px',
+                                        fontWeight: 500,
+                                        textAlign: 'center',
+                                        MozAppearance: 'textfield' as const,
+                                        WebkitAppearance: 'none' as const,
+                                    }}
+                                />
+                            </div>
                         </div>
 
-                        <button
+                        <motion.button
+                            whileHover={{ scale: 1.05, boxShadow: 'var(--shadow-md)' }}
+                            whileTap={{ scale: 0.95 }}
                             onClick={handleCreateDebate}
                             disabled={!topic.trim() || isCreating}
                             style={{
-                                width: '32px',
-                                height: '32px',
+                                width: '40px',
+                                height: '40px',
                                 borderRadius: '50%',
-                                background: topic.trim() && !isCreating ? 'var(--text-primary)' : 'var(--bg-tertiary)',
-                                color: topic.trim() && !isCreating ? 'var(--bg-primary)' : 'var(--text-muted)',
+                                background: topic.trim() && !isCreating
+                                    ? 'linear-gradient(135deg, var(--accent-indigo) 0%, var(--accent-cyan) 100%)'
+                                    : 'var(--bg-tertiary)',
+                                color: topic.trim() && !isCreating ? 'white' : 'var(--text-muted)',
                                 border: 'none',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 cursor: topic.trim() && !isCreating ? 'pointer' : 'not-allowed',
-                                transition: 'all var(--transition-fast)'
+                                transition: 'all var(--transition-fast)',
+                                boxShadow: topic.trim() && !isCreating
+                                    ? '0 4px 16px rgba(99, 102, 241, 0.35)'
+                                    : 'var(--shadow-inner)',
+                                flexShrink: 0,
                             }}
                         >
-                            <ArrowRight size={16} />
-                        </button>
+                            <ArrowRight size={20} />
+                        </motion.button>
                     </div>
-                </div>
+                </motion.div>
+
+                <AnimatePresence>
+                    {error && (
+                        <motion.p
+                            initial={{ opacity: 0, y: -8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -8 }}
+                            style={{
+                                color: 'var(--accent-rose)',
+                                fontSize: '13px',
+                                marginTop: '12px',
+                                textAlign: 'center',
+                                padding: '10px 16px',
+                                background: 'rgba(239, 68, 68, 0.08)',
+                                borderRadius: 'var(--radius-lg)',
+                                fontWeight: 500,
+                            }}
+                        >
+                            {error}
+                        </motion.p>
+                    )}
+                </AnimatePresence>
+
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.5 }}
+                    style={{
+                        display: 'flex',
+                        gap: '24px',
+                        marginTop: '36px',
+                        color: 'var(--text-muted)',
+                        fontSize: '12px',
+                    }}
+                >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{
+                            width: '6px',
+                            height: '6px',
+                            borderRadius: '50%',
+                            background: 'var(--color-proposer)',
+                        }} />
+                        <span>正方观点</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{
+                            width: '6px',
+                            height: '6px',
+                            borderRadius: '50%',
+                            background: 'var(--color-opposer)',
+                        }} />
+                        <span>反方观点</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{
+                            width: '6px',
+                            height: '6px',
+                            borderRadius: '50%',
+                            background: 'var(--color-judge)',
+                        }} />
+                        <span>裁判评分</span>
+                    </div>
+                </motion.div>
             </motion.div>
         </div>
     );

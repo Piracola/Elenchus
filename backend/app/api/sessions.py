@@ -31,10 +31,15 @@ async def create_session(body: SessionCreate, db: AsyncSession = Depends(get_db)
 # ── List ─────────────────────────────────────────────────────────
 
 @router.get("/sessions", response_model=SessionListResponse)
-async def list_sessions(db: AsyncSession = Depends(get_db)):
-    """List all debate sessions."""
-    items = await session_service.list_sessions(db)
-    return SessionListResponse(sessions=items, total=len(items))
+async def list_sessions(
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    """List debate sessions with pagination."""
+    items = await session_service.list_sessions(db, offset=offset, limit=limit)
+    total = await session_service.count_sessions(db)
+    return SessionListResponse(sessions=items, total=total)
 
 
 # ── Get ──────────────────────────────────────────────────────────

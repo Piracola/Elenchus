@@ -1,4 +1,4 @@
-from app.models.state import GraphState
+from app.models.state import DialogueEntry
 from app.models.schemas import (
     SessionCreate,
     SessionResponse,

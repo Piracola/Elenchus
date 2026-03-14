@@ -118,6 +118,16 @@ export const useDebateStore = create<DebateState>((set) => ({
 
     endStreaming: (role, content, citations) =>
         set((state) => {
+            const history = state.currentSession?.dialogue_history || [];
+            const isDuplicate = history.some(
+                e => e.role === role && e.content === content && e.timestamp
+            );
+            if (isDuplicate) {
+                return {
+                    streamingRole: '',
+                    streamingContent: '',
+                };
+            }
             const entry: DialogueEntry = {
                 role,
                 agent_name: role === 'proposer' ? '正方 (Proposer)' : '反方 (Opposer)',
@@ -131,7 +141,7 @@ export const useDebateStore = create<DebateState>((set) => ({
                 currentSession: state.currentSession
                     ? {
                         ...state.currentSession,
-                        dialogue_history: [...state.currentSession.dialogue_history, entry],
+                        dialogue_history: [...history, entry],
                     }
                     : null,
             };

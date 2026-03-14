@@ -12,8 +12,9 @@ Flow per turn (Dynamic Tool Calling):
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from operator import add
-from typing import Annotated, Any, Sequence
+from typing import Annotated, Any, Sequence, Literal
 
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
@@ -23,6 +24,7 @@ from app.agents.debater import debater_speak
 from app.agents.judge import judge_score
 from app.agents.context_manager import compress_context
 from app.agents.skills import get_all_skills
+from app.models.state import DialogueEntryDict, SharedKnowledgeEntry
 
 logger = logging.getLogger(__name__)
 
@@ -43,16 +45,15 @@ class DebateGraphState(TypedDict, total=False):
     current_speaker: str
     current_speaker_index: int
 
-    dialogue_history: Annotated[list[dict[str, Any]], add]
-    shared_knowledge: list[dict[str, Any]]
+    dialogue_history: Annotated[list[DialogueEntryDict], add]
+    shared_knowledge: Annotated[list[SharedKnowledgeEntry], add]
     
-    # Internal message passing for tool calling loop within a node execution
     messages: Annotated[list[BaseMessage], add_messages]
 
     current_scores: dict[str, Any]
     cumulative_scores: dict[str, Any]
 
-    status: str
+    status: Literal['in_progress', 'completed', 'error']
     error: str | None
     agent_configs: dict[str, dict[str, Any]]
 
@@ -66,17 +67,33 @@ async def node_manage_context(state: DebateGraphState) -> dict[str, Any]:
 
     # Convert history entries to plain dicts for processing
     history_dicts = [dict(e) if not isinstance(e, dict) else e for e in history]
-    
-    # We do not override dialogue_history directly via `add` reducer, so we just return the new shared_knowledge
-    # The actual truncation happens magically, or we return what we added. 
-    # Actually, to truncate history with an `add` reducer in LangGraph, you usually return empty if not replacing.
-    # Since `add` appends, to truncate we technically shouldn't use `add` for history if we want to prune it.
-    # But since we only read from `shared_knowledge` + `recent_history`, we can just append to `shared_knowledge`.
-    # Let's fix this: `compress_context` returns updated knowledge.
+
+    # compress_context returns (updated_full_knowledge, recent_entries).
+    # Since shared_knowledge now uses `add` reducer, we must return only NEW items.
     new_knowledge, _ = await compress_context(history_dicts, knowledge)
 
+    # Compute delta: only items added by compression (memos not already in knowledge)
+    delta = new_knowledge[len(knowledge):]
+
+    # Inject any pending user interventions as audience dialogue entries
+    from app.services.intervention_manager import get_intervention_manager
+    session_id = state.get("session_id", "")
+    intervention_mgr = get_intervention_manager()
+    queued = await intervention_mgr.pop_interventions(session_id)
+    intervention_entries = [
+        {
+            "role": "audience",
+            "agent_name": "观众介入",
+            "content": content,
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+            "citations": [],
+        }
+        for content in queued
+    ]
+
     return {
-        "shared_knowledge": new_knowledge,
+        "shared_knowledge": delta,
+        "dialogue_history": intervention_entries,
     }
 
 
@@ -142,7 +159,7 @@ async def node_tool_executor(state: DebateGraphState) -> dict[str, Any]:
             
     return {
         "messages": results,
-        "shared_knowledge": state.get("shared_knowledge", []) + knowledge_updates
+        "shared_knowledge": knowledge_updates
     }
 
 

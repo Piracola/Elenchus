@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -152,7 +153,6 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
             )
 
             # --- Inject Judge response directly into dialogue history ---
-            from datetime import datetime, timezone
             dialogue_history_updates.append({
                 "role": "judge",
                 "target_role": role,
@@ -171,8 +171,6 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
             }
             fallback_scores["overall_comment"] = "评分过程出现错误，使用默认分数。"
             current_scores[role] = fallback_scores
-            
-            from datetime import datetime, timezone
             dialogue_history_updates.append({
                 "role": "judge",
                 "target_role": role,

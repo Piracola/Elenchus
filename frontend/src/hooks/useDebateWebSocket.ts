@@ -3,6 +3,9 @@
  *
  * Connects to /api/ws/{sessionId}, dispatches all server events
  * to the Zustand store, and exposes startDebate / stopDebate actions.
+ *
+ * IMPORTANT: All store interactions inside WebSocket callbacks use
+ * useDebateStore.getState() (not the hook return) to avoid stale closures.
  */
 
 import { useEffect, useRef, useCallback } from 'react';
@@ -12,22 +15,25 @@ import type { WSMessage } from '../types';
 const WS_BASE = import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:8000/api`;
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000]; // exponential backoff
 
+/** Direct store access — always returns latest state, no stale closure risk. */
+const getStore = () => useDebateStore.getState();
+
 export function useDebateWebSocket(sessionId: string | null) {
     const ws = useRef<WebSocket | null>(null);
     const reconnectAttempt = useRef(0);
     const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
     const isMounted = useRef(true);
-
-    const store = useDebateStore();
 
     // ── Message handler ─────────────────────────────────────────
     const handleMessage = useCallback((msg: WSMessage) => {
+        const s = getStore();
         switch (msg.type) {
             case 'system':
                 break;
 
             case 'status':
-                store.setPhase(
+                s.setPhase(
                     msg.phase ?? 'processing',
                     msg.content ?? '',
                     msg.node ?? '',
@@ -35,15 +41,14 @@ export function useDebateWebSocket(sessionId: string | null) {
                 break;
 
             case 'speech_start':
-                store.startStreaming(msg.role ?? '');
+                s.startStreaming(msg.role ?? '');
                 break;
 
             case 'speech_token':
-                store.appendStreamToken(msg.token ?? '');
+                s.appendStreamToken(msg.token ?? '');
                 break;
-
             case 'speech_end':
-                store.endStreaming(
+                s.endStreaming(
                     msg.role ?? '',
                     msg.content ?? '',
                     msg.citations ?? [],
@@ -51,13 +56,13 @@ export function useDebateWebSocket(sessionId: string | null) {
                 break;
 
             case 'fact_check_result':
-                store.setSearchResults(msg.results ?? [], msg.count ?? 0);
+                s.setSearchResults(msg.results ?? [], msg.count ?? 0);
                 break;
 
             case 'judge_score':
                 if (msg.role && msg.scores) {
-                    store.updateCurrentScores(msg.role, msg.scores);
-                    store.appendDialogueEntry({
+                    s.updateCurrentScores(msg.role, msg.scores);
+                    s.appendDialogueEntry({
                         role: 'judge',
                         target_role: msg.role,
                         agent_name: '裁判组视角',
@@ -70,22 +75,21 @@ export function useDebateWebSocket(sessionId: string | null) {
                 break;
 
             case 'turn_complete':
-                if (msg.turn !== undefined) store.advanceTurn(msg.turn);
-                if (msg.cumulative_scores) store.updateCumulativeScores(msg.cumulative_scores);
+                if (msg.turn !== undefined) s.advanceTurn(msg.turn);
+                if (msg.cumulative_scores) s.updateCumulativeScores(msg.cumulative_scores);
                 break;
 
             case 'debate_complete':
-                store.completeDebate(
+                s.completeDebate(
                     msg.final_scores ?? {},
                     msg.total_turns ?? 0,
                 );
                 break;
 
             case 'error':
-                store.setPhase('error', msg.content ?? '出现错误');
-                store.setDebating(false);
-                // Also push an error message to history so it's visible on screen
-                store.currentSession?.dialogue_history.push({
+                s.setPhase('error', msg.content ?? '出现错误');
+                s.setDebating(false);
+                s.appendDialogueEntry({
                     role: 'error',
                     content: msg.content ?? '出现错误',
                     timestamp: new Date().toISOString(),
@@ -94,11 +98,20 @@ export function useDebateWebSocket(sessionId: string | null) {
                 });
                 break;
 
+            case 'audience_message':
+                s.appendDialogueEntry({
+                    role: 'audience',
+                    content: msg.content ?? '',
+                    timestamp: msg.timestamp ?? new Date().toISOString(),
+                    citations: [],
+                    agent_name: '观众发言'
+                });
+                break;
+
             case 'pong':
                 break;
         }
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
+    }, []);
     // ── Connect ─────────────────────────────────────────────────
     const connect = useCallback(() => {
         if (!sessionId || !isMounted.current) return;
@@ -110,13 +123,15 @@ export function useDebateWebSocket(sessionId: string | null) {
         socket.onopen = () => {
             if (!isMounted.current) return;
             reconnectAttempt.current = 0;
-            store.setConnected(true);
-            // Start keepalive ping
-            const ping = setInterval(() => {
+            getStore().setConnected(true);
+            // Start keepalive ping (clear any previous)
+            if (pingTimer.current) clearInterval(pingTimer.current);
+            pingTimer.current = setInterval(() => {
                 if (socket.readyState === WebSocket.OPEN) {
                     socket.send(JSON.stringify({ action: 'ping' }));
                 } else {
-                    clearInterval(ping);
+                    if (pingTimer.current) clearInterval(pingTimer.current);
+                    pingTimer.current = null;
                 }
             }, 20000);
         };
@@ -133,8 +148,7 @@ export function useDebateWebSocket(sessionId: string | null) {
 
         socket.onclose = () => {
             if (!isMounted.current) return;
-            store.setConnected(false);
-            // Exponential backoff reconnect
+            getStore().setConnected(false);
             const delay = RECONNECT_DELAYS[
                 Math.min(reconnectAttempt.current, RECONNECT_DELAYS.length - 1)
             ];
@@ -145,7 +159,7 @@ export function useDebateWebSocket(sessionId: string | null) {
         socket.onerror = () => {
             socket.close();
         };
-    }, [sessionId, handleMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [sessionId, handleMessage]);
 
     // ── Lifecycle ────────────────────────────────────────────────
     useEffect(() => {
@@ -155,10 +169,11 @@ export function useDebateWebSocket(sessionId: string | null) {
         return () => {
             isMounted.current = false;
             if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+            if (pingTimer.current) clearInterval(pingTimer.current);
             ws.current?.close();
-            store.setConnected(false);
+            getStore().setConnected(false);
         };
-    }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [sessionId, connect]);
 
     // ── Public actions ───────────────────────────────────────────
     const startDebate = useCallback((
@@ -167,8 +182,8 @@ export function useDebateWebSocket(sessionId: string | null) {
         maxTurns: number,
     ) => {
         if (ws.current?.readyState !== WebSocket.OPEN) return;
-        store.setDebating(true);
-        store.setPhase('initializing', '辩论准备中...');
+        getStore().setDebating(true);
+        getStore().setPhase('initializing', '辩论准备中...');
         ws.current.send(JSON.stringify({
             action: 'start',
             topic,
@@ -179,9 +194,14 @@ export function useDebateWebSocket(sessionId: string | null) {
 
     const stopDebate = useCallback(() => {
         ws.current?.send(JSON.stringify({ action: 'stop' }));
-        store.setDebating(false);
-        store.setPhase('idle', '');
+        getStore().setDebating(false);
+        getStore().setPhase('idle', '');
     }, []);
 
-    return { startDebate, stopDebate };
+    const sendIntervention = useCallback((content: string) => {
+        if (ws.current?.readyState !== WebSocket.OPEN) return;
+        ws.current.send(JSON.stringify({ action: 'intervene', content }));
+    }, []);
+
+    return { startDebate, stopDebate, sendIntervention };
 }

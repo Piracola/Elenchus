@@ -1,0 +1,17 @@
+# Development dependencies for Elenchus backend
+# Install with: pip install -r requirements-dev.txt
+
+# Include production dependencies
+-r requirements.txt
+
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+
+# Code Quality
+ruff>=0.4.0
+mypy>=1.9.0
+
+# Type stubs
+types-pyyaml>=6.0.0

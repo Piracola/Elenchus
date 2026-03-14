@@ -102,85 +102,52 @@ if (-not $checksPassed) {
     Write-Host "Recommended installation:"
     Write-Host "  Python:  https://www.python.org/downloads/"
     Write-Host "  Node.js: https://nodejs.org/"
-    Write-Host ""
-    Read-Host "Press Enter to exit"
     exit 1
 }
 
-Print-OK "All environment checks passed"
+Write-Host ""
+Write-Host $CYAN"========================================"$RESET
+Write-Host $BOLD"Step 2/5: Backend Setup"$RESET
+Write-Host $CYAN"========================================"$RESET
+Write-Host ""
 
-if (-not $FrontendOnly) {
-    Write-Host ""
-    Write-Host $CYAN"========================================"$RESET
-    Write-Host $BOLD"Step 2/5: Backend Setup"$RESET
-    Write-Host $CYAN"========================================"$RESET
-    Write-Host ""
+Push-Location $BackendDir
 
-    Push-Location $BackendDir
-
-    if (-not (Test-Path $VenvDir)) {
-        Print-Info "Creating Python virtual environment..."
-        python -m venv venv
-        Print-OK "Virtual environment created"
-    } else {
-        Print-OK "Virtual environment already exists"
-    }
-
-    Print-Info "Activating virtual environment..."
-    & "$VenvDir\Scripts\Activate.ps1"
-
-    if (-not $SkipInstall) {
-        Print-Info "Installing backend dependencies..."
-        pip install -r requirements.txt --quiet --disable-pip-version-check 2>$null
-        Print-OK "Backend dependencies installed"
-    } else {
-        Print-Info "Skipping dependency installation"
-    }
-
-    $EnvFile = Join-Path $BackendDir ".env"
-    $EnvExample = Join-Path $BackendDir ".env.example"
-    if (-not (Test-Path $EnvFile)) {
-        if (Test-Path $EnvExample) {
-            Print-Info "Creating .env config file..."
-            Copy-Item $EnvExample $EnvFile
-            Print-OK ".env file created"
-            Print-Warn "Please edit backend/.env to configure your API Keys"
-        }
-    } else {
-        Print-OK ".env config file already exists"
-    }
-
-    # ── Encryption key setup ──────────────────────────────────────────
-    $envContent = if (Test-Path $EnvFile) { Get-Content $EnvFile -Raw } else { "" }
-    $needsKey = $envContent -notmatch "^PROVIDERS_ENCRYPTION_KEY=(?!your-generated-fernet-key-here).+"
-    if ($needsKey) {
-        Print-Info "Generating Provider encryption master key..."
-        $fernetKey = & "$VenvDir\Scripts\python.exe" -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-        if ($envContent -match "^PROVIDERS_ENCRYPTION_KEY=") {
-            $envContent = $envContent -replace "(?m)^PROVIDERS_ENCRYPTION_KEY=.*", "PROVIDERS_ENCRYPTION_KEY=$fernetKey"
-            Set-Content $EnvFile $envContent -NoNewline
-        } else {
-            Add-Content $EnvFile "`nPROVIDERS_ENCRYPTION_KEY=$fernetKey"
-        }
-        Print-OK "Encryption master key written to .env"
-    } else {
-        Print-OK "Encryption master key already configured"
-    }
-
-    # ── Migrate existing plaintext keys ──────────────────────────────
-    $ProvidersJson = Join-Path $BackendDir "data\providers.json"
-    if (Test-Path $ProvidersJson) {
-        Print-Info "Checking and encrypting plaintext keys in providers.json..."
-        & "$VenvDir\Scripts\python.exe" "$BackendDir\migrate_encrypt_providers.py" 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            Print-OK "providers.json keys encrypted"
-        } else {
-            Print-Warn "providers.json migration skipped (may already be encrypted)"
-        }
-    }
-
-    Pop-Location
+if (-not (Test-Path $VenvDir)) {
+    Print-Info "Creating Python virtual environment..."
+    python -m venv $VenvDir
+    Print-OK "Virtual environment created"
+} else {
+    Print-OK "Virtual environment already exists"
 }
+
+Print-Info "Activating virtual environment..."
+& "$VenvDir\Scripts\Activate.ps1"
+
+if (-not $SkipInstall) {
+    Print-Info "Installing backend dependencies..."
+    $ErrorActionPreference = "Continue"
+    & "$VenvDir\Scripts\pip.exe" install -r requirements.txt 2>&1 | Out-Null
+    $ErrorActionPreference = "Stop"
+    Print-OK "Backend dependencies installed"
+} else {
+    Print-Info "Skipping dependency installation"
+}
+
+$EnvFile = Join-Path $BackendDir ".env"
+$EnvExample = Join-Path $BackendDir ".env.example"
+if (-not (Test-Path $EnvFile)) {
+    if (Test-Path $EnvExample) {
+        Print-Info "Creating .env config file..."
+        Copy-Item $EnvExample $EnvFile
+        Print-OK ".env file created"
+        Print-Warn "Please edit backend/.env to configure your API Keys"
+    }
+} else {
+    Print-OK ".env config file already exists"
+}
+
+Pop-Location
 
 if (-not $BackendOnly) {
     Write-Host ""
@@ -208,43 +175,31 @@ if (-not $BackendOnly) {
 
 Write-Host ""
 Write-Host $CYAN"========================================"$RESET
-Write-Host $BOLD"Step 4/5: Starting Services"$RESET
+Write-Host $BOLD"Step 4/5: Installing Process Manager"$RESET
 Write-Host $CYAN"========================================"$RESET
 Write-Host ""
 
-$backendProcess = $null
-$frontendProcess = $null
+$RootDir = $ScriptDir
+$RootPackageJson = Join-Path $RootDir "package.json"
 
-if (-not $FrontendOnly) {
-    Print-Info "Starting backend service (port 8000)..."
-    $backendProcess = Start-Process -FilePath "powershell" -ArgumentList @(
-        "-NoExit",
-        "-Command",
-        "cd '$BackendDir'; & '$VenvDir\Scripts\Activate.ps1'; python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
-    ) -PassThru -WindowStyle Normal
-    Start-Sleep -Seconds 2
-    Print-OK "Backend service started (PID: $($backendProcess.Id))"
-}
-
-if (-not $BackendOnly) {
-    Print-Info "Starting frontend service (port 5173)..."
-    $frontendProcess = Start-Process -FilePath "powershell" -ArgumentList @(
-        "-NoExit",
-        "-Command",
-        "cd '$FrontendDir'; npm run dev"
-    ) -PassThru -WindowStyle Normal
-    Start-Sleep -Seconds 2
-    Print-OK "Frontend service started (PID: $($frontendProcess.Id))"
+if (-not (Test-Path (Join-Path $RootDir "node_modules"))) {
+    Print-Info "Installing concurrently for unified process management..."
+    Push-Location $RootDir
+    npm install --silent 2>$null
+    Pop-Location
+    Print-OK "Process manager installed"
+} else {
+    Print-OK "Process manager already installed"
 }
 
 Write-Host ""
 Write-Host $CYAN"========================================"$RESET
-Write-Host $BOLD"Step 5/5: Startup Complete"$RESET
+Write-Host $BOLD"Step 5/5: Starting Services"$RESET
 Write-Host $CYAN"========================================"$RESET
 Write-Host ""
 
 Write-Host ""
-Write-Host $BOLD$GREEN"  Elenchus Started Successfully!"$RESET
+Write-Host $BOLD$GREEN"  Elenchus Starting..."$RESET
 Write-Host ""
 Write-Host "  "$CYAN"Service URLs:"$RESET
 if (-not $FrontendOnly) {
@@ -262,27 +217,23 @@ if (-not $FrontendOnly) {
 Write-Host ""
 
 if (-not $BackendOnly) {
-    Print-Info "Opening browser..."
-    Start-Sleep -Seconds 3
+    Print-Info "Opening browser in 5 seconds..."
+    Start-Sleep -Seconds 5
     Start-Process "http://localhost:5173"
 }
 
 Write-Host ""
-Write-Host "  "$CYAN"Press Ctrl+C or close this window to stop all services"$RESET
+Write-Host "  "$CYAN"Press Ctrl+C to stop all services"$RESET
 Write-Host ""
 
-try {
-    while ($true) {
-        Start-Sleep -Seconds 1
-    }
-} finally {
-    Write-Host ""
-    Print-Info "Stopping services..."
-    if ($backendProcess -and -not $backendProcess.HasExited) {
-        Stop-Process -Id $backendProcess.Id -Force -ErrorAction SilentlyContinue
-    }
-    if ($frontendProcess -and -not $frontendProcess.HasExited) {
-        Stop-Process -Id $frontendProcess.Id -Force -ErrorAction SilentlyContinue
-    }
-    Print-OK "Services stopped"
+Push-Location $RootDir
+
+if ($BackendOnly) {
+    npm run dev:backend
+} elseif ($FrontendOnly) {
+    npm run dev:frontend
+} else {
+    npm run dev
 }
+
+Pop-Location

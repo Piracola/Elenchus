@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -95,6 +96,11 @@ manager = ConnectionManager()
 
 # ── WebSocket Endpoint ───────────────────────────────────────────
 
+# Validate session_id format (hex string, 12 chars — matches _gen_id output)
+_SESSION_ID_RE = re.compile(r"^[0-9a-f]{12}$")
+_VALID_ACTIONS = {"start", "stop", "ping", "intervene"}
+
+
 @router.websocket("/ws/{session_id}")
 async def debate_ws(websocket: WebSocket, session_id: str):
     """
@@ -102,6 +108,13 @@ async def debate_ws(websocket: WebSocket, session_id: str):
     After connection, the client sends action messages to control the debate.
     The server streams events back in real-time.
     """
+    # Validate session_id format before accepting
+    if not _SESSION_ID_RE.match(session_id):
+        # Must accept before we can send a close frame
+        await websocket.accept()
+        await websocket.close(code=4001, reason="Invalid session_id format")
+        return
+
     await manager.connect(session_id, websocket)
 
     try:
@@ -112,8 +125,26 @@ async def debate_ws(websocket: WebSocket, session_id: str):
         })
 
         while True:
-            data = await websocket.receive_json()
-            action = data.get("action")
+            # Wrap receive_json in try/except for malformed JSON only.
+            # WebSocketDisconnect must be re-raised so the outer handler can clean up.
+            try:
+                data = await websocket.receive_json()
+            except WebSocketDisconnect:
+                raise
+            except Exception:
+                await manager.send(session_id, websocket, {
+                    "type": "error",
+                    "content": "无效的 JSON 消息格式。",
+                })
+                continue
+
+            action = data.get("action") if isinstance(data, dict) else None
+            if not action or action not in _VALID_ACTIONS:
+                await manager.send(session_id, websocket, {
+                    "type": "error",
+                    "content": f"Unknown or missing action: {action}",
+                })
+                continue
 
             if action == "start":
                 # Check if debate is already running for this session
@@ -156,6 +187,8 @@ async def debate_ws(websocket: WebSocket, session_id: str):
                     )
                 )
                 _debate_tasks[session_id] = task
+                # Clean up finished tasks to prevent memory leaks
+                task.add_done_callback(lambda t, sid=session_id: _debate_tasks.pop(sid, None))
                 logger.info("Debate task launched for session %s with runtime configs %s", session_id, list(agent_configs.keys()))
 
             elif action == "stop":
@@ -172,11 +205,25 @@ async def debate_ws(websocket: WebSocket, session_id: str):
             elif action == "ping":
                 await manager.send(session_id, websocket, {"type": "pong"})
 
-            else:
-                await manager.send(session_id, websocket, {
-                    "type": "error",
-                    "content": f"Unknown action: {action}",
-                })
+            elif action == "intervene":
+                content = data.get("content", "").strip()
+                if content:
+                    from app.services.intervention_manager import get_intervention_manager
+                    intervention_mgr = get_intervention_manager()
+                    await intervention_mgr.add_intervention(session_id, content)
+                    task = _debate_tasks.get(session_id)
+                    if task and task.done():
+                        from datetime import datetime, timezone
+                        await manager.broadcast(session_id, {
+                            "type": "audience_message",
+                            "content": content,
+                            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                        })
+                    else:
+                        await manager.send(session_id, websocket, {
+                            "type": "system",
+                            "content": f"介入消息已加入队列，将在下一回合开始时注入。",
+                        })
 
     except WebSocketDisconnect:
         manager.disconnect(session_id, websocket)

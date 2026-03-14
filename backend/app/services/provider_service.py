@@ -7,17 +7,14 @@ from pathlib import Path
 
 from app.config import get_settings
 from app.models.schemas import ModelConfigCreate, ModelConfigUpdate, ModelConfigResponse
-from app.services.crypto import encrypt_key, decrypt_key, is_encrypted
 
 logger = logging.getLogger(__name__)
 
-# Usually we'd put this in a configurable data dir, but project root is fine for now
 _PROVIDERS_FILE = get_settings().project_root / "data" / "providers.json"
 
 class ProviderService:
     def __init__(self):
         self._lock = threading.RLock()
-        # Ensure directory exists
         _PROVIDERS_FILE.parent.mkdir(parents=True, exist_ok=True)
         if not _PROVIDERS_FILE.exists():
             self._write_data([])
@@ -37,21 +34,14 @@ class ProviderService:
     def list_configs(self) -> list[ModelConfigResponse]:
         with self._lock:
             data = self._read_data()
-        # Sort so defaults are at the top, then by creation date descending
         data.sort(key=lambda x: (not x.get("is_default", False), x.get("created_at", "")), reverse=True)
         return [ModelConfigResponse(**item) for item in data]
 
     def list_configs_raw(self) -> list[dict]:
-        """Return raw dicts with decrypted api_key for internal server-side use."""
+        """Return raw dicts with api_key for internal server-side use."""
         with self._lock:
             data = self._read_data()
-        result = []
-        for item in data:
-            entry = dict(item)
-            if entry.get("api_key") and is_encrypted(entry["api_key"]):
-                entry["api_key"] = decrypt_key(entry["api_key"])
-            result.append(entry)
-        return result
+        return [dict(item) for item in data]
 
     def get_default_config(self) -> ModelConfigResponse | None:
         with self._lock:
@@ -65,21 +55,18 @@ class ProviderService:
         with self._lock:
             data = self._read_data()
 
-            # Enforce unique name
             if any(item["name"] == config_in.name for item in data):
                 raise ValueError("A model configuration with this name already exists.")
 
-            now = datetime.now(timezone.utc).isoformat() + "Z"
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
-            # If this is the first config being added, make it default automatically
-            # Or if the user explicitly requested it to be default
             make_default = config_in.is_default or len(data) == 0
 
             new_item = {
                 "id": str(uuid.uuid4()),
                 "name": config_in.name,
                 "provider_type": config_in.provider_type,
-                "api_key": encrypt_key(config_in.api_key) if config_in.api_key else None,
+                "api_key": config_in.api_key,
                 "api_base_url": config_in.api_base_url,
                 "models": config_in.models,
                 "is_default": make_default,
@@ -103,11 +90,8 @@ class ProviderService:
                 return None
 
             update_data = config_in.model_dump(exclude_unset=True)
-            if "api_key" in update_data and update_data["api_key"]:
-                update_data["api_key"] = encrypt_key(update_data["api_key"])
-            now = datetime.now(timezone.utc).isoformat() + "Z"
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
-            # Handle default toggling
             if update_data.get("is_default") is True:
                 self._clear_defaults(data)
 
@@ -123,7 +107,6 @@ class ProviderService:
             data = self._read_data()
             initial_length = len(data)
 
-            # Find if we are deleting the default
             was_default = any(item["id"] == config_id and item.get("is_default") for item in data)
 
             data = [item for item in data if item["id"] != config_id]
@@ -131,7 +114,6 @@ class ProviderService:
             if len(data) == initial_length:
                 return False
 
-            # Reassign default if we deleted it and there are others left
             if was_default and len(data) > 0:
                 data[0]["is_default"] = True
 
@@ -142,5 +124,5 @@ class ProviderService:
         for item in data:
             item["is_default"] = False
 
-# Singleton instance
+
 provider_service = ProviderService()

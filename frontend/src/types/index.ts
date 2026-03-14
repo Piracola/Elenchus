@@ -3,6 +3,14 @@
  * Mirrors the backend Pydantic schemas exactly.
  */
 
+// ── Settings ─────────────────────────────────────────────────────
+
+export type LogLevel = 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
+
+export interface DisplaySettings {
+  messageWidth: 'narrow' | 'medium' | 'wide' | 'full';
+}
+
 // ── Scoring ─────────────────────────────────────────────────────
 
 export interface DimensionScore {
@@ -19,12 +27,12 @@ export interface TurnScore {
     overall_comment: string;
 }
 
-export const SCORE_DIMENSIONS: { key: keyof Omit<TurnScore, 'overall_comment'>; label: string; icon: string }[] = [
-    { key: 'logical_rigor', label: '逻辑严密度', icon: '🧠' },
-    { key: 'evidence_quality', label: '证据质量', icon: '📊' },
-    { key: 'rebuttal_strength', label: '反驳力度', icon: '⚡' },
-    { key: 'consistency', label: '前后自洽', icon: '🔗' },
-    { key: 'persuasiveness', label: '说服力', icon: '🎯' },
+export const SCORE_DIMENSIONS: { key: keyof Omit<TurnScore, 'overall_comment'>; label: string; icon: string; max: number }[] = [
+    { key: 'logical_rigor', label: '逻辑严密度', icon: '🧠', max: 10 },
+    { key: 'evidence_quality', label: '证据质量', icon: '📊', max: 10 },
+    { key: 'rebuttal_strength', label: '反驳力度', icon: '⚡', max: 10 },
+    { key: 'consistency', label: '前后自洽', icon: '🔗', max: 10 },
+    { key: 'persuasiveness', label: '说服力', icon: '🎯', max: 10 },
 ];
 
 // ── Debate ──────────────────────────────────────────────────────
@@ -111,6 +119,28 @@ export interface ModelConfigCreatePayload {
     is_default?: boolean;
 }
 
+// ── Form Data Types ────────────────────────────────────────────────
+
+export interface ProviderFormData {
+    name: string;
+    providerType: string;
+    apiKey: string;
+    apiBaseUrl: string;
+    models: string[];
+    isDefault: boolean;
+}
+
+/**
+ * Agent configuration result for API payload.
+ * Derived from ModelConfig with selected model information.
+ */
+export interface AgentConfigResult {
+    model: string;
+    provider_type: string;
+    provider_id: string;
+    api_base_url?: string;
+}
+
 // ── WebSocket messages ──────────────────────────────────────────
 
 export type DebatePhase =
@@ -138,6 +168,7 @@ export type WSMessageType =
     | 'judge_score'
     | 'turn_complete'
     | 'debate_complete'
+    | 'audience_message'
     | 'error'
     | 'pong';
 
@@ -163,4 +194,6 @@ export interface WSMessage {
     // debate_complete
     final_scores?: Record<string, Record<string, number[]>>;
     total_turns?: number;
+    // audience_message
+    timestamp?: string;
 }

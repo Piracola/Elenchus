@@ -1,8 +1,13 @@
+"""
+Manual test script for double debate runner.
+
+Run with: python -m tests.manual_test_double
+"""
 import asyncio
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.agents.runner import run_debate
 

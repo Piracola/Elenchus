@@ -1,31 +1,35 @@
-/**
- * SessionList — left sidebar to view past and active debate sessions.
- */
-
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Search, Settings, Sun, Moon } from 'lucide-react';
+import { Plus, Search, Settings, Sun, Moon, Trash2, MessageSquare } from 'lucide-react';
 import { useDebateStore } from '../../stores/debateStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { api } from '../../api/client';
-import ModelConfigManager from './ModelConfigManager';
+import SettingsPanel from './SettingsPanel';
 import type { SessionListItem } from '../../types';
 
 export default function SessionList() {
     const { sessions, setSessions, currentSessionId, setCurrentSessionId, setCurrentSession } = useDebateStore();
     const { theme, toggleTheme } = useThemeStore();
     const [isLoading, setIsLoading] = useState(true);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [total, setTotal] = useState(0);
+    const [hoveredId, setHoveredId] = useState<string | null>(null);
+    const PAGE_SIZE = 50;
 
-    const loadSessions = async () => {
+    const loadSessions = async (offset = 0, append = false) => {
         try {
-            const data = await api.sessions.list();
-            setSessions(data.sessions);
+            if (offset === 0) setIsLoading(true);
+            else setIsLoadingMore(true);
+            const data = await api.sessions.list(offset, PAGE_SIZE);
+            setSessions(append ? [...sessions, ...data.sessions] : data.sessions);
+            setTotal(data.total);
         } catch (err) {
             console.error('Failed to load sessions', err);
         } finally {
             setIsLoading(false);
+            setIsLoadingMore(false);
         }
     };
 
@@ -46,7 +50,10 @@ export default function SessionList() {
 
     const handleDelete = async (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
-        if (!confirm('确定删除此 Session 吗？')) return;
+        e.preventDefault();
+        
+        const confirmed = window.confirm('确定删除此辩论记录吗？');
+        if (!confirmed) return;
 
         try {
             await api.sessions.delete(id);
@@ -60,32 +67,62 @@ export default function SessionList() {
         }
     };
 
+    const filteredSessions = sessions.filter(s =>
+        s.topic.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
     return (
         <aside style={{
-            width: '280px',
-            borderRight: '1px solid var(--border-subtle)',
+            width: '320px',
+            minWidth: '280px',
+            maxWidth: '380px',
             display: 'flex',
             flexDirection: 'column',
             background: 'var(--bg-secondary)',
-            height: '100%'
+            height: '100%',
+            borderRight: '1px solid var(--border-subtle)',
+            position: 'relative',
+            zIndex: 10,
         }}>
-            {/* Header / Logo */}
+            {/* Header */}
             <div style={{
-                padding: '24px 20px',
+                padding: '20px 18px 14px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '12px'
+                gap: '12px',
+                borderBottom: '1px solid var(--border-subtle)',
             }}>
+                <div style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: 'var(--radius-lg)',
+                    background: 'linear-gradient(135deg, var(--accent-indigo) 0%, var(--accent-cyan) 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 3px 12px rgba(99, 102, 241, 0.25)',
+                }}>
+                    <MessageSquare size={18} color="white" />
+                </div>
                 <div>
-                    <h1 style={{ fontSize: '18px', fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
+                    <h1 style={{ 
+                        fontSize: '17px', 
+                        fontWeight: 700, 
+                        letterSpacing: '-0.02em', 
+                        color: 'var(--text-primary)',
+                        margin: 0,
+                    }}>
                         Elenchus
                     </h1>
+                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '2px 0 0' }}>AI 辩论平台</p>
                 </div>
             </div>
 
-            {/* Actions: New / Search */}
-            <div style={{ padding: '0 20px 24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <button
+            {/* Actions */}
+            <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <motion.button
+                    whileHover={{ scale: 1.01, background: 'var(--bg-hover)' }}
+                    whileTap={{ scale: 0.99 }}
                     onClick={() => {
                         setCurrentSessionId(null);
                         setCurrentSession(null);
@@ -93,167 +130,279 @@ export default function SessionList() {
                     style={{
                         display: 'flex',
                         alignItems: 'center',
+                        justifyContent: 'center',
                         gap: '8px',
-                        padding: '10px 16px',
-                        borderRadius: 'var(--radius-sm)',
-                        background: 'transparent', // 'var(--bg-primary)'
-                        border: '1px solid transparent',
+                        padding: '11px 14px',
+                        borderRadius: 'var(--radius-lg)',
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border-subtle)',
                         color: 'var(--text-primary)',
-                        fontSize: '14px',
+                        fontSize: '13px',
+                        fontWeight: 600,
                         cursor: 'pointer',
-                        transition: 'background var(--transition-fast)'
+                        boxShadow: 'var(--shadow-xs)',
+                        transition: 'all var(--transition-fast)',
                     }}
-                    onMouseOver={(e) => e.currentTarget.style.background = 'var(--bg-tertiary)'}
-                    onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
                 >
-                    <Plus size={18} />
+                    <Plus size={16} strokeWidth={2.5} />
                     新辩题
-                </button>
-                <div style={{ position: 'relative' }}>
-                    <Search size={16} style={{ position: 'absolute', left: '16px', top: '11px', color: 'var(--text-muted)' }} />
+                </motion.button>
+
+                <div style={{
+                    position: 'relative',
+                    background: 'var(--bg-tertiary)',
+                    borderRadius: 'var(--radius-lg)',
+                    transition: 'all var(--transition-fast)',
+                }}>
+                    <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                     <input
                         type="text"
-                        placeholder="搜索辩题"
+                        placeholder="搜索辩论记录"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         style={{
                             width: '100%',
-                            padding: '10px 16px 10px 40px',
+                            padding: '10px 12px 10px 36px',
                             background: 'transparent',
                             border: 'none',
                             outline: 'none',
                             color: 'var(--text-primary)',
-                            fontSize: '14px'
+                            fontSize: '13px',
+                            borderRadius: 'var(--radius-lg)',
                         }}
                     />
                 </div>
             </div>
 
+            {/* Section Header */}
             <div style={{
-                padding: '0 20px 12px',
-                borderBottom: '1px solid var(--border-subtle)'
+                padding: '0 18px 10px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
             }}>
-                <h2 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                <h2 style={{
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: 'var(--text-muted)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    margin: 0,
+                }}>
                     辩论记录
                 </h2>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    {filteredSessions.length}
+                </span>
             </div>
 
-            <div style={{ flex: 1, overflowY: 'auto' }}>
+            {/* Session List */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px' }}>
                 {isLoading ? (
-                    <div style={{ padding: '20px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                    <div style={{ padding: '40px 20px', color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center' }}>
                         加载中...
                     </div>
-                ) : sessions.length === 0 ? (
-                    <div style={{ padding: '20px', color: 'var(--text-muted)', fontSize: '13px' }}>
-                        暂无历史辩论
+                ) : filteredSessions.length === 0 ? (
+                    <div style={{
+                        padding: '40px 24px',
+                        color: 'var(--text-muted)',
+                        fontSize: '13px',
+                        textAlign: 'center',
+                        background: 'var(--bg-tertiary)',
+                        borderRadius: 'var(--radius-lg)',
+                        margin: '0 6px',
+                    }}>
+                        {searchQuery ? '未找到匹配的辩论' : '暂无历史辩论'}
                     </div>
                 ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        {sessions.map((item) => {
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {filteredSessions.map((item) => {
                             const isActive = item.id === currentSessionId;
+                            const isHovered = hoveredId === item.id;
                             return (
                                 <motion.div
                                     key={item.id}
-                                    whileHover={{ backgroundColor: 'rgba(255,255,255,0.03)' }}
+                                    onMouseEnter={() => setHoveredId(item.id)}
+                                    onMouseLeave={() => setHoveredId(null)}
                                     onClick={() => handleSelectSession(item)}
                                     style={{
-                                        padding: '16px 20px',
-                                        borderBottom: '1px solid var(--border-subtle)',
+                                        padding: '12px 14px',
+                                        borderRadius: 'var(--radius-lg)',
                                         cursor: 'pointer',
-                                        background: isActive ? 'var(--bg-tertiary)' : 'transparent',
-                                        borderLeft: isActive ? '3px solid var(--accent-indigo)' : '3px solid transparent',
-                                        transition: 'background var(--transition-fast)',
+                                        background: isActive ? 'var(--bg-card)' : 'transparent',
+                                        border: isActive ? '1px solid var(--border-subtle)' : '1px solid transparent',
+                                        boxShadow: isActive ? 'var(--shadow-sm)' : 'none',
+                                        transition: 'all var(--transition-fast)',
                                         position: 'relative',
+                                        display: 'flex',
+                                        alignItems: 'flex-start',
+                                        gap: '10px',
                                     }}
                                 >
+                                    {/* Status indicator */}
                                     <div style={{
-                                        fontWeight: isActive ? 600 : 500,
-                                        fontSize: '14px',
-                                        color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-                                        marginBottom: '6px',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap',
-                                        paddingRight: '24px', // avoid delete btn overlap
+                                        width: '8px',
+                                        height: '8px',
+                                        borderRadius: '50%',
+                                        background: item.status === 'in_progress' ? 'var(--accent-emerald)' : 'var(--text-muted)',
+                                        marginTop: '5px',
+                                        flexShrink: 0,
+                                        boxShadow: item.status === 'in_progress' ? '0 0 6px var(--accent-emerald)' : 'none',
+                                    }} />
+
+                                    {/* Content */}
+                                    <div style={{
+                                        flex: 1,
+                                        minWidth: 0,
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '5px',
                                     }}>
-                                        {item.topic}
-                                    </div>
-                                    <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                                        <span>
-                                            {item.status === 'in_progress' ? '进行中' : '已完成'}
-                                        </span>
-                                        <span>共 {item.current_turn} / {item.max_turns} 轮</span>
+                                        {/* Topic */}
+                                        <div style={{
+                                            fontWeight: isActive ? 600 : 500,
+                                            fontSize: '13px',
+                                            color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
+                                            lineHeight: 1.4,
+                                        }}>
+                                            {item.topic}
+                                        </div>
+
+                                        {/* Meta info */}
+                                        <div style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            fontSize: '11px',
+                                            color: 'var(--text-muted)',
+                                        }}>
+                                            <span style={{
+                                                padding: '2px 6px',
+                                                borderRadius: 'var(--radius-sm)',
+                                                background: item.status === 'in_progress' ? 'rgba(52, 199, 89, 0.1)' : 'var(--bg-tertiary)',
+                                                color: item.status === 'in_progress' ? 'var(--color-proposer)' : 'var(--text-muted)',
+                                                fontWeight: 500,
+                                                fontSize: '10px',
+                                            }}>
+                                                {item.status === 'in_progress' ? '进行中' : '已完成'}
+                                            </span>
+                                            <span>{item.current_turn}/{item.max_turns} 轮</span>
+                                        </div>
                                     </div>
 
-                                    <button
+                                    {/* Delete button */}
+                                    <motion.button
+                                        initial={false}
+                                        animate={{ opacity: isHovered || isActive ? 1 : 0 }}
+                                        whileHover={{ scale: 1.1, color: 'var(--accent-rose)' }}
+                                        whileTap={{ scale: 0.95 }}
                                         onClick={(e) => handleDelete(e, item.id)}
+                                        onPointerDown={(e) => {
+                                            e.stopPropagation();
+                                        }}
                                         style={{
-                                            position: 'absolute',
-                                            right: '12px',
-                                            top: '16px',
+                                            flexShrink: 0,
                                             background: 'none',
                                             border: 'none',
                                             color: 'var(--text-muted)',
                                             cursor: 'pointer',
-                                            fontSize: '14px',
-                                            opacity: 0.6,
+                                            padding: '4px',
+                                            borderRadius: 'var(--radius-sm)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            marginTop: '2px',
+                                            transition: 'color var(--transition-fast)',
                                         }}
                                         title="删除"
                                     >
-                                        ×
-                                    </button>
+                                        <Trash2 size={14} />
+                                    </motion.button>
                                 </motion.div>
                             );
                         })}
+                        {sessions.length < total && !searchQuery && (
+                            <motion.button
+                                whileHover={{ scale: 1.01, background: 'var(--bg-hover)' }}
+                                onClick={() => loadSessions(sessions.length, true)}
+                                disabled={isLoadingMore}
+                                style={{
+                                    margin: '10px 16px',
+                                    padding: '10px',
+                                    background: 'var(--bg-tertiary)',
+                                    border: 'none',
+                                    borderRadius: 'var(--radius-lg)',
+                                    color: 'var(--text-muted)',
+                                    fontSize: '12px',
+                                    cursor: isLoadingMore ? 'not-allowed' : 'pointer',
+                                    opacity: isLoadingMore ? 0.5 : 1,
+                                    boxShadow: 'var(--shadow-xs)',
+                                    transition: 'all var(--transition-fast)',
+                                }}
+                            >
+                                {isLoadingMore ? '加载中...' : `加载更多 (${total - sessions.length})`}
+                            </motion.button>
+                        )}
                     </div>
                 )}
             </div>
 
             {/* Bottom Actions */}
             <div style={{
-                padding: '16px 20px',
+                padding: '14px 16px',
                 borderTop: '1px solid var(--border-subtle)',
+                background: 'var(--bg-secondary)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                color: 'var(--text-secondary)'
             }}>
-                <button
+                <motion.button
+                    whileHover={{ scale: 1.05, background: 'var(--bg-hover)' }}
+                    whileTap={{ scale: 0.95 }}
                     style={{
-                        background: 'transparent',
-                        border: 'none',
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border-subtle)',
                         cursor: 'pointer',
-                        color: 'inherit',
+                        color: 'var(--text-secondary)',
                         display: 'flex',
                         alignItems: 'center',
-                        padding: '4px',
+                        justifyContent: 'center',
+                        padding: '9px',
+                        borderRadius: 'var(--radius-lg)',
+                        boxShadow: 'var(--shadow-xs)',
                     }}
                     title="设置"
                     onClick={() => setIsSettingsOpen(true)}
                 >
-                    <Settings size={20} />
-                </button>
+                    <Settings size={18} />
+                </motion.button>
 
-                <button
+                <motion.button
+                    whileHover={{ scale: 1.05, background: 'var(--bg-hover)' }}
+                    whileTap={{ scale: 0.95 }}
                     onClick={toggleTheme}
                     style={{
-                        background: 'transparent',
-                        border: 'none',
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border-subtle)',
                         cursor: 'pointer',
-                        color: 'inherit',
+                        color: 'var(--text-secondary)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        padding: '4px',
-                        borderRadius: 'var(--radius-sm)',
+                        padding: '9px',
+                        borderRadius: 'var(--radius-lg)',
+                        boxShadow: 'var(--shadow-xs)',
                     }}
                     title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
                 >
-                    {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
-                </button>
+                    {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+                </motion.button>
             </div>
 
-            <ModelConfigManager
+            <SettingsPanel
                 isOpen={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
             />

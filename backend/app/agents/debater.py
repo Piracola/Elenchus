@@ -15,13 +15,9 @@ from app.agents.llm import get_debater_llm
 from app.agents.prompt_loader import get_debater_system_prompt
 from app.agents.context_manager import build_context_for_agent
 from app.agents.skills import get_all_skills
+from app.constants import ROLE_NAMES
 
 logger = logging.getLogger(__name__)
-
-_ROLE_NAMES = {
-    "proposer": "正方 (Proposer)",
-    "opposer": "反方 (Opposer)",
-}
 
 
 def _extract_citations(text: str) -> list[str]:
@@ -49,7 +45,7 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
     
     # Custom persona overrides
     role_config = agent_configs.get(role, {})
-    agent_name = role_config.get("custom_name", _ROLE_NAMES.get(role, role))
+    agent_name = role_config.get("custom_name", ROLE_NAMES.get(role, role))
     custom_prompt = role_config.get("custom_prompt", "")
 
     logger.info("Debater [%s] ('%s') speaking — Turn %d/%d", role, agent_name, current_turn + 1, max_turns)

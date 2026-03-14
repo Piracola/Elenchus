@@ -2,7 +2,7 @@
  * API client — typed fetch wrappers for the Elenchus REST API.
  */
 
-import type { Session, SessionListItem, SessionCreatePayload, ModelConfig, ModelConfigCreatePayload } from '../types';
+import type { Session, SessionListItem, SessionCreatePayload, ModelConfig, ModelConfigCreatePayload, LogLevel } from '../types';
 
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
@@ -57,22 +57,22 @@ export const api = {
 
     models: {
         list: (): Promise<ModelConfig[]> =>
-            request('/models'),
+            request('/models/'),
 
         create: (payload: ModelConfigCreatePayload): Promise<ModelConfig> =>
-            request('/models', {
+            request('/models/', {
                 method: 'POST',
                 body: JSON.stringify(payload),
             }),
 
         update: (id: string, payload: Partial<ModelConfigCreatePayload>): Promise<ModelConfig> =>
-            request(`/models/${id}`, {
+            request(`/models/${id}/`, {
                 method: 'PUT',
                 body: JSON.stringify(payload),
             }),
 
         delete: (id: string): Promise<void> =>
-            request(`/models/${id}`, { method: 'DELETE' }),
+            request(`/models/${id}/`, { method: 'DELETE' }),
     },
 
     health: {
@@ -80,5 +80,19 @@ export const api = {
             request<{ status: string; service: string }>('/health').catch(() => ({ status: 'error', service: 'elenchus' })),
         searchCheck: (): Promise<{ status: string; provider: string | null }> =>
             request<{ status: string; provider: string | null }>('/health/search').catch(() => ({ status: 'error', provider: null })),
+    },
+
+    log: {
+        getLevel: (): Promise<{ level: string }> =>
+            request('/log/level'),
+
+        setLevel: (level: LogLevel): Promise<{ level: string }> =>
+            request('/log/level', {
+                method: 'PUT',
+                body: JSON.stringify({ level }),
+            }),
+
+        getLevels: (): Promise<{ levels: string[]; current: string }> =>
+            request('/log/levels'),
     },
 };
