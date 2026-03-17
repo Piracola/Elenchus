@@ -1,15 +1,15 @@
 /**
- * DebateControls — Compact input bar to start/stop debates.
- * Includes turn selector, intervention input, and session creation.
+ * DebateControls - compact input bar to create, start, and stop debates.
  */
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { useDebateStore } from '../../stores/debateStore';
-import { useDebateWebSocket } from '../../hooks/useDebateWebSocket';
-import { api } from '../../api/client';
-import AgentConfigPanel from '../shared/AgentConfigPanel';
+
 import { useAgentConfigs } from '../../hooks/useAgentConfigs';
+import { useDebateWebSocket } from '../../hooks/useDebateWebSocket';
+import { useSessionCreate } from '../../hooks/useSessionCreate';
+import { useDebateStore } from '../../stores/debateStore';
+import AgentConfigPanel from '../shared/AgentConfigPanel';
 
 const DEFAULT_MAX_TURNS = 5;
 
@@ -20,10 +20,14 @@ function ActiveSessionControls() {
     const [interventionText, setInterventionText] = useState('');
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
 
-    const maxTurns = maxTurnsInput.trim() ? parseInt(maxTurnsInput, 10) || DEFAULT_MAX_TURNS : DEFAULT_MAX_TURNS;
+    const maxTurns = maxTurnsInput.trim()
+        ? parseInt(maxTurnsInput, 10) || DEFAULT_MAX_TURNS
+        : DEFAULT_MAX_TURNS;
 
     const handleSendIntervention = () => {
-        if (!interventionText.trim() || !isConnected) return;
+        if (!interventionText.trim() || !isConnected) {
+            return;
+        }
         sendIntervention(interventionText.trim());
         setInterventionText('');
     };
@@ -31,29 +35,30 @@ function ActiveSessionControls() {
     const canIntervene = isConnected;
 
     return (
-        <motion.div style={{
-            padding: '10px 14px',
-            background: 'var(--bg-card)',
-            borderRadius: 'var(--radius-lg)',
-            boxShadow: 'var(--shadow-xs)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-        }}>
-            <div style={{
+        <motion.div
+            style={{
+                padding: '10px 14px',
+                background: 'var(--bg-card)',
+                borderRadius: 'var(--radius-lg)',
+                boxShadow: 'var(--shadow-xs)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
-                padding: '4px 10px',
-                background: 'var(--bg-tertiary)',
-                borderRadius: 'var(--radius-full)',
-                flexShrink: 0,
-            }}>
+                gap: '10px',
+            }}
+        >
+            <div
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '4px 10px',
+                    background: 'var(--bg-tertiary)',
+                    borderRadius: 'var(--radius-full)',
+                    flexShrink: 0,
+                }}
+            >
                 <motion.div
-                    animate={isConnected ? {
-                        scale: [1, 1.15, 1],
-                        opacity: [1, 0.7, 1]
-                    } : {}}
+                    animate={isConnected ? { scale: [1, 1.15, 1], opacity: [1, 0.7, 1] } : {}}
                     transition={{ repeat: Infinity, duration: 2 }}
                     style={{
                         width: 7,
@@ -68,20 +73,22 @@ function ActiveSessionControls() {
             </div>
 
             {!isDebating && (
-                <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '4px',
-                    background: 'var(--bg-tertiary)',
-                    padding: '4px 10px',
-                    borderRadius: 'var(--radius-sm)',
-                    flexShrink: 0,
-                }}>
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        background: 'var(--bg-tertiary)',
+                        padding: '4px 10px',
+                        borderRadius: 'var(--radius-sm)',
+                        flexShrink: 0,
+                    }}
+                >
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>轮</span>
                     <input
                         type="number"
                         value={maxTurnsInput}
-                        onChange={(e) => setMaxTurnsInput(e.target.value)}
+                        onChange={(event) => setMaxTurnsInput(event.target.value)}
                         placeholder="5"
                         min={1}
                         max={100}
@@ -94,8 +101,8 @@ function ActiveSessionControls() {
                             fontSize: '11px',
                             fontWeight: 500,
                             textAlign: 'center',
-                            MozAppearance: 'textfield' as const,
-                            WebkitAppearance: 'none' as const,
+                            MozAppearance: 'textfield',
+                            WebkitAppearance: 'none',
                         }}
                     />
                 </div>
@@ -104,9 +111,9 @@ function ActiveSessionControls() {
             <input
                 type="text"
                 value={interventionText}
-                onChange={(e) => setInterventionText(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSendIntervention()}
-                placeholder={canIntervene ? "随时发言参与辩论..." : "连接中断..."}
+                onChange={(event) => setInterventionText(event.target.value)}
+                onKeyDown={(event) => event.key === 'Enter' && handleSendIntervention()}
+                placeholder={canIntervene ? '随时发言参与辩论...' : '连接中断...'}
                 disabled={!canIntervene}
                 style={{
                     flex: 1,
@@ -147,7 +154,11 @@ function ActiveSessionControls() {
                     <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        onClick={() => startDebate(useDebateStore.getState().currentSession?.topic || '新辩论', ['proposer', 'opposer'], maxTurns)}
+                        onClick={() => startDebate(
+                            useDebateStore.getState().currentSession?.topic || '新辩题',
+                            ['proposer', 'opposer'],
+                            maxTurns,
+                        )}
                         disabled={!isConnected}
                         style={{
                             padding: '8px 14px',
@@ -173,7 +184,9 @@ function ActiveSessionControls() {
                             padding: '8px 14px',
                             borderRadius: 'var(--radius-md)',
                             border: 'none',
-                            background: canIntervene && interventionText.trim() ? 'var(--accent-indigo)' : 'var(--bg-tertiary)',
+                            background: canIntervene && interventionText.trim()
+                                ? 'var(--accent-indigo)'
+                                : 'var(--bg-tertiary)',
                             color: canIntervene && interventionText.trim() ? '#fff' : 'var(--text-muted)',
                             fontWeight: 600,
                             cursor: canIntervene && interventionText.trim() ? 'pointer' : 'not-allowed',
@@ -192,59 +205,56 @@ function ActiveSessionControls() {
 
 function SessionCreator() {
     const [topic, setTopic] = useState('');
-    const [isCreating, setIsCreating] = useState(false);
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
-    const { setCurrentSession } = useDebateStore();
-
+    const { isCreating, createSession } = useSessionCreate();
     const {
-        showAdvanced, setShowAdvanced,
-        savedConfigs, selectedConfigIds,
-        showConfigManager, setShowConfigManager, handleConfigSelect,
+        showAdvanced,
+        setShowAdvanced,
+        savedConfigs,
+        selectedConfigIds,
+        showConfigManager,
+        setShowConfigManager,
+        handleConfigSelect,
         buildAgentConfigs,
     } = useAgentConfigs();
 
-    const maxTurns = maxTurnsInput.trim() ? parseInt(maxTurnsInput, 10) || DEFAULT_MAX_TURNS : DEFAULT_MAX_TURNS;
+    const maxTurns = maxTurnsInput.trim()
+        ? parseInt(maxTurnsInput, 10) || DEFAULT_MAX_TURNS
+        : DEFAULT_MAX_TURNS;
 
     const handleStart = async () => {
-        if (!topic.trim()) return;
-        try {
-            setIsCreating(true);
-            const agentConfigs = buildAgentConfigs();
-            const session = await api.sessions.create({
-                topic: topic.trim(),
-                max_turns: maxTurns,
-                agent_configs: agentConfigs,
-            });
-            setCurrentSession(session);
-        } catch (err) {
-            console.error('Failed to create session:', err);
-        } finally {
-            setIsCreating(false);
-            setTopic('');
+        if (!topic.trim()) {
+            return;
         }
+        await createSession(topic, maxTurns, buildAgentConfigs());
+        setTopic('');
     };
 
     return (
         <div style={{ position: 'relative', flexShrink: 0 }}>
-            <AgentConfigPanel
-                    show={showAdvanced}
-                    onToggle={() => setShowAdvanced(!showAdvanced)}
-                    savedConfigs={savedConfigs}
-                    selectedConfigIds={selectedConfigIds}
-                    showConfigManager={showConfigManager}
-                    setShowConfigManager={setShowConfigManager}
-                    handleConfigSelect={handleConfigSelect}
-                />
+            {showAdvanced && (
+                <div style={{ marginBottom: '10px' }}>
+                    <AgentConfigPanel
+                        savedConfigs={savedConfigs}
+                        selectedConfigIds={selectedConfigIds}
+                        showConfigManager={showConfigManager}
+                        setShowConfigManager={setShowConfigManager}
+                        handleConfigSelect={handleConfigSelect}
+                    />
+                </div>
+            )}
 
-            <motion.div style={{
-                padding: '12px 14px',
-                background: 'var(--bg-card)',
-                borderRadius: 'var(--radius-lg)',
-                boxShadow: 'var(--shadow-xs)',
-                display: 'flex',
-                gap: '8px',
-                alignItems: 'center',
-            }}>
+            <motion.div
+                style={{
+                    padding: '12px 14px',
+                    background: 'var(--bg-card)',
+                    borderRadius: 'var(--radius-lg)',
+                    boxShadow: 'var(--shadow-xs)',
+                    display: 'flex',
+                    gap: '8px',
+                    alignItems: 'center',
+                }}
+            >
                 <motion.button
                     whileHover={{ scale: 1.03, background: 'var(--bg-hover)' }}
                     whileTap={{ scale: 0.97 }}
@@ -263,23 +273,38 @@ function SessionCreator() {
                     }}
                     title="模型配置"
                 >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16v0Z"></path>
-                        <path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4v0Z"></path>
-                        <path d="M12 2v2"></path><path d="M12 22v-2"></path>
-                        <path d="m17 20.66-1-1.73"></path><path d="M11 10.27 7 3.34"></path>
-                        <path d="m20.66 17-1.73-1"></path><path d="m3.34 7 1.73 1"></path>
-                        <path d="M14 12h8"></path><path d="M2 12h2"></path>
-                        <path d="m20.66 7-1.73 1"></path><path d="m3.34 17 1.73-1"></path>
-                        <path d="m17 3.34-1 1.73"></path><path d="m11 13.73-4 6.93"></path>
+                    <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                    >
+                        <path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16v0Z" />
+                        <path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4v0Z" />
+                        <path d="M12 2v2" />
+                        <path d="M12 22v-2" />
+                        <path d="m17 20.66-1-1.73" />
+                        <path d="M11 10.27 7 3.34" />
+                        <path d="m20.66 17-1.73-1" />
+                        <path d="m3.34 7 1.73 1" />
+                        <path d="M14 12h8" />
+                        <path d="M2 12h2" />
+                        <path d="m20.66 7-1.73 1" />
+                        <path d="m3.34 17 1.73-1" />
+                        <path d="m17 3.34-1 1.73" />
+                        <path d="m11 13.73-4 6.93" />
                     </svg>
                 </motion.button>
 
                 <input
                     type="text"
                     value={topic}
-                    onChange={(e) => setTopic(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleStart()}
+                    onChange={(event) => setTopic(event.target.value)}
+                    onKeyDown={(event) => event.key === 'Enter' && handleStart()}
                     placeholder="输入辩题..."
                     disabled={isCreating}
                     style={{
@@ -294,20 +319,22 @@ function SessionCreator() {
                     }}
                 />
 
-                <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '4px', 
-                    flexShrink: 0,
-                    background: 'var(--bg-tertiary)',
-                    padding: '4px 10px',
-                    borderRadius: 'var(--radius-sm)',
-                }}>
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        flexShrink: 0,
+                        background: 'var(--bg-tertiary)',
+                        padding: '4px 10px',
+                        borderRadius: 'var(--radius-sm)',
+                    }}
+                >
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>轮</span>
                     <input
                         type="number"
                         value={maxTurnsInput}
-                        onChange={(e) => setMaxTurnsInput(e.target.value)}
+                        onChange={(event) => setMaxTurnsInput(event.target.value)}
                         placeholder="5"
                         min={1}
                         max={100}
@@ -320,8 +347,8 @@ function SessionCreator() {
                             fontSize: '12px',
                             fontWeight: 500,
                             textAlign: 'center',
-                            MozAppearance: 'textfield' as const,
-                            WebkitAppearance: 'none' as const,
+                            MozAppearance: 'textfield',
+                            WebkitAppearance: 'none',
                         }}
                     />
                 </div>
@@ -338,8 +365,8 @@ function SessionCreator() {
                         background: topic.trim() && !isCreating ? 'var(--text-primary)' : 'var(--bg-tertiary)',
                         color: topic.trim() && !isCreating ? 'var(--bg-primary)' : 'var(--text-muted)',
                         fontWeight: 600,
-                        cursor: (isCreating || !topic.trim()) ? 'not-allowed' : 'pointer',
-                        opacity: (isCreating || !topic.trim()) ? 0.5 : 1,
+                        cursor: isCreating || !topic.trim() ? 'not-allowed' : 'pointer',
+                        opacity: isCreating || !topic.trim() ? 0.5 : 1,
                         fontSize: '12px',
                         flexShrink: 0,
                     }}

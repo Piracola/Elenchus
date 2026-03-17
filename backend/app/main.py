@@ -15,7 +15,6 @@ from app.api.websocket import router as ws_router, manager as ws_manager
 from app.api.models import router as models_router
 from app.api.log import router as log_router
 from app.api.search import router as search_router
-from app.api.users import router as users_router
 from app.db.database import init_db
 from app.dependencies import get_search_factory
 from app.services.log_service import setup_logging, get_logger
@@ -64,7 +63,6 @@ app.include_router(ws_router, prefix="/api")
 app.include_router(models_router, prefix="/api/models", tags=["models"])
 app.include_router(log_router, prefix="/api")
 app.include_router(search_router, prefix="/api")
-app.include_router(users_router, prefix="/api")
 
 
 # ── Health / diagnostic endpoints ────────────────────────────────

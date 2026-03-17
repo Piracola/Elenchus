@@ -54,7 +54,7 @@ start.bat
 
 - ✅ 环境检查（Python 3.10+、Node.js 18+）
 - ✅ 创建虚拟环境并安装后端依赖
-- ✅ 生成加密主密钥（`PROVIDERS_ENCRYPTION_KEY`）
+- ✅ 生成加密主密钥（`ELENCHUS_ENCRYPTION_KEY`）
 - ✅ 安装前端依赖
 - ✅ 同时启动后端（`http://localhost:8001`）和前端（`http://localhost:5173`）
 - ✅ 自动打开浏览器访问 UI
@@ -258,7 +258,7 @@ elenchus/
 
 | 变量名                        | 说明                  | 必需 | 默认值                                 |
 | -------------------------- | ------------------- | -- | ----------------------------------- |
-| `PROVIDERS_ENCRYPTION_KEY` | API 密钥加密主密钥         | ✅  | -                                   |
+| `ELENCHUS_ENCRYPTION_KEY` | API 密钥加密主密钥         | ✅  | -                                   |
 | `DATABASE_URL`             | SQLite 数据库路径        | ❌  | `sqlite+aiosqlite:///./elenchus.db` |
 | `SEARXNG_BASE_URL`         | SearXNG 搜索地址        | ❌  | `http://localhost:8080`             |
 | `TAVILY_API_KEY`           | Tavily API 密钥（备选搜索） | ❌  | -                                   |

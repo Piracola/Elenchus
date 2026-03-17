@@ -9,11 +9,12 @@ import { ProviderForm } from './ProviderForm';
 import { SearchConfigTab } from './SearchConfigTab';
 import type { LogLevel, DisplaySettings } from '../../types';
 
-type SettingsTab = 'providers' | 'display' | 'logging' | 'search';
+export type SettingsTab = 'providers' | 'display' | 'logging' | 'search';
 
 interface Props {
     isOpen: boolean;
     onClose: () => void;
+    initialTab?: SettingsTab;
 }
 
 const LOG_LEVELS: { value: LogLevel; label: string; description: string }[] = [
@@ -31,8 +32,12 @@ const MESSAGE_WIDTH_OPTIONS: { value: DisplaySettings['messageWidth']; label: st
     { value: 'full', label: '全宽', description: '100% — 最大化显示区域' },
 ];
 
-export default function SettingsPanel({ isOpen, onClose }: Props) {
-    const [activeTab, setActiveTab] = useState<SettingsTab>('providers');
+export default function SettingsPanel({
+    isOpen,
+    onClose,
+    initialTab = 'providers',
+}: Props) {
+    const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
     const { logLevel, setLogLevel, displaySettings, setDisplaySettings } = useSettingsStore();
 
     // Use the extracted hook for provider management
@@ -40,13 +45,14 @@ export default function SettingsPanel({ isOpen, onClose }: Props) {
 
     useEffect(() => {
         if (isOpen) {
+            setActiveTab(initialTab);
             modelConfig.fetchConfigs();
             syncLogLevelFromServer();
         } else {
             modelConfig.startNew();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOpen]);
+    }, [initialTab, isOpen]);
 
     const syncLogLevelFromServer = async () => {
         try {

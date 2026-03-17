@@ -1,25 +1,5 @@
 """
 WebSocket endpoint for real-time debate streaming.
-
-Protocol (Server → Client messages):
-  { "type": "system",            "content": "..." }
-  { "type": "status",            "content": "...", "phase": "..." }
-  { "type": "speech_start",      "role": "proposer" }
-  { "type": "speech_token",      "role": "proposer", "token": "..." }
-  { "type": "speech_end",        "role": "proposer", "content": "full text" }
-  { "type": "fact_check_start",  "claims": [...] }
-  { "type": "fact_check_result", "results": [...] }
-  { "type": "judge_start" }
-  { "type": "judge_score",       "role": "proposer", "scores": {...} }
-  { "type": "turn_complete",     "turn": 3, "scores": {...} }
-  { "type": "debate_complete",   "final_scores": {...} }
-  { "type": "error",             "content": "..." }
-  { "type": "pong" }
-
-Protocol (Client → Server messages):
-  { "action": "start" }          — Begin the debate
-  { "action": "ping" }           — Keep-alive
-  { "action": "stop" }           — Abort the debate
 """
 
 from __future__ import annotations
@@ -27,29 +7,20 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
-
-from app.auth.dependencies import WebSocketUser, get_current_user_ws
-from app.config import get_settings
-from app.db.models import UserRecord
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["websocket"])
 
-# Track running debate tasks so they can be cancelled
 _debate_tasks: dict[str, asyncio.Task] = {}
 
 
-# ── Connection Manager ───────────────────────────────────────────
-
 class ConnectionManager:
-    """
-    Manages active WebSocket connections grouped by session_id.
-    Supports multiple viewers per session (spectator mode).
-    """
+    """Manage active WebSocket connections grouped by session id."""
 
     def __init__(self) -> None:
         self._active: dict[str, list[WebSocket]] = {}
@@ -57,7 +28,7 @@ class ConnectionManager:
     async def connect(self, session_id: str, websocket: WebSocket) -> None:
         await websocket.accept()
         self._active.setdefault(session_id, []).append(websocket)
-        logger.info("WS connected: session=%s  (total=%d)", session_id, len(self._active[session_id]))
+        logger.info("WS connected: session=%s (total=%d)", session_id, len(self._active[session_id]))
 
     def disconnect(self, session_id: str, websocket: WebSocket) -> None:
         conns = self._active.get(session_id, [])
@@ -68,23 +39,21 @@ class ConnectionManager:
         logger.info("WS disconnected: session=%s", session_id)
 
     async def send(self, session_id: str, websocket: WebSocket, message: dict[str, Any]) -> None:
-        """Send a message to a specific client."""
         try:
             await websocket.send_json(message)
         except Exception as exc:
-            logger.warning("Failed to send WS message: %s", exc)
+            logger.warning("Failed to send WS message for %s: %s", session_id, exc)
 
     async def broadcast(self, session_id: str, message: dict[str, Any]) -> None:
-        """Broadcast a message to ALL clients watching a session."""
         dead: list[WebSocket] = []
-        for ws in self._active.get(session_id, []):
+        for websocket in self._active.get(session_id, []):
             try:
-                await ws.send_json(message)
+                await websocket.send_json(message)
             except Exception:
-                dead.append(ws)
-        # Clean up broken connections
-        for ws in dead:
-            self.disconnect(session_id, ws)
+                dead.append(websocket)
+
+        for websocket in dead:
+            self.disconnect(session_id, websocket)
 
     def get_connections(self, session_id: str) -> list[WebSocket]:
         return self._active.get(session_id, [])
@@ -94,153 +63,137 @@ class ConnectionManager:
         return list(self._active.keys())
 
 
-# Singleton instance — shared with the debate runner
 manager = ConnectionManager()
 
-
-# ── WebSocket Endpoint ───────────────────────────────────────────
-
-# Validate session_id format (hex string, 12 chars — matches _gen_id output)
 _SESSION_ID_RE = re.compile(r"^[0-9a-f]{12}$")
 _VALID_ACTIONS = {"start", "stop", "ping", "intervene"}
 
 
 @router.websocket("/ws/{session_id}")
-async def debate_ws(
-    websocket: WebSocket,
-    session_id: str,
-    user: WebSocketUser,
-):
+async def debate_ws(websocket: WebSocket, session_id: str):
     """
-    WebSocket endpoint for a debate session.
-    After connection, the client sends action messages to control the debate.
-    The server streams events back in real-time.
-
-    Authentication:
-    - When AUTH_ENABLED=true, pass JWT token as query parameter: ?token=<jwt>
-    - When AUTH_ENABLED=false, no authentication required
+    Connect to a debate session and stream debate events in real time.
     """
-    settings = get_settings()
-
     if not _SESSION_ID_RE.match(session_id):
         await websocket.accept()
         await websocket.close(code=4001, reason="Invalid session_id format")
         return
 
-    user_id = user.id if user else None
-
     await manager.connect(session_id, websocket)
 
     try:
-        # Notify client of successful connection
-        await manager.send(session_id, websocket, {
-            "type": "system",
-            "content": f"Connected to session {session_id}",
-        })
+        await manager.send(
+            session_id,
+            websocket,
+            {"type": "system", "content": f"Connected to session {session_id}"},
+        )
 
         while True:
-            # Wrap receive_json in try/except for malformed JSON only.
-            # WebSocketDisconnect must be re-raised so the outer handler can clean up.
             try:
                 data = await websocket.receive_json()
             except WebSocketDisconnect:
                 raise
             except Exception:
-                await manager.send(session_id, websocket, {
-                    "type": "error",
-                    "content": "无效的 JSON 消息格式。",
-                })
+                await manager.send(
+                    session_id,
+                    websocket,
+                    {"type": "error", "content": "Invalid JSON message."},
+                )
                 continue
 
             action = data.get("action") if isinstance(data, dict) else None
-            if not action or action not in _VALID_ACTIONS:
-                await manager.send(session_id, websocket, {
-                    "type": "error",
-                    "content": f"Unknown or missing action: {action}",
-                })
+            if action not in _VALID_ACTIONS:
+                await manager.send(
+                    session_id,
+                    websocket,
+                    {"type": "error", "content": f"Unknown or missing action: {action}"},
+                )
                 continue
 
             if action == "start":
-                # Check if debate is already running for this session
                 if session_id in _debate_tasks and not _debate_tasks[session_id].done():
-                    await manager.send(session_id, websocket, {
-                        "type": "error",
-                        "content": "该 Session 的辩论已在进行中。",
-                    })
+                    await manager.send(
+                        session_id,
+                        websocket,
+                        {"type": "error", "content": "This session is already running."},
+                    )
                     continue
 
-                # Fetch session info securely from database
-                from app.services import session_service
                 from app.db.database import get_session_factory
-                factory = get_session_factory()
+                from app.services import session_service
 
-                async with factory() as db:
-                    # Pass owner_id for ownership verification when auth is enabled
-                    owner_filter = user_id if settings.env.auth_enabled else None
-                    session_db = await session_service.get_session(db, session_id, owner_id=owner_filter)
+                async with get_session_factory()() as db:
+                    session_db = await session_service.get_session(db, session_id)
 
                 if not session_db:
-                    await manager.send(session_id, websocket, {
-                        "type": "error",
-                        "content": f"Session {session_id} 不存在或无权访问。",
-                    })
+                    await manager.send(
+                        session_id,
+                        websocket,
+                        {"type": "error", "content": f"Session {session_id} was not found."},
+                    )
                     continue
 
-                topic = session_db.get("topic", "")
-                max_turns = session_db.get("max_turns", 5)
-                participants = session_db.get("participants", ["proposer", "opposer"])
-                agent_configs = session_db.get("agent_configs", {})
-
-                # Launch debate as background task
                 from app.agents.runner import run_debate
+
                 task = asyncio.create_task(
                     run_debate(
                         session_id=session_id,
-                        topic=topic,
-                        participants=participants,
-                        max_turns=max_turns,
-                        agent_configs=agent_configs,
+                        topic=session_db.get("topic", ""),
+                        participants=session_db.get("participants", ["proposer", "opposer"]),
+                        max_turns=session_db.get("max_turns", 5),
+                        agent_configs=session_db.get("agent_configs", {}),
                     )
                 )
                 _debate_tasks[session_id] = task
-                # Clean up finished tasks to prevent memory leaks
-                task.add_done_callback(lambda t, sid=session_id: _debate_tasks.pop(sid, None))
-                logger.info("Debate task launched for session %s with runtime configs %s", session_id, list(agent_configs.keys()))
+                task.add_done_callback(lambda _task, sid=session_id: _debate_tasks.pop(sid, None))
+                logger.info(
+                    "Debate task launched for session %s with runtime configs %s",
+                    session_id,
+                    list(session_db.get("agent_configs", {}).keys()),
+                )
 
             elif action == "stop":
-                # Cancel running debate
                 task = _debate_tasks.get(session_id)
                 if task and not task.done():
                     task.cancel()
                     logger.info("Debate task cancelled for session %s", session_id)
-                await manager.broadcast(session_id, {
-                    "type": "system",
-                    "content": "辩论已被用户终止。",
-                })
+                await manager.broadcast(
+                    session_id,
+                    {"type": "system", "content": "Debate stopped by user."},
+                )
 
             elif action == "ping":
                 await manager.send(session_id, websocket, {"type": "pong"})
 
             elif action == "intervene":
                 content = data.get("content", "").strip()
-                if content:
-                    from app.dependencies import get_intervention_manager
-                    intervention_mgr = get_intervention_manager()
-                    await intervention_mgr.add_intervention(session_id, content)
-                    task = _debate_tasks.get(session_id)
-                    # Broadcast to all viewers if debate is in progress; otherwise just confirm to sender
-                    if task and not task.done():
-                        from datetime import datetime, timezone
-                        await manager.broadcast(session_id, {
+                if not content:
+                    continue
+
+                from app.dependencies import get_intervention_manager
+
+                intervention_manager = get_intervention_manager()
+                await intervention_manager.add_intervention(session_id, content)
+
+                task = _debate_tasks.get(session_id)
+                if task and not task.done():
+                    await manager.broadcast(
+                        session_id,
+                        {
                             "type": "audience_message",
                             "content": content,
                             "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-                        })
-                    else:
-                        await manager.send(session_id, websocket, {
+                        },
+                    )
+                else:
+                    await manager.send(
+                        session_id,
+                        websocket,
+                        {
                             "type": "system",
-                            "content": "介入消息已加入队列，将在下一回合开始时注入。",
-                        })
+                            "content": "Intervention queued for the next round.",
+                        },
+                    )
 
     except WebSocketDisconnect:
         manager.disconnect(session_id, websocket)

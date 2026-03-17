@@ -1,10 +1,13 @@
 import { useEffect } from 'react';
-import { ChatPanel, ToastContainer, useToastState, BackendHealthCheck } from './components';
+import ChatPanel from './components/ChatPanel';
 import HomeView from './components/HomeView';
 import SessionList from './components/sidebar/SessionList';
-import { useThemeStore } from './stores/themeStore';
-import { useDebateStore } from './stores/debateStore';
+import { BackendHealthCheck } from './components/shared/BackendHealthCheck';
 import ErrorBoundary from './components/shared/ErrorBoundary';
+import { ToastContainer } from './components/shared/ToastContainer';
+import { useToastState } from './hooks/useToastState';
+import { useDebateStore } from './stores/debateStore';
+import { useThemeStore } from './stores/themeStore';
 
 function App() {
   const { theme, setTheme } = useThemeStore();

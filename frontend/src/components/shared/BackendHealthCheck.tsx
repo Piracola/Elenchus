@@ -27,7 +27,7 @@ export function BackendHealthCheck({ children }: Props) {
                         throw new Error('Backend returned error status');
                     }
                 }
-            } catch (err) {
+            } catch {
                 if (mounted) {
                     retryCountRef.current += 1;
                     if (retryCountRef.current >= 60) {

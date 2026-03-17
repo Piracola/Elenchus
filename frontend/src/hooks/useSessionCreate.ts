@@ -6,7 +6,7 @@ import type { AgentConfigResult } from '../types';
 interface UseSessionCreateResult {
     isCreating: boolean;
     error: string;
-    createSession: (topic: string, maxTurns: number, agentConfigs: Record<string, AgentConfigResult>) => Promise<void>;
+    createSession: (topic: string, maxTurns: number, agentConfigs?: Record<string, AgentConfigResult>) => Promise<void>;
     clearError: () => void;
 }
 
@@ -18,7 +18,7 @@ export function useSessionCreate(): UseSessionCreateResult {
     const createSession = useCallback(async (
         topic: string,
         maxTurns: number,
-        agentConfigs: Record<string, AgentConfigResult>
+        agentConfigs?: Record<string, AgentConfigResult>
     ) => {
         if (!topic.trim() || isCreating) return;
 

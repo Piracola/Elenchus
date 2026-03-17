@@ -5,8 +5,8 @@
 
 import { motion } from 'framer-motion';
 import { Settings2 } from 'lucide-react';
-import ModelConfigManager from '../sidebar/ModelConfigManager';
 import CustomSelect from './CustomSelect';
+import SettingsPanel from '../sidebar/SettingsPanel';
 import type { ModelConfig } from '../../types';
 
 export type { AgentConfigResult } from '../../types';
@@ -28,8 +28,6 @@ const AGENT_ICONS: Record<string, string> = {
 const AGENTS = ['proposer', 'opposer', 'judge', 'fact_checker'] as const;
 
 interface AgentConfigPanelProps {
-    show?: boolean;
-    onToggle?: () => void;
     savedConfigs: ModelConfig[];
     selectedConfigIds: Record<string, string>;
     showConfigManager: boolean;
@@ -127,7 +125,11 @@ export default function AgentConfigPanel({
                     ))}
                 </div>
             </motion.div>
-            <ModelConfigManager isOpen={showConfigManager} onClose={() => setShowConfigManager(false)} />
+            <SettingsPanel
+                isOpen={showConfigManager}
+                onClose={() => setShowConfigManager(false)}
+                initialTab="providers"
+            />
         </>
     );
 }

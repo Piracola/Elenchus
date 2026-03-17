@@ -1,48 +1,37 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, ChevronDown, Sparkles, Settings2 } from 'lucide-react';
-import { useDebateStore } from '../stores/debateStore';
-import { api } from '../api/client';
-import AgentConfigPanel from './shared/AgentConfigPanel';
+import { ArrowRight, ChevronDown, Settings2, Sparkles } from 'lucide-react';
+
 import { useAgentConfigs } from '../hooks/useAgentConfigs';
+import { useSessionCreate } from '../hooks/useSessionCreate';
+import AgentConfigPanel from './shared/AgentConfigPanel';
 
 const DEFAULT_MAX_TURNS = 5;
 
 export default function HomeView() {
     const [topic, setTopic] = useState('');
-    const [isCreating, setIsCreating] = useState(false);
-    const [error, setError] = useState('');
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
-    const { setCurrentSession } = useDebateStore();
-
+    const { isCreating, error, createSession, clearError } = useSessionCreate();
     const {
-        showAdvanced, setShowAdvanced,
-        savedConfigs, selectedConfigIds,
-        showConfigManager, setShowConfigManager, handleConfigSelect,
+        showAdvanced,
+        setShowAdvanced,
+        savedConfigs,
+        selectedConfigIds,
+        showConfigManager,
+        setShowConfigManager,
+        handleConfigSelect,
         buildAgentConfigs,
     } = useAgentConfigs();
 
-    const maxTurns = maxTurnsInput.trim() ? parseInt(maxTurnsInput, 10) || DEFAULT_MAX_TURNS : DEFAULT_MAX_TURNS;
+    const maxTurns = maxTurnsInput.trim()
+        ? parseInt(maxTurnsInput, 10) || DEFAULT_MAX_TURNS
+        : DEFAULT_MAX_TURNS;
 
     const handleCreateDebate = async () => {
-        if (!topic.trim() || isCreating) return;
-
-        try {
-            setIsCreating(true);
-            setError('');
-            const agentConfigs = buildAgentConfigs();
-            const session = await api.sessions.create({
-                topic: topic.trim(),
-                max_turns: maxTurns,
-                agent_configs: agentConfigs,
-            });
-            setCurrentSession(session);
-        } catch (err) {
-            console.error('Failed to create session:', err);
-            setError(err instanceof Error ? err.message : '创建会话失败，请检查后端服务是否正常运行');
-        } finally {
-            setIsCreating(false);
+        if (!topic.trim() || isCreating) {
+            return;
         }
+        await createSession(topic, maxTurns, buildAgentConfigs());
     };
 
     const controlStyle = {
@@ -57,41 +46,47 @@ export default function HomeView() {
         fontSize: '13px',
         fontWeight: 500,
         boxShadow: 'var(--shadow-xs)',
-    };
+    } as const;
 
     return (
-        <div style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '24px',
-            background: 'var(--bg-primary)',
-            position: 'relative',
-        }}>
-            <div style={{
-                position: 'absolute',
-                top: '5%',
-                left: '5%',
-                width: '400px',
-                height: '400px',
-                background: 'radial-gradient(circle, var(--glass-bg) 0%, transparent 70%)',
-                borderRadius: '50%',
-                pointerEvents: 'none',
-                opacity: 0.6,
-            }} />
-            <div style={{
-                position: 'absolute',
-                bottom: '10%',
-                right: '8%',
-                width: '300px',
-                height: '300px',
-                background: 'radial-gradient(circle, var(--glass-bg) 0%, transparent 70%)',
-                borderRadius: '50%',
-                pointerEvents: 'none',
-                opacity: 0.4,
-            }} />
+        <div
+            style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '24px',
+                background: 'var(--bg-primary)',
+                position: 'relative',
+            }}
+        >
+            <div
+                style={{
+                    position: 'absolute',
+                    top: '5%',
+                    left: '5%',
+                    width: '400px',
+                    height: '400px',
+                    background: 'radial-gradient(circle, var(--glass-bg) 0%, transparent 70%)',
+                    borderRadius: '50%',
+                    pointerEvents: 'none',
+                    opacity: 0.6,
+                }}
+            />
+            <div
+                style={{
+                    position: 'absolute',
+                    bottom: '10%',
+                    right: '8%',
+                    width: '300px',
+                    height: '300px',
+                    background: 'radial-gradient(circle, var(--glass-bg) 0%, transparent 70%)',
+                    borderRadius: '50%',
+                    pointerEvents: 'none',
+                    opacity: 0.4,
+                }}
+            />
 
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -118,24 +113,28 @@ export default function HomeView() {
                         marginBottom: '32px',
                     }}
                 >
-                    <div style={{
-                        width: '44px',
-                        height: '44px',
-                        borderRadius: 'var(--radius-lg)',
-                        background: 'linear-gradient(135deg, var(--accent-indigo) 0%, var(--accent-cyan) 100%)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 4px 20px rgba(99, 102, 241, 0.3)',
-                    }}>
+                    <div
+                        style={{
+                            width: '44px',
+                            height: '44px',
+                            borderRadius: 'var(--radius-lg)',
+                            background: 'linear-gradient(135deg, var(--accent-indigo) 0%, var(--accent-cyan) 100%)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 4px 20px rgba(99, 102, 241, 0.3)',
+                        }}
+                    >
                         <Sparkles size={22} color="white" />
                     </div>
-                    <h1 style={{
-                        fontSize: '36px',
-                        fontWeight: 700,
-                        color: 'var(--text-primary)',
-                        letterSpacing: '-0.02em',
-                    }}>
+                    <h1
+                        style={{
+                            fontSize: '36px',
+                            fontWeight: 700,
+                            color: 'var(--text-primary)',
+                            letterSpacing: '-0.02em',
+                        }}
+                    >
                         Elenchus
                     </h1>
                 </motion.div>
@@ -152,7 +151,7 @@ export default function HomeView() {
                         fontWeight: 400,
                     }}
                 >
-                    AI 多智能体辩论平台 — 让观点碰撞产生智慧火花
+                    AI 多智能体辩论平台，让观点碰撞产生更清晰的结论。
                 </motion.p>
 
                 <AnimatePresence>
@@ -165,8 +164,6 @@ export default function HomeView() {
                             style={{ width: '100%' }}
                         >
                             <AgentConfigPanel
-                                show={showAdvanced}
-                                onToggle={() => setShowAdvanced(!showAdvanced)}
                                 savedConfigs={savedConfigs}
                                 selectedConfigIds={selectedConfigIds}
                                 showConfigManager={showConfigManager}
@@ -192,8 +189,13 @@ export default function HomeView() {
                     <div style={{ padding: '20px 24px 16px' }}>
                         <textarea
                             value={topic}
-                            onChange={(e) => setTopic(e.target.value)}
-                            placeholder="输入辩题，开启一场深度辩论..."
+                            onChange={(event) => {
+                                if (error) {
+                                    clearError();
+                                }
+                                setTopic(event.target.value);
+                            }}
+                            placeholder="输入辩题，开始一场深入辩论..."
                             rows={3}
                             style={{
                                 width: '100%',
@@ -209,21 +211,25 @@ export default function HomeView() {
                         />
                     </div>
 
-                    <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: '12px',
-                        padding: '12px 16px 16px',
-                        borderTop: '1px solid var(--border-subtle)',
-                    }}>
-                        <div style={{ 
-                            display: 'flex', 
-                            justifyContent: 'flex-start', 
-                            flex: 1, 
-                            alignItems: 'center', 
-                            gap: '10px' 
-                        }}>
+                    <div
+                        style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: '12px 16px 16px',
+                            borderTop: '1px solid var(--border-subtle)',
+                        }}
+                    >
+                        <div
+                            style={{
+                                display: 'flex',
+                                justifyContent: 'flex-start',
+                                flex: 1,
+                                alignItems: 'center',
+                                gap: '10px',
+                            }}
+                        >
                             <motion.button
                                 whileHover={{ scale: 1.02, background: 'var(--bg-hover)' }}
                                 whileTap={{ scale: 0.98 }}
@@ -246,11 +252,13 @@ export default function HomeView() {
                             </motion.button>
 
                             <div style={controlStyle}>
-                                <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>轮数</span>
+                                <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                    轮数
+                                </span>
                                 <input
                                     type="number"
                                     value={maxTurnsInput}
-                                    onChange={(e) => setMaxTurnsInput(e.target.value)}
+                                    onChange={(event) => setMaxTurnsInput(event.target.value)}
                                     placeholder="5"
                                     min={1}
                                     max={100}
@@ -263,8 +271,8 @@ export default function HomeView() {
                                         fontSize: '13px',
                                         fontWeight: 500,
                                         textAlign: 'center',
-                                        MozAppearance: 'textfield' as const,
-                                        WebkitAppearance: 'none' as const,
+                                        MozAppearance: 'textfield',
+                                        WebkitAppearance: 'none',
                                     }}
                                 />
                             </div>
@@ -335,30 +343,36 @@ export default function HomeView() {
                     }}
                 >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div style={{
-                            width: '6px',
-                            height: '6px',
-                            borderRadius: '50%',
-                            background: 'var(--color-proposer)',
-                        }} />
+                        <div
+                            style={{
+                                width: '6px',
+                                height: '6px',
+                                borderRadius: '50%',
+                                background: 'var(--color-proposer)',
+                            }}
+                        />
                         <span>正方观点</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div style={{
-                            width: '6px',
-                            height: '6px',
-                            borderRadius: '50%',
-                            background: 'var(--color-opposer)',
-                        }} />
+                        <div
+                            style={{
+                                width: '6px',
+                                height: '6px',
+                                borderRadius: '50%',
+                                background: 'var(--color-opposer)',
+                            }}
+                        />
                         <span>反方观点</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div style={{
-                            width: '6px',
-                            height: '6px',
-                            borderRadius: '50%',
-                            background: 'var(--color-judge)',
-                        }} />
+                        <div
+                            style={{
+                                width: '6px',
+                                height: '6px',
+                                borderRadius: '50%',
+                                background: 'var(--color-judge)',
+                            }}
+                        />
                         <span>裁判评分</span>
                     </div>
                 </motion.div>

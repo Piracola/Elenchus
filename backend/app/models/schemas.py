@@ -1,5 +1,5 @@
 """
-Request / Response schemas for the REST API.
+Request and response schemas for the REST API.
 """
 
 from __future__ import annotations
@@ -8,10 +8,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
-
-# ── Enums ────────────────────────────────────────────────────────
 
 class ExportFormat(str, Enum):
     JSON = "json"
@@ -25,53 +23,8 @@ class SessionStatus(str, Enum):
     ERROR = "error"
 
 
-# ── User Request/Response models ─────────────────────────────────
-
-class UserRegister(BaseModel):
-    """POST /api/users/register — create a new user account."""
-
-    email: EmailStr = Field(..., description="User email address")
-    password: str = Field(..., min_length=8, max_length=128, description="User password")
-
-
-class UserLogin(BaseModel):
-    """POST /api/users/login — authenticate user."""
-
-    email: EmailStr = Field(..., description="User email address")
-    password: str = Field(..., description="User password")
-
-
-class UserResponse(BaseModel):
-    """User information response."""
-
-    id: str
-    email: str
-    is_active: bool
-    is_superuser: bool
-    created_at: datetime
-    updated_at: datetime
-
-
-class TokenResponse(BaseModel):
-    """JWT token response for login."""
-
-    access_token: str
-    token_type: str = "bearer"
-    expires_in: int  # seconds
-
-
-class AuthStatusResponse(BaseModel):
-    """Authentication status response."""
-
-    auth_enabled: bool
-    authenticated: bool
-    user: UserResponse | None = None
-
-
-# ── Request models ───────────────────────────────────────────────
-
 class SessionCreate(BaseModel):
-    """POST /api/sessions — create a new debate session."""
+    """Payload to create a new debate session."""
 
     topic: str = Field(..., min_length=1, description="The debate topic")
     participants: list[str] = Field(
@@ -81,12 +34,15 @@ class SessionCreate(BaseModel):
     max_turns: int = Field(default=5, ge=1, le=20)
     agent_configs: dict[str, dict[str, Any]] | None = Field(
         default=None,
-        description="Optional overrides. Keys can be roles (proposer_1/opposer_1). Values: {model, api_key, api_base_url, custom_name, custom_prompt}"
+        description=(
+            "Optional runtime overrides keyed by role. Values may include "
+            "{model, provider_type, provider_id, api_base_url, custom_name, custom_prompt}."
+        ),
     )
 
 
 class ModelConfigCreate(BaseModel):
-    """Payload to create a new reusable model configuration (Provider settings)."""
+    """Payload to create a reusable provider configuration."""
 
     name: str = Field(..., min_length=1, max_length=100)
     provider_type: str = Field(default="openai", description="Protocol: openai, anthropic, or gemini")
@@ -97,7 +53,7 @@ class ModelConfigCreate(BaseModel):
 
 
 class ModelConfigUpdate(BaseModel):
-    """Payload to update an existing model configuration (Provider settings)."""
+    """Payload to update an existing provider configuration."""
 
     name: str | None = Field(default=None, min_length=1, max_length=100)
     provider_type: str | None = Field(default=None)
@@ -106,8 +62,6 @@ class ModelConfigUpdate(BaseModel):
     models: list[str] | None = Field(default=None)
     is_default: bool | None = Field(default=None)
 
-
-# ── Response models ──────────────────────────────────────────────
 
 class SessionResponse(BaseModel):
     """Full session detail."""
@@ -139,14 +93,14 @@ class SessionListItem(BaseModel):
 
 
 class SessionListResponse(BaseModel):
-    """GET /api/sessions — list all sessions."""
+    """Paginated session list."""
 
     sessions: list[SessionListItem]
     total: int
 
 
 class ModelConfigResponse(BaseModel):
-    """Detail of a persisted model configuration."""
+    """Detail of a persisted provider configuration."""
 
     id: str
     name: str
@@ -160,10 +114,9 @@ class ModelConfigResponse(BaseModel):
 
     @field_validator("api_key", mode="before")
     @classmethod
-    def mask_api_key(cls, v: str | None) -> str | None:
-        if not v:
-            return v
-        if len(v) <= 8:
+    def mask_api_key(cls, value: str | None) -> str | None:
+        if not value:
+            return value
+        if len(value) <= 8:
             return "****"
-        return v[:3] + "..." + v[-4:]
-
+        return value[:3] + "..." + value[-4:]

@@ -1,5 +1,5 @@
 """
-Session CRUD REST API — backed by SQLAlchemy async database.
+Session CRUD REST API backed by the async database layer.
 """
 
 from __future__ import annotations
@@ -7,8 +7,6 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import OptionalUser
-from app.config import get_settings
 from app.db.database import get_db
 from app.models.schemas import (
     ExportFormat,
@@ -16,94 +14,69 @@ from app.models.schemas import (
     SessionListResponse,
     SessionResponse,
 )
-from app.services import session_service, export_service
+from app.services import export_service, session_service
 
 router = APIRouter(tags=["sessions"])
 
-
-# ── Create ───────────────────────────────────────────────────────
 
 @router.post("/sessions", response_model=SessionResponse, status_code=201)
 async def create_session(
     body: SessionCreate,
     db: AsyncSession = Depends(get_db),
-    user: OptionalUser = None,
 ):
     """Create a new debate session."""
-    owner_id = user.id if user else None
-    data = await session_service.create_session(db, body, owner_id=owner_id)
+    data = await session_service.create_session(db, body)
     return SessionResponse(**data)
 
-
-# ── List ─────────────────────────────────────────────────────────
 
 @router.get("/sessions", response_model=SessionListResponse)
 async def list_sessions(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
-    user: OptionalUser = None,
 ):
     """List debate sessions with pagination."""
-    settings = get_settings()
-    # Filter by owner if auth is enabled
-    owner_id = user.id if (settings.env.auth_enabled and user) else None
-    items = await session_service.list_sessions(db, offset=offset, limit=limit, owner_id=owner_id)
-    total = await session_service.count_sessions(db, owner_id=owner_id)
+    items = await session_service.list_sessions(db, offset=offset, limit=limit)
+    total = await session_service.count_sessions(db)
     return SessionListResponse(sessions=items, total=total)
 
-
-# ── Get ──────────────────────────────────────────────────────────
 
 @router.get("/sessions/{session_id}", response_model=SessionResponse)
 async def get_session(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-    user: OptionalUser = None,
 ):
     """Get a single session's full data."""
-    settings = get_settings()
-    owner_id = user.id if (settings.env.auth_enabled and user) else None
-    data = await session_service.get_session(db, session_id, owner_id=owner_id)
+    data = await session_service.get_session(db, session_id)
     if data is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return SessionResponse(**data)
 
 
-# ── Delete ───────────────────────────────────────────────────────
-
 @router.delete("/sessions/{session_id}", status_code=204)
 async def delete_session(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-    user: OptionalUser = None,
 ):
     """Delete a session."""
-    settings = get_settings()
-    owner_id = user.id if (settings.env.auth_enabled and user) else None
-    deleted = await session_service.delete_session(db, session_id, owner_id=owner_id)
+    deleted = await session_service.delete_session(db, session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
     return Response(status_code=204)
 
-
-# ── Export ───────────────────────────────────────────────────────
 
 @router.get("/sessions/{session_id}/export")
 async def export_session(
     session_id: str,
     format: ExportFormat = Query(default=ExportFormat.JSON),
     db: AsyncSession = Depends(get_db),
-    user: OptionalUser = None,
 ):
     """
     Export full session data.
-    - format=json  → returns JSON object
-    - format=markdown → returns { content: "...", format: "markdown" }
+    - format=json returns a JSON file
+    - format=markdown returns a markdown file
     """
-    settings = get_settings()
-    owner_id = user.id if (settings.env.auth_enabled and user) else None
-    data = await session_service.get_session(db, session_id, owner_id=owner_id)
+    data = await session_service.get_session(db, session_id)
     if data is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -117,10 +90,9 @@ async def export_session(
             },
         )
 
-    # Markdown
-    md_str = export_service.export_markdown(data)
+    markdown = export_service.export_markdown(data)
     return Response(
-        content=md_str,
+        content=markdown,
         media_type="text/markdown; charset=utf-8",
         headers={
             "Content-Disposition": f'attachment; filename="elenchus_session_{session_id}.md"'

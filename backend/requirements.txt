@@ -1,21 +1,20 @@
 # Core
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
-websockets==14.1
 pydantic==2.10.4
 pydantic-settings==2.7.1
 
 # Database
 sqlalchemy==2.0.36
 aiosqlite==0.20.0
-greenlet==3.3.2
 
-# LangGraph / LangChain providers
+# Agent runtime
 langgraph==0.2.60
-langchain==0.3.13
+langchain-core
 langchain-openai
 langchain-anthropic
 langchain-google-genai
+openai
 
 # Search
 httpx==0.28.1
@@ -25,11 +24,5 @@ ddgs>=6.0.0
 pyyaml==6.0.2
 python-dotenv==1.0.1
 
-# Security
+# Provider key encryption
 cryptography>=42.0.0
-python-jose[cryptography]>=3.3.0
-passlib[bcrypt]>=1.7.4
-
-# Utilities
-python-multipart==0.0.20
-email-validator>=2.1.0
