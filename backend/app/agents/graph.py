@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from operator import add
-from typing import Annotated, Any, Sequence, Literal
+from typing import Annotated, Any, Literal, Sequence, TypedDict
 
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
@@ -24,15 +24,13 @@ from app.agents.debater import debater_speak
 from app.agents.judge import judge_score
 from app.agents.context_manager import compress_context
 from app.agents.skills import get_all_skills
+from app.agents.skills.search_tool import web_search
 from app.models.state import DialogueEntryDict, SharedKnowledgeEntry
 
 logger = logging.getLogger(__name__)
 
 
 # ── LangGraph State Type ────────────────────────────────────────
-
-from typing import TypedDict
-
 
 class DebateGraphState(TypedDict, total=False):
     """State flowing through the LangGraph debate graph."""
@@ -56,6 +54,9 @@ class DebateGraphState(TypedDict, total=False):
     status: Literal['in_progress', 'completed', 'error']
     error: str | None
     agent_configs: dict[str, dict[str, Any]]
+    
+    # Node execution tracking
+    last_executed_node: str  # Name of the most recently executed node
 
 
 # ── Node functions ──────────────────────────────────────────────
@@ -64,19 +65,17 @@ async def node_manage_context(state: DebateGraphState) -> dict[str, Any]:
     """Compress old dialogue history if it exceeds the context window."""
     history = state.get("dialogue_history", [])
     knowledge = state.get("shared_knowledge", [])
+    agent_configs = state.get("agent_configs", {})
 
-    # Convert history entries to plain dicts for processing
     history_dicts = [dict(e) if not isinstance(e, dict) else e for e in history]
 
-    # compress_context returns (updated_full_knowledge, recent_entries).
-    # Since shared_knowledge now uses `add` reducer, we must return only NEW items.
-    new_knowledge, _ = await compress_context(history_dicts, knowledge)
+    new_knowledge, _ = await compress_context(history_dicts, knowledge, agent_configs)
 
     # Compute delta: only items added by compression (memos not already in knowledge)
     delta = new_knowledge[len(knowledge):]
 
     # Inject any pending user interventions as audience dialogue entries
-    from app.services.intervention_manager import get_intervention_manager
+    from app.dependencies import get_intervention_manager
     session_id = state.get("session_id", "")
     intervention_mgr = get_intervention_manager()
     queued = await intervention_mgr.pop_interventions(session_id)
@@ -94,6 +93,7 @@ async def node_manage_context(state: DebateGraphState) -> dict[str, Any]:
     return {
         "shared_knowledge": delta,
         "dialogue_history": intervention_entries,
+        "last_executed_node": "manage_context",
     }
 
 
@@ -108,24 +108,27 @@ async def node_set_speaker(state: DebateGraphState) -> dict[str, Any]:
     if next_idx >= len(participants):
         # All participants have spoken for this turn.
         # But we don't set speaker here if we're done, the edge will route to judge.
-        return {}
+        return {"last_executed_node": "set_speaker"}
 
     return {
         "current_speaker": participants[next_idx],
         "current_speaker_index": next_idx,
+        "last_executed_node": "set_speaker",
     }
 
 
 async def node_debater_speak(state: DebateGraphState) -> dict[str, Any]:
     """Wrapper around debater_speak for the LangGraph node."""
-    return await debater_speak(state)
+    result = await debater_speak(state)
+    result["last_executed_node"] = "speaker"
+    return result
 
 
 async def node_tool_executor(state: DebateGraphState) -> dict[str, Any]:
     """Executes the tool called by the LLM and feeds it back into the messages list and shared_knowledge."""
     messages = state.get("messages", [])
     if not messages:
-        return {}
+        return {"last_executed_node": "tool_executor"}
         
     last_message = messages[-1]
     results = []
@@ -150,22 +153,27 @@ async def node_tool_executor(state: DebateGraphState) -> dict[str, Any]:
                 ))
                 
                 # Automatically save tool facts into shared memory
-                if tool_call["name"] in ["search_searxng", "search_tavily"]:
+                if tool_fn.name == web_search.name:
+                    result_str = str(result_content)
+                    truncated_result = result_str[:500] + ("..." if len(result_str) > 500 else "")
                     knowledge_updates.append({
                         "type": "fact",
                         "query": tool_call["args"].get("query", ""),
-                        "result": str(result_content)[:500] + "..." # Truncated
+                        "result": truncated_result,
                     })
             
     return {
         "messages": results,
-        "shared_knowledge": knowledge_updates
+        "shared_knowledge": knowledge_updates,
+        "last_executed_node": "tool_executor",
     }
 
 
 async def node_judge_score(state: DebateGraphState) -> dict[str, Any]:
     """Wrapper around judge_score for the LangGraph node."""
-    return await judge_score(state)
+    result = await judge_score(state)
+    result["last_executed_node"] = "judge"
+    return result
 
 
 from langchain_core.messages import RemoveMessage
@@ -182,7 +190,8 @@ async def node_advance_turn(state: DebateGraphState) -> dict[str, Any]:
     return {
         "current_turn": current + 1,
         "current_speaker_index": -1, # Reset for the next round
-        "messages": remove_msgs # Clear internal tool messages
+        "messages": remove_msgs, # Clear internal tool messages
+        "last_executed_node": "advance_turn",
     }
 
 

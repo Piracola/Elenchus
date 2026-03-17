@@ -47,8 +47,8 @@ export default function ChatPanel() {
                 } as DialogueEntry);
             }
         }
-        return groupDialogue(allEntries);
-    }, [currentSession?.dialogue_history, streamingRole, streamingContent]);
+        return groupDialogue(allEntries, currentSession?.participants);
+    }, [currentSession?.dialogue_history, currentSession?.participants, streamingRole, streamingContent]);
 
     const maxWidthValue = MESSAGE_WIDTH_VALUES[displaySettings.messageWidth];
 
@@ -82,6 +82,9 @@ export default function ChatPanel() {
                     zIndex: 20,
                     background: 'var(--bg-primary)',
                     padding: '12px 0 8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
                 }}>
                     <motion.div style={{
                         padding: '12px 16px',
@@ -93,6 +96,8 @@ export default function ChatPanel() {
                         justifyContent: 'space-between',
                         alignItems: 'center',
                         backdropFilter: 'blur(12px)',
+                        flex: 1,
+                        minWidth: 0,
                     }}>
                         <h2 style={{
                             fontSize: '15px',
@@ -133,10 +138,7 @@ export default function ChatPanel() {
                             </div>
                         )}
                     </motion.div>
-
-                    <div style={{ marginTop: '8px' }}>
-                        <StatusBanner />
-                    </div>
+                    <StatusBanner />
                 </div>
 
                 <div
@@ -152,14 +154,18 @@ export default function ChatPanel() {
                         gap: '10px',
                     }}
                 >
-                    {rows.map((row, idx) => (
-                        <MessageRow
-                            key={idx}
-                            agentEntry={row.agent}
-                            judgeEntry={row.judge}
-                            systemEntry={row.system}
-                        />
-                    ))}
+                    {rows.map((row, idx) => {
+                        const agentKey = row.agent?.timestamp || `agent-${idx}`;
+                        const judgeKey = row.judge?.timestamp || `judge-${idx}`;
+                        return (
+                            <MessageRow
+                                key={`${agentKey}-${judgeKey}`}
+                                agentEntry={row.agent}
+                                judgeEntry={row.judge}
+                                systemEntry={row.system}
+                            />
+                        );
+                    })}
                     <div style={{ height: '80px' }} />
                 </div>
 

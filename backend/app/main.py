@@ -14,8 +14,10 @@ from app.api.sessions import router as sessions_router
 from app.api.websocket import router as ws_router, manager as ws_manager
 from app.api.models import router as models_router
 from app.api.log import router as log_router
+from app.api.search import router as search_router
+from app.api.users import router as users_router
 from app.db.database import init_db
-from app.search.factory import SearchProviderFactory
+from app.dependencies import get_search_factory
 from app.services.log_service import setup_logging, get_logger
 from app.agents.events import set_broadcaster
 
@@ -31,7 +33,9 @@ async def lifespan(app: FastAPI):
     set_broadcaster(ws_manager)
     logger.info("Database initialized. Event broadcaster configured.")
     yield
-    await SearchProviderFactory.close()
+    # Cleanup search provider resources
+    search_factory = get_search_factory()
+    await search_factory.close()
     logger.info("Elenchus shut down.")
 
 
@@ -59,19 +63,24 @@ app.include_router(sessions_router, prefix="/api")
 app.include_router(ws_router, prefix="/api")
 app.include_router(models_router, prefix="/api/models", tags=["models"])
 app.include_router(log_router, prefix="/api")
+app.include_router(search_router, prefix="/api")
+app.include_router(users_router, prefix="/api")
 
 
 # ── Health / diagnostic endpoints ────────────────────────────────
 
 @app.get("/health")
+@app.get("/api/health")
 async def health_check():
     return {"status": "ok", "service": "elenchus"}
 
 
 @app.get("/health/search")
+@app.get("/api/health/search")
 async def search_health():
     """Check which search provider is available."""
-    provider = await SearchProviderFactory.get_provider()
+    search_factory = get_search_factory()
+    provider = await search_factory.get_provider()
     if provider is None:
         return {
             "status": "unavailable",

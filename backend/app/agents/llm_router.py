@@ -53,6 +53,3 @@ class LLMRouter:
             api_base_url=api_base_url,
             **kwargs
         )
-
-# Global router instance
-router = LLMRouter()

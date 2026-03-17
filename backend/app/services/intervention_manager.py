@@ -35,11 +35,8 @@ class InterventionManager:
     """
 
     def __init__(self) -> None:
-        # Per-session list of intervention content strings
         self._interventions: dict[str, list[str]] = defaultdict(list)
-        # Per-session locks for thread-safe access
-        self._locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
-        # Global lock for managing the locks dict itself
+        self._locks: dict[str, asyncio.Lock] = {}
         self._global_lock = asyncio.Lock()
 
     async def _get_session_lock(self, session_id: str) -> asyncio.Lock:
@@ -132,19 +129,3 @@ class InterventionManager:
                 for sid, interventions in self._interventions.items()
             }
         }
-
-
-# Singleton instance - shared across the application
-_intervention_manager: InterventionManager | None = None
-
-
-def get_intervention_manager() -> InterventionManager:
-    """
-    Get the singleton InterventionManager instance.
-
-    Creates the instance on first call. Thread-safe via module-level import lock.
-    """
-    global _intervention_manager
-    if _intervention_manager is None:
-        _intervention_manager = InterventionManager()
-    return _intervention_manager

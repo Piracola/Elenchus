@@ -7,7 +7,7 @@
 
 # ── 搜索 ──────────────────────────────────────────────────────────
 search:
-  provider: "searxng"            # searxng | tavily
+  provider: "duckduckgo"         # duckduckgo | searxng | tavily
   max_results_per_query: 5
 
 # ── 辩论 ──────────────────────────────────────────────────────────

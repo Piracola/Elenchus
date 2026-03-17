@@ -39,4 +39,18 @@ describe('groupDialogue', () => {
     expect(result[0].agent).toBeNull()
     expect(result[0].judge?.role).toBe('judge')
   })
+
+  it('should treat additional participants as agent rows when provided', () => {
+    const entries: DialogueEntry[] = [
+      { role: 'proposer', agent_name: 'Proposer', content: 'Opening', timestamp: '2024-01-01T00:00:00Z', citations: [] },
+      { role: 'challenger', agent_name: 'Challenger', content: 'Counterpoint', timestamp: '2024-01-01T00:01:00Z', citations: [] },
+      { role: 'judge', agent_name: 'Judge', content: 'Noted', timestamp: '2024-01-01T00:02:00Z', citations: [], target_role: 'challenger' },
+    ]
+
+    const result = groupDialogue(entries, ['proposer', 'challenger'])
+
+    expect(result).toHaveLength(2)
+    expect(result[1].agent?.role).toBe('challenger')
+    expect(result[1].judge?.target_role).toBe('challenger')
+  })
 })

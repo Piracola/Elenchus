@@ -14,8 +14,9 @@ import { useAgentConfigs } from '../../hooks/useAgentConfigs';
 const DEFAULT_MAX_TURNS = 5;
 
 function ActiveSessionControls() {
-    const { isDebating, isConnected, currentSessionId } = useDebateStore();
-    const { startDebate, stopDebate, sendIntervention } = useDebateWebSocket(currentSessionId);
+    const { isDebating, isConnected, currentSession } = useDebateStore();
+    const sessionId = currentSession?.id || null;
+    const { startDebate, stopDebate, sendIntervention } = useDebateWebSocket(sessionId);
     const [interventionText, setInterventionText] = useState('');
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
 
@@ -30,107 +31,126 @@ function ActiveSessionControls() {
     const canIntervene = isConnected;
 
     return (
-        <div style={{
+        <motion.div style={{
+            padding: '10px 14px',
+            background: 'var(--bg-card)',
+            borderRadius: 'var(--radius-lg)',
+            boxShadow: 'var(--shadow-xs)',
             display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-            flexShrink: 0,
+            alignItems: 'center',
+            gap: '10px',
         }}>
-            <motion.div style={{
-                padding: '10px 14px',
-                background: 'var(--bg-card)',
-                borderRadius: 'var(--radius-lg)',
-                boxShadow: 'var(--shadow-xs)',
+            <div style={{
                 display: 'flex',
-                justifyContent: 'space-between',
                 alignItems: 'center',
-                gap: '12px',
+                gap: '6px',
+                padding: '4px 10px',
+                background: 'var(--bg-tertiary)',
+                borderRadius: 'var(--radius-full)',
+                flexShrink: 0,
             }}>
-                <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '4px 10px',
+                <motion.div
+                    animate={isConnected ? {
+                        scale: [1, 1.15, 1],
+                        opacity: [1, 0.7, 1]
+                    } : {}}
+                    transition={{ repeat: Infinity, duration: 2 }}
+                    style={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: '50%',
+                        background: isConnected ? 'var(--accent-emerald)' : 'var(--accent-rose)',
+                    }}
+                />
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                    {isConnected ? '已连接' : '断开'}
+                </span>
+            </div>
+
+            {!isDebating && (
+                <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '4px',
                     background: 'var(--bg-tertiary)',
-                    borderRadius: 'var(--radius-full)',
+                    padding: '4px 10px',
+                    borderRadius: 'var(--radius-sm)',
+                    flexShrink: 0,
                 }}>
-                    <motion.div
-                        animate={isConnected ? {
-                            scale: [1, 1.15, 1],
-                            opacity: [1, 0.7, 1]
-                        } : {}}
-                        transition={{ repeat: Infinity, duration: 2 }}
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>轮</span>
+                    <input
+                        type="number"
+                        value={maxTurnsInput}
+                        onChange={(e) => setMaxTurnsInput(e.target.value)}
+                        placeholder="5"
+                        min={1}
+                        max={100}
                         style={{
-                            width: 7,
-                            height: 7,
-                            borderRadius: '50%',
-                            background: isConnected ? 'var(--accent-emerald)' : 'var(--accent-rose)',
+                            width: '24px',
+                            background: 'transparent',
+                            border: 'none',
+                            outline: 'none',
+                            color: 'var(--text-primary)',
+                            fontSize: '11px',
+                            fontWeight: 500,
+                            textAlign: 'center',
+                            MozAppearance: 'textfield' as const,
+                            WebkitAppearance: 'none' as const,
                         }}
                     />
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                        {isConnected ? '已连接' : '断开'}
-                    </span>
                 </div>
+            )}
 
-                {!isDebating && (
-                    <div style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '4px',
-                        background: 'var(--bg-tertiary)',
-                        padding: '4px 10px',
-                        borderRadius: 'var(--radius-sm)',
-                    }}>
-                        <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>轮数</span>
-                        <input
-                            type="number"
-                            value={maxTurnsInput}
-                            onChange={(e) => setMaxTurnsInput(e.target.value)}
-                            placeholder="5"
-                            min={1}
-                            max={100}
-                            style={{
-                                width: '28px',
-                                background: 'transparent',
-                                border: 'none',
-                                outline: 'none',
-                                color: 'var(--text-primary)',
-                                fontSize: '12px',
-                                fontWeight: 500,
-                                textAlign: 'center',
-                                MozAppearance: 'textfield' as const,
-                                WebkitAppearance: 'none' as const,
-                            }}
-                        />
-                    </div>
-                )}
+            <input
+                type="text"
+                value={interventionText}
+                onChange={(e) => setInterventionText(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSendIntervention()}
+                placeholder={canIntervene ? "随时发言参与辩论..." : "连接中断..."}
+                disabled={!canIntervene}
+                style={{
+                    flex: 1,
+                    padding: '9px 12px',
+                    borderRadius: 'var(--radius-md)',
+                    border: 'none',
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                    outline: 'none',
+                    cursor: canIntervene ? 'text' : 'not-allowed',
+                    opacity: canIntervene ? 1 : 0.5,
+                    fontSize: '13px',
+                    minWidth: 0,
+                }}
+            />
 
-                {isDebating ? (
-                    <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={stopDebate}
-                        style={{
-                            padding: '7px 16px',
-                            borderRadius: 'var(--radius-md)',
-                            border: 'none',
-                            background: 'var(--color-opposer)',
-                            color: '#fff',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                        }}
-                    >
-                        终止
-                    </motion.button>
-                ) : (
+            {isDebating ? (
+                <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={stopDebate}
+                    style={{
+                        padding: '8px 14px',
+                        borderRadius: 'var(--radius-md)',
+                        border: 'none',
+                        background: 'var(--color-opposer)',
+                        color: '#fff',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        flexShrink: 0,
+                    }}
+                >
+                    终止
+                </motion.button>
+            ) : (
+                <>
                     <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                         onClick={() => startDebate(useDebateStore.getState().currentSession?.topic || '新辩论', ['proposer', 'opposer'], maxTurns)}
                         disabled={!isConnected}
                         style={{
-                            padding: '7px 18px',
+                            padding: '8px 14px',
                             borderRadius: 'var(--radius-md)',
                             border: 'none',
                             background: 'var(--text-primary)',
@@ -139,63 +159,34 @@ function ActiveSessionControls() {
                             cursor: isConnected ? 'pointer' : 'not-allowed',
                             opacity: isConnected ? 1 : 0.5,
                             fontSize: '12px',
+                            flexShrink: 0,
                         }}
                     >
                         开始辩论
                     </motion.button>
-                )}
-            </motion.div>
-
-            <motion.div style={{
-                padding: '10px 12px',
-                background: 'var(--bg-card)',
-                borderRadius: 'var(--radius-lg)',
-                boxShadow: 'var(--shadow-xs)',
-                display: 'flex',
-                gap: '8px',
-                alignItems: 'center',
-            }}>
-                <input
-                    type="text"
-                    value={interventionText}
-                    onChange={(e) => setInterventionText(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSendIntervention()}
-                    placeholder={canIntervene ? "随时发言参与辩论..." : "连接中断..."}
-                    disabled={!canIntervene}
-                    style={{
-                        flex: 1,
-                        padding: '9px 12px',
-                        borderRadius: 'var(--radius-md)',
-                        border: 'none',
-                        background: 'var(--bg-tertiary)',
-                        color: 'var(--text-primary)',
-                        outline: 'none',
-                        cursor: canIntervene ? 'text' : 'not-allowed',
-                        opacity: canIntervene ? 1 : 0.5,
-                        fontSize: '13px',
-                    }}
-                />
-                <motion.button
-                    whileHover={canIntervene && interventionText.trim() ? { scale: 1.02 } : {}}
-                    whileTap={canIntervene && interventionText.trim() ? { scale: 0.98 } : {}}
-                    onClick={handleSendIntervention}
-                    disabled={!canIntervene || !interventionText.trim()}
-                    style={{
-                        padding: '9px 16px',
-                        borderRadius: 'var(--radius-md)',
-                        border: 'none',
-                        background: canIntervene && interventionText.trim() ? 'var(--text-primary)' : 'var(--bg-tertiary)',
-                        color: canIntervene && interventionText.trim() ? 'var(--bg-primary)' : 'var(--text-muted)',
-                        fontWeight: 600,
-                        cursor: canIntervene && interventionText.trim() ? 'pointer' : 'not-allowed',
-                        opacity: canIntervene && interventionText.trim() ? 1 : 0.5,
-                        fontSize: '12px',
-                    }}
-                >
-                    发送
-                </motion.button>
-            </motion.div>
-        </div>
+                    <motion.button
+                        whileHover={canIntervene && interventionText.trim() ? { scale: 1.02 } : {}}
+                        whileTap={canIntervene && interventionText.trim() ? { scale: 0.98 } : {}}
+                        onClick={handleSendIntervention}
+                        disabled={!canIntervene || !interventionText.trim()}
+                        style={{
+                            padding: '8px 14px',
+                            borderRadius: 'var(--radius-md)',
+                            border: 'none',
+                            background: canIntervene && interventionText.trim() ? 'var(--accent-indigo)' : 'var(--bg-tertiary)',
+                            color: canIntervene && interventionText.trim() ? '#fff' : 'var(--text-muted)',
+                            fontWeight: 600,
+                            cursor: canIntervene && interventionText.trim() ? 'pointer' : 'not-allowed',
+                            opacity: canIntervene && interventionText.trim() ? 1 : 0.5,
+                            fontSize: '12px',
+                            flexShrink: 0,
+                        }}
+                    >
+                        发送
+                    </motion.button>
+                </>
+            )}
+        </motion.div>
     );
 }
 
@@ -203,10 +194,12 @@ function SessionCreator() {
     const [topic, setTopic] = useState('');
     const [isCreating, setIsCreating] = useState(false);
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
-    const { setCurrentSessionId, setCurrentSession } = useDebateStore();
+    const { setCurrentSession } = useDebateStore();
 
     const {
         showAdvanced, setShowAdvanced,
+        savedConfigs, selectedConfigIds,
+        showConfigManager, setShowConfigManager, handleConfigSelect,
         buildAgentConfigs,
     } = useAgentConfigs();
 
@@ -223,7 +216,6 @@ function SessionCreator() {
                 agent_configs: agentConfigs,
             });
             setCurrentSession(session);
-            setCurrentSessionId(session.id);
         } catch (err) {
             console.error('Failed to create session:', err);
         } finally {
@@ -234,7 +226,15 @@ function SessionCreator() {
 
     return (
         <div style={{ position: 'relative', flexShrink: 0 }}>
-            <AgentConfigPanel show={showAdvanced} onToggle={() => setShowAdvanced(!showAdvanced)} />
+            <AgentConfigPanel
+                    show={showAdvanced}
+                    onToggle={() => setShowAdvanced(!showAdvanced)}
+                    savedConfigs={savedConfigs}
+                    selectedConfigIds={selectedConfigIds}
+                    showConfigManager={showConfigManager}
+                    setShowConfigManager={setShowConfigManager}
+                    handleConfigSelect={handleConfigSelect}
+                />
 
             <motion.div style={{
                 padding: '12px 14px',
@@ -352,6 +352,6 @@ function SessionCreator() {
 }
 
 export default function DebateControls() {
-    const { currentSessionId } = useDebateStore();
-    return currentSessionId ? <ActiveSessionControls /> : <SessionCreator />;
+    const { currentSession } = useDebateStore();
+    return currentSession ? <ActiveSessionControls /> : <SessionCreator />;
 }

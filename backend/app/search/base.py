@@ -34,3 +34,7 @@ class SearchProvider(ABC):
     async def is_available(self) -> bool:
         """Health check — can this provider serve requests right now?"""
         ...
+
+    async def close(self) -> None:
+        """Cleanup resources — optional, override if provider holds resources."""
+        pass

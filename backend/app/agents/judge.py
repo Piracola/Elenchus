@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -15,7 +14,6 @@ from pydantic import ValidationError
 
 from app.agents.llm import get_judge_llm
 from app.agents.prompt_loader import get_judge_prompt
-from app.agents.context_manager import build_dialogue_text
 from app.models.scoring import TurnScore
 
 logger = logging.getLogger(__name__)
@@ -44,7 +42,7 @@ def _build_judge_instruction(
     for entry in dialogue_history:
         role = entry.get("role", "")
         content = entry.get("content", "")
-        marker = " ← (being judged)" if role == role_to_judge else ""
+        marker = " <- (being judged)" if role == role_to_judge else ""
         parts.append(f"\n### [{role}]{marker}\n{content}")
 
     # Search context / Shared Knowledge Facts
@@ -57,25 +55,14 @@ def _build_judge_instruction(
     parts.append(
         "\n## Instructions\n"
         "Score this debater on ALL 5 dimensions (1-10) with rationale. "
-        "Include an overall_comment. Output ONLY valid JSON matching the TurnScore schema.\n"
-        "\nExample output structure:\n"
-        "```json\n"
-        '{\n'
-        '  "logical_rigor": {"score": 7, "rationale": "..."},\n'
-        '  "evidence_quality": {"score": 6, "rationale": "..."},\n'
-        '  "rebuttal_strength": {"score": 8, "rationale": "..."},\n'
-        '  "consistency": {"score": 7, "rationale": "..."},\n'
-        '  "persuasiveness": {"score": 7, "rationale": "..."},\n'
-        '  "overall_comment": "..."\n'
-        '}\n'
-        "```"
+        "Include an overall_comment."
     )
 
     return "\n".join(parts)
 
 
 def _parse_score_response(text: str) -> TurnScore | None:
-    """Try to parse the judge's response into a TurnScore."""
+    """Try to parse the judge's response into a TurnScore (fallback method)."""
     # Strip markdown code block if present
     cleaned = text.strip()
     if cleaned.startswith("```"):
@@ -85,7 +72,7 @@ def _parse_score_response(text: str) -> TurnScore | None:
         data = json.loads(cleaned)
         return TurnScore(**data)
     except (json.JSONDecodeError, ValidationError) as exc:
-        logger.warning("Score parse failed: %s — raw: %s", exc, cleaned[:300])
+        logger.warning("Score parse failed: %s - raw: %s", exc, cleaned[:300])
         return None
 
 
@@ -108,10 +95,12 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
     system_prompt = get_judge_prompt()
     agent_configs = state.get("agent_configs", {})
     override = agent_configs.get("judge")
-    llm = get_judge_llm(streaming=False, override=override)
+    base_llm = await get_judge_llm(streaming=False, override=override)
+
+    # Use with_structured_output to enforce TurnScore schema
+    structured_llm = base_llm.with_structured_output(TurnScore)
 
     current_scores: dict[str, Any] = {}
-    dialogue_history_updates: list[dict[str, Any]] = []
 
     for role in participants:
         instruction = _build_judge_instruction(
@@ -122,19 +111,51 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
             current_turn=current_turn,
         )
 
-        # Attempt scoring with retry
+        # Attempt scoring with structured output (primary) and text parsing fallback (secondary)
         score: TurnScore | None = None
         for attempt in range(2):
-            response = await llm.ainvoke([
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=instruction),
-            ])
-            score = _parse_score_response(response.content)
-            if score:
-                break
-            logger.warning("Judge retry for [%s] — attempt %d", role, attempt + 1)
+            try:
+                # Primary: Use structured output
+                result = await structured_llm.ainvoke([
+                    SystemMessage(content=system_prompt),
+                    HumanMessage(content=instruction),
+                ])
+                # Check if result is already a TurnScore (OpenAI native support)
+                if isinstance(result, TurnScore):
+                    score = result
+                    break
+                # Check if result is a string (some providers don't support structured output)
+                if isinstance(result, str):
+                    logger.warning("Structured output returned string for [%s], attempting parse", role)
+                    score = _parse_score_response(result)
+                    if isinstance(score, TurnScore):
+                        break
+                # Check if result is a dict (some providers return dict instead of Pydantic model)
+                if isinstance(result, dict):
+                    try:
+                        score = TurnScore(**result)
+                        break
+                    except Exception as dict_exc:
+                        logger.warning("Failed to parse dict result for [%s]: %s", role, dict_exc)
+                score = None
+            except Exception as exc:
+                logger.warning("Structured output failed for [%s] attempt %d: %s", role, attempt + 1, exc)
+                # Fallback: Try text parsing
+                try:
+                    response = await base_llm.ainvoke([
+                        SystemMessage(content=system_prompt),
+                        HumanMessage(content=instruction),
+                    ])
+                    response_content = response.content if hasattr(response, 'content') else str(response)
+                    score = _parse_score_response(response_content)
+                    if isinstance(score, TurnScore):
+                        break
+                except Exception as fallback_exc:
+                    logger.error("Fallback parsing also failed for [%s]: %s", role, fallback_exc)
+                score = None
+            logger.warning("Judge retry for [%s] - attempt %d", role, attempt + 1)
 
-        if score:
+        if isinstance(score, TurnScore):
             score_dict = score.model_dump()
             current_scores[role] = score_dict
 
@@ -152,36 +173,17 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
                 role, score.average_score,
             )
 
-            # --- Inject Judge response directly into dialogue history ---
-            dialogue_history_updates.append({
-                "role": "judge",
-                "target_role": role,
-                "agent_name": "裁判长",
-                "content": score.overall_comment,
-                "scores": score_dict,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            })
-
         else:
             logger.error("Judge failed to score [%s] after retries", role)
             # Use placeholder scores
             fallback_scores: dict[str, Any] = {
-                dim: {"score": 5, "rationale": "Scoring failed — using default"}
+                dim: {"score": 5, "rationale": "Scoring failed - using default"}
                 for dim in _SCORE_DIMS
             }
             fallback_scores["overall_comment"] = "评分过程出现错误，使用默认分数。"
             current_scores[role] = fallback_scores
-            dialogue_history_updates.append({
-                "role": "judge",
-                "target_role": role,
-                "agent_name": "裁判长",
-                "content": fallback_scores["overall_comment"],
-                "scores": fallback_scores,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            })
 
     return {
         "current_scores": current_scores,
         "cumulative_scores": cumulative_scores,
-        "dialogue_history": dialogue_history_updates,
     }

@@ -18,7 +18,6 @@ import type {
 interface DebateState {
     // Session list (sidebar)
     sessions: SessionListItem[];
-    currentSessionId: string | null;
     currentSession: Session | null;
 
     // Real-time debate state
@@ -39,7 +38,6 @@ interface DebateState {
     // Actions — session list
     setSessions: (sessions: SessionListItem[]) => void;
     setCurrentSession: (session: Session | null) => void;
-    setCurrentSessionId: (id: string | null) => void;
 
     // Actions — connection
     setConnected: (connected: boolean) => void;
@@ -50,7 +48,7 @@ interface DebateState {
     appendDialogueEntry: (entry: DialogueEntry) => void;
     startStreaming: (role: string) => void;
     appendStreamToken: (token: string) => void;
-    endStreaming: (role: string, content: string, citations: string[]) => void;
+    endStreaming: (role: string, content: string, citations: string[], agentName?: string) => void;
 
     // Actions — scores
     updateCurrentScores: (role: string, scores: TurnScore) => void;
@@ -71,7 +69,6 @@ interface DebateState {
 
 const initialState = {
     sessions: [] as SessionListItem[],
-    currentSessionId: null as string | null,
     currentSession: null as Session | null,
     isConnected: false,
     isDebating: false,
@@ -92,7 +89,6 @@ export const useDebateStore = create<DebateState>((set) => ({
     // Session list
     setSessions: (sessions) => set({ sessions }),
     setCurrentSession: (session) => set({ currentSession: session }),
-    setCurrentSessionId: (id) => set({ currentSessionId: id }),
 
     // Connection / debate flow
     setConnected: (connected) => set({ isConnected: connected }),
@@ -116,21 +112,12 @@ export const useDebateStore = create<DebateState>((set) => ({
     appendStreamToken: (token) =>
         set((state) => ({ streamingContent: state.streamingContent + token })),
 
-    endStreaming: (role, content, citations) =>
+    endStreaming: (role, content, citations, agentName) =>
         set((state) => {
             const history = state.currentSession?.dialogue_history || [];
-            const isDuplicate = history.some(
-                e => e.role === role && e.content === content && e.timestamp
-            );
-            if (isDuplicate) {
-                return {
-                    streamingRole: '',
-                    streamingContent: '',
-                };
-            }
             const entry: DialogueEntry = {
                 role,
-                agent_name: role === 'proposer' ? '正方 (Proposer)' : '反方 (Opposer)',
+                agent_name: agentName || role,
                 content,
                 citations,
                 timestamp: new Date().toISOString(),

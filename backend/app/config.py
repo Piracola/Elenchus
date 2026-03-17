@@ -4,12 +4,11 @@ Reads from .env (secrets/environment) and config.yaml (application behaviour).
 
 Secret split:
   .env                    — search keys, DB URL, server params, encryption key
-  backend/data/providers.json — LLM provider API keys (Fernet-encrypted, managed via UI)
+  database (providers table) — LLM provider API keys (Fernet-encrypted, managed via UI)
 """
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from functools import lru_cache
 from typing import Any
@@ -40,7 +39,7 @@ class SearchConfig:
 
     def __init__(self, data: dict[str, Any] | None = None):
         data = data or {}
-        self.provider: str = data.get("provider", "searxng")
+        self.provider: str = data.get("provider", "duckduckgo")
         self.max_results_per_query: int = data.get("max_results_per_query", 5)
 
 
@@ -77,12 +76,29 @@ class EnvSettings(BaseSettings):
 
     # ── Server ───────────────────────────────────────────────────
     host: str = Field(default="0.0.0.0", alias="HOST")
-    port: int = Field(default=8000, alias="PORT")
+    port: int = Field(default=8001, alias="PORT")
     debug: bool = Field(default=False, alias="DEBUG")
     cors_origins: str = Field(
         default="http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174",
         alias="CORS_ORIGINS",
         description="Comma-separated list of allowed CORS origins",
+    )
+
+    # ── Authentication ───────────────────────────────────────────
+    jwt_secret_key: str = Field(
+        default="change-me-in-production",
+        alias="JWT_SECRET_KEY",
+        description="Secret key for JWT token signing",
+    )
+    jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
+    jwt_expire_minutes: int = Field(
+        default=60 * 24 * 7,  # 7 days
+        alias="JWT_EXPIRE_MINUTES",
+    )
+    auth_enabled: bool = Field(
+        default=False,
+        alias="AUTH_ENABLED",
+        description="Enable authentication (set to true for production)",
     )
 
     model_config = {"env_file": str(_PROJECT_ROOT / ".env"), "extra": "ignore"}

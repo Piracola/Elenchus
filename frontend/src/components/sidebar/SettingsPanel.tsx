@@ -6,9 +6,10 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useModelConfigManager } from '../../hooks/useModelConfigManager';
 import { ProviderSidebar } from './ProviderSidebar';
 import { ProviderForm } from './ProviderForm';
+import { SearchConfigTab } from './SearchConfigTab';
 import type { LogLevel, DisplaySettings } from '../../types';
 
-type SettingsTab = 'providers' | 'display' | 'logging';
+type SettingsTab = 'providers' | 'display' | 'logging' | 'search';
 
 interface Props {
     isOpen: boolean;
@@ -432,6 +433,24 @@ export default function SettingsPanel({ isOpen, onClose }: Props) {
                                 >
                                     日志打印等级
                                 </motion.div>
+
+                                <motion.div
+                                    whileHover={{ scale: 1.02 }}
+                                    onClick={() => setActiveTab('search')}
+                                    style={{
+                                        padding: '14px 16px',
+                                        borderRadius: 'var(--radius-lg)',
+                                        background: activeTab === 'search' ? 'var(--bg-card)' : 'transparent',
+                                        cursor: 'pointer',
+                                        color: activeTab === 'search' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                        fontWeight: activeTab === 'search' ? 600 : 500,
+                                        fontSize: '14px',
+                                        boxShadow: activeTab === 'search' ? 'var(--shadow-xs)' : 'none',
+                                        transition: 'all var(--transition-fast)',
+                                    }}
+                                >
+                                    搜索引擎
+                                </motion.div>
                             </div>
 
                             {/* Content Area */}
@@ -471,6 +490,7 @@ export default function SettingsPanel({ isOpen, onClose }: Props) {
                                 {activeTab === 'providers' && renderProvidersTab()}
                                 {activeTab === 'display' && renderDisplayTab()}
                                 {activeTab === 'logging' && renderLoggingTab()}
+                                {activeTab === 'search' && <SearchConfigTab />}
                             </div>
                         </motion.div>
                     </motion.div>

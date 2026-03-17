@@ -6,7 +6,6 @@ Also persists state snapshots to the database after each node.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -27,37 +26,7 @@ _NODE_STATUS = {
     "advance_turn": ("准备下一回合...", "context"),
 }
 
-_NODE_SIGNATURES: list[tuple[str, list[str]]] = [
-    ("advance_turn", ["current_turn"]),
-    ("judge", ["current_scores", "cumulative_scores"]),
-    ("tool_executor", ["shared_knowledge"]),
-    ("speaker", ["dialogue_history", "messages"]),
-    ("set_speaker", ["current_speaker", "current_speaker_index"]),
-    ("manage_context", ["shared_knowledge"]),
-]
-
-
-def _infer_node(prev: dict, curr: dict) -> str:
-    """Heuristic: compare two full-state snapshots to guess which node ran."""
-    if curr.get("current_turn") != prev.get("current_turn"):
-        return "advance_turn"
-    if curr.get("current_scores") != prev.get("current_scores"):
-        return "judge"
-    curr_msgs = curr.get("messages", [])
-    prev_msgs = prev.get("messages", [])
-    if len(curr_msgs) > len(prev_msgs) and curr_msgs:
-        last = curr_msgs[-1]
-        if hasattr(last, "tool_call_id"):
-            return "tool_executor"
-    if len(curr.get("dialogue_history", [])) != len(prev.get("dialogue_history", [])):
-        return "speaker"
-    if curr_msgs != prev_msgs:
-        return "speaker"
-    if curr.get("current_speaker") != prev.get("current_speaker"):
-        return "set_speaker"
-    if curr.get("shared_knowledge") != prev.get("shared_knowledge"):
-        return "manage_context"
-    return ""
+_PERSIST_NODES = frozenset({"advance_turn", "judge", "speaker"})
 
 
 async def run_debate(
@@ -78,7 +47,6 @@ async def run_debate(
         session_db = await session_service.get_session(db, session_id)
         
     session_db = session_db or {}
-    state_snap = session_db.get("state_snapshot") or {}
 
     logger.info(
         "Starting/Resuming debate: session=%s topic='%s' turns=%d",
@@ -93,11 +61,11 @@ async def run_debate(
         "max_turns": max_turns,
         "current_speaker": "",
         "current_speaker_index": -1,
-        "dialogue_history": state_snap.get("dialogue_history", []),
-        "shared_knowledge": state_snap.get("shared_knowledge", []),
+        "dialogue_history": session_db.get("dialogue_history", []),
+        "shared_knowledge": session_db.get("shared_knowledge", []),
         "messages": [],
-        "current_scores": state_snap.get("current_scores", {}),
-        "cumulative_scores": state_snap.get("cumulative_scores", {}),
+        "current_scores": session_db.get("current_scores", {}),
+        "cumulative_scores": session_db.get("cumulative_scores", {}),
         "status": "in_progress",
         "error": None,
         "agent_configs": agent_configs or {},
@@ -118,11 +86,13 @@ async def run_debate(
 
     final_state = dict(initial_state)
     prev_history_len = len(initial_state.get("dialogue_history", []))
+    # Track already-broadcasted judge scores to prevent duplicates
+    last_broadcasted_scores: dict[str, Any] = {}
 
     try:
         last_node = ""
         async for state_snapshot in app.astream(initial_state, stream_mode="values"):
-            node_name = _infer_node(final_state, state_snapshot)
+            node_name = state_snapshot.get("last_executed_node", "")
             final_state = dict(state_snapshot)
 
             if node_name and node_name != last_node:
@@ -145,10 +115,12 @@ async def run_debate(
                         await broadcast_event(session_id, {
                             "type": "speech_start",
                             "role": latest.get("role", ""),
+                            "agent_name": latest.get("agent_name", ""),
                         })
                         await broadcast_event(session_id, {
                             "type": "speech_end",
                             "role": latest.get("role", ""),
+                            "agent_name": latest.get("agent_name", ""),
                             "content": latest.get("content", ""),
                             "citations": latest.get("citations", []),
                         })
@@ -166,12 +138,15 @@ async def run_debate(
 
                 elif node_name == "judge":
                     scores = final_state.get("current_scores", {})
+                    # Only broadcast scores that haven't been broadcasted yet
                     for role, score_data in scores.items():
-                        await broadcast_event(session_id, {
-                            "type": "judge_score",
-                            "role": role,
-                            "scores": score_data,
-                        })
+                        if role not in last_broadcasted_scores or last_broadcasted_scores.get(role) != score_data:
+                            await broadcast_event(session_id, {
+                                "type": "judge_score",
+                                "role": role,
+                                "scores": score_data,
+                            })
+                            last_broadcasted_scores[role] = score_data
 
                 elif node_name == "advance_turn":
                     turn = final_state.get("current_turn", 0)
@@ -182,7 +157,8 @@ async def run_debate(
                         "cumulative_scores": final_state.get("cumulative_scores", {}),
                     })
 
-            await _persist_state(session_id, final_state)
+            if node_name in _PERSIST_NODES:
+                await _persist_state(session_id, final_state)
 
         final_state["status"] = "completed"
         await _persist_state(session_id, final_state)
@@ -226,6 +202,11 @@ async def run_debate(
 async def _persist_state(session_id: str, state: dict[str, Any]) -> None:
     """Save the current graph state to the database."""
     try:
+        agent_configs = state.get("agent_configs", {})
+        agent_configs_for_storage = {
+            role: {k: v for k, v in cfg.items() if k != "api_key"}
+            for role, cfg in agent_configs.items()
+        }
         factory = get_session_factory()
         async with factory() as db:
             await session_service.update_session_state(
@@ -238,7 +219,7 @@ async def _persist_state(session_id: str, state: dict[str, Any]) -> None:
                     "shared_knowledge": state.get("shared_knowledge", []),
                     "current_scores": state.get("current_scores", {}),
                     "cumulative_scores": state.get("cumulative_scores", {}),
-                    "agent_configs": state.get("agent_configs", {}),
+                    "agent_configs": agent_configs_for_storage,
                 },
             )
     except Exception as exc:

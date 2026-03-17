@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Search, Settings, Sun, Moon, Trash2, MessageSquare } from 'lucide-react';
 import { useDebateStore } from '../../stores/debateStore';
@@ -6,9 +6,10 @@ import { useThemeStore } from '../../stores/themeStore';
 import { api } from '../../api/client';
 import SettingsPanel from './SettingsPanel';
 import type { SessionListItem } from '../../types';
+import { toast } from '../../utils/toast';
 
 export default function SessionList() {
-    const { sessions, setSessions, currentSessionId, setCurrentSessionId, setCurrentSession } = useDebateStore();
+    const { sessions, setSessions, currentSession, setCurrentSession } = useDebateStore();
     const { theme, toggleTheme } = useThemeStore();
     const [isLoading, setIsLoading] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -17,6 +18,7 @@ export default function SessionList() {
     const [total, setTotal] = useState(0);
     const [hoveredId, setHoveredId] = useState<string | null>(null);
     const PAGE_SIZE = 50;
+    const currentSessionId = currentSession?.id;
 
     const loadSessions = async (offset = 0, append = false) => {
         try {
@@ -27,6 +29,7 @@ export default function SessionList() {
             setTotal(data.total);
         } catch (err) {
             console.error('Failed to load sessions', err);
+            toast('加载辩论记录失败', 'error');
         } finally {
             setIsLoading(false);
             setIsLoadingMore(false);
@@ -42,7 +45,6 @@ export default function SessionList() {
         try {
             const fullSession = await api.sessions.get(item.id);
             setCurrentSession(fullSession);
-            setCurrentSessionId(fullSession.id);
         } catch (err) {
             console.error('Failed to load session details', err);
         }
@@ -58,18 +60,21 @@ export default function SessionList() {
         try {
             await api.sessions.delete(id);
             if (currentSessionId === id) {
-                setCurrentSessionId(null);
                 setCurrentSession(null);
             }
             await loadSessions();
+            toast('辩论记录已删除', 'success');
         } catch (err) {
             console.error('Failed to delete session', err);
+            toast('删除辩论记录失败', 'error');
         }
     };
 
-    const filteredSessions = sessions.filter(s =>
-        s.topic.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredSessions = useMemo(() => {
+        if (!searchQuery.trim()) return sessions;
+        const query = searchQuery.toLowerCase();
+        return sessions.filter(s => s.topic.toLowerCase().includes(query));
+    }, [sessions, searchQuery]);
 
     return (
         <aside style={{
@@ -124,7 +129,6 @@ export default function SessionList() {
                     whileHover={{ scale: 1.01, background: 'var(--bg-hover)' }}
                     whileTap={{ scale: 0.99 }}
                     onClick={() => {
-                        setCurrentSessionId(null);
                         setCurrentSession(null);
                     }}
                     style={{

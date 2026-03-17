@@ -1,22 +1,19 @@
 """
-LLM client factory — unified via LiteLLM.
+LLM client factory — unified via custom LLMRouter.
 
-LiteLLM routes to 100+ providers by model name prefix:
-  "openai/gpt-4o"               → OpenAI
-  "anthropic/claude-opus-4-5"   → Anthropic
-  "ollama/qwen2.5:32b"          → Ollama (local)
-  "azure/<deployment>"          → Azure OpenAI
-  "groq/llama-3.3-70b-versatile"→ Groq
-  "deepseek/deepseek-chat"      → DeepSeek
-  "huggingface/<model>"         → HuggingFace TGI
-  ... (100+ providers total)
+The LLMRouter routes requests to the appropriate LangChain provider client:
+  - "openai"     → ChatOpenAI (also supports OpenAI-compatible APIs via base_url)
+  - "anthropic"  → ChatAnthropic
+  - "gemini"     → ChatGoogleGenerativeAI
 
-Models WITHOUT a provider prefix are auto-inferred by LiteLLM.
+OpenAI-compatible providers (DeepSeek, Groq, Ollama, etc.) can be used by:
+  1. Setting provider_type to "openai"
+  2. Setting api_base_url to the provider's API endpoint
 
 Priority chain for api_key / api_base:
-  1. Per-agent config.yaml fields   (highest priority)
-  2. .env global fields             (fallback)
-  3. LiteLLM / provider SDK default (no custom endpoint)
+  1. Per-agent config override (highest priority)
+  2. provider_id lookup from provider_service
+  3. Default provider configuration
 """
 
 from __future__ import annotations
@@ -26,45 +23,12 @@ from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 
-from app.agents.llm_router import router as llm_router
+from app.dependencies import get_llm_router, get_provider_service
 
 logger = logging.getLogger(__name__)
 
 
-def _resolve_api_key(override: dict[str, Any]) -> str | None:
-    """
-    Resolve API key from override config.
-    
-    Priority:
-    1. Direct api_key in override (highest)
-    2. Lookup by provider_id from database
-    3. Use default provider from database
-    """
-    api_key = override.get("api_key")
-    if api_key:
-        return api_key
-    
-    provider_id = override.get("provider_id")
-    
-    from app.services.provider_service import provider_service
-    
-    if provider_id:
-        providers = provider_service.list_configs_raw()
-        for p in providers:
-            if p.get("id") == provider_id:
-                return p.get("api_key")
-    
-    default_config = provider_service.get_default_config()
-    if default_config:
-        providers = provider_service.list_configs_raw()
-        for p in providers:
-            if p.get("id") == default_config.id:
-                return p.get("api_key")
-    
-    return None
-
-
-def _resolve_provider_info(override: dict[str, Any]) -> tuple[str | None, str | None, str | None]:
+async def _resolve_provider_info(override: dict[str, Any]) -> tuple[str | None, str | None, str | None]:
     """
     Resolve provider_type and api_base_url from override config or database.
     
@@ -76,9 +40,10 @@ def _resolve_provider_info(override: dict[str, Any]) -> tuple[str | None, str | 
     
     provider_id = override.get("provider_id")
     
+    provider_service = get_provider_service()
+    
     if provider_id:
-        from app.services.provider_service import provider_service
-        providers = provider_service.list_configs_raw()
+        providers = await provider_service.list_configs_raw()
         for p in providers:
             if p.get("id") == provider_id:
                 if not provider_type:
@@ -88,11 +53,21 @@ def _resolve_provider_info(override: dict[str, Any]) -> tuple[str | None, str | 
                 if not api_key:
                     api_key = p.get("api_key")
                 break
+    elif not api_key:
+        default_config = await provider_service.get_default_config()
+        if default_config:
+            providers = await provider_service.list_configs_raw()
+            for p in providers:
+                if p.get("id") == default_config.id:
+                    provider_type = provider_type or p.get("provider_type")
+                    api_base_url = api_base_url or p.get("api_base_url")
+                    api_key = p.get("api_key")
+                    break
     
     return provider_type, api_base_url, api_key
 
 
-def create_llm(
+async def create_llm(
     *,
     streaming: bool = True,
     override: dict[str, Any] | None = None,
@@ -104,7 +79,7 @@ def create_llm(
     override = override or {}
     model = override.get("model", "gpt-4o")
     
-    provider_type, api_base_url, api_key = _resolve_provider_info(override)
+    provider_type, api_base_url, api_key = await _resolve_provider_info(override)
 
     temperature = override.get("temperature", 0.7)
     max_tokens = override.get("max_tokens", 1500)
@@ -121,6 +96,7 @@ def create_llm(
     log_base = api_base_url or "(provider default / env)"
     logger.info("[LLM Router] route=%s model=%s api_base=%s kwargs=%s", provider_type, model, log_base, {**kwargs, "api_key": "***"})
 
+    llm_router = get_llm_router()
     return llm_router.get_client(
         provider_type=provider_type or "openai",
         model=model,
@@ -132,13 +108,12 @@ def create_llm(
 
 # ── Convenience getters ───────────────────────────────────────────
 
-def get_debater_llm(streaming: bool = True, override: dict[str, Any] | None = None) -> BaseChatModel:
-    return create_llm(streaming=streaming, override=override)
+async def get_llm(streaming: bool = True, override: dict[str, Any] | None = None) -> BaseChatModel:
+    """Generic LLM getter for any agent role."""
+    return await create_llm(streaming=streaming, override=override)
 
 
-def get_judge_llm(streaming: bool = True, override: dict[str, Any] | None = None) -> BaseChatModel:
-    return create_llm(streaming=streaming, override=override)
-
-
-def get_fact_checker_llm(streaming: bool = True, override: dict[str, Any] | None = None) -> BaseChatModel:
-    return create_llm(streaming=streaming, override=override)
+# Aliases for backward compatibility
+get_debater_llm = get_llm
+get_judge_llm = get_llm
+get_fact_checker_llm = get_llm

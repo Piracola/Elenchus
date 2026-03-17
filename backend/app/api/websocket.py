@@ -29,7 +29,11 @@ import logging
 import re
 from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+
+from app.auth.dependencies import WebSocketUser, get_current_user_ws
+from app.config import get_settings
+from app.db.models import UserRecord
 
 logger = logging.getLogger(__name__)
 
@@ -102,18 +106,28 @@ _VALID_ACTIONS = {"start", "stop", "ping", "intervene"}
 
 
 @router.websocket("/ws/{session_id}")
-async def debate_ws(websocket: WebSocket, session_id: str):
+async def debate_ws(
+    websocket: WebSocket,
+    session_id: str,
+    user: WebSocketUser,
+):
     """
     WebSocket endpoint for a debate session.
     After connection, the client sends action messages to control the debate.
     The server streams events back in real-time.
+
+    Authentication:
+    - When AUTH_ENABLED=true, pass JWT token as query parameter: ?token=<jwt>
+    - When AUTH_ENABLED=false, no authentication required
     """
-    # Validate session_id format before accepting
+    settings = get_settings()
+
     if not _SESSION_ID_RE.match(session_id):
-        # Must accept before we can send a close frame
         await websocket.accept()
         await websocket.close(code=4001, reason="Invalid session_id format")
         return
+
+    user_id = user.id if user else None
 
     await manager.connect(session_id, websocket)
 
@@ -159,14 +173,16 @@ async def debate_ws(websocket: WebSocket, session_id: str):
                 from app.services import session_service
                 from app.db.database import get_session_factory
                 factory = get_session_factory()
-                
+
                 async with factory() as db:
-                    session_db = await session_service.get_session(db, session_id)
-                    
+                    # Pass owner_id for ownership verification when auth is enabled
+                    owner_filter = user_id if settings.env.auth_enabled else None
+                    session_db = await session_service.get_session(db, session_id, owner_id=owner_filter)
+
                 if not session_db:
                     await manager.send(session_id, websocket, {
                         "type": "error",
-                        "content": f"Session {session_id} 不存在。",
+                        "content": f"Session {session_id} 不存在或无权访问。",
                     })
                     continue
 
@@ -208,11 +224,12 @@ async def debate_ws(websocket: WebSocket, session_id: str):
             elif action == "intervene":
                 content = data.get("content", "").strip()
                 if content:
-                    from app.services.intervention_manager import get_intervention_manager
+                    from app.dependencies import get_intervention_manager
                     intervention_mgr = get_intervention_manager()
                     await intervention_mgr.add_intervention(session_id, content)
                     task = _debate_tasks.get(session_id)
-                    if task and task.done():
+                    # Broadcast to all viewers if debate is in progress; otherwise just confirm to sender
+                    if task and not task.done():
                         from datetime import datetime, timezone
                         await manager.broadcast(session_id, {
                             "type": "audience_message",
@@ -222,7 +239,7 @@ async def debate_ws(websocket: WebSocket, session_id: str):
                     else:
                         await manager.send(session_id, websocket, {
                             "type": "system",
-                            "content": f"介入消息已加入队列，将在下一回合开始时注入。",
+                            "content": "介入消息已加入队列，将在下一回合开始时注入。",
                         })
 
     except WebSocketDisconnect:

@@ -10,15 +10,16 @@ import sys
 # Add the backend dir to path so app. imports work
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.search.factory import SearchProviderFactory
+from app.dependencies import get_search_factory
 
 async def main():
     print("Testing search...")
+    search_factory = get_search_factory()
     try:
-        results = await SearchProviderFactory.search("test")
+        results = await search_factory.search("test")
         print(f"Results: {results}")
     finally:
-        await SearchProviderFactory.close()
+        await search_factory.close()
 
 if __name__ == "__main__":
     asyncio.run(main())

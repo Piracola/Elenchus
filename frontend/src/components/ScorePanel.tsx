@@ -10,8 +10,9 @@ import { SCORE_DIMENSIONS } from '../types';
  * ScorePanel — scoring sidebar with radar chart and export functions.
  */
 export default function ScorePanel() {
-    const { currentSession, currentSessionId } = useDebateStore();
+    const { currentSession } = useDebateStore();
     const { theme } = useThemeStore();
+    const sessionId = currentSession?.id;
 
     const radarOption = useMemo(() => {
         if (!currentSession?.current_scores || Object.keys(currentSession.current_scores).length === 0) {
@@ -60,11 +61,11 @@ export default function ScorePanel() {
     }, [currentSession?.current_scores, theme]);
 
     const handleExport = (format: 'json' | 'markdown') => {
-        if (!currentSessionId) return;
+        if (!sessionId) return;
         if (format === 'json') {
-            api.sessions.exportJson(currentSessionId);
+            api.sessions.exportJson(sessionId);
         } else {
-            api.sessions.exportMarkdown(currentSessionId);
+            api.sessions.exportMarkdown(sessionId);
         }
     };
 

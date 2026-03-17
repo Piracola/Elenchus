@@ -4,7 +4,7 @@
 
 import type { Session, SessionListItem, SessionCreatePayload, ModelConfig, ModelConfigCreatePayload, LogLevel } from '../types';
 
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const BASE = import.meta.env.VITE_API_URL || '/api';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await fetch(`${BASE}${path}`, {
@@ -57,22 +57,22 @@ export const api = {
 
     models: {
         list: (): Promise<ModelConfig[]> =>
-            request('/models/'),
+            request('/models'),
 
         create: (payload: ModelConfigCreatePayload): Promise<ModelConfig> =>
-            request('/models/', {
+            request('/models', {
                 method: 'POST',
                 body: JSON.stringify(payload),
             }),
 
         update: (id: string, payload: Partial<ModelConfigCreatePayload>): Promise<ModelConfig> =>
-            request(`/models/${id}/`, {
+            request(`/models/${id}`, {
                 method: 'PUT',
                 body: JSON.stringify(payload),
             }),
 
         delete: (id: string): Promise<void> =>
-            request(`/models/${id}/`, { method: 'DELETE' }),
+            request(`/models/${id}`, { method: 'DELETE' }),
     },
 
     health: {
@@ -94,5 +94,22 @@ export const api = {
 
         getLevels: (): Promise<{ levels: string[]; current: string }> =>
             request('/log/levels'),
+    },
+
+    search: {
+        getConfig: (): Promise<{ provider: string; available_providers: Array<{ name: string; available: boolean; is_primary: boolean }> }> =>
+            request('/search/config'),
+
+        setProvider: (provider: string): Promise<{ status: string; provider: string }> =>
+            request('/search/config', {
+                method: 'POST',
+                body: JSON.stringify({ provider }),
+            }),
+
+        getProviders: (): Promise<Array<{ name: string; available: boolean; is_primary: boolean }>> =>
+            request('/search/providers'),
+
+        getHealth: (): Promise<{ status: string; provider: string | null }> =>
+            request('/search/health'),
     },
 };

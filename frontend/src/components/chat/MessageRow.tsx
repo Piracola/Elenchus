@@ -10,7 +10,100 @@ interface MessageRowProps {
     systemEntry?: (DialogueEntry & { isStreaming?: boolean; streamingContent?: string }) | null;
 }
 
+type RoleVisual = {
+    badge: string;
+    label: string;
+    color: string;
+    cardTint: string;
+    glowTint: string;
+};
+
+const KNOWN_ROLE_VISUALS: Record<string, RoleVisual> = {
+    proposer: {
+        badge: 'P',
+        label: 'Proposer',
+        color: 'var(--color-proposer)',
+        cardTint: 'rgba(52, 199, 89, 0.08)',
+        glowTint: 'rgba(52, 199, 89, 0.35)',
+    },
+    opposer: {
+        badge: 'O',
+        label: 'Opposer',
+        color: 'var(--color-opposer)',
+        cardTint: 'rgba(255, 59, 48, 0.08)',
+        glowTint: 'rgba(255, 59, 48, 0.35)',
+    },
+};
+
+const EXTRA_ROLE_VISUALS: Omit<RoleVisual, 'badge' | 'label'>[] = [
+    {
+        color: 'var(--accent-indigo)',
+        cardTint: 'rgba(99, 102, 241, 0.08)',
+        glowTint: 'rgba(99, 102, 241, 0.35)',
+    },
+    {
+        color: 'var(--accent-cyan)',
+        cardTint: 'rgba(34, 211, 238, 0.08)',
+        glowTint: 'rgba(34, 211, 238, 0.35)',
+    },
+    {
+        color: 'var(--accent-amber)',
+        cardTint: 'rgba(245, 158, 11, 0.08)',
+        glowTint: 'rgba(245, 158, 11, 0.35)',
+    },
+];
+
+function formatRoleLabel(role: string | undefined): string {
+    if (!role) return 'Speaker';
+    return role
+        .split(/[_-\s]+/)
+        .filter(Boolean)
+        .map(part => part[0].toUpperCase() + part.slice(1))
+        .join(' ');
+}
+
+function getRoleBadge(text: string): string {
+    const badge = text
+        .split(/[_-\s]+/)
+        .filter(Boolean)
+        .map(part => part[0]?.toUpperCase() ?? '')
+        .join('')
+        .slice(0, 2);
+    return badge || 'SP';
+}
+
+function hashRole(role: string): number {
+    let hash = 0;
+    for (const char of role) {
+        hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+    }
+    return hash;
+}
+
+function getAgentVisual(agentEntry?: DialogueEntry | null): RoleVisual {
+    const role = agentEntry?.role ?? '';
+    const rawLabel = agentEntry?.agent_name?.trim();
+    const label = rawLabel && rawLabel !== role ? rawLabel : formatRoleLabel(role);
+    const knownVisual = role ? KNOWN_ROLE_VISUALS[role] : undefined;
+
+    if (knownVisual) {
+        return {
+            ...knownVisual,
+            label: label || knownVisual.label,
+        };
+    }
+
+    const palette = EXTRA_ROLE_VISUALS[hashRole(role || label) % EXTRA_ROLE_VISUALS.length];
+    return {
+        badge: getRoleBadge(label || role),
+        label: label || 'Speaker',
+        ...palette,
+    };
+}
+
 export default function MessageRow({ agentEntry, judgeEntry, systemEntry }: MessageRowProps) {
+    const neutralColor = 'var(--color-neutral, #6b7280)';
+
     if (systemEntry) {
         if (systemEntry.role === 'audience') {
             return (
@@ -26,16 +119,16 @@ export default function MessageRow({ agentEntry, judgeEntry, systemEntry }: Mess
                             display: 'flex',
                             alignItems: 'center',
                             gap: '12px',
-                            boxShadow: 'var(--shadow-md), 0 2px 8px rgba(52, 199, 89, 0.15)',
+                            boxShadow: 'var(--shadow-md), 0 2px 8px rgba(107, 114, 128, 0.15)',
                         }}
                     >
                         <span style={{
                             fontSize: '12px',
-                            color: 'var(--color-proposer)',
+                            color: neutralColor,
                             fontWeight: 700,
                             whiteSpace: 'nowrap',
                             padding: '4px 10px',
-                            background: 'rgba(52, 199, 89, 0.12)',
+                            background: 'rgba(107, 114, 128, 0.12)',
                             borderRadius: 'var(--radius-full)',
                         }}>
                             观众介入
@@ -69,8 +162,7 @@ export default function MessageRow({ agentEntry, judgeEntry, systemEntry }: Mess
 
     if (!agentEntry && !judgeEntry) return null;
 
-    const isProposer = agentEntry?.role === 'proposer';
-    const agentColor = isProposer ? 'var(--color-proposer)' : 'var(--color-opposer)';
+    const agentVisual = getAgentVisual(agentEntry);
 
     return (
         <div style={{
@@ -93,7 +185,7 @@ export default function MessageRow({ agentEntry, judgeEntry, systemEntry }: Mess
                             background: 'var(--bg-card)',
                             padding: '28px',
                             borderRadius: 'var(--radius-xl)',
-                            boxShadow: `var(--shadow-sm), 0 4px 20px ${isProposer ? 'rgba(52, 199, 89, 0.08)' : 'rgba(255, 59, 48, 0.08)'}`,
+                            boxShadow: `var(--shadow-sm), 0 4px 20px ${agentVisual.cardTint}`,
                             marginTop: '20px',
                             transition: 'box-shadow var(--transition-fast)',
                         }}
@@ -112,7 +204,7 @@ export default function MessageRow({ agentEntry, judgeEntry, systemEntry }: Mess
                                 style={{
                                     width: '40px',
                                     height: '40px',
-                                    background: agentColor,
+                                    background: agentVisual.color,
                                     borderRadius: 'var(--radius-md)',
                                     display: 'flex',
                                     alignItems: 'center',
@@ -120,10 +212,10 @@ export default function MessageRow({ agentEntry, judgeEntry, systemEntry }: Mess
                                     color: '#fff',
                                     fontWeight: 700,
                                     fontSize: '16px',
-                                    boxShadow: `0 6px 16px ${isProposer ? 'rgba(52, 199, 89, 0.35)' : 'rgba(255, 59, 48, 0.35)'}`,
+                                    boxShadow: `0 6px 16px ${agentVisual.glowTint}`,
                                 }}
                             >
-                                {isProposer ? '正' : '反'}
+                                {agentVisual.badge}
                             </motion.div>
                             <span style={{
                                 fontSize: '13px',
@@ -134,7 +226,7 @@ export default function MessageRow({ agentEntry, judgeEntry, systemEntry }: Mess
                                 boxShadow: 'var(--shadow-xs)',
                                 fontWeight: 500,
                             }}>
-                                {agentEntry.agent_name || (isProposer ? '正方' : '反方')}
+                                {agentVisual.label}
                             </span>
                         </div>
 
@@ -152,7 +244,7 @@ export default function MessageRow({ agentEntry, judgeEntry, systemEntry }: Mess
                                 <motion.span
                                     animate={{ opacity: [1, 0, 1] }}
                                     transition={{ repeat: Infinity, duration: 0.8 }}
-                                    style={{ display: 'inline-block', marginLeft: '4px', color: agentColor }}
+                                    style={{ display: 'inline-block', marginLeft: '4px', color: agentVisual.color }}
                                 >
                                     ▍
                                 </motion.span>
@@ -268,7 +360,7 @@ export default function MessageRow({ agentEntry, judgeEntry, systemEntry }: Mess
                                     gap: '10px'
                                 }}>
                                     {SCORE_DIMENSIONS.map(dim => {
-                                        const dimData = (judgeEntry!.scores as any)[dim.key];
+                                        const dimData = judgeEntry!.scores?.[dim.key];
                                         if (!dimData) return null;
                                         return (
                                             <motion.div

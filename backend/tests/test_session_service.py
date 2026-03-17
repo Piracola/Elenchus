@@ -78,3 +78,35 @@ async def test_update_session_state(db_session: AsyncSession):
     )
     assert updated["current_turn"] == 2
     assert updated["status"] == "in_progress"
+
+
+@pytest.mark.asyncio
+async def test_get_session_flattens_shared_knowledge(db_session: AsyncSession):
+    created = await session_service.create_session(
+        db_session,
+        SessionCreate(topic="Shared knowledge"),
+    )
+    expected_shared_knowledge = [
+        {"type": "fact", "query": "example", "result": "result"},
+        {"type": "memo", "role": "proposer", "content": "summary"},
+    ]
+
+    updated = await session_service.update_session_state(
+        db_session,
+        created["id"],
+        state_snapshot={
+            "dialogue_history": [],
+            "shared_knowledge": expected_shared_knowledge,
+            "current_scores": {},
+            "cumulative_scores": {},
+            "agent_configs": {},
+        },
+    )
+
+    assert updated is not None
+    assert updated["shared_knowledge"] == expected_shared_knowledge
+
+    fetched = await session_service.get_session(db_session, created["id"])
+
+    assert fetched is not None
+    assert fetched["shared_knowledge"] == expected_shared_knowledge

@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 # ── Enums ────────────────────────────────────────────────────────
@@ -23,6 +23,49 @@ class SessionStatus(str, Enum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     ERROR = "error"
+
+
+# ── User Request/Response models ─────────────────────────────────
+
+class UserRegister(BaseModel):
+    """POST /api/users/register — create a new user account."""
+
+    email: EmailStr = Field(..., description="User email address")
+    password: str = Field(..., min_length=8, max_length=128, description="User password")
+
+
+class UserLogin(BaseModel):
+    """POST /api/users/login — authenticate user."""
+
+    email: EmailStr = Field(..., description="User email address")
+    password: str = Field(..., description="User password")
+
+
+class UserResponse(BaseModel):
+    """User information response."""
+
+    id: str
+    email: str
+    is_active: bool
+    is_superuser: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class TokenResponse(BaseModel):
+    """JWT token response for login."""
+
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int  # seconds
+
+
+class AuthStatusResponse(BaseModel):
+    """Authentication status response."""
+
+    auth_enabled: bool
+    authenticated: bool
+    user: UserResponse | None = None
 
 
 # ── Request models ───────────────────────────────────────────────

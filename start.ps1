@@ -42,6 +42,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BackendDir = Join-Path $ScriptDir "backend"
 $FrontendDir = Join-Path $ScriptDir "frontend"
 $VenvDir = Join-Path $BackendDir "venv"
+$RootDir = $ScriptDir
 
 Write-Host ""
 Write-Host $CYAN"========================================"$RESET
@@ -179,7 +180,6 @@ Write-Host $BOLD"Step 4/5: Installing Process Manager"$RESET
 Write-Host $CYAN"========================================"$RESET
 Write-Host ""
 
-$RootDir = $ScriptDir
 $RootPackageJson = Join-Path $RootDir "package.json"
 
 if (-not (Test-Path (Join-Path $RootDir "node_modules"))) {
@@ -198,13 +198,74 @@ Write-Host $BOLD"Step 5/5: Starting Services"$RESET
 Write-Host $CYAN"========================================"$RESET
 Write-Host ""
 
+Push-Location $RootDir
+
+$backendJob = $null
+$frontendJob = $null
+$BackendPort = 8001
+
+if (-not $FrontendOnly) {
+    Print-Info "Checking port 8001..."
+    
+    $portToUse = 8001
+    $maxPortAttempts = 10
+    
+    for ($portAttempt = 0; $portAttempt -lt $maxPortAttempts; $portAttempt++) {
+        $currentPort = 8001 + $portAttempt
+        $portCheck = netstat -ano 2>$null | Select-String ":$currentPort\s"
+        
+        if (-not $portCheck) {
+            $portToUse = $currentPort
+            break
+        }
+        
+        if ($portAttempt -eq 0) {
+            Print-Info "Port 8001 is in use, trying to free it..."
+            
+            for ($attempt = 0; $attempt -lt 3; $attempt++) {
+                try {
+                    Get-NetTCPConnection -LocalPort $currentPort -ErrorAction SilentlyContinue | ForEach-Object {
+                        Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue
+                    }
+                } catch {}
+                
+                Start-Sleep -Seconds 1
+                
+                $portCheck = netstat -ano 2>$null | Select-String ":$currentPort\s"
+                if (-not $portCheck) {
+                    $portToUse = $currentPort
+                    break
+                }
+                
+                Print-Info "Using kill-port to free port $currentPort..."
+                npx kill-port $currentPort 2>$null
+                Start-Sleep -Seconds 2
+                
+                $portCheck = netstat -ano 2>$null | Select-String ":$currentPort\s"
+                if (-not $portCheck) {
+                    $portToUse = $currentPort
+                    break
+                }
+            }
+            
+            if (-not $portCheck) { break }
+        }
+    }
+    
+    if ($portToUse -ne 8001) {
+        Print-Warn "Port 8001 unavailable, using port $portToUse"
+    }
+    
+    $BackendPort = $portToUse
+}
+
 Write-Host ""
 Write-Host $BOLD$GREEN"  Elenchus Starting..."$RESET
 Write-Host ""
 Write-Host "  "$CYAN"Service URLs:"$RESET
 if (-not $FrontendOnly) {
-    Write-Host "    Backend API:  "$BOLD"http://localhost:8000"$RESET
-    Write-Host "    API Docs:     "$BOLD"http://localhost:8000/docs"$RESET
+    Write-Host "    Backend API:  "$BOLD"http://localhost:$BackendPort"$RESET
+    Write-Host "    API Docs:     "$BOLD"http://localhost:$BackendPort/docs"$RESET
 }
 if (-not $BackendOnly) {
     Write-Host "    Frontend UI:  "$BOLD"http://localhost:5173"$RESET
@@ -216,24 +277,99 @@ if (-not $FrontendOnly) {
 }
 Write-Host ""
 
-if (-not $BackendOnly) {
-    Print-Info "Opening browser in 5 seconds..."
-    Start-Sleep -Seconds 5
-    Start-Process "http://localhost:5173"
-}
-
-Write-Host ""
 Write-Host "  "$CYAN"Press Ctrl+C to stop all services"$RESET
 Write-Host ""
-
-Push-Location $RootDir
 
 if ($BackendOnly) {
     npm run dev:backend
 } elseif ($FrontendOnly) {
     npm run dev:frontend
 } else {
-    npm run dev
+    Print-Info "Starting backend service..."
+    
+    $backendProcess = Start-Process -FilePath "$VenvDir\Scripts\python.exe" `
+        -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "$BackendPort" `
+        -WorkingDirectory $BackendDir `
+        -WindowStyle Hidden `
+        -PassThru
+    
+    Start-Sleep -Seconds 2
+    
+    if ($backendProcess -and $backendProcess.HasExited) {
+        Print-Err "Backend process exited immediately."
+        exit 1
+    }
+    
+    Print-Info "Waiting for backend to be ready..."
+    $maxRetries = 30
+    $backendReady = $false
+    
+    for ($i = 0; $i -lt $maxRetries; $i++) {
+        try {
+            $result = curl.exe -s "http://localhost:$BackendPort/health" 2>$null
+            if ($result -and $result -match '"status"\s*:\s*"ok"') {
+                $backendReady = $true
+                Print-OK "Backend is ready"
+                break
+            }
+        } catch {}
+        Write-Host "." -NoNewline
+        Start-Sleep -Milliseconds 500
+    }
+    Write-Host ""
+    
+    if (-not $backendReady) {
+        Print-Err "Backend failed to start."
+        if ($backendProcess -and -not $backendProcess.HasExited) {
+            Stop-Process -Id $backendProcess.Id -Force -ErrorAction SilentlyContinue
+        }
+        exit 1
+    }
+    
+    Print-Info "Starting frontend service..."
+    
+    $npmPath = (Get-Command npm -ErrorAction SilentlyContinue).Source
+    if (-not $npmPath) {
+        Print-Err "npm not found in PATH"
+        exit 1
+    }
+    
+    $FrontendEnvFile = Join-Path $FrontendDir ".env"
+    $envContent = "VITE_BACKEND_PORT=$BackendPort"
+    Set-Content -Path $FrontendEnvFile -Value $envContent -Force
+    Print-OK "Frontend .env configured with port $BackendPort"
+    
+    Push-Location $FrontendDir
+    $frontendProcess = Start-Process -FilePath "powershell.exe" `
+        -ArgumentList "-NoExit", "-Command", "npm run dev" `
+        -PassThru
+    Pop-Location
+    
+    Start-Sleep -Seconds 3
+    Print-Info "Opening browser..."
+    Start-Process "http://localhost:5173"
+    
+    Write-Host ""
+    Write-Host $CYAN"Services are running. Press Ctrl+C to stop."$RESET
+    Write-Host ""
+    
+    try {
+        while ($true) {
+            Start-Sleep -Seconds 1
+            if ($backendProcess -and $backendProcess.HasExited) {
+                Print-Warn "Backend process has stopped"
+                break
+            }
+        }
+    } catch [System.Management.Automation.HaltCommandException] {
+    }
+    
+    if ($backendProcess -and -not $backendProcess.HasExited) {
+        Stop-Process -Id $backendProcess.Id -Force -ErrorAction SilentlyContinue
+    }
+    if ($frontendProcess -and -not $frontendProcess.HasExited) {
+        Stop-Process -Id $frontendProcess.Id -Force -ErrorAction SilentlyContinue
+    }
 }
 
 Pop-Location

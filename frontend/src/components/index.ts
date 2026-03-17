@@ -15,8 +15,12 @@ export { default as StatusBanner } from './chat/StatusBanner';
 
 // Shared components
 export { default as AgentConfigPanel } from './shared/AgentConfigPanel';
+export { BackendHealthCheck } from './shared/BackendHealthCheck';
 export { default as CustomSelect } from './shared/CustomSelect';
 export { default as ErrorBoundary } from './shared/ErrorBoundary';
+export { ToastContainer } from './shared/ToastContainer';
+
+export { useToastState } from '../hooks/useToastState';
 
 // Sidebar components
 export { default as ModelConfigManager } from './sidebar/ModelConfigManager';

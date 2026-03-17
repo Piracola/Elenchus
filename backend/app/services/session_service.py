@@ -6,11 +6,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select, delete as sa_delete
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import SessionRecord, _gen_id, _utcnow
 from app.models.schemas import SessionCreate, SessionStatus
+from app.dependencies import get_provider_service
 
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -28,6 +29,7 @@ def _record_to_dict(record: SessionRecord) -> dict[str, Any]:
         "created_at": record.created_at,
         "updated_at": record.updated_at,
         "dialogue_history": snapshot.get("dialogue_history", []),
+        "shared_knowledge": snapshot.get("shared_knowledge", []),
         "current_scores": snapshot.get("current_scores", {}),
         "cumulative_scores": snapshot.get("cumulative_scores", {}),
         "agent_configs": snapshot.get("agent_configs", {}),
@@ -36,15 +38,19 @@ def _record_to_dict(record: SessionRecord) -> dict[str, Any]:
 
 # ── CRUD Operations ─────────────────────────────────────────────
 
-async def create_session(db: AsyncSession, body: SessionCreate) -> dict[str, Any]:
+async def create_session(
+    db: AsyncSession,
+    body: SessionCreate,
+    owner_id: str | None = None,
+) -> dict[str, Any]:
     """Create a new debate session in the database."""
     now = _utcnow()
-    from app.services.provider_service import provider_service
+    provider_service = get_provider_service()
     agent_configs = body.agent_configs or {}
 
     # Resolve api_key from provider store for each agent config.
     # Frontend sends provider_id; backend looks up the real key.
-    all_providers = {p["id"]: p for p in provider_service.list_configs_raw()}
+    all_providers = {p["id"]: p for p in await provider_service.list_configs_raw()}
     for role, cfg in list(agent_configs.items()):
         pid = cfg.get("provider_id")
         if pid and pid in all_providers:
@@ -55,7 +61,7 @@ async def create_session(db: AsyncSession, body: SessionCreate) -> dict[str, Any
         # Strip provider_id from persisted config — it's a lookup key, not runtime data
         cfg.pop("provider_id", None)
 
-    default_provider = provider_service.get_default_config()
+    default_provider = await provider_service.get_default_config()
 
     roles_needed = set(body.participants + ["judge", "fact_checker"])
     for role in roles_needed:
@@ -70,6 +76,12 @@ async def create_session(db: AsyncSession, body: SessionCreate) -> dict[str, Any
                 "api_base_url": default_provider.api_base_url,
             }
 
+    # Strip api_key before persisting to database — preserve provider store encryption
+    agent_configs_for_storage = {
+        role: {k: v for k, v in cfg.items() if k != "api_key"}
+        for role, cfg in agent_configs.items()
+    }
+
     record = SessionRecord(
         id=_gen_id(),
         topic=body.topic,
@@ -77,13 +89,15 @@ async def create_session(db: AsyncSession, body: SessionCreate) -> dict[str, Any
         max_turns=body.max_turns,
         current_turn=0,
         status=SessionStatus.PENDING.value,
+        owner_id=owner_id,
         state_snapshot={
             "dialogue_history": [],
+            "shared_knowledge": [],
             "current_scores": {},
             "cumulative_scores": {},
             "search_context": [],
             "context_summary": "",
-            "agent_configs": agent_configs,
+            "agent_configs": agent_configs_for_storage,
         },
         created_at=now,
         updated_at=now,
@@ -94,14 +108,20 @@ async def create_session(db: AsyncSession, body: SessionCreate) -> dict[str, Any
     return _record_to_dict(record)
 
 
-async def list_sessions(db: AsyncSession, offset: int = 0, limit: int = 50) -> list[dict[str, Any]]:
+async def list_sessions(
+    db: AsyncSession,
+    offset: int = 0,
+    limit: int = 50,
+    owner_id: str | None = None,
+) -> list[dict[str, Any]]:
     """List sessions with pagination (lightweight info only)."""
-    stmt = (
-        select(SessionRecord)
-        .order_by(SessionRecord.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-    )
+    stmt = select(SessionRecord)
+
+    # Filter by owner if specified
+    if owner_id is not None:
+        stmt = stmt.where(SessionRecord.owner_id == owner_id)
+
+    stmt = stmt.order_by(SessionRecord.created_at.desc()).offset(offset).limit(limit)
     result = await db.execute(stmt)
     records = result.scalars().all()
     return [
@@ -117,18 +137,33 @@ async def list_sessions(db: AsyncSession, offset: int = 0, limit: int = 50) -> l
     ]
 
 
-async def count_sessions(db: AsyncSession) -> int:
+async def count_sessions(db: AsyncSession, owner_id: str | None = None) -> int:
     """Return total session count for pagination."""
     from sqlalchemy import func, select as sa_select
-    result = await db.execute(sa_select(func.count()).select_from(SessionRecord))
+    stmt = sa_select(func.count()).select_from(SessionRecord)
+
+    # Filter by owner if specified
+    if owner_id is not None:
+        stmt = stmt.where(SessionRecord.owner_id == owner_id)
+
+    result = await db.execute(stmt)
     return result.scalar_one()
 
 
-async def get_session(db: AsyncSession, session_id: str) -> dict[str, Any] | None:
+async def get_session(
+    db: AsyncSession,
+    session_id: str,
+    owner_id: str | None = None,
+) -> dict[str, Any] | None:
     """Get a single session's full data. Returns None if not found."""
     record = await db.get(SessionRecord, session_id)
     if record is None:
         return None
+
+    # Check ownership if owner_id is specified
+    if owner_id is not None and record.owner_id != owner_id:
+        return None
+
     return _record_to_dict(record)
 
 
@@ -166,11 +201,20 @@ async def update_session_state(
     return _record_to_dict(record)
 
 
-async def delete_session(db: AsyncSession, session_id: str) -> bool:
+async def delete_session(
+    db: AsyncSession,
+    session_id: str,
+    owner_id: str | None = None,
+) -> bool:
     """Delete a session. Returns True if deleted, False if not found."""
     record = await db.get(SessionRecord, session_id)
     if record is None:
         return False
+
+    # Check ownership if owner_id is specified
+    if owner_id is not None and record.owner_id != owner_id:
+        return False
+
     await db.delete(record)
     await db.commit()
     return True

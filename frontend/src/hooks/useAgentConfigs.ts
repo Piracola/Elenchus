@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
 import type { ModelConfig, AgentConfigResult } from '../types';
 
@@ -9,19 +9,26 @@ export function useAgentConfigs() {
     });
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [showConfigManager, setShowConfigManager] = useState(false);
+    const hasLoadedRef = useRef(false);
 
-    const loadConfigs = useCallback(async () => {
-        try {
-            const data = await api.models.list();
-            setSavedConfigs(data);
-        } catch (err) {
-            console.error(err);
-        }
+    const loadConfigs = useCallback(() => {
+        api.models.list()
+            .then(data => setSavedConfigs(data))
+            .catch(err => console.error(err));
     }, []);
 
     useEffect(() => {
-        if (showAdvanced) loadConfigs();
-    }, [showAdvanced, showConfigManager, loadConfigs]);
+        if (!hasLoadedRef.current) {
+            hasLoadedRef.current = true;
+            loadConfigs();
+        }
+    }, [loadConfigs]);
+
+    useEffect(() => {
+        if (!showConfigManager && hasLoadedRef.current) {
+            loadConfigs();
+        }
+    }, [showConfigManager, loadConfigs]);
 
     const handleConfigSelect = (agent: string, configId: string) => {
         setSelectedConfigIds(prev => ({ ...prev, [agent]: configId }));

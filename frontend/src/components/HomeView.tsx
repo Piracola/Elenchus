@@ -13,10 +13,12 @@ export default function HomeView() {
     const [isCreating, setIsCreating] = useState(false);
     const [error, setError] = useState('');
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
-    const { setCurrentSessionId, setCurrentSession } = useDebateStore();
+    const { setCurrentSession } = useDebateStore();
 
     const {
         showAdvanced, setShowAdvanced,
+        savedConfigs, selectedConfigIds,
+        showConfigManager, setShowConfigManager, handleConfigSelect,
         buildAgentConfigs,
     } = useAgentConfigs();
 
@@ -35,7 +37,6 @@ export default function HomeView() {
                 agent_configs: agentConfigs,
             });
             setCurrentSession(session);
-            setCurrentSessionId(session.id);
         } catch (err) {
             console.error('Failed to create session:', err);
             setError(err instanceof Error ? err.message : '创建会话失败，请检查后端服务是否正常运行');
@@ -163,7 +164,15 @@ export default function HomeView() {
                             transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
                             style={{ width: '100%' }}
                         >
-                            <AgentConfigPanel show={showAdvanced} onToggle={() => setShowAdvanced(!showAdvanced)} />
+                            <AgentConfigPanel
+                                show={showAdvanced}
+                                onToggle={() => setShowAdvanced(!showAdvanced)}
+                                savedConfigs={savedConfigs}
+                                selectedConfigIds={selectedConfigIds}
+                                showConfigManager={showConfigManager}
+                                setShowConfigManager={setShowConfigManager}
+                                handleConfigSelect={handleConfigSelect}
+                            />
                         </motion.div>
                     )}
                 </AnimatePresence>

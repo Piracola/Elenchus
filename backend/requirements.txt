@@ -19,10 +19,17 @@ langchain-google-genai
 
 # Search
 httpx==0.28.1
+ddgs>=6.0.0
 
 # Config
 pyyaml==6.0.2
 python-dotenv==1.0.1
 
+# Security
+cryptography>=42.0.0
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+
 # Utilities
 python-multipart==0.0.20
+email-validator>=2.1.0

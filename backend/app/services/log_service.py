@@ -5,6 +5,7 @@ Supports dynamic log level adjustment and file-based logging.
 
 from __future__ import annotations
 
+import json
 import logging
 import sys
 from datetime import datetime
@@ -16,6 +17,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+_LOG_CONFIG_FILE = _PROJECT_ROOT / "data" / "log_config.json"
 
 
 class LogLevel(IntEnum):
@@ -70,23 +72,43 @@ class LogManager:
             cls._instance = cls()
         return cls._instance
 
+    def _load_persisted_level(self) -> LogLevel:
+        try:
+            if _LOG_CONFIG_FILE.exists():
+                with open(_LOG_CONFIG_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    level_str = data.get("level", "INFO")
+                    return LogLevel.from_string(level_str)
+        except (json.JSONDecodeError, KeyError, OSError):
+            pass
+        return LogLevel.INFO
+
+    def _persist_level(self, level: LogLevel) -> None:
+        try:
+            _LOG_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(_LOG_CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump({"level": level.to_string()}, f)
+        except OSError:
+            pass
+
     def setup(
         self,
         level: LogLevel = LogLevel.INFO,
         log_dir: str = "logs",
         enable_file_logging: bool = True,
     ) -> None:
-        self._current_level = level
+        persisted_level = self._load_persisted_level()
+        self._current_level = persisted_level
         self._log_dir = _PROJECT_ROOT / log_dir
 
         root_logger = logging.getLogger()
-        root_logger.setLevel(level.value)
+        root_logger.setLevel(self._current_level.value)
 
         for handler in root_logger.handlers[:]:
             root_logger.removeHandler(handler)
 
         self._console_handler = logging.StreamHandler(sys.stdout)
-        self._console_handler.setLevel(level.value)
+        self._console_handler.setLevel(self._current_level.value)
         self._console_handler.setFormatter(
             logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT)
         )
@@ -117,6 +139,7 @@ class LogManager:
 
     def set_level(self, level: LogLevel) -> None:
         self._current_level = level
+        self._persist_level(level)
 
         root_logger = logging.getLogger()
         root_logger.setLevel(level.value)

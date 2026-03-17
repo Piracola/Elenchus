@@ -56,21 +56,15 @@ class SearXNGProvider(SearchProvider):
         return results
 
     async def is_available(self) -> bool:
-        """Check if SearXNG instance is reachable."""
+        """Check if SearXNG instance is reachable with short timeout."""
         try:
-            resp = await self._client.get(f"{self.base_url}/healthz", timeout=3.0)
+            resp = await self._client.get(
+                f"{self.base_url}/healthz",
+                timeout=httpx.Timeout(0.8, connect=0.3)
+            )
             return resp.status_code == 200
         except Exception:
-            # Fallback: try a lightweight search
-            try:
-                resp = await self._client.get(
-                    f"{self.base_url}/search",
-                    params={"q": "test", "format": "json"},
-                    timeout=5.0,
-                )
-                return resp.status_code == 200
-            except Exception:
-                return False
+            return False
 
     async def close(self):
         await self._client.aclose()

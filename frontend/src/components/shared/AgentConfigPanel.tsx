@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 import { Settings2 } from 'lucide-react';
 import ModelConfigManager from '../sidebar/ModelConfigManager';
 import CustomSelect from './CustomSelect';
-import { useAgentConfigs } from '../../hooks/useAgentConfigs';
+import type { ModelConfig } from '../../types';
 
 export type { AgentConfigResult } from '../../types';
 
@@ -30,13 +30,17 @@ const AGENTS = ['proposer', 'opposer', 'judge', 'fact_checker'] as const;
 interface AgentConfigPanelProps {
     show?: boolean;
     onToggle?: () => void;
+    savedConfigs: ModelConfig[];
+    selectedConfigIds: Record<string, string>;
+    showConfigManager: boolean;
+    setShowConfigManager: (v: boolean) => void;
+    handleConfigSelect: (agent: string, value: string) => void;
 }
 
-export default function AgentConfigPanel(_props: AgentConfigPanelProps) {
-    const {
-        savedConfigs, selectedConfigIds,
-        showConfigManager, setShowConfigManager, handleConfigSelect,
-    } = useAgentConfigs();
+export default function AgentConfigPanel({
+    savedConfigs, selectedConfigIds,
+    showConfigManager, setShowConfigManager, handleConfigSelect,
+}: AgentConfigPanelProps) {
 
     const buildOptions = () => {
         const options = [{ value: '', label: '默认配置' }];

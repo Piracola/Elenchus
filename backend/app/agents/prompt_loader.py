@@ -45,9 +45,5 @@ def get_debater_system_prompt(role: str) -> str:
     return base
 
 
-def get_fact_checker_prompt() -> str:
-    return load_prompt("fact_checker_system.md")
-
-
 def get_judge_prompt() -> str:
     return load_prompt("judge_system.md")

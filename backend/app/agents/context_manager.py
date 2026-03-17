@@ -24,19 +24,10 @@ MESSAGE TO COMPRESS:
 OUTPUT a single concise statement representing their point:"""
 
 
-def build_dialogue_text(entries: list[dict[str, Any]]) -> str:
-    """Format dialogue entries into readable text."""
-    lines = []
-    for entry in entries:
-        role = entry.get("role", "unknown")
-        content = entry.get("content", "")
-        lines.append(f"[{role}]: {content}")
-    return "\n\n".join(lines)
-
-
 async def compress_context(
     dialogue_history: list[dict[str, Any]],
     shared_knowledge: list[dict[str, Any]],
+    agent_configs: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """
     Apply single-message compression for old dialogue.
@@ -51,19 +42,17 @@ async def compress_context(
     if not ctx_cfg.enable_summary_compression:
         return shared_knowledge, dialogue_history
 
-    # Keep the last N messages verbatim
-    # Let's say keep_entries = 6 (e.g. 3 turns of 2 speakers)
     keep_entries = ctx_cfg.recent_turns_to_keep * 2 
 
     if len(dialogue_history) <= keep_entries:
         return shared_knowledge, dialogue_history
 
-    # Split into old (to compress) and recent (to keep verbatim)
     old_entries = dialogue_history[:-keep_entries]
     recent_entries = dialogue_history[-keep_entries:]
 
     new_knowledge = list(shared_knowledge)
-    llm = get_fact_checker_llm(streaming=False)
+    override = (agent_configs or {}).get("fact_checker")
+    llm = await get_fact_checker_llm(streaming=False, override=override)
 
     for entry in old_entries:
         # Skip if it's already a compressed memo or system message
@@ -80,7 +69,8 @@ async def compress_context(
                 SystemMessage(content="You are a concise archivist. Output only the short memo."),
                 HumanMessage(content=prompt),
             ])
-            summary = response.content.strip()
+            response_content = response.content if hasattr(response, 'content') else str(response)
+            summary = response_content.strip() if isinstance(response_content, str) else str(response_content)
             
             # Append as a memo to shared knowledge
             new_knowledge.append({

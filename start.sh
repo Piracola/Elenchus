@@ -283,6 +283,8 @@ else
     print_success "Process manager already installed"
 fi
 
+BACKEND_PORT=8001
+
 print_header "Step 5/5: Starting Services"
 
 echo ""
@@ -290,8 +292,8 @@ echo -e "${BOLD}${GREEN}  Elenchus Starting...${RESET}"
 echo ""
 echo -e "  ${CYAN}Service URLs:${RESET}"
 if [[ "$FRONTEND_ONLY" != true ]]; then
-    echo -e "    Backend API:  ${BOLD}http://localhost:8000${RESET}"
-    echo -e "    API Docs:     ${BOLD}http://localhost:8000/docs${RESET}"
+    echo -e "    Backend API:  ${BOLD}http://localhost:$BACKEND_PORT${RESET}"
+    echo -e "    API Docs:     ${BOLD}http://localhost:$BACKEND_PORT/docs${RESET}"
 fi
 if [[ "$BACKEND_ONLY" != true ]]; then
     echo -e "    Frontend UI:  ${BOLD}http://localhost:5173${RESET}"
@@ -304,6 +306,8 @@ fi
 echo ""
 
 if [[ "$BACKEND_ONLY" != true ]]; then
+    echo "VITE_BACKEND_PORT=$BACKEND_PORT" > "$FRONTEND_DIR/.env"
+    print_success "Frontend .env configured with port $BACKEND_PORT"
     print_info "Opening browser..."
     sleep 5
     if [[ "$(uname)" == "Darwin" ]]; then

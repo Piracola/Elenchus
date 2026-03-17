@@ -4,12 +4,15 @@
   "private": true,
   "description": "Elenchus AI Debate Framework",
   "scripts": {
-    "dev": "concurrently -n backend,frontend -c \"blue,green\" --kill-others \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "dev:backend": "cd backend && .\\venv\\Scripts\\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000",
+    "dev": "concurrently -n backend,frontend -c \"blue,green\" --kill-others-on-fail --handle-input \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && .\\venv\\Scripts\\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload",
     "dev:frontend": "cd frontend && npm run dev",
-    "dev:backend:unix": "cd backend && ./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    "dev:backend:unix": "cd backend && ./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload",
+    "kill:backend": "npx kill-port 8001 || true",
+    "predev": "npm run kill:backend"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "kill-port": "^2.0.1"
   }
 }

@@ -9,7 +9,8 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage, AIMessage
+from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage
+from langgraph.graph.message import RemoveMessage
 
 from app.agents.llm import get_debater_llm
 from app.agents.prompt_loader import get_debater_system_prompt
@@ -43,19 +44,16 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
     messages = state.get("messages", [])
     agent_configs = state.get("agent_configs", {})
     
-    # Custom persona overrides
     role_config = agent_configs.get(role, {})
     agent_name = role_config.get("custom_name", ROLE_NAMES.get(role, role))
     custom_prompt = role_config.get("custom_prompt", "")
 
     logger.info("Debater [%s] ('%s') speaking — Turn %d/%d", role, agent_name, current_turn + 1, max_turns)
 
-    # Build system prompt
     system_prompt = get_debater_system_prompt(role)
     if custom_prompt:
         system_prompt += f"\n\n## Custom Persona Instructions\n{custom_prompt}"
 
-    # Build context
     context_block = build_context_for_agent(
         shared_knowledge=shared_knowledge,
         recent_history=dialogue_history,
@@ -64,7 +62,6 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
         max_turns=max_turns,
     )
 
-    # Determine the instruction based on turn and role
     is_first_turn = current_turn == 0
     is_proposer = role == "proposer"
 
@@ -89,33 +86,28 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
             f"and address any weaknesses in your opponent's case.\n\n{context_block}"
         )
 
-    # Bind skills (tools)
     override = agent_configs.get(role, agent_configs.get("debater"))
-    llm = get_debater_llm(streaming=False, override=override)
+    llm = await get_debater_llm(streaming=False, override=override)
     skills = get_all_skills()
     if skills:
         llm = llm.bind_tools(skills)
         
-    # Build complete message payload (System + Internal Tool Scratchpad)
     payload_messages: list[BaseMessage] = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=instruction),
     ]
-    # Append tool execution results if we are looping in same turn
     if messages:
         payload_messages.extend(messages)
 
     response = await llm.ainvoke(payload_messages)
     
-    # Check if the LLM decided to call a tool
     if hasattr(response, "tool_calls") and response.tool_calls:
         logger.info("Debater [%s] requested tools: %s", role, [t["name"] for t in response.tool_calls])
-        return {"messages": [response]} # Yield back to graph to route to tool_executor
+        return {"messages": [response]}
 
     content = response.content.strip() if isinstance(response.content, str) else str(response.content)
     citations = _extract_citations(content)
 
-    # Create dialogue entry
     entry = {
         "role": role,
         "agent_name": agent_name,
@@ -129,5 +121,7 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
         role, len(content), len(citations),
     )
 
-    # Clear `messages` scratchpad, push the result to `dialogue_history`
-    return {"dialogue_history": [entry], "messages": []}
+    return {
+        "dialogue_history": [entry],
+        "messages": [RemoveMessage(id=m.id) for m in messages if m.id],
+    }

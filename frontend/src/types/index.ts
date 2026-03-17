@@ -76,7 +76,6 @@ export interface Session {
 export interface AgentConfig {
     model?: string;
     provider_type?: string;
-    api_key?: string;
     api_base_url?: string;
 }
 
@@ -180,6 +179,7 @@ export interface WSMessage {
     node?: string;
     // speech
     role?: string;
+    agent_name?: string;
     token?: string;
     citations?: string[];
     // fact_check

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { ChatPanel } from './components';
+import { ChatPanel, ToastContainer, useToastState, BackendHealthCheck } from './components';
 import HomeView from './components/HomeView';
 import SessionList from './components/sidebar/SessionList';
 import { useThemeStore } from './stores/themeStore';
@@ -8,7 +8,8 @@ import ErrorBoundary from './components/shared/ErrorBoundary';
 
 function App() {
   const { theme, setTheme } = useThemeStore();
-  const { currentSessionId } = useDebateStore();
+  const { currentSession } = useDebateStore();
+  const { toasts, removeToast } = useToastState();
 
   useEffect(() => {
     setTheme(theme);
@@ -16,36 +17,39 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'row',
-          height: '100vh',
-          width: '100vw',
-          overflow: 'hidden',
-          background: 'var(--bg-primary)',
-          color: 'var(--text-primary)',
-        }}
-      >
-        <SessionList />
-
-        <main
+      <BackendHealthCheck>
+        <div
           style={{
-            flex: 1,
             display: 'flex',
-            flexDirection: 'column',
-            minWidth: 0,
+            flexDirection: 'row',
+            height: '100vh',
+            width: '100vw',
             overflow: 'hidden',
             background: 'var(--bg-primary)',
+            color: 'var(--text-primary)',
           }}
         >
-          {!currentSessionId ? (
-            <HomeView />
-          ) : (
-            <ChatPanel />
-          )}
-        </main>
-      </div>
+          <SessionList />
+
+          <main
+            style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              minWidth: 0,
+              overflow: 'hidden',
+              background: 'var(--bg-primary)',
+            }}
+          >
+            {!currentSession ? (
+              <HomeView />
+            ) : (
+              <ChatPanel />
+            )}
+          </main>
+        </div>
+        <ToastContainer toasts={toasts} removeToast={removeToast} />
+      </BackendHealthCheck>
     </ErrorBoundary>
   );
 }
