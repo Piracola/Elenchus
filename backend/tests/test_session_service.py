@@ -110,3 +110,45 @@ async def test_get_session_flattens_shared_knowledge(db_session: AsyncSession):
 
     assert fetched is not None
     assert fetched["shared_knowledge"] == expected_shared_knowledge
+
+
+@pytest.mark.asyncio
+async def test_get_session_sanitizes_malformed_sse_dialogue_history(db_session: AsyncSession):
+    created = await session_service.create_session(
+        db_session,
+        SessionCreate(topic="Malformed provider payload"),
+    )
+
+    raw_sse = "\n\n".join(
+        [
+            'data: {"choices":[{"delta":{"role":"assistant","content":""},"index":0}]}',
+            'data: {"choices":[{"delta":{"content":"Recovered "},"index":0}]}',
+            'data: {"choices":[{"delta":{"content":"speech"},"index":0}]}',
+            "data: [DONE]",
+        ]
+    )
+
+    await session_service.update_session_state(
+        db_session,
+        created["id"],
+        state_snapshot={
+            "dialogue_history": [
+                {
+                    "role": "proposer",
+                    "agent_name": "Proposer",
+                    "content": raw_sse,
+                    "citations": [],
+                    "timestamp": "2026-03-17T00:00:00Z",
+                }
+            ],
+            "shared_knowledge": [],
+            "current_scores": {},
+            "cumulative_scores": {},
+            "agent_configs": {},
+        },
+    )
+
+    fetched = await session_service.get_session(db_session, created["id"])
+
+    assert fetched is not None
+    assert fetched["dialogue_history"][0]["content"] == "Recovered speech"

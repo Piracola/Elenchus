@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.safe_invoke import normalize_model_text
 from app.db.models import SessionRecord, _gen_id, _utcnow
 from app.models.schemas import SessionCreate, SessionStatus
 from app.dependencies import get_provider_service
@@ -18,7 +19,7 @@ from app.dependencies import get_provider_service
 
 def _record_to_dict(record: SessionRecord) -> dict[str, Any]:
     """Convert a DB record to a dict suitable for SessionResponse."""
-    snapshot = record.state_snapshot or {}
+    snapshot = _sanitize_state_snapshot(record.state_snapshot or {})
     return {
         "id": record.id,
         "topic": record.topic,
@@ -34,6 +35,34 @@ def _record_to_dict(record: SessionRecord) -> dict[str, Any]:
         "cumulative_scores": snapshot.get("cumulative_scores", {}),
         "agent_configs": snapshot.get("agent_configs", {}),
     }
+
+
+def _sanitize_dialogue_history(dialogue_history: Any) -> list[dict[str, Any]]:
+    """Normalize malformed provider payloads embedded in stored dialogue history."""
+    if not isinstance(dialogue_history, list):
+        return []
+
+    sanitized: list[dict[str, Any]] = []
+    for entry in dialogue_history:
+        if not isinstance(entry, dict):
+            continue
+
+        normalized_entry = dict(entry)
+        content = normalized_entry.get("content")
+        if isinstance(content, str) and content:
+            normalized_entry["content"] = normalize_model_text(content)
+        sanitized.append(normalized_entry)
+
+    return sanitized
+
+
+def _sanitize_state_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Return a snapshot safe to persist and safe to send to the frontend."""
+    sanitized = dict(snapshot)
+    sanitized["dialogue_history"] = _sanitize_dialogue_history(
+        sanitized.get("dialogue_history", [])
+    )
+    return sanitized
 
 
 # ── CRUD Operations ─────────────────────────────────────────────
@@ -193,7 +222,7 @@ async def update_session_state(
     if status is not None:
         record.status = status
     if state_snapshot is not None:
-        record.state_snapshot = state_snapshot
+        record.state_snapshot = _sanitize_state_snapshot(state_snapshot)
 
     record.updated_at = _utcnow()
     await db.commit()

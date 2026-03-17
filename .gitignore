@@ -40,6 +40,7 @@ env/
 
 # pytest
 .pytest_cache/
+pytest-cache-files-*/
 .coverage
 htmlcov/
 
@@ -57,6 +58,12 @@ yarn-error.log*
 # ========================================
 .vscode/
 *.code-workspace
+
+# ========================================
+# Static Analysis / Build Cache
+# ========================================
+.mypy_cache/
+.ruff_cache/
 
 # ========================================
 # Database
