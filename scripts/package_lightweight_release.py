@@ -12,12 +12,14 @@ import argparse
 import hashlib
 import json
 import shutil
-import subprocess
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = ROOT / "dist" / "releases"
 STAGING_DIR = ROOT / "dist" / "staging"
+LAUNCHER_SOURCE_DIR = Path("release/launchers")
+LAUNCHER_DEST_DIR = Path("launchers")
 
 COMMON_DIRECTORIES = [
     Path("backend/app"),
@@ -33,13 +35,13 @@ COMMON_FILES = [
     Path("data/log_config.json"),
 ]
 
-PLATFORM_FILES = {
+PLATFORM_LAUNCHERS = {
     "windows": [
-        Path("start-release.bat"),
-        Path("start-release.ps1"),
+        "start-release.bat",
+        "start-release.ps1",
     ],
     "unix": [
-        Path("start-release.sh"),
+        "start-release.sh",
     ],
 }
 
@@ -87,10 +89,14 @@ def detect_default_version() -> str:
     return version or "dev"
 
 
-def ensure_required_files() -> None:
+def ensure_required_files(platform: str) -> None:
     required_paths = [ROOT / "frontend" / "dist" / "index.html"]
     required_paths.extend(ROOT / rel_path for rel_path in COMMON_DIRECTORIES)
     required_paths.extend(ROOT / rel_path for rel_path in COMMON_FILES)
+    required_paths.extend(
+        ROOT / LAUNCHER_SOURCE_DIR / launcher_name
+        for launcher_name in PLATFORM_LAUNCHERS[platform]
+    )
 
     missing = [path for path in required_paths if not path.exists()]
     if missing:
@@ -115,11 +121,19 @@ def copy_file(src: Path, dst: Path) -> None:
     shutil.copy2(src, dst)
 
 
+def copy_platform_launchers(platform: str, release_root: Path) -> None:
+    for launcher_name in PLATFORM_LAUNCHERS[platform]:
+        copy_file(
+            ROOT / LAUNCHER_SOURCE_DIR / launcher_name,
+            release_root / LAUNCHER_DEST_DIR / launcher_name,
+        )
+
+
 def write_quickstart(target_dir: Path, platform: str, version: str) -> None:
     if platform == "windows":
-        start_command = "Double-click start-release.bat"
+        start_command = r"Double-click launchers\start-release.bat"
     else:
-        start_command = "Run `chmod +x ./start-release.sh && ./start-release.sh`"
+        start_command = "Run `chmod +x ./launchers/start-release.sh && ./launchers/start-release.sh`"
 
     content = "\n".join(
         [
@@ -128,7 +142,7 @@ def write_quickstart(target_dir: Path, platform: str, version: str) -> None:
             "This package includes:",
             "- Prebuilt frontend static files",
             "- Python backend source and runtime config",
-            "- A release launcher for end users",
+            "- A launchers/ folder for end-user startup scripts",
             "",
             "Before first run:",
             "- Install Python 3.10 or newer",
@@ -165,67 +179,27 @@ def build_staging_tree(platform: str, version: str) -> tuple[Path, Path]:
     for rel_path in COMMON_FILES:
         copy_file(ROOT / rel_path, release_root / rel_path)
 
-    for rel_path in PLATFORM_FILES[platform]:
-        copy_file(ROOT / rel_path, release_root / rel_path)
+    copy_platform_launchers(platform, release_root)
 
     (release_root / "logs").mkdir(exist_ok=True)
     write_quickstart(release_root, platform, version)
 
     if platform == "unix":
-        launcher = release_root / "start-release.sh"
+        launcher = release_root / LAUNCHER_DEST_DIR / "start-release.sh"
         launcher.chmod(0o755)
 
     return temp_root, release_root
 
 
-def find_working_7z() -> str:
-    candidates = ("7z", "7zz", "7za")
-    resolved_candidates: list[str] = []
-
-    for candidate in candidates:
-        resolved = shutil.which(candidate)
-        if resolved and resolved not in resolved_candidates:
-            resolved_candidates.append(resolved)
-
-    for resolved in resolved_candidates:
-        probe = subprocess.run(
-            [resolved, "i"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if probe.returncode == 0:
-            return resolved
-
-    raise FileNotFoundError(
-        "No working 7z CLI was found. Install 7-Zip or p7zip and ensure `7z` works from the command line."
-    )
-
-
-def create_7z_archive(source_dir: Path, archive_path: Path) -> None:
-    seven_zip = find_working_7z()
-
-    result = subprocess.run(
-        [
-            seven_zip,
-            "a",
-            "-t7z",
-            "-mx=9",
-            str(archive_path),
-            source_dir.name,
-        ],
-        cwd=source_dir.parent,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    if result.returncode != 0:
-        raise RuntimeError(
-            "7z packaging failed:\n"
-            f"{result.stdout}\n"
-            f"{result.stderr}"
-        )
+def create_zip_archive(source_dir: Path, archive_path: Path) -> None:
+    with zipfile.ZipFile(
+        archive_path,
+        mode="w",
+        compression=zipfile.ZIP_DEFLATED,
+        compresslevel=9,
+    ) as archive:
+        for path in sorted(source_dir.rglob("*")):
+            archive.write(path, arcname=path.relative_to(source_dir.parent))
 
 
 def sha256_file(path: Path) -> str:
@@ -244,18 +218,18 @@ def write_checksum_file(archive_path: Path) -> Path:
 
 
 def build_archive(platform: str, version: str, output_dir: Path) -> tuple[Path, Path]:
-    ensure_required_files()
+    ensure_required_files(platform)
     temp_root, release_root = build_staging_tree(platform, version)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     stem = package_name(platform, version)
-    archive_path = output_dir / f"{stem}.7z"
+    archive_path = output_dir / f"{stem}.zip"
 
     if archive_path.exists():
         archive_path.unlink()
 
     try:
-        create_7z_archive(release_root, archive_path)
+        create_zip_archive(release_root, archive_path)
     finally:
         if temp_root.exists():
             shutil.rmtree(temp_root)

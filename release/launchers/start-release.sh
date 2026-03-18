@@ -70,13 +70,30 @@ find_free_port() {
     return 1
 }
 
+resolve_package_root() {
+    local script_dir="$1"
+    local candidate
+
+    for candidate in \
+        "$(cd "$script_dir/.." && pwd)" \
+        "$(cd "$script_dir/../.." && pwd)"; do
+        if [[ -d "$candidate/backend" && -d "$candidate/frontend" ]]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+
+    echo "$(cd "$script_dir/.." && pwd)"
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKEND_DIR="$SCRIPT_DIR/backend"
-FRONTEND_DIR="$SCRIPT_DIR/frontend"
+PACKAGE_ROOT="$(resolve_package_root "$SCRIPT_DIR")"
+BACKEND_DIR="$PACKAGE_ROOT/backend"
+FRONTEND_DIR="$PACKAGE_ROOT/frontend"
 FRONTEND_DIST_DIR="$FRONTEND_DIR/dist"
 FRONTEND_INDEX="$FRONTEND_DIST_DIR/index.html"
 VENV_DIR="$BACKEND_DIR/venv"
-LOG_DIR="$SCRIPT_DIR/logs"
+LOG_DIR="$PACKAGE_ROOT/logs"
 RUN_STAMP="$(date +%Y%m%d-%H%M%S)"
 BACKEND_LOG_FILE="$LOG_DIR/release-backend-$RUN_STAMP.log"
 
@@ -167,7 +184,7 @@ trap cleanup EXIT INT TERM
 cd "$BACKEND_DIR"
 "$PYTHON_EXE" -m uvicorn app.main:app --host 0.0.0.0 --port "$PORT_TO_USE" > "$BACKEND_LOG_FILE" 2>&1 &
 BACKEND_PID=$!
-cd "$SCRIPT_DIR"
+cd "$PACKAGE_ROOT"
 
 sleep 1
 if ! kill -0 "$BACKEND_PID" >/dev/null 2>&1; then

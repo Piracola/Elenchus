@@ -7,14 +7,14 @@ from app.models.schemas import ModelConfigCreate, ModelConfigResponse, ModelConf
 
 router = APIRouter()
 
-@router.get("/", response_model=List[ModelConfigResponse])
+@router.get("", response_model=List[ModelConfigResponse])
 async def list_model_configs(
     service: ProviderService = Depends(get_provider_service)
 ):
     """List all saved model configurations."""
     return await service.list_configs()
 
-@router.post("/", response_model=ModelConfigResponse)
+@router.post("", response_model=ModelConfigResponse)
 async def create_model_config(
     config_in: ModelConfigCreate,
     service: ProviderService = Depends(get_provider_service)

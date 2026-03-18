@@ -68,13 +68,34 @@ function Get-FreePort {
     throw "No free port found in range $StartPort-$($StartPort + 9)."
 }
 
+function Resolve-PackageRoot {
+    param([string]$CurrentScriptDir)
+
+    $candidates = @(
+        (Split-Path -Parent $CurrentScriptDir),
+        (Split-Path -Parent (Split-Path -Parent $CurrentScriptDir))
+    ) | Select-Object -Unique
+
+    foreach ($candidate in $candidates) {
+        if (
+            (Test-Path (Join-Path $candidate "backend") -PathType Container) -and
+            (Test-Path (Join-Path $candidate "frontend") -PathType Container)
+        ) {
+            return $candidate
+        }
+    }
+
+    return (Split-Path -Parent $CurrentScriptDir)
+}
+
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$BackendDir = Join-Path $ScriptDir "backend"
-$FrontendDir = Join-Path $ScriptDir "frontend"
+$PackageRoot = Resolve-PackageRoot -CurrentScriptDir $ScriptDir
+$BackendDir = Join-Path $PackageRoot "backend"
+$FrontendDir = Join-Path $PackageRoot "frontend"
 $FrontendDistDir = Join-Path $FrontendDir "dist"
 $FrontendIndex = Join-Path $FrontendDistDir "index.html"
 $VenvDir = Join-Path $BackendDir "venv"
-$LogDir = Join-Path $ScriptDir "logs"
+$LogDir = Join-Path $PackageRoot "logs"
 $RunStamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $BackendStdOutLog = Join-Path $LogDir "release-backend-$RunStamp.out.log"
 $BackendStdErrLog = Join-Path $LogDir "release-backend-$RunStamp.err.log"
