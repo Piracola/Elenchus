@@ -2,6 +2,18 @@ import type { RuntimeEvent } from '../types';
 
 export const TIMELINE_PAGE_SIZE = 200;
 
+export interface IndexedTimelineEvent {
+    event: RuntimeEvent;
+    searchText: string;
+}
+
+export interface VirtualTimelineWindow {
+    startIndex: number;
+    endIndex: number;
+    paddingTop: number;
+    paddingBottom: number;
+}
+
 function payloadString(event: RuntimeEvent, key: string): string {
     const value = event.payload[key];
     return typeof value === 'string' ? value : '';
@@ -46,12 +58,28 @@ export function buildTimelineSearchText(event: RuntimeEvent): string {
         .toLowerCase();
 }
 
-export function filterTimelineEvents(events: RuntimeEvent[], query: string): RuntimeEvent[] {
+export function buildTimelineSearchIndex(events: RuntimeEvent[]): IndexedTimelineEvent[] {
+    return events.map((event) => ({
+        event,
+        searchText: buildTimelineSearchText(event),
+    }));
+}
+
+export function filterIndexedTimelineEvents(
+    entries: IndexedTimelineEvent[],
+    query: string,
+): RuntimeEvent[] {
     const keyword = query.trim().toLowerCase();
     if (!keyword) {
-        return events;
+        return entries.map((entry) => entry.event);
     }
-    return events.filter((event) => buildTimelineSearchText(event).includes(keyword));
+    return entries
+        .filter((entry) => entry.searchText.includes(keyword))
+        .map((entry) => entry.event);
+}
+
+export function filterTimelineEvents(events: RuntimeEvent[], query: string): RuntimeEvent[] {
+    return filterIndexedTimelineEvents(buildTimelineSearchIndex(events), query);
 }
 
 export function computeTimelinePageTotal(total: number, pageSize: number): number {
@@ -81,4 +109,40 @@ export function sliceTimelineTail(
     const safePages = Math.max(1, pageCount);
     const visibleCount = Math.min(events.length, safeSize * safePages);
     return events.slice(events.length - visibleCount);
+}
+
+export function computeVirtualTimelineWindow(
+    totalCount: number,
+    scrollTop: number,
+    viewportHeight: number,
+    rowHeight: number,
+    overscan: number,
+): VirtualTimelineWindow {
+    if (totalCount <= 0) {
+        return {
+            startIndex: 0,
+            endIndex: 0,
+            paddingTop: 0,
+            paddingBottom: 0,
+        };
+    }
+
+    const safeRowHeight = Math.max(1, rowHeight);
+    const safeViewportHeight = Math.max(safeRowHeight, viewportHeight);
+    const safeOverscan = Math.max(0, overscan);
+
+    const visibleRows = Math.ceil(safeViewportHeight / safeRowHeight);
+    const baseStart = Math.floor(Math.max(0, scrollTop) / safeRowHeight);
+    const startIndex = Math.max(0, baseStart - safeOverscan);
+    const endIndex = Math.min(
+        totalCount,
+        baseStart + visibleRows + safeOverscan,
+    );
+
+    return {
+        startIndex,
+        endIndex,
+        paddingTop: startIndex * safeRowHeight,
+        paddingBottom: Math.max(0, (totalCount - endIndex) * safeRowHeight),
+    };
 }

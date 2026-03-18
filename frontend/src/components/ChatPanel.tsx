@@ -162,10 +162,10 @@ export default function ChatPanel() {
         setExportingFormat(format);
         try {
             if (format === 'markdown') {
-                await api.sessions.exportMarkdown(currentSession.id);
+                await api.sessions.exportMarkdown(currentSession.id, currentSession.topic);
                 toast('已导出 Markdown 辩论记录', 'success');
             } else {
-                await api.sessions.exportJson(currentSession.id);
+                await api.sessions.exportJson(currentSession.id, currentSession.topic);
                 toast('已导出 JSON 辩论数据', 'success');
             }
         } catch (error) {

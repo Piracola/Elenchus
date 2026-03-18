@@ -119,5 +119,70 @@ describe('debateStore replay state', () => {
         expect(state.replayCursor).toBe(1);
         expect(state.focusedRuntimeEventId).toBe('evt_2');
     });
-});
 
+    it('hydrates persisted runtime history without forcing replay mode', () => {
+        useDebateStore.getState().hydrateRuntimeEvents(
+            [
+                makeEvent({ event_id: 'evt_10', seq: 10, type: 'status', payload: { content: 'A' } }),
+                makeEvent({ event_id: 'evt_11', seq: 11, type: 'status', payload: { content: 'B' } }),
+            ],
+            true,
+        );
+
+        const state = useDebateStore.getState();
+        expect(state.replayEnabled).toBe(false);
+        expect(state.runtimeEvents).toHaveLength(2);
+        expect(state.visibleRuntimeEvents).toHaveLength(2);
+        expect(state.hasOlderRuntimeEvents).toBe(true);
+        expect(state.lastEventSeq).toBe(11);
+    });
+
+    it('preserves replay focus when older runtime history is prepended', () => {
+        const store = useDebateStore.getState();
+        store.hydrateRuntimeEvents([
+            makeEvent({ event_id: 'evt_3', seq: 3, type: 'status', payload: { content: 'C' } }),
+            makeEvent({ event_id: 'evt_4', seq: 4, type: 'status', payload: { content: 'D' } }),
+        ]);
+
+        store.setReplayCursor(1);
+        store.prependRuntimeEvents(
+            [
+                makeEvent({ event_id: 'evt_1', seq: 1, type: 'status', payload: { content: 'A' } }),
+                makeEvent({ event_id: 'evt_2', seq: 2, type: 'status', payload: { content: 'B' } }),
+            ],
+            false,
+        );
+
+        const state = useDebateStore.getState();
+        expect(state.runtimeEvents.map((event) => event.event_id)).toEqual([
+            'evt_1',
+            'evt_2',
+            'evt_3',
+            'evt_4',
+        ]);
+        expect(state.replayEnabled).toBe(true);
+        expect(state.focusedRuntimeEventId).toBe('evt_4');
+        expect(state.replayCursor).toBe(3);
+    });
+
+    it('retains more than 1200 runtime events for long-session replay', () => {
+        const store = useDebateStore.getState();
+
+        for (let index = 0; index < 1500; index++) {
+            store.applyRuntimeEvent(
+                makeEvent({
+                    event_id: `evt_${index + 1}`,
+                    seq: index + 1,
+                    type: 'status',
+                    payload: { content: `event ${index + 1}` },
+                }),
+            );
+        }
+
+        const state = useDebateStore.getState();
+        expect(state.runtimeEvents).toHaveLength(1500);
+        expect(state.visibleRuntimeEvents).toHaveLength(1500);
+        expect(state.runtimeEvents[0].event_id).toBe('evt_1');
+        expect(state.runtimeEvents[1499].event_id).toBe('evt_1500');
+    });
+});

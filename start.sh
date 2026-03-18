@@ -242,7 +242,8 @@ if [[ "$FRONTEND_ONLY" != true ]]; then
             print_info "Creating .env config file..."
             cp "$ENV_EXAMPLE" "$ENV_FILE"
             print_success ".env file created"
-            print_warning "Please edit backend/.env to configure your API Keys"
+            print_info "A local encryption key will be generated automatically on first backend start"
+            print_warning "Model provider API Keys are configured later in the web UI"
         fi
     else
         print_success ".env config file already exists"
@@ -301,7 +302,7 @@ fi
 echo ""
 
 if [[ "$FRONTEND_ONLY" != true ]]; then
-    echo -e "  ${YELLOW}Tip: First time? Configure API Keys in backend/.env${RESET}"
+    echo -e "  ${YELLOW}Tip: First time? Open the web UI and add your model provider API Keys there${RESET}"
 fi
 echo ""
 

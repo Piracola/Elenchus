@@ -3,13 +3,17 @@ Provider configuration service with database persistence.
 API keys are encrypted using Fernet symmetric encryption.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from cryptography.fernet import Fernet
+from dotenv import dotenv_values, set_key
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,24 +23,82 @@ from app.models.schemas import ModelConfigCreate, ModelConfigUpdate, ModelConfig
 
 logger = logging.getLogger(__name__)
 
+_ENCRYPTION_ENV_KEY = "ELENCHUS_ENCRYPTION_KEY"
+_ENCRYPTION_PLACEHOLDER = "replace-with-a-generated-key"
+
+
+def _backend_env_path() -> Path:
+    return Path(__file__).resolve().parents[2] / ".env"
+
+
+def _normalize_key(candidate: object | None) -> str:
+    if candidate is None:
+        return ""
+    return str(candidate).strip()
+
+
+def _is_valid_fernet_key(candidate: str) -> bool:
+    if not candidate:
+        return False
+    try:
+        Fernet(candidate.encode())
+        return True
+    except Exception:
+        return False
+
+
+def ensure_local_encryption_key(env_file: Path | None = None) -> str:
+    """
+    Ensure a valid local encryption key exists.
+
+    Behavior:
+    - If the process environment already contains a valid key, use it.
+    - If `.env` contains a valid key, load it into the process environment.
+    - If the key is missing or still uses the template placeholder, generate one,
+      persist it to `.env`, and export it to the current process.
+    - If a non-placeholder invalid key is present, raise an error instead of
+      silently overwriting it, because doing so could orphan previously
+      encrypted provider API keys.
+    """
+    current_key = _normalize_key(os.environ.get(_ENCRYPTION_ENV_KEY))
+    if _is_valid_fernet_key(current_key):
+        return current_key
+
+    if current_key and current_key != _ENCRYPTION_PLACEHOLDER:
+        raise ValueError(
+            f"{_ENCRYPTION_ENV_KEY} is set but invalid. "
+            "Refusing to replace it automatically because that could make "
+            "existing encrypted provider API keys undecryptable."
+        )
+
+    env_path = env_file or _backend_env_path()
+    file_values = dotenv_values(env_path) if env_path.exists() else {}
+    stored_key = _normalize_key(file_values.get(_ENCRYPTION_ENV_KEY))
+
+    if _is_valid_fernet_key(stored_key):
+        os.environ[_ENCRYPTION_ENV_KEY] = stored_key
+        return stored_key
+
+    if stored_key and stored_key != _ENCRYPTION_PLACEHOLDER:
+        raise ValueError(
+            f"{_ENCRYPTION_ENV_KEY} in {env_path} is invalid. "
+            "Refusing to overwrite it automatically because that could break "
+            "decryption of existing provider API keys."
+        )
+
+    generated_key = Fernet.generate_key().decode()
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    if not env_path.exists():
+        env_path.touch()
+    set_key(str(env_path), _ENCRYPTION_ENV_KEY, generated_key, quote_mode="never")
+    os.environ[_ENCRYPTION_ENV_KEY] = generated_key
+    logger.info("Generated local provider encryption key at %s", env_path)
+    return generated_key
+
 
 def _get_encryption_key() -> bytes:
-    """Get Fernet encryption key from environment.
-
-    Raises:
-        ValueError: If ELENCHUS_ENCRYPTION_KEY is not set.
-
-    For development, generate a key with:
-        python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-    """
-    key = os.environ.get("ELENCHUS_ENCRYPTION_KEY")
-    if not key:
-        raise ValueError(
-            "ELENCHUS_ENCRYPTION_KEY environment variable is required. "
-            "Generate one with: "
-            "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
-        )
-    return key.encode() if isinstance(key, str) else key
+    """Get Fernet encryption key, generating a local one on first startup."""
+    return ensure_local_encryption_key().encode()
 
 
 def _get_fernet() -> Fernet:
@@ -59,11 +121,13 @@ class ProviderService:
             return None
         try:
             return _get_fernet().decrypt(encrypted.encode()).decode()
-        except Exception as e:
-            logger.error(f"Failed to decrypt API key: {e}")
+        except Exception as exc:
+            logger.error("Failed to decrypt API key: %s", exc)
             return None
 
-    def _record_to_response(self, record: ProviderRecord, mask_key: bool = True) -> ModelConfigResponse:
+    def _record_to_response(
+        self, record: ProviderRecord, mask_key: bool = True
+    ) -> ModelConfigResponse:
         """Convert database record to response model."""
         api_key = self._decrypt_api_key(record.api_key_encrypted)
         if mask_key:
@@ -114,18 +178,18 @@ class ProviderService:
             result = await session.execute(
                 select(ProviderRecord).order_by(
                     ProviderRecord.is_default.desc(),
-                    ProviderRecord.created_at.desc()
+                    ProviderRecord.created_at.desc(),
                 )
             )
             records = result.scalars().all()
-            return [self._record_to_response(r) for r in records]
+            return [self._record_to_response(record) for record in records]
 
     async def list_configs_raw(self) -> list[dict[str, Any]]:
         """Return raw dicts with decrypted api_key for internal server-side use."""
         async with await self._get_session() as session:
             result = await session.execute(select(ProviderRecord))
             records = result.scalars().all()
-            return [self._record_to_dict(r) for r in records]
+            return [self._record_to_dict(record) for record in records]
 
     async def get_default_config(self) -> ModelConfigResponse | None:
         """Get the default provider configuration."""
@@ -141,19 +205,16 @@ class ProviderService:
     async def create_config(self, config_in: ModelConfigCreate) -> ModelConfigResponse:
         """Create a new provider configuration."""
         async with await self._get_session() as session:
-            # Check for duplicate name
             existing = await session.execute(
                 select(ProviderRecord).where(ProviderRecord.name == config_in.name)
             )
             if existing.scalar_one_or_none():
                 raise ValueError("A model configuration with this name already exists.")
 
-            # Check if this should be default (first config or explicitly requested)
             count_result = await session.execute(select(ProviderRecord))
             existing_count = len(count_result.scalars().all())
             make_default = config_in.is_default or existing_count == 0
 
-            # Clear existing defaults if needed
             if make_default:
                 await self._clear_defaults(session)
 
@@ -188,11 +249,9 @@ class ProviderService:
 
             update_data = config_in.model_dump(exclude_unset=True)
 
-            # Handle is_default update
             if update_data.get("is_default") is True:
                 await self._clear_defaults(session)
 
-            # Update fields
             if "name" in update_data:
                 record.name = update_data["name"]
             if "provider_type" in update_data:

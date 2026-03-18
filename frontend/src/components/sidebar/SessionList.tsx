@@ -9,7 +9,7 @@ import type { SessionListItem } from '../../types';
 import { toast } from '../../utils/toast';
 
 export default function SessionList() {
-    const { sessions, setSessions, currentSession, setCurrentSession } = useDebateStore();
+    const { sessions, setSessions, currentSession, setCurrentSession, hydrateRuntimeEvents } = useDebateStore();
     const { theme, toggleTheme } = useThemeStore();
     const [isLoading, setIsLoading] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -43,10 +43,22 @@ export default function SessionList() {
     const handleSelectSession = async (item: SessionListItem) => {
         if (item.id === currentSessionId) return;
         try {
-            const fullSession = await api.sessions.get(item.id);
+            const [fullSession, runtimePage] = await Promise.all([
+                api.sessions.get(item.id),
+                api.sessions.listRuntimeEvents(item.id).catch((error) => {
+                    console.error('Failed to load runtime events', error);
+                    toast('加载执行时间轴失败，已仅打开辩论内容', 'error');
+                    return null;
+                }),
+            ]);
             setCurrentSession(fullSession);
+            hydrateRuntimeEvents(
+                runtimePage?.events ?? [],
+                runtimePage?.has_more ?? false,
+            );
         } catch (err) {
             console.error('Failed to load session details', err);
+            toast('加载辩论记录失败', 'error');
         }
     };
 

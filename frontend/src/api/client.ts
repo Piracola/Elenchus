@@ -2,9 +2,18 @@
  * API client — typed fetch wrappers for the Elenchus REST API.
  */
 
-import type { Session, SessionListItem, SessionCreatePayload, ModelConfig, ModelConfigCreatePayload, LogLevel } from '../types';
+import type {
+    Session,
+    SessionListItem,
+    SessionCreatePayload,
+    ModelConfig,
+    ModelConfigCreatePayload,
+    LogLevel,
+    RuntimeEventPage,
+} from '../types';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
+const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\u0000-\u001f]/g;
 
 async function readErrorMessage(res: Response): Promise<string> {
     const text = await res.text();
@@ -40,6 +49,17 @@ function getFilename(contentDisposition: string | null, fallback: string): strin
     return fallback;
 }
 
+function buildTopicFilename(topic: string, extension: string): string {
+    const normalized = topic
+        .trim()
+        .replace(INVALID_FILENAME_CHARS, '_')
+        .replace(/\s+/g, ' ')
+        .replace(/[. ]+$/g, '');
+    const base = normalized || '未命名辩题';
+    const suffix = extension.replace(/^\./, '') || 'txt';
+    return `${base}.${suffix}`;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await fetch(`${BASE}${path}`, {
         headers: { 'Content-Type': 'application/json' },
@@ -51,6 +71,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // 204 No Content
     if (res.status === 204) return undefined as T;
     return res.json();
+}
+
+async function requestText(path: string, init?: RequestInit): Promise<string> {
+    const res = await fetch(`${BASE}${path}`, {
+        headers: { 'Content-Type': 'application/json' },
+        ...init,
+    });
+    if (!res.ok) {
+        throw new Error(await readErrorMessage(res));
+    }
+    return res.text();
 }
 
 async function download(path: string, fallbackFilename: string): Promise<void> {
@@ -86,16 +117,38 @@ export const api = {
         get: (id: string): Promise<Session> =>
             request(`/sessions/${id}`),
 
+        listRuntimeEvents: (
+            id: string,
+            options: { beforeSeq?: number; limit?: number } = {},
+        ): Promise<RuntimeEventPage> => {
+            const params = new URLSearchParams();
+            if (typeof options.beforeSeq === 'number' && Number.isFinite(options.beforeSeq)) {
+                params.set('before_seq', String(options.beforeSeq));
+            }
+            params.set('limit', String(options.limit ?? 200));
+            return request(`/sessions/${id}/runtime-events?${params.toString()}`);
+        },
+
         delete: (id: string): Promise<void> =>
             request(`/sessions/${id}`, { method: 'DELETE' }),
 
-        exportJson: (id: string): Promise<void> => {
-            return download(`/sessions/${id}/export?format=json`, `elenchus_session_${id}.json`);
+        exportJson: (id: string, topic: string): Promise<void> => {
+            return download(`/sessions/${id}/export?format=json`, buildTopicFilename(topic, 'json'));
         },
 
-        exportMarkdown: (id: string): Promise<void> => {
-            return download(`/sessions/${id}/export?format=markdown`, `elenchus_session_${id}.md`);
+        exportMarkdown: (id: string, topic: string): Promise<void> => {
+            return download(`/sessions/${id}/export?format=markdown`, buildTopicFilename(topic, 'md'));
         },
+
+        exportRuntimeEventsSnapshot: (id: string, topic: string): Promise<void> => {
+            return download(
+                `/sessions/${id}/runtime-events/export`,
+                buildTopicFilename(topic, 'runtime-events.json'),
+            );
+        },
+
+        getRuntimeEventsSnapshot: (id: string): Promise<string> =>
+            requestText(`/sessions/${id}/runtime-events/export`),
     },
 
     models: {

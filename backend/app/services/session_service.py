@@ -7,11 +7,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.safe_invoke import normalize_model_text
-from app.db.models import SessionRecord, _gen_id, _utcnow
+from app.db.models import RuntimeEventRecord, SessionRecord, _gen_id, _utcnow
 from app.dependencies import get_agent_config_service
 from app.models.schemas import SessionCreate, SessionStatus
 
@@ -216,6 +216,9 @@ async def delete_session(db: AsyncSession, session_id: str) -> bool:
     if record is None:
         return False
 
+    await db.execute(
+        delete(RuntimeEventRecord).where(RuntimeEventRecord.session_id == session_id)
+    )
     await db.delete(record)
     await db.commit()
     return True

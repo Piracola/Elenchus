@@ -142,7 +142,8 @@ if (-not (Test-Path $EnvFile)) {
         Print-Info "Creating .env config file..."
         Copy-Item $EnvExample $EnvFile
         Print-OK ".env file created"
-        Print-Warn "Please edit backend/.env to configure your API Keys"
+        Print-Info "A local encryption key will be generated automatically on first backend start"
+        Print-Warn "Model provider API Keys are configured later in the web UI"
     }
 } else {
     Print-OK ".env config file already exists"
@@ -273,7 +274,7 @@ if (-not $BackendOnly) {
 Write-Host ""
 
 if (-not $FrontendOnly) {
-    Print-Warn "First time? Please configure API Keys in backend/.env"
+    Print-Warn "First time? Open the web UI and add your model provider API Keys there"
 }
 Write-Host ""
 

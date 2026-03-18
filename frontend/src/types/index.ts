@@ -217,3 +217,11 @@ export interface RuntimeEvent {
     phase?: DebatePhase;
     payload: Record<string, unknown>;
 }
+
+export interface RuntimeEventPage {
+    events: RuntimeEvent[];
+    total: number;
+    limit: number;
+    has_more: boolean;
+    next_before_seq: number | null;
+}

@@ -5,8 +5,10 @@ Export service - converts session data to Markdown or JSON for download.
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import quote
 
 _DIM_LABELS = {
     "logical_rigor": "逻辑严密度",
@@ -25,6 +27,35 @@ _ROLE_LABELS = {
     "audience": "观众",
     "error": "系统错误",
 }
+
+
+_INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1F]')
+_WINDOWS_RESERVED_NAMES = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    "COM1",
+    "COM2",
+    "COM3",
+    "COM4",
+    "COM5",
+    "COM6",
+    "COM7",
+    "COM8",
+    "COM9",
+    "LPT1",
+    "LPT2",
+    "LPT3",
+    "LPT4",
+    "LPT5",
+    "LPT6",
+    "LPT7",
+    "LPT8",
+    "LPT9",
+}
+_MAX_FILENAME_BASE_LENGTH = 120
+_RUNTIME_SNAPSHOT_VERSION = "runtime-events.v1"
 
 
 def _role_label(role: str) -> str:
@@ -62,9 +93,101 @@ def _format_cumulative_value(value: Any) -> str:
     return str(value)
 
 
+def _sanitize_filename_base(raw: Any) -> str:
+    text = str(raw or "").strip()
+    if not text:
+        return "未命名辩题"
+
+    sanitized = _INVALID_FILENAME_CHARS.sub("_", text)
+    sanitized = re.sub(r"\s+", " ", sanitized).strip().rstrip(". ")
+    if not sanitized:
+        sanitized = "未命名辩题"
+
+    if sanitized.upper() in _WINDOWS_RESERVED_NAMES:
+        sanitized = f"{sanitized}_"
+
+    if len(sanitized) > _MAX_FILENAME_BASE_LENGTH:
+        sanitized = sanitized[:_MAX_FILENAME_BASE_LENGTH].rstrip(". ")
+
+    return sanitized or "未命名辩题"
+
+
+def build_export_filename(session_data: dict[str, Any], extension: str) -> str:
+    base = _sanitize_filename_base(session_data.get("topic"))
+    normalized_extension = extension.lstrip(".") or "txt"
+    return f"{base}.{normalized_extension}"
+
+
+def build_content_disposition(filename: str) -> str:
+    fallback = filename.encode("ascii", "ignore").decode("ascii").strip()
+    fallback_base = fallback.rsplit(".", 1)[0].strip(". ") if "." in fallback else fallback.strip(". ")
+    if not fallback_base:
+        extension = filename.rsplit(".", 1)[-1] if "." in filename else "txt"
+        fallback = f"debate-export.{extension}"
+    return f'attachment; filename="{fallback}"; filename*=UTF-8\'\'{quote(filename)}'
+
+
 def export_json(session_data: dict[str, Any]) -> str:
     """Return pretty-printed JSON of the full session data."""
     return json.dumps(session_data, ensure_ascii=False, indent=2, default=str)
+
+
+def _stable_serialize(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, (int, float, bool)):
+        return str(value).lower() if isinstance(value, bool) else str(value)
+    if isinstance(value, list):
+        return f"[{','.join(_stable_serialize(item) for item in value)}]"
+    if isinstance(value, dict):
+        entries = []
+        for key, item in sorted(value.items(), key=lambda pair: str(pair[0])):
+            encoded_key = json.dumps(str(key), ensure_ascii=False)
+            entries.append(f"{encoded_key}:{_stable_serialize(item)}")
+        return f"{{{','.join(entries)}}}"
+    return json.dumps(str(value), ensure_ascii=False)
+
+
+def _fnv1a32(value: str) -> str:
+    hash_value = 0x811C9DC5
+    for char in value:
+        hash_value ^= ord(char)
+        hash_value = (hash_value * 0x01000193) & 0xFFFFFFFF
+    return f"{hash_value:08x}"
+
+
+def compute_runtime_events_checksum(events: list[dict[str, Any]]) -> str:
+    canonical = "|".join(
+        _stable_serialize(
+            [
+                event.get("schema_version"),
+                event.get("event_id"),
+                event.get("session_id"),
+                event.get("seq"),
+                event.get("timestamp"),
+                event.get("source"),
+                event.get("type"),
+                event.get("phase"),
+                event.get("payload", {}),
+            ]
+        )
+        for event in events
+    )
+    return f"fnv1a32-{_fnv1a32(canonical)}-{len(events)}"
+
+
+def export_runtime_events_snapshot(events: list[dict[str, Any]]) -> str:
+    """Return a replay-compatible runtime event snapshot JSON."""
+    snapshot = {
+        "version": _RUNTIME_SNAPSHOT_VERSION,
+        "exported_at": datetime.now(UTC).isoformat(),
+        "event_count": len(events),
+        "trajectory_checksum": compute_runtime_events_checksum(events),
+        "events": events,
+    }
+    return json.dumps(snapshot, ensure_ascii=False, indent=2, default=str)
 
 
 def export_markdown(session_data: dict[str, Any]) -> str:

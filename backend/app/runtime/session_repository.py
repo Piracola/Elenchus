@@ -6,7 +6,7 @@ from typing import Any
 
 from app.agents.safe_invoke import normalize_model_text
 from app.db.database import get_session_factory
-from app.services import session_service
+from app.services import runtime_event_service, session_service
 
 
 def _sanitize_dialogue_history(dialogue_history: Any) -> list[dict[str, Any]]:
@@ -114,4 +114,34 @@ class SessionRuntimeRepository:
                     "cumulative_scores": state.get("cumulative_scores", {}),
                     "agent_configs": agent_configs_for_storage,
                 },
+            )
+
+    async def persist_runtime_event(self, event: dict[str, Any]) -> None:
+        session_id = str(event.get("session_id", "") or "")
+        if not session_id:
+            return
+
+        factory = get_session_factory()
+        async with factory() as db:
+            await runtime_event_service.create_runtime_event(db, event)
+
+    async def get_latest_runtime_event_seq(self, session_id: str) -> int:
+        factory = get_session_factory()
+        async with factory() as db:
+            return await runtime_event_service.get_latest_runtime_event_seq(db, session_id)
+
+    async def load_runtime_events(
+        self,
+        session_id: str,
+        *,
+        before_seq: int | None = None,
+        limit: int = 200,
+    ) -> dict[str, Any]:
+        factory = get_session_factory()
+        async with factory() as db:
+            return await runtime_event_service.list_runtime_events(
+                db,
+                session_id,
+                before_seq=before_seq,
+                limit=limit,
             )

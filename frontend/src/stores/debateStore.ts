@@ -16,7 +16,8 @@ import type {
 import { clampReplayCursor, getVisibleRuntimeEvents } from '../utils/replay';
 
 const MAX_SAFE_CONTENT_LENGTH = 50000;
-const MAX_RUNTIME_EVENTS = 1200;
+// Keep the in-memory retention aligned with the existing 10k replay/timeline baseline.
+const MAX_RUNTIME_EVENTS = 10_000;
 
 // ── Store shape ─────────────────────────────────────────────────
 
@@ -32,6 +33,7 @@ interface DebateState {
     focusedRuntimeEventId: string | null;
     replayEnabled: boolean;
     replayCursor: number;
+    hasOlderRuntimeEvents: boolean;
 
     // Real-time debate state
     isConnected: boolean;
@@ -65,6 +67,8 @@ interface DebateState {
     stepReplay: (offset: number) => void;
     exitReplay: () => void;
     loadRuntimeEventSnapshot: (events: RuntimeEvent[]) => void;
+    hydrateRuntimeEvents: (events: RuntimeEvent[], hasOlderRuntimeEvents?: boolean) => void;
+    prependRuntimeEvents: (events: RuntimeEvent[], hasOlderRuntimeEvents?: boolean) => void;
 
     // Actions — dialogue
     appendDialogueEntry: (entry: DialogueEntry) => void;
@@ -98,6 +102,7 @@ const initialState = {
     focusedRuntimeEventId: null as string | null,
     replayEnabled: false,
     replayCursor: -1,
+    hasOlderRuntimeEvents: false,
     isConnected: false,
     isDebating: false,
     phase: 'idle' as DebatePhase,
@@ -206,6 +211,47 @@ function sanitizeSession(session: Session | null): Session | null {
     };
 }
 
+function sortRuntimeEvents(a: RuntimeEvent, b: RuntimeEvent): number {
+    const aSeq = a.seq >= 0 ? a.seq : Number.MAX_SAFE_INTEGER;
+    const bSeq = b.seq >= 0 ? b.seq : Number.MAX_SAFE_INTEGER;
+    if (aSeq !== bSeq) {
+        return aSeq - bSeq;
+    }
+
+    const aTime = Date.parse(a.timestamp);
+    const bTime = Date.parse(b.timestamp);
+    const safeATime = Number.isFinite(aTime) ? aTime : 0;
+    const safeBTime = Number.isFinite(bTime) ? bTime : 0;
+    if (safeATime !== safeBTime) {
+        return safeATime - safeBTime;
+    }
+
+    return a.event_id.localeCompare(b.event_id);
+}
+
+function normalizeRuntimeEvents(events: RuntimeEvent[]): RuntimeEvent[] {
+    const sorted = [...events].sort(sortRuntimeEvents);
+    const seenIds = new Set<string>();
+    const unique: RuntimeEvent[] = [];
+
+    for (const event of sorted) {
+        if (seenIds.has(event.event_id)) continue;
+        seenIds.add(event.event_id);
+        unique.push(event);
+    }
+
+    return unique.length > MAX_RUNTIME_EVENTS ? unique.slice(-MAX_RUNTIME_EVENTS) : unique;
+}
+
+function computeLastEventSeq(events: RuntimeEvent[]): number {
+    return events.reduce((maxSeq, event) => {
+        if (event.seq >= 0 && event.seq > maxSeq) {
+            return event.seq;
+        }
+        return maxSeq;
+    }, -1);
+}
+
 // ── Store ───────────────────────────────────────────────────────
 
 export const useDebateStore = create<DebateState>((set) => ({
@@ -228,6 +274,7 @@ export const useDebateStore = create<DebateState>((set) => ({
                 focusedRuntimeEventId: null,
                 replayEnabled: false,
                 replayCursor: -1,
+                hasOlderRuntimeEvents: false,
                 streamingRole: '',
                 streamingContent: '',
             };
@@ -256,10 +303,10 @@ export const useDebateStore = create<DebateState>((set) => ({
 
             const payload = event.payload ?? {};
             const runtimeEvents = [...state.runtimeEvents, event];
-            const trimmedEvents =
-                runtimeEvents.length > MAX_RUNTIME_EVENTS
-                    ? runtimeEvents.slice(-MAX_RUNTIME_EVENTS)
-                    : runtimeEvents;
+            const didTrim = runtimeEvents.length > MAX_RUNTIME_EVENTS;
+            const trimmedEvents = didTrim
+                ? runtimeEvents.slice(-MAX_RUNTIME_EVENTS)
+                : runtimeEvents;
             const nextReplayCursor = state.replayEnabled
                 ? clampReplayCursor(state.replayCursor, trimmedEvents.length)
                 : clampReplayCursor(trimmedEvents.length - 1, trimmedEvents.length);
@@ -274,6 +321,7 @@ export const useDebateStore = create<DebateState>((set) => ({
                 visibleRuntimeEvents,
                 lastEventSeq: event.seq >= 0 ? event.seq : state.lastEventSeq,
                 replayCursor: nextReplayCursor,
+                hasOlderRuntimeEvents: state.hasOlderRuntimeEvents || didTrim,
             };
             if (
                 state.focusedRuntimeEventId &&
@@ -569,15 +617,9 @@ export const useDebateStore = create<DebateState>((set) => ({
         }),
     loadRuntimeEventSnapshot: (events) =>
         set(() => {
-            const safeEvents =
-                events.length > MAX_RUNTIME_EVENTS
-                    ? events.slice(-MAX_RUNTIME_EVENTS)
-                    : events;
+            const safeEvents = normalizeRuntimeEvents(events);
             const replayCursor = clampReplayCursor(safeEvents.length - 1, safeEvents.length);
-            const lastEventSeq = safeEvents.reduce((maxSeq, event) => {
-                if (event.seq >= 0 && event.seq > maxSeq) return event.seq;
-                return maxSeq;
-            }, -1);
+            const lastEventSeq = computeLastEventSeq(safeEvents);
             return {
                 runtimeEvents: safeEvents,
                 visibleRuntimeEvents: getVisibleRuntimeEvents(safeEvents, true, replayCursor),
@@ -585,8 +627,75 @@ export const useDebateStore = create<DebateState>((set) => ({
                 replayEnabled: true,
                 replayCursor,
                 focusedRuntimeEventId: replayCursor >= 0 ? safeEvents[replayCursor].event_id : null,
+                hasOlderRuntimeEvents: false,
                 streamingRole: '',
                 streamingContent: '',
+            };
+        }),
+    hydrateRuntimeEvents: (events, hasOlderRuntimeEvents = false) =>
+        set(() => {
+            const safeEvents = normalizeRuntimeEvents(events);
+            const replayCursor = clampReplayCursor(safeEvents.length - 1, safeEvents.length);
+            return {
+                runtimeEvents: safeEvents,
+                visibleRuntimeEvents: safeEvents,
+                lastEventSeq: computeLastEventSeq(safeEvents),
+                replayEnabled: false,
+                replayCursor,
+                focusedRuntimeEventId: null,
+                hasOlderRuntimeEvents,
+                streamingRole: '',
+                streamingContent: '',
+            };
+        }),
+    prependRuntimeEvents: (events, hasOlderRuntimeEvents = false) =>
+        set((state) => {
+            const mergedEvents = normalizeRuntimeEvents([...events, ...state.runtimeEvents]);
+            const focusedEventId =
+                state.focusedRuntimeEventId ??
+                (state.replayEnabled && state.replayCursor >= 0
+                    ? state.runtimeEvents[state.replayCursor]?.event_id ?? null
+                    : null);
+
+            let replayCursor = state.replayEnabled
+                ? clampReplayCursor(state.replayCursor, mergedEvents.length)
+                : clampReplayCursor(mergedEvents.length - 1, mergedEvents.length);
+            let focusedRuntimeEventId = state.focusedRuntimeEventId;
+
+            if (state.replayEnabled) {
+                if (focusedEventId) {
+                    const focusedIndex = mergedEvents.findIndex(
+                        (event) => event.event_id === focusedEventId,
+                    );
+                    if (focusedIndex >= 0) {
+                        replayCursor = focusedIndex;
+                        focusedRuntimeEventId = focusedEventId;
+                    } else {
+                        focusedRuntimeEventId =
+                            replayCursor >= 0 ? mergedEvents[replayCursor]?.event_id ?? null : null;
+                    }
+                } else {
+                    focusedRuntimeEventId =
+                        replayCursor >= 0 ? mergedEvents[replayCursor]?.event_id ?? null : null;
+                }
+            } else if (
+                focusedRuntimeEventId &&
+                !mergedEvents.some((event) => event.event_id === focusedRuntimeEventId)
+            ) {
+                focusedRuntimeEventId = null;
+            }
+
+            return {
+                runtimeEvents: mergedEvents,
+                visibleRuntimeEvents: getVisibleRuntimeEvents(
+                    mergedEvents,
+                    state.replayEnabled,
+                    replayCursor,
+                ),
+                lastEventSeq: computeLastEventSeq(mergedEvents),
+                replayCursor,
+                focusedRuntimeEventId,
+                hasOlderRuntimeEvents,
             };
         }),
 

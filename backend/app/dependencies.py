@@ -100,9 +100,11 @@ def get_agent_config_service() -> "AgentConfigService":
 def get_event_stream_gateway() -> "EventStreamGateway":
     """Get the shared event stream gateway for normalized runtime events."""
     from app.runtime.event_gateway import EventStreamGateway
+    from app.runtime.session_repository import SessionRuntimeRepository
 
     connection_hub = get_connection_hub()
-    return EventStreamGateway(connection_hub.broadcast)
+    repository = SessionRuntimeRepository()
+    return EventStreamGateway(connection_hub.broadcast, repository=repository)
 
 
 @lru_cache()

@@ -4,6 +4,8 @@ Tests for session export formatting.
 
 from __future__ import annotations
 
+import json
+
 from app.services import export_service
 
 
@@ -73,3 +75,39 @@ def test_export_json_preserves_unicode_content():
 
     assert '"topic": "测试导出"' in payload
     assert '"value": "中文内容"' in payload
+
+
+def test_export_runtime_events_snapshot_contains_checksum_and_full_event_list():
+    payload = export_service.export_runtime_events_snapshot(
+        [
+            {
+                "schema_version": "2026-03-17",
+                "event_id": "evt_1",
+                "session_id": "abc123def456",
+                "seq": 1,
+                "timestamp": "2026-03-18T10:00:00Z",
+                "source": "runtime.orchestrator",
+                "type": "status",
+                "phase": "context",
+                "payload": {"content": "准备中"},
+            },
+            {
+                "schema_version": "2026-03-17",
+                "event_id": "evt_2",
+                "session_id": "abc123def456",
+                "seq": 2,
+                "timestamp": "2026-03-18T10:00:01Z",
+                "source": "runtime.node.speaker",
+                "type": "speech_end",
+                "phase": "speaking",
+                "payload": {"role": "proposer", "content": "发言内容"},
+            },
+        ]
+    )
+
+    parsed = json.loads(payload)
+    assert parsed["version"] == "runtime-events.v1"
+    assert parsed["event_count"] == 2
+    assert parsed["trajectory_checksum"].startswith("fnv1a32-")
+    assert parsed["events"][1]["type"] == "speech_end"
+    assert parsed["events"][1]["payload"]["content"] == "发言内容"

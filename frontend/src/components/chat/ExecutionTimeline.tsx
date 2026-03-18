@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { api } from '../../api/client';
 import { useDebateStore } from '../../stores/debateStore';
 import type { RuntimeEvent } from '../../types';
 import { getEventNode } from '../../utils/eventFocus';
 import { getLiveGraphNodeLabel } from '../../utils/liveGraph';
 import { parseRuntimeEventsSnapshot, serializeRuntimeEventsSnapshot } from '../../utils/replaySnapshot';
 import {
+    buildTimelineSearchIndex,
     computeTimelinePageTotal,
-    filterTimelineEvents,
+    computeVirtualTimelineWindow,
+    filterIndexedTimelineEvents,
     requiredPageCountForIndex,
     sliceTimelineTail,
     TIMELINE_PAGE_SIZE,
@@ -19,6 +22,9 @@ type TimelineFilter = 'all' | 'status' | 'speech' | 'judge' | 'tool' | 'memory' 
 type ExecutionTimelineProps = { compact?: boolean };
 
 const FILTERS: TimelineFilter[] = ['all', 'status', 'speech', 'judge', 'tool', 'memory', 'system', 'error'];
+const TIMELINE_ROW_HEIGHT = 60;
+const TIMELINE_OVERSCAN = 8;
+const TIMELINE_LOAD_MORE_OFFSET = 38;
 const FILTER_LABELS: Record<TimelineFilter, string> = {
     all: '全部',
     status: '状态',
@@ -79,15 +85,18 @@ const pillStyle = {
 export default function ExecutionTimeline({ compact = false }: ExecutionTimelineProps) {
     const {
         runtimeEvents,
+        currentSession,
         replayEnabled,
         replayCursor,
         focusedRuntimeEventId,
+        hasOlderRuntimeEvents,
         setFocusedRuntimeEventId,
         setReplayEnabled,
         setReplayCursor,
         stepReplay,
         exitReplay,
         loadRuntimeEventSnapshot,
+        prependRuntimeEvents,
     } = useDebateStore();
 
     const [expanded, setExpanded] = useState(false);
@@ -95,9 +104,14 @@ export default function ExecutionTimeline({ compact = false }: ExecutionTimeline
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
     const [pageCount, setPageCount] = useState(1);
+    const [historyLoading, setHistoryLoading] = useState(false);
+    const [snapshotLoading, setSnapshotLoading] = useState(false);
+    const [listScrollTop, setListScrollTop] = useState(0);
+    const [listViewportHeight, setListViewportHeight] = useState(0);
 
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const listRef = useRef<HTMLDivElement | null>(null);
+    const deferredSearchQuery = useDeferredValue(searchQuery);
 
     const runtimeEventIndex = useMemo(() => {
         const map = new Map<string, number>();
@@ -109,10 +123,14 @@ export default function ExecutionTimeline({ compact = false }: ExecutionTimeline
         if (filter === 'all') return runtimeEvents;
         return runtimeEvents.filter((event) => getRuntimeEventGroup(event.type) === filter);
     }, [filter, runtimeEvents]);
+    const indexedTypeFilteredEvents = useMemo(
+        () => buildTimelineSearchIndex(typeFilteredEvents),
+        [typeFilteredEvents],
+    );
 
     const filteredEvents = useMemo(
-        () => filterTimelineEvents(typeFilteredEvents, searchQuery),
-        [searchQuery, typeFilteredEvents],
+        () => filterIndexedTimelineEvents(indexedTypeFilteredEvents, deferredSearchQuery),
+        [deferredSearchQuery, indexedTypeFilteredEvents],
     );
     const pageTotal = useMemo(
         () => computeTimelinePageTotal(filteredEvents.length, TIMELINE_PAGE_SIZE),
@@ -122,10 +140,48 @@ export default function ExecutionTimeline({ compact = false }: ExecutionTimeline
         () => sliceTimelineTail(filteredEvents, TIMELINE_PAGE_SIZE, pageCount),
         [filteredEvents, pageCount],
     );
+    const canLoadOlder = pageCount < pageTotal || hasOlderRuntimeEvents;
+    const virtualWindow = useMemo(
+        () =>
+            computeVirtualTimelineWindow(
+                visibleEvents.length,
+                Math.max(0, listScrollTop - (canLoadOlder ? TIMELINE_LOAD_MORE_OFFSET : 0)),
+                listViewportHeight || 240,
+                TIMELINE_ROW_HEIGHT,
+                TIMELINE_OVERSCAN,
+            ),
+        [canLoadOlder, listScrollTop, listViewportHeight, visibleEvents.length],
+    );
+    const virtualEvents = useMemo(
+        () => visibleEvents.slice(virtualWindow.startIndex, virtualWindow.endIndex),
+        [virtualWindow.endIndex, virtualWindow.startIndex, visibleEvents],
+    );
 
     useEffect(() => {
         setPageCount((prev) => Math.min(Math.max(1, prev), pageTotal));
     }, [pageTotal]);
+
+    useEffect(() => {
+        const element = listRef.current;
+        if (!element) return;
+
+        const updateMetrics = () => {
+            setListViewportHeight(element.clientHeight);
+            setListScrollTop(element.scrollTop);
+        };
+
+        updateMetrics();
+        if (typeof ResizeObserver === 'undefined') {
+            window.addEventListener('resize', updateMetrics);
+            return () => {
+                window.removeEventListener('resize', updateMetrics);
+            };
+        }
+
+        const observer = new ResizeObserver(() => updateMetrics());
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, [expanded, canLoadOlder]);
 
     useEffect(() => {
         if (!filteredEvents.length) {
@@ -179,6 +235,34 @@ export default function ExecutionTimeline({ compact = false }: ExecutionTimeline
         if (requiredPages > pageCount) setPageCount(requiredPages);
     }, [filteredEvents, pageCount, selectedEventId]);
 
+    useEffect(() => {
+        const container = listRef.current;
+        if (!expanded || !container || !selectedEventId) return;
+
+        const selectedIndex = visibleEvents.findIndex((event) => event.event_id === selectedEventId);
+        if (selectedIndex < 0) return;
+
+        const offset = canLoadOlder ? TIMELINE_LOAD_MORE_OFFSET : 0;
+        const rowTop = offset + selectedIndex * TIMELINE_ROW_HEIGHT;
+        const rowBottom = rowTop + TIMELINE_ROW_HEIGHT;
+        const viewportTop = container.scrollTop;
+        const viewportBottom = viewportTop + container.clientHeight;
+
+        if (rowTop < viewportTop) {
+            container.scrollTop = Math.max(0, rowTop - TIMELINE_ROW_HEIGHT);
+            setListScrollTop(container.scrollTop);
+            return;
+        }
+
+        if (rowBottom > viewportBottom) {
+            container.scrollTop = Math.max(
+                0,
+                rowBottom - container.clientHeight + TIMELINE_ROW_HEIGHT,
+            );
+            setListScrollTop(container.scrollTop);
+        }
+    }, [canLoadOlder, expanded, selectedEventId, visibleEvents]);
+
     const selectedEvent = useMemo(() => {
         if (!selectedEventId) return null;
         const index = runtimeEventIndex.get(selectedEventId);
@@ -193,30 +277,116 @@ export default function ExecutionTimeline({ compact = false }: ExecutionTimeline
         if (targetIndex !== undefined) setReplayCursor(targetIndex);
     };
 
-    const handleLoadOlder = () => {
+    const handleLoadOlder = async () => {
         const previousHeight = listRef.current?.scrollHeight ?? 0;
-        setPageCount((prev) => Math.min(pageTotal, prev + 1));
-        requestAnimationFrame(() => {
-            const current = listRef.current;
-            if (!current) return;
-            current.scrollTop += Math.max(0, current.scrollHeight - previousHeight);
-        });
-    };
+        const restoreScroll = () => {
+            requestAnimationFrame(() => {
+                const current = listRef.current;
+                if (!current) return;
+                current.scrollTop += Math.max(0, current.scrollHeight - previousHeight);
+            });
+        };
 
-    const handleExport = () => {
-        if (!runtimeEvents.length) {
-            toast('没有可导出的运行事件', 'info');
+        if (pageCount < pageTotal) {
+            setPageCount((prev) => Math.min(pageTotal, prev + 1));
+            restoreScroll();
             return;
         }
-        const snapshot = serializeRuntimeEventsSnapshot(runtimeEvents);
-        const blob = new Blob([snapshot], { type: 'application/json;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = `runtime-events-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-        anchor.click();
-        URL.revokeObjectURL(url);
-        toast('回放快照已导出', 'success');
+
+        if (
+            historyLoading ||
+            !hasOlderRuntimeEvents ||
+            !currentSession?.id ||
+            !runtimeEvents.length
+        ) {
+            return;
+        }
+
+        const oldestSeq = runtimeEvents[0]?.seq;
+        if (!(typeof oldestSeq === 'number' && oldestSeq > 0)) {
+            return;
+        }
+
+        try {
+            setHistoryLoading(true);
+            const page = await api.sessions.listRuntimeEvents(currentSession.id, {
+                beforeSeq: oldestSeq,
+                limit: TIMELINE_PAGE_SIZE,
+            });
+
+            if (!page.events.length) {
+                prependRuntimeEvents([], false);
+                toast('没有更多历史事件了', 'info');
+                return;
+            }
+
+            prependRuntimeEvents(page.events, page.has_more);
+            setPageCount((prev) => prev + 1);
+            restoreScroll();
+        } catch (error) {
+            toast(error instanceof Error ? error.message : '加载历史事件失败', 'error');
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+
+    const handleExport = async () => {
+        if (!runtimeEvents.length) {
+            if (!currentSession?.id) {
+                toast('没有可导出的运行事件', 'info');
+                return;
+            }
+        }
+
+        try {
+            setSnapshotLoading(true);
+            if (currentSession?.id) {
+                await api.sessions.exportRuntimeEventsSnapshot(currentSession.id, currentSession.topic);
+                toast('完整回放快照已导出', 'success');
+                return;
+            }
+
+            const snapshot = serializeRuntimeEventsSnapshot(runtimeEvents);
+            const blob = new Blob([snapshot], { type: 'application/json;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = `runtime-events-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+            anchor.click();
+            URL.revokeObjectURL(url);
+            toast('回放快照已导出', 'success');
+        } catch (error) {
+            toast(error instanceof Error ? error.message : '导出失败', 'error');
+        } finally {
+            setSnapshotLoading(false);
+        }
+    };
+
+    const handleLoadFullReplay = async () => {
+        if (!currentSession?.id) {
+            toast('当前会话不支持从后端装载整段回放', 'info');
+            return;
+        }
+
+        try {
+            setSnapshotLoading(true);
+            const raw = await api.sessions.getRuntimeEventsSnapshot(currentSession.id);
+            const parsedEvents = parseRuntimeEventsSnapshot(raw);
+            loadRuntimeEventSnapshot(parsedEvents);
+            setFilter('all');
+            setSearchQuery('');
+            setPageCount(1);
+            setSelectedEventId(parsedEvents[parsedEvents.length - 1]?.event_id ?? null);
+            toast(`已装载整段回放，共 ${parsedEvents.length} 条事件`, 'success');
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('no usable events')) {
+                toast('当前会话还没有可回放的历史事件', 'info');
+                return;
+            }
+            toast(error instanceof Error ? error.message : '装载整段回放失败', 'error');
+        } finally {
+            setSnapshotLoading(false);
+        }
     };
 
     const handleImportFile = async (file: File | null) => {
@@ -240,7 +410,6 @@ export default function ExecutionTimeline({ compact = false }: ExecutionTimeline
     const replayProgress = replayEnabled
         ? `回放 ${Math.max(0, replayCursor + 1)} / ${runtimeEvents.length}`
         : `实时 ${runtimeEvents.length}`;
-    const canLoadOlder = pageCount < pageTotal;
     const canReplayStep = replayEnabled && runtimeEvents.length > 0;
     const replayAtStart = replayCursor <= 0;
     const replayAtEnd = replayCursor >= runtimeEvents.length - 1;
@@ -361,23 +530,34 @@ export default function ExecutionTimeline({ compact = false }: ExecutionTimeline
                                 />
                             </div>
 
-                            <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
+                            <div
+                                ref={listRef}
+                                onScroll={(event) => setListScrollTop(event.currentTarget.scrollTop)}
+                                style={{ flex: 1, overflowY: 'auto', padding: '6px' }}
+                            >
                                 {canLoadOlder && (
                                     <button
-                                        onClick={handleLoadOlder}
+                                        onClick={() => {
+                                            void handleLoadOlder();
+                                        }}
+                                        disabled={historyLoading}
                                         style={{
                                             width: '100%',
                                             border: 'none',
                                             borderRadius: 'var(--radius-sm)',
                                             marginBottom: '6px',
+                                            minHeight: `${TIMELINE_LOAD_MORE_OFFSET - 6}px`,
                                             padding: '6px 8px',
                                             fontSize: '11px',
-                                            cursor: 'pointer',
+                                            cursor: historyLoading ? 'not-allowed' : 'pointer',
+                                            opacity: historyLoading ? 0.7 : 1,
                                             color: 'var(--text-secondary)',
                                             background: 'var(--bg-tertiary)',
                                         }}
                                     >
-                                        加载更早事件 ({pageCount}/{pageTotal})
+                                        {historyLoading
+                                            ? '正在加载历史事件...'
+                                            : `加载更早事件 (${pageCount}/${pageTotal})`}
                                     </button>
                                 )}
                                 {!filteredEvents.length && (
@@ -385,59 +565,70 @@ export default function ExecutionTimeline({ compact = false }: ExecutionTimeline
                                         当前筛选下暂无事件。
                                     </div>
                                 )}
-                                {visibleEvents.map((event) => {
-                                    const active = event.event_id === selectedEventId;
-                                    return (
-                                        <button
-                                            key={event.event_id}
-                                            onClick={() => handleSelectEvent(event.event_id)}
-                                            style={{
-                                                width: '100%',
-                                                display: 'grid',
-                                                gridTemplateColumns: '58px 1fr',
-                                                gap: '10px',
-                                                border: 'none',
-                                                borderRadius: 'var(--radius-md)',
-                                                marginBottom: '4px',
-                                                padding: '8px',
-                                                textAlign: 'left',
-                                                background: active ? 'var(--bg-card)' : 'transparent',
-                                                cursor: 'pointer',
-                                                color: 'var(--text-primary)',
-                                            }}
-                                        >
-                                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                                                {formatTime(event.timestamp)}
-                                            </span>
-                                            <span style={{ minWidth: 0 }}>
-                                                <span
+                                {visibleEvents.length > 0 && (
+                                    <div
+                                        style={{
+                                            paddingTop: `${virtualWindow.paddingTop}px`,
+                                            paddingBottom: `${virtualWindow.paddingBottom}px`,
+                                        }}
+                                    >
+                                        {virtualEvents.map((event) => {
+                                            const active = event.event_id === selectedEventId;
+                                            return (
+                                                <button
+                                                    key={event.event_id}
+                                                    onClick={() => handleSelectEvent(event.event_id)}
                                                     style={{
-                                                        fontSize: '11px',
-                                                        color: eventColor(event.type),
-                                                        fontWeight: 600,
-                                                        display: 'inline-block',
-                                                        marginRight: '6px',
+                                                        width: '100%',
+                                                        height: `${TIMELINE_ROW_HEIGHT - 4}px`,
+                                                        display: 'grid',
+                                                        gridTemplateColumns: '58px 1fr',
+                                                        gap: '10px',
+                                                        border: 'none',
+                                                        borderRadius: 'var(--radius-md)',
+                                                        marginBottom: '4px',
+                                                        padding: '8px',
+                                                        textAlign: 'left',
+                                                        background: active ? 'var(--bg-card)' : 'transparent',
+                                                        cursor: 'pointer',
+                                                        color: 'var(--text-primary)',
+                                                        boxSizing: 'border-box',
                                                     }}
                                                 >
-                                                    #{event.seq}
-                                                </span>
-                                                <span style={{ fontSize: '11px', fontWeight: 500 }}>{event.type}</span>
-                                                <div
-                                                    style={{
-                                                        fontSize: '11px',
-                                                        color: 'var(--text-muted)',
-                                                        marginTop: '2px',
-                                                        overflow: 'hidden',
-                                                        textOverflow: 'ellipsis',
-                                                        whiteSpace: 'nowrap',
-                                                    }}
-                                                >
-                                                    {summarizeEvent(event)}
-                                                </div>
-                                            </span>
-                                        </button>
-                                    );
-                                })}
+                                                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                                                        {formatTime(event.timestamp)}
+                                                    </span>
+                                                    <span style={{ minWidth: 0 }}>
+                                                        <span
+                                                            style={{
+                                                                fontSize: '11px',
+                                                                color: eventColor(event.type),
+                                                                fontWeight: 600,
+                                                                display: 'inline-block',
+                                                                marginRight: '6px',
+                                                            }}
+                                                        >
+                                                            #{event.seq}
+                                                        </span>
+                                                        <span style={{ fontSize: '11px', fontWeight: 500 }}>{event.type}</span>
+                                                        <div
+                                                            style={{
+                                                                fontSize: '11px',
+                                                                color: 'var(--text-muted)',
+                                                                marginTop: '2px',
+                                                                overflow: 'hidden',
+                                                                textOverflow: 'ellipsis',
+                                                                whiteSpace: 'nowrap',
+                                                            }}
+                                                        >
+                                                            {summarizeEvent(event)}
+                                                        </div>
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -511,17 +702,40 @@ export default function ExecutionTimeline({ compact = false }: ExecutionTimeline
                                         返回实时
                                     </button>
                                 )}
+                                {currentSession?.id && (
+                                    <button
+                                        onClick={() => {
+                                            void handleLoadFullReplay();
+                                        }}
+                                        disabled={snapshotLoading}
+                                        style={{
+                                            ...pillStyle,
+                                            borderRadius: 'var(--radius-sm)',
+                                            color: 'var(--text-secondary)',
+                                            background: 'var(--bg-tertiary)',
+                                            opacity: snapshotLoading ? 0.7 : 1,
+                                            cursor: snapshotLoading ? 'not-allowed' : 'pointer',
+                                        }}
+                                    >
+                                        {snapshotLoading ? '装载中...' : '整段回放'}
+                                    </button>
+                                )}
                                 <button
-                                    onClick={handleExport}
+                                    onClick={() => {
+                                        void handleExport();
+                                    }}
+                                    disabled={snapshotLoading}
                                     style={{
                                         ...pillStyle,
                                         marginLeft: 'auto',
                                         borderRadius: 'var(--radius-sm)',
                                         color: 'var(--text-secondary)',
                                         background: 'var(--bg-tertiary)',
+                                        opacity: snapshotLoading ? 0.7 : 1,
+                                        cursor: snapshotLoading ? 'not-allowed' : 'pointer',
                                     }}
                                 >
-                                    导出
+                                    {snapshotLoading ? '处理中...' : '导出'}
                                 </button>
                                 <button
                                     onClick={() => fileInputRef.current?.click()}

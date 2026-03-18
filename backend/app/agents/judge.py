@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -34,6 +35,81 @@ _OUTPUT_SCHEMA = {
     "persuasiveness": {"score": 1, "rationale": "Explain the score."},
     "overall_comment": "One concise summary of the debater's performance.",
 }
+
+
+def _strip_code_fences(text: str) -> str:
+    """Remove markdown code fences when the model wraps JSON in a block."""
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+    return cleaned
+
+
+def _extract_json_fragment(text: str) -> str | None:
+    """Extract the outermost JSON object from mixed prose + JSON output."""
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or start >= end:
+        return None
+    return text[start : end + 1]
+
+
+def _next_significant_char(text: str, start_index: int) -> str | None:
+    """Peek ahead to the next non-whitespace character."""
+    for char in text[start_index:]:
+        if not char.isspace():
+            return char
+    return None
+
+
+def _repair_json_fragment(text: str) -> str:
+    """
+    Repair common LLM JSON glitches.
+
+    The main failure mode we see in production is otherwise-valid JSON with
+    unescaped ASCII double quotes inside rationale strings, for example:
+    `"...但"GDP=福祉"这个前提..."`.
+    """
+    repaired: list[str] = []
+    in_string = False
+    escaped = False
+
+    for index, char in enumerate(text):
+        if not in_string:
+            repaired.append(char)
+            if char == '"':
+                in_string = True
+            continue
+
+        if escaped:
+            repaired.append(char)
+            escaped = False
+            continue
+
+        if char == "\\":
+            repaired.append(char)
+            escaped = True
+            continue
+
+        if char == '"':
+            next_char = _next_significant_char(text, index + 1)
+            if next_char in {",", "}", "]", ":"}:
+                repaired.append(char)
+                in_string = False
+            else:
+                repaired.append('\\"')
+            continue
+
+        repaired.append(char)
+
+    repaired_text = "".join(repaired)
+    return re.sub(r",(\s*[}\]])", r"\1", repaired_text)
+
+
+def _load_turn_score(text: str) -> TurnScore:
+    """Parse one JSON payload and validate it against the TurnScore schema."""
+    data = json.loads(text)
+    return TurnScore(**data)
 
 
 def _build_judge_instruction(
@@ -67,7 +143,8 @@ def _build_judge_instruction(
     parts.append(
         "\n## Instructions\n"
         "Score this debater on all 5 dimensions from 1 to 10 and explain each score. "
-        "Return ONLY valid JSON. Do not include markdown fences, headings, or prose.\n"
+        "Return ONLY valid JSON. Do not include markdown fences, headings, or prose. "
+        "If you need to quote a term inside a JSON string, use Chinese quotes like 「」 instead of ASCII double quotes.\n"
         f"## Required JSON Shape\n{json.dumps(_OUTPUT_SCHEMA, ensure_ascii=False, indent=2)}"
     )
 
@@ -76,27 +153,39 @@ def _build_judge_instruction(
 
 def _parse_score_response(text: str) -> TurnScore | None:
     """Parse a judge response into a TurnScore."""
-    cleaned = text.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+    cleaned = _strip_code_fences(text)
+    candidates: list[str] = []
+    if cleaned:
+        candidates.append(cleaned)
 
-    try:
-        data = json.loads(cleaned)
-        return TurnScore(**data)
-    except (json.JSONDecodeError, ValidationError):
-        start = cleaned.find("{")
-        end = cleaned.rfind("}")
-        if start == -1 or end == -1 or start >= end:
-            logger.warning("Score parse failed - raw: %s", cleaned[:300])
-            return None
+    fragment = _extract_json_fragment(cleaned)
+    if fragment and fragment != cleaned:
+        candidates.append(fragment)
 
-        fragment = cleaned[start : end + 1]
+    last_error: Exception | None = None
+
+    for candidate in candidates:
         try:
-            data = json.loads(fragment)
-            return TurnScore(**data)
+            return _load_turn_score(candidate)
         except (json.JSONDecodeError, ValidationError) as exc:
-            logger.warning("Score parse failed: %s - raw: %s", exc, cleaned[:300])
-            return None
+            last_error = exc
+
+        repaired = _repair_json_fragment(candidate)
+        if repaired == candidate:
+            continue
+
+        try:
+            parsed = _load_turn_score(repaired)
+            logger.info("Score parse succeeded after JSON repair")
+            return parsed
+        except (json.JSONDecodeError, ValidationError) as exc:
+            last_error = exc
+
+    if last_error is None:
+        logger.warning("Score parse failed - raw: %s", cleaned[:300])
+    else:
+        logger.warning("Score parse failed: %s - raw: %s", last_error, cleaned[:300])
+    return None
 
 
 def _default_scores() -> dict[str, Any]:

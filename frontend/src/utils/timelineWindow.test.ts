@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { RuntimeEvent } from '../types';
 import {
+    buildTimelineSearchIndex,
     buildTimelineSearchText,
     computeTimelinePageTotal,
+    computeVirtualTimelineWindow,
+    filterIndexedTimelineEvents,
     filterTimelineEvents,
     requiredPageCountForIndex,
     sliceTimelineTail,
@@ -68,6 +71,28 @@ describe('timelineWindow utils', () => {
         expect(filterTimelineEvents(events, '').map((event) => event.event_id)).toEqual(['evt_a', 'evt_b', 'evt_c']);
     });
 
+    it('reuses prebuilt search index for repeated filtering', () => {
+        const events = [
+            makeEvent({
+                event_id: 'evt_a',
+                seq: 1,
+                type: 'speech_end',
+                payload: { role: 'proposer', content: 'Alpha point' },
+            }),
+            makeEvent({
+                event_id: 'evt_b',
+                seq: 2,
+                type: 'judge_score',
+                payload: { role: 'opposer', content: 'Beta response' },
+            }),
+        ];
+
+        const index = buildTimelineSearchIndex(events);
+        expect(filterIndexedTimelineEvents(index, 'alpha').map((event) => event.event_id)).toEqual(['evt_a']);
+        expect(filterIndexedTimelineEvents(index, 'beta').map((event) => event.event_id)).toEqual(['evt_b']);
+        expect(filterIndexedTimelineEvents(index, '').map((event) => event.event_id)).toEqual(['evt_a', 'evt_b']);
+    });
+
     it('computes page totals and tail slices for long timeline', () => {
         const events = Array.from({ length: 9 }, (_, index) =>
             makeEvent({
@@ -84,5 +109,14 @@ describe('timelineWindow utils', () => {
             'evt_8',
             'evt_9',
         ]);
+    });
+
+    it('computes a virtual window for long visible event lists', () => {
+        const window = computeVirtualTimelineWindow(500, 600, 240, 60, 3);
+
+        expect(window.startIndex).toBe(7);
+        expect(window.endIndex).toBe(17);
+        expect(window.paddingTop).toBe(420);
+        expect(window.paddingBottom).toBe((500 - 17) * 60);
     });
 });

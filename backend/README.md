@@ -1,6 +1,6 @@
 # Elenchus Backend
 
-这是 Elenchus 的后端部分，技术栈主要是：
+这是 Elenchus 的后端部分，主要技术栈：
 
 - FastAPI
 - LangGraph
@@ -8,15 +8,15 @@
 - WebSocket
 - pytest
 
-后端负责的事情包括：
+后端负责：
 
 - 创建和管理辩论会话
 - 驱动多智能体辩论流程
-- 持久化会话、评分、模型配置
-- 提供 REST API 和 WebSocket
-- 提供搜索配置、导出、运行时事件等能力
+- 保存会话、评分和模型配置
+- 提供 REST API / WebSocket
+- 加密保存模型提供商 API Key
 
-## 后端目录大致在做什么
+## 目录结构
 
 ```text
 backend/
@@ -27,54 +27,45 @@ backend/
 │  ├─ services/      会话、模型配置、导出、连接管理等服务
 │  ├─ search/        搜索引擎适配层
 │  ├─ db/            数据库模型与连接
-│  ├─ models/        Pydantic 数据模型
+│  ├─ models/        Pydantic 模型
 │  └─ main.py        FastAPI 入口
-├─ tests/            后端测试
+├─ tests/
 ├─ requirements.txt
 ├─ requirements-dev.txt
 ├─ .env.example
 └─ config.yaml
 ```
 
-## 如果你只想先把后端跑起来
+## 最快启动方式
 
-### 1. 进入后端目录
+### Windows PowerShell
+
+```powershell
+cd backend
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+```
+
+### macOS / Linux
 
 ```bash
 cd backend
-```
-
-### 2. 创建虚拟环境
-
-Windows PowerShell：
-
-```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-```
-
-macOS / Linux：
-
-```bash
 python3 -m venv venv
 source venv/bin/activate
-```
-
-### 3. 安装依赖
-
-```bash
 pip install -r requirements.txt
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
-如果你还要跑测试，再额外安装开发依赖：
+启动后可访问：
 
-```bash
-pip install -r requirements-dev.txt
-```
+- Swagger：`http://localhost:8001/docs`
+- 健康检查：`http://localhost:8001/health`
 
-### 4. 准备环境变量
+## `.env` 现在怎么处理
 
-如果还没有 `backend/.env`，先复制模板：
+如果没有 `backend/.env`，你可以先复制模板：
 
 Windows PowerShell：
 
@@ -88,36 +79,22 @@ macOS / Linux：
 cp .env.example .env
 ```
 
-### 5. 生成加密密钥
+但现在有个重要变化：
 
-后端需要 `ELENCHUS_ENCRYPTION_KEY` 才能正常处理模型提供商配置。
+- `ELENCHUS_ENCRYPTION_KEY` 不需要你手工生成
+- 后端首次启动时会自动生成并写回 `backend/.env`
 
-生成方法：
+也就是说，第一次启动后端时，这一项会被自动补齐。
 
-```bash
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
+## `ELENCHUS_ENCRYPTION_KEY` 到底加密了什么
 
-把输出结果写进 `backend/.env`：
+它不是在加密整个数据库。
 
-```env
-ELENCHUS_ENCRYPTION_KEY=替换成你刚生成的密钥
-```
+当前它只用于加密保存在本地数据库里的模型提供商 API Key，也就是 `providers` 表里的密钥字段。
 
-### 6. 启动后端
+这样做的目的不是提供强对抗级安全，而是避免 API Key 明文落盘。
 
-```bash
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
-```
-
-启动后可以访问：
-
-- 接口文档：`http://localhost:8001/docs`
-- 健康检查：`http://localhost:8001/health`
-
-## 哪些配置是最常用的
-
-`backend/.env` 常见字段：
+## 常见环境变量
 
 ```env
 ELENCHUS_ENCRYPTION_KEY=
@@ -131,17 +108,23 @@ DEBUG=false
 
 说明：
 
-- `ELENCHUS_ENCRYPTION_KEY`：必填
-- `SEARXNG_BASE_URL`：可选，接自己的 SearXNG 时再填
+- `ELENCHUS_ENCRYPTION_KEY`：可留空，首次启动自动生成
+- `SEARXNG_BASE_URL`：可选，接自建搜索时再填
 - `TAVILY_API_KEY`：可选，接 Tavily 时再填
 - `DATABASE_URL`：默认 SQLite，一般先不用改
 
-## 后端常用命令
+## 常用命令
 
-### 启动开发服务器
+### 启动开发服务
 
 ```bash
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+```
+
+### 安装测试依赖
+
+```bash
+pip install -r requirements-dev.txt
 ```
 
 ### 跑全部测试
@@ -161,87 +144,12 @@ pytest -p no:cacheprovider
 ```bash
 pytest backend/tests/test_session_service.py
 pytest backend/tests/test_judge.py
+pytest backend/tests/test_provider_service.py
 ```
 
-如果你当前就在 `backend/` 目录里，也可以写成：
+## 后端代码建议先看哪里
 
-```bash
-pytest tests/test_session_service.py
-```
-
-## 后端主要接口入口
-
-你可以先从这些文件开始看：
-
-- `app/main.py`：FastAPI 应用入口
-- `app/api/sessions.py`：会话创建、读取、删除、导出
-- `app/api/websocket.py`：实时通信入口
-- `app/api/models.py`：模型配置接口
-- `app/api/search.py`：搜索配置接口
-- `app/runtime/`：运行时调度主逻辑
-- `app/agents/graph.py`：辩论图编排入口
-
-## 一条最常见的本地联调路径
-
-如果你要前后端一起调试，通常是这样：
-
-1. 先启动后端
-2. 确认 `http://localhost:8001/health` 正常
-3. 再启动前端
-4. 打开 `http://localhost:5173`
-5. 在前端里配置模型提供商
-6. 新建一场辩论
-
-## 常见问题
-
-### 1. 启动时报 `ELENCHUS_ENCRYPTION_KEY` 相关错误
-
-说明 `.env` 里没有正确配置这个值。
-
-重新生成：
-
-```bash
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
-
-写回 `backend/.env` 后重启服务。
-
-### 2. 后端起来了，但前端设置模型时报错
-
-优先检查：
-
-- `backend/.env` 里是否有有效的 `ELENCHUS_ENCRYPTION_KEY`
-- 后端有没有真的启动在 `8001`
-- 浏览器访问 `http://localhost:8001/docs` 是否正常
-
-### 3. 搜索配置获取失败
-
-先确认后端本身已启动，再检查：
-
-- `http://localhost:8001/api/search/config` 能否访问
-- `.env` 是否写错
-- 如果你接了自定义搜索服务，地址是否可达
-
-### 4. 我只想开发后端，不想启动前端
-
-完全可以。
-
-你只需要：
-
-```bash
-cd backend
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
-```
-
-然后直接用：
-
-- Swagger：`/docs`
-- 或 Postman / curl
-- 或你自己的前端
-
-## 给第一次看后端代码的人一个建议
-
-如果你要快速理解主链路，最推荐的阅读顺序是：
+如果你第一次接手后端，推荐阅读顺序：
 
 1. `app/main.py`
 2. `app/api/websocket.py`
@@ -250,3 +158,32 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 5. `app/agents/graph.py`
 6. `app/agents/debater.py`
 7. `app/agents/judge.py`
+
+## 常见问题
+
+### 1. 启动时报加密密钥错误
+
+现在如果 `.env` 里缺少密钥，系统会自动生成。
+
+如果仍然报错，通常说明：
+
+- 你手动写入了一个无效的 `ELENCHUS_ENCRYPTION_KEY`
+- 或者这个 key 被改坏了
+
+这种情况下不要让系统自动覆盖旧 key，因为那会导致已有加密 API Key 无法解密。应当修正原来的 key，或者删除本地 providers 数据后重新配置。
+
+### 2. 后端正常启动，但前端保存模型时报错
+
+优先检查：
+
+- `http://localhost:8001/docs` 是否正常
+- `http://localhost:8001/health` 是否正常
+- 你是否误改过 `ELENCHUS_ENCRYPTION_KEY`
+
+### 3. 搜索配置获取失败
+
+可以直接检查：
+
+- `http://localhost:8001/api/search/config`
+- `.env` 中的搜索配置是否正确
+- 自定义搜索服务是否可达

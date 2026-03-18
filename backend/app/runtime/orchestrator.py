@@ -34,6 +34,16 @@ async def _noop_emit_event(session_id: str, message: dict[str, Any]) -> None:
     return None
 
 
+def _has_pending_tool_calls(state: dict[str, Any]) -> bool:
+    messages = state.get("messages", [])
+    if not isinstance(messages, list) or not messages:
+        return False
+
+    last_message = messages[-1]
+    tool_calls = getattr(last_message, "tool_calls", None)
+    return bool(tool_calls)
+
+
 class DebateOrchestrator:
     """Coordinate a debate engine with persistence and outbound events."""
 
@@ -97,6 +107,7 @@ class DebateOrchestrator:
 
         try:
             last_node = ""
+            last_status_node = "manage_context"
             async for state_snapshot in self._engine.stream(initial_state):
                 node_name = state_snapshot.get("last_executed_node", "")
                 final_state = dict(state_snapshot)
@@ -108,7 +119,11 @@ class DebateOrchestrator:
 
                 if node_name and node_name != last_node:
                     last_node = node_name
-                    await self._emit_status(session_id, node_name)
+                    last_status_node = await self._emit_status_if_changed(
+                        session_id,
+                        node_name,
+                        last_status_node,
+                    )
 
                     if node_name == "speaker":
                         prev_history_len = await self._emit_speech(
@@ -126,6 +141,14 @@ class DebateOrchestrator:
                         )
                     elif node_name == "advance_turn":
                         await self._emit_turn_complete(session_id, final_state)
+
+                    next_status_node = self._predict_next_status_node(node_name, final_state)
+                    if next_status_node is not None:
+                        last_status_node = await self._emit_status_if_changed(
+                            session_id,
+                            next_status_node,
+                            last_status_node,
+                        )
 
                 if node_name in _PERSIST_NODES:
                     await self._repository.persist_state(session_id, final_state)
@@ -220,6 +243,51 @@ class DebateOrchestrator:
             phase=phase,
             source=f"runtime.node.{node_name}",
         )
+
+    async def _emit_status_if_changed(
+        self,
+        session_id: str,
+        node_name: str,
+        last_status_node: str,
+    ) -> str:
+        if not node_name or node_name == last_status_node:
+            return last_status_node
+
+        await self._emit_status(session_id, node_name)
+        return node_name
+
+    def _predict_next_status_node(
+        self,
+        node_name: str,
+        final_state: dict[str, Any],
+    ) -> str | None:
+        if node_name == "set_speaker":
+            current_speaker = final_state.get("current_speaker")
+            if isinstance(current_speaker, str) and current_speaker:
+                return "speaker"
+            return None
+
+        if node_name == "speaker":
+            if _has_pending_tool_calls(final_state):
+                return "tool_executor"
+
+            participants = final_state.get("participants", ["proposer", "opposer"])
+            current_idx = final_state.get("current_speaker_index", 0)
+            if isinstance(participants, list) and current_idx + 1 >= len(participants):
+                return "judge"
+            return None
+
+        if node_name == "tool_executor":
+            return "speaker"
+
+        if node_name == "advance_turn":
+            current_turn = final_state.get("current_turn", 0)
+            max_turns = final_state.get("max_turns", 5)
+            if isinstance(current_turn, int) and isinstance(max_turns, int) and current_turn < max_turns:
+                return "manage_context"
+            return None
+
+        return None
 
     async def _emit_speech(
         self,

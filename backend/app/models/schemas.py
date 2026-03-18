@@ -99,6 +99,30 @@ class SessionListResponse(BaseModel):
     total: int
 
 
+class RuntimeEventResponse(BaseModel):
+    """Persisted runtime event envelope."""
+
+    schema_version: str
+    event_id: str
+    session_id: str
+    seq: int
+    timestamp: str
+    source: str
+    type: str
+    phase: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class RuntimeEventPageResponse(BaseModel):
+    """Paginated runtime event history page."""
+
+    events: list[RuntimeEventResponse]
+    total: int
+    limit: int
+    has_more: bool
+    next_before_seq: int | None = None
+
+
 class ModelConfigResponse(BaseModel):
     """Detail of a persisted provider configuration."""
 

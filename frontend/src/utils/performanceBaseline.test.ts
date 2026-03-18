@@ -6,7 +6,10 @@ import {
     serializeRuntimeEventsSnapshot,
 } from './replaySnapshot';
 import {
+    buildTimelineSearchIndex,
     computeTimelinePageTotal,
+    computeVirtualTimelineWindow,
+    filterIndexedTimelineEvents,
     filterTimelineEvents,
     requiredPageCountForIndex,
     sliceTimelineTail,
@@ -34,16 +37,20 @@ describe('performance baseline (10k events)', () => {
         const events = Array.from({ length: 10_000 }, (_, index) => makeEvent(index));
 
         const timelineStart = performance.now();
-        const filtered = filterTimelineEvents(events, 'proposer');
+        const indexed = buildTimelineSearchIndex(events);
+        const filtered = filterIndexedTimelineEvents(indexed, 'proposer');
         const pageTotal = computeTimelinePageTotal(filtered.length, 200);
         const requiredPages = requiredPageCountForIndex(filtered.length, 1500, 200);
         const tail = sliceTimelineTail(filtered, 200, 5);
+        const virtualWindow = computeVirtualTimelineWindow(tail.length, 3200, 360, 60, 8);
         const timelineCost = performance.now() - timelineStart;
 
+        expect(filterTimelineEvents(events, 'proposer').length).toBe(filtered.length);
         expect(filtered.length).toBeGreaterThan(0);
         expect(pageTotal).toBeGreaterThan(1);
         expect(requiredPages).toBeGreaterThan(1);
         expect(tail.length).toBe(1000);
+        expect(virtualWindow.endIndex - virtualWindow.startIndex).toBeLessThan(40);
         expect(timelineCost).toBeLessThan(3000);
 
         const replayStart = performance.now();
@@ -55,4 +62,3 @@ describe('performance baseline (10k events)', () => {
         expect(replayCost).toBeLessThan(8000);
     });
 });
-
