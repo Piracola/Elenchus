@@ -105,6 +105,12 @@ jobs:
       - name: Build frontend
         run: npm --prefix frontend run build
 
+      - name: Install backend runtime dependencies
+        run: python -m pip install -r backend/requirements.txt
+
+      - name: Smoke test backend startup
+        run: python scripts/smoke_test_release_backend.py
+
       - name: Package lightweight release
         run: python scripts/package_lightweight_release.py --platform ${{ matrix.platform }} --version ${{ steps.meta.outputs.version }}
 

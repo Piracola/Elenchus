@@ -7,6 +7,7 @@ pydantic-settings==2.7.1
 # Database
 sqlalchemy==2.0.36
 aiosqlite==0.20.0
+greenlet>=3.1.1,<4
 
 # Agent runtime
 langgraph==0.2.60

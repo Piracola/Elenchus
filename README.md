@@ -2,6 +2,83 @@
 
 Elenchus 是一个基于 LangGraph + FastAPI + React 的多智能体辩论系统。
 
+## 本地打包 7z 发行包
+
+如果需要在本地手动构建可直接分发给普通用户的轻量发布包，可以按下面步骤执行。
+
+### 前提条件
+
+- 安装 `Python 3.11+`
+- 安装 `Node.js 20+`
+- 命令行里可以直接使用 `7z`
+
+Windows 可先确认：
+
+```powershell
+python --version
+node --version
+npm --version
+7z
+```
+
+### 1. 构建前端
+
+```powershell
+npm ci --prefix frontend
+npm --prefix frontend run build
+```
+
+构建完成后，需要确认 `frontend/dist/index.html` 已生成。
+
+### 2. 安装后端运行时依赖
+
+```powershell
+python -m pip install -r backend/requirements.txt
+```
+
+这里会安装发布包运行所需的最小依赖集合，包括数据库初始化需要的 `greenlet`。
+
+### 3. 先做一次本地冒烟验证
+
+```powershell
+python scripts/smoke_test_release_backend.py
+```
+
+这个脚本会直接跑一遍 FastAPI 的启动和关闭生命周期，用来确认：
+
+- 运行时依赖齐全
+- 数据库初始化可以正常完成
+- 发行包模式下的后端至少能成功启动
+
+看到 `Release backend smoke test passed.` 再继续打包。
+
+### 4. 生成 Windows / Unix 发行包
+
+```powershell
+python scripts/package_lightweight_release.py --platform windows --version v1.0.2
+python scripts/package_lightweight_release.py --platform unix --version v1.0.2
+```
+
+### 5. 查看产物
+
+打包结果会输出到 `dist/releases/`，包括：
+
+- `elenchus-lightweight-<version>-windows.7z`
+- `elenchus-lightweight-<version>-windows.7z.sha256`
+- `elenchus-lightweight-<version>-unix.7z`
+- `elenchus-lightweight-<version>-unix.7z.sha256`
+
+### 6. 和 GitHub Actions 的关系
+
+GitHub Actions 里的轻量发版工作流现在也会执行同样的关键步骤：
+
+- 构建 `frontend/dist`
+- 安装 `backend/requirements.txt`
+- 运行 `scripts/smoke_test_release_backend.py`
+- 生成 `.7z` 发行包并上传到 Release
+
+这样可以尽量避免“压缩包构建成功，但用户启动时报缺依赖”的问题。
+
 它可以让不同 AI 扮演正方、反方、裁判等角色，围绕一个议题进行多轮辩论，并在前端控制台里实时展示发言、裁判评分、执行时间线、运行图和记忆状态。
 
 如果你是开发者，最快跑起来的方式是：
