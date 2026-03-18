@@ -126,11 +126,26 @@ function sanitizeIncomingContent(content: unknown): string {
         return '[已过滤异常的流式响应数据]';
     }
 
+    if (looksLikeHtmlDocument(text)) {
+        return '[Provider endpoint returned HTML instead of model output. Check API Base URL (usually ending with /v1).]';
+    }
+
     if (text.length > MAX_SAFE_CONTENT_LENGTH) {
         return `${text.slice(0, MAX_SAFE_CONTENT_LENGTH)}\n\n[内容过长，已截断以保护界面]`;
     }
 
     return text;
+}
+
+function looksLikeHtmlDocument(text: string): boolean {
+    const normalized = text.trimStart().toLowerCase();
+    if (!normalized) return false;
+
+    if (normalized.startsWith('<!doctype html') || normalized.startsWith('<html')) {
+        return true;
+    }
+
+    return normalized.includes('<html') && normalized.includes('</html>') && normalized.includes('<body');
 }
 
 function getPayloadString(payload: Record<string, unknown>, key: string): string | undefined {
@@ -161,6 +176,10 @@ function sameDialogueContent(a: DialogueEntry, b: DialogueEntry): boolean {
         a.role === b.role &&
         (a.turn ?? -1) === (b.turn ?? -1) &&
         (a.target_role ?? '') === (b.target_role ?? '') &&
+        (a.team_side ?? '') === (b.team_side ?? '') &&
+        (a.team_round ?? -1) === (b.team_round ?? -1) &&
+        (a.team_member_index ?? -1) === (b.team_member_index ?? -1) &&
+        (a.team_specialty ?? '') === (b.team_specialty ?? '') &&
         a.agent_name === b.agent_name &&
         a.content === b.content &&
         sameCitations(a.citations, b.citations) &&
@@ -207,7 +226,9 @@ function sanitizeSession(session: Session | null): Session | null {
     if (!session) return null;
     return {
         ...session,
-        dialogue_history: session.dialogue_history.map(sanitizeDialogueEntry),
+        dialogue_history: (session.dialogue_history ?? []).map(sanitizeDialogueEntry),
+        team_dialogue_history: (session.team_dialogue_history ?? []).map(sanitizeDialogueEntry),
+        team_config: session.team_config ?? { agents_per_team: 0, discussion_rounds: 0 },
     };
 }
 
@@ -344,6 +365,33 @@ export const useDebateStore = create<DebateState>((set) => ({
                     patch.currentStatus = sanitizeIncomingContent(getPayloadString(payload, 'content')) || '';
                     patch.currentNode = getPayloadString(payload, 'node') ?? '';
                     break;
+
+                case 'team_discussion':
+                case 'team_summary': {
+                    if (!state.currentSession) break;
+                    const entry: DialogueEntry = {
+                        role: getPayloadString(payload, 'role') ?? (event.type === 'team_summary' ? 'team_summary' : 'team_member'),
+                        agent_name: getPayloadString(payload, 'agent_name') ?? '',
+                        content: sanitizeIncomingContent(getPayloadString(payload, 'content')),
+                        citations: getPayloadCitations(payload),
+                        timestamp: event.timestamp || new Date().toISOString(),
+                        event_id: event.event_id,
+                        team_side: getPayloadString(payload, 'team_side'),
+                        team_round: getPayloadNumber(payload, 'team_round'),
+                        team_member_index: getPayloadNumber(payload, 'team_member_index'),
+                        team_specialty: getPayloadString(payload, 'team_specialty'),
+                        source_role: getPayloadString(payload, 'source_role'),
+                    };
+
+                    patch.currentSession = {
+                        ...state.currentSession,
+                        team_dialogue_history: appendDialogueWithDedupe(
+                            state.currentSession.team_dialogue_history,
+                            entry,
+                        ),
+                    };
+                    break;
+                }
 
                 case 'speech_start':
                     patch.streamingRole = getPayloadString(payload, 'role') ?? '';

@@ -103,6 +103,13 @@ def test_coerce_openai_response_to_ai_message_collapses_sse_stream():
     assert message.tool_calls == []
 
 
+def test_coerce_openai_response_to_ai_message_rejects_html_document():
+    html = "<!doctype html><html><head><title>New API</title></head><body></body></html>"
+
+    with pytest.raises(ValueError, match="HTML"):
+        safe_invoke._coerce_openai_response_to_ai_message(html)
+
+
 def test_normalize_model_text_truncates_unbounded_payloads():
     giant = "x" * 60000
 
@@ -110,3 +117,12 @@ def test_normalize_model_text_truncates_unbounded_payloads():
 
     assert len(normalized) < len(giant)
     assert normalized.endswith("characters.]")
+
+
+def test_normalize_model_text_masks_html_documents():
+    html = "<!doctype html><html lang='zh'><body>New API</body></html>"
+
+    normalized = safe_invoke.normalize_model_text(html)
+
+    assert "HTML" in normalized
+    assert "<!doctype html>" not in normalized.lower()
