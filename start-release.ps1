@@ -26,6 +26,34 @@ function Print-Err { param($Text) Write-Host $RED"[ERROR]"$RESET" $Text" }
 function Print-Warn { param($Text) Write-Host $YELLOW"[WARN]"$RESET" $Text" }
 function Print-Info { param($Text) Write-Host $BLUE"[INFO]"$RESET" $Text" }
 
+function Test-BackendReady {
+    param([int]$BackendPort)
+
+    try {
+        $response = Invoke-RestMethod -Uri "http://127.0.0.1:$BackendPort/health" -TimeoutSec 2
+        return $response.status -eq "ok"
+    } catch {
+        return $false
+    }
+}
+
+function Show-BackendLogs {
+    param(
+        [string]$StdOutLog,
+        [string]$StdErrLog
+    )
+
+    if (Test-Path $StdOutLog) {
+        Print-Info "Backend stdout log: $StdOutLog"
+        Get-Content $StdOutLog -Tail 30
+    }
+
+    if (Test-Path $StdErrLog) {
+        Print-Info "Backend stderr log: $StdErrLog"
+        Get-Content $StdErrLog -Tail 30
+    }
+}
+
 function Get-FreePort {
     param([int]$StartPort)
 
@@ -46,6 +74,10 @@ $FrontendDir = Join-Path $ScriptDir "frontend"
 $FrontendDistDir = Join-Path $FrontendDir "dist"
 $FrontendIndex = Join-Path $FrontendDistDir "index.html"
 $VenvDir = Join-Path $BackendDir "venv"
+$LogDir = Join-Path $ScriptDir "logs"
+$RunStamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$BackendStdOutLog = Join-Path $LogDir "release-backend-$RunStamp.out.log"
+$BackendStdErrLog = Join-Path $LogDir "release-backend-$RunStamp.err.log"
 
 Write-Host ""
 Write-Host $BOLD$CYAN"   __                                         "$RESET
@@ -122,6 +154,10 @@ if ($PortToUse -ne $Port) {
     Print-Warn "Port $Port is in use, using port $PortToUse instead"
 }
 
+if (-not (Test-Path $LogDir)) {
+    New-Item -ItemType Directory -Path $LogDir | Out-Null
+}
+
 Write-Host ""
 Write-Host $CYAN"========================================"$RESET
 Write-Host $BOLD"Step 3/4: Starting Elenchus"$RESET
@@ -132,31 +168,42 @@ $backendProcess = Start-Process -FilePath $PythonExe `
     -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "$PortToUse" `
     -WorkingDirectory $BackendDir `
     -WindowStyle Hidden `
+    -RedirectStandardOutput $BackendStdOutLog `
+    -RedirectStandardError $BackendStdErrLog `
     -PassThru
 
 Start-Sleep -Seconds 1
+$backendProcess.Refresh()
 
 if ($backendProcess.HasExited) {
     Print-Err "Backend process exited immediately."
+    Show-BackendLogs -StdOutLog $BackendStdOutLog -StdErrLog $BackendStdErrLog
     exit 1
 }
 
 Print-Info "Waiting for service to be ready..."
 $backendReady = $false
 
-for ($i = 0; $i -lt 30; $i++) {
-    try {
-        $result = curl.exe -s "http://localhost:$PortToUse/health" 2>$null
-        if ($result -and $result -match '"status"\s*:\s*"ok"') {
-            $backendReady = $true
-            break
-        }
-    } catch {}
+for ($i = 0; $i -lt 60; $i++) {
+    $backendProcess.Refresh()
+
+    if ($backendProcess.HasExited) {
+        Print-Err "Backend process stopped before becoming ready."
+        Show-BackendLogs -StdOutLog $BackendStdOutLog -StdErrLog $BackendStdErrLog
+        exit 1
+    }
+
+    if (Test-BackendReady -BackendPort $PortToUse) {
+        $backendReady = $true
+        break
+    }
+
     Start-Sleep -Milliseconds 500
 }
 
 if (-not $backendReady) {
     Print-Err "Backend failed to become ready."
+    Show-BackendLogs -StdOutLog $BackendStdOutLog -StdErrLog $BackendStdErrLog
     if ($backendProcess -and -not $backendProcess.HasExited) {
         Stop-Process -Id $backendProcess.Id -Force -ErrorAction SilentlyContinue
     }

@@ -42,6 +42,21 @@ print_info() {
     echo -e "${BLUE}[INFO]${RESET} $1"
 }
 
+check_backend_ready() {
+    "$PYTHON_EXE" - "$PORT_TO_USE" >/dev/null 2>&1 <<'PY'
+import json
+import sys
+import urllib.request
+
+port = sys.argv[1]
+with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2) as response:
+    payload = json.load(response)
+
+if payload.get("status") != "ok":
+    raise SystemExit(1)
+PY
+}
+
 find_free_port() {
     local start_port="$1"
     local candidate
@@ -61,6 +76,9 @@ FRONTEND_DIR="$SCRIPT_DIR/frontend"
 FRONTEND_DIST_DIR="$FRONTEND_DIR/dist"
 FRONTEND_INDEX="$FRONTEND_DIST_DIR/index.html"
 VENV_DIR="$BACKEND_DIR/venv"
+LOG_DIR="$SCRIPT_DIR/logs"
+RUN_STAMP="$(date +%Y%m%d-%H%M%S)"
+BACKEND_LOG_FILE="$LOG_DIR/release-backend-$RUN_STAMP.log"
 
 echo ""
 echo -e "${BOLD}${CYAN}   __                                         ${RESET}"
@@ -130,6 +148,8 @@ if [[ "$PORT_TO_USE" != "$PORT" ]]; then
     print_warning "Port $PORT is in use, using port $PORT_TO_USE instead"
 fi
 
+mkdir -p "$LOG_DIR"
+
 echo ""
 echo -e "${CYAN}========================================${RESET}"
 echo -e "${BOLD}Step 3/4: Starting Elenchus${RESET}"
@@ -145,20 +165,29 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 cd "$BACKEND_DIR"
-"$PYTHON_EXE" -m uvicorn app.main:app --host 0.0.0.0 --port "$PORT_TO_USE" &
+"$PYTHON_EXE" -m uvicorn app.main:app --host 0.0.0.0 --port "$PORT_TO_USE" > "$BACKEND_LOG_FILE" 2>&1 &
 BACKEND_PID=$!
 cd "$SCRIPT_DIR"
 
 sleep 1
 if ! kill -0 "$BACKEND_PID" >/dev/null 2>&1; then
     print_error "Backend process exited immediately."
+    print_info "Backend log: $BACKEND_LOG_FILE"
+    tail -n 30 "$BACKEND_LOG_FILE" || true
     exit 1
 fi
 
 print_info "Waiting for service to be ready..."
 BACKEND_READY=false
-for _ in {1..30}; do
-    if curl -sf "http://localhost:$PORT_TO_USE/health" >/dev/null 2>&1; then
+for _ in {1..60}; do
+    if ! kill -0 "$BACKEND_PID" >/dev/null 2>&1; then
+        print_error "Backend process stopped before becoming ready."
+        print_info "Backend log: $BACKEND_LOG_FILE"
+        tail -n 30 "$BACKEND_LOG_FILE" || true
+        exit 1
+    fi
+
+    if check_backend_ready; then
         BACKEND_READY=true
         break
     fi
@@ -167,6 +196,8 @@ done
 
 if [[ "$BACKEND_READY" != true ]]; then
     print_error "Backend failed to become ready."
+    print_info "Backend log: $BACKEND_LOG_FILE"
+    tail -n 30 "$BACKEND_LOG_FILE" || true
     exit 1
 fi
 
