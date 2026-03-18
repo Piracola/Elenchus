@@ -2,17 +2,32 @@
 
 Elenchus 是一个基于 LangGraph + FastAPI + React 的多智能体辩论系统。
 
-它可以让不同 AI 扮演正方、反方、裁判等角色，围绕一个议题进行多轮辩论，并在前端控制台中实时展示发言、裁判评分、执行时间线、运行图和记忆状态。
+它可以让不同 AI 扮演正方、反方、裁判等角色，围绕一个议题进行多轮辩论，并在前端控制台里实时展示发言、裁判评分、执行时间线、运行图和记忆状态。
 
-如果你只关心一件事：
+如果你是开发者，最快跑起来的方式是：
 
-1. 安装 `Python 3.10+` 和 `Node.js 18+`
-2. 配好 `backend/.env` 里的 `ELENCHUS_ENCRYPTION_KEY`
+1. 安装 `Python 3.10+`
+2. 安装 `Node.js 18+`
 3. Windows 运行 `start.bat`
 4. macOS / Linux 运行 `./start.sh`
 5. 打开 `http://localhost:5173`
+6. 在网页里配置模型提供商 API Key
 
-下面是给新手的完整版本。
+如果你是普通用户，更简单的发布版方式是：
+
+1. 安装 `Python 3.10+`
+2. 使用已经构建好前端的发布包
+3. Windows 运行 `start-release.bat`
+4. macOS / Linux 运行 `./start-release.sh`
+5. 打开 `http://localhost:8001`
+6. 在网页里配置模型提供商 API Key
+
+说明：
+
+- `ELENCHUS_ENCRYPTION_KEY` 现在会在首次启动后端时自动生成并写入 `backend/.env`
+- 你不再需要手工生成 Fernet key
+- 开发模式仍然需要 Python 和 Node.js
+- 发布模式只需要 Python，前提是维护者已经提前构建好 `frontend/dist`
 
 ## 这个项目能做什么
 
@@ -22,96 +37,81 @@ Elenchus 是一个基于 LangGraph + FastAPI + React 的多智能体辩论系统
 - 在前端实时查看消息流、Live Graph、Execution Timeline、Memory
 - 导出辩论内容为 Markdown 或 JSON
 
-## 运行前你需要准备什么
+## 当前运行方式属于哪一类
 
-请先确认你的电脑已经安装：
+先说结论：
 
-- `Python 3.10` 或更高版本
-- `Node.js 18` 或更高版本
-- `npm`
+- 仓库默认入口仍然偏向“开发环境运行方式”
+- 但现在已经支持“预构建前端 + FastAPI 托管”的发布模式
 
-可以用下面的命令检查：
+开发模式第一次启动仍然需要：
 
-```bash
-python --version
-node --version
-npm --version
-```
+- Python
+- pip
+- Node.js
+- npm
 
-## 第一次启动前必须做的事
+发布模式则只需要：
 
-### 1. 准备后端配置文件
+- Python
 
-如果项目里还没有 `backend/.env`，你可以：
+但相比之前已经少了一步：
 
-- 直接先运行一次启动脚本，它会自动从 `backend/.env.example` 复制出 `backend/.env`
-- 或者手动复制一份
+- 不再需要你手工配置 `ELENCHUS_ENCRYPTION_KEY`
 
-手动复制示例：
+## 一键启动
 
-```bash
-cd backend
-cp .env.example .env
-```
+### 普通用户 / 发布模式
 
-Windows PowerShell 可以用：
-
-```powershell
-Copy-Item .env.example .env
-```
-
-### 2. 生成加密密钥
-
-这个项目会把模型提供商的 API Key 加密后存储，所以 `backend/.env` 里的 `ELENCHUS_ENCRYPTION_KEY` 不能为空。
-
-运行下面这条命令生成一串密钥：
-
-```bash
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
-
-把输出结果复制到 `backend/.env` 中：
-
-```env
-ELENCHUS_ENCRYPTION_KEY=这里替换成你刚生成的整串内容
-```
-
-### 3. 哪些配置一定要填，哪些可以先不填
-
-第一次启动时，真正必须处理的通常只有这一项：
-
-- `ELENCHUS_ENCRYPTION_KEY`
-
-下面这些可以先保持默认：
-
-- `DATABASE_URL`
-- `HOST`
-- `PORT`
-- `SEARXNG_BASE_URL`
-- `TAVILY_API_KEY`
-
-说明：
-
-- LLM 的 `API Key` 不是写在 `.env` 里，而是启动后在网页界面的“模型配置”里填写
-- 搜索默认可用 `DuckDuckGo`，所以不配置 `SearXNG` 和 `Tavily` 也能先跑起来
-
-## 最推荐的启动方式：一键启动
+前提：维护者已经执行过一次前端构建，目录里存在 `frontend/dist/index.html`。
 
 ### Windows
 
-最简单的方式：
+```powershell
+start-release.bat
+```
+
+或者：
+
+```powershell
+.\start-release.ps1
+```
+
+### macOS / Linux
+
+先给执行权限：
+
+```bash
+chmod +x ./start-release.sh
+```
+
+再启动：
+
+```bash
+./start-release.sh
+```
+
+默认地址：
+
+- 应用首页：`http://localhost:8001`
+- 后端 Swagger：`http://localhost:8001/docs`
+- 后端健康检查：`http://localhost:8001/health`
+
+### 开发模式
+
+### Windows
 
 ```powershell
 start.bat
 ```
 
-如果你想直接运行 PowerShell 脚本：
+或者：
 
 ```powershell
 .\start.ps1
 ```
 
-如果 PowerShell 提示脚本执行被禁止，可以这样运行：
+如果 PowerShell 拦脚本：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\start.ps1
@@ -119,38 +119,61 @@ powershell -ExecutionPolicy Bypass -File .\start.ps1
 
 ### macOS / Linux
 
-先给脚本执行权限：
+先给执行权限：
 
 ```bash
 chmod +x ./start.sh
 ```
 
-然后运行：
+再启动：
 
 ```bash
 ./start.sh
 ```
 
-## 一键启动脚本会帮你做什么
+## 启动脚本会自动做什么
 
-启动脚本会自动：
+### 发布模式 `start-release.*`
 
-- 检查 Python、Node.js、npm、pip 是否存在
-- 创建 `backend/venv` Python 虚拟环境
-- 安装后端依赖和前端依赖
-- 如果 `backend/.env` 不存在，就从示例文件复制一份
+- 检查 Python
+- 检查 `frontend/dist/index.html` 是否存在
+- 创建 `backend/venv`
+- 安装后端依赖
+- 如果 `backend/.env` 不存在，就从 `backend/.env.example` 复制一份
+- 首次后端启动时自动生成本地加密密钥
+- 启动 FastAPI，并直接托管前端构建产物
+
+### 开发模式 `start.*`
+
+- 检查 Python / pip / Node.js / npm
+- 创建 `backend/venv`
+- 安装后端依赖
+- 安装前端依赖
+- 如果 `backend/.env` 不存在，就从 `backend/.env.example` 复制一份
+- 首次后端启动时自动生成本地加密密钥
 - 启动后端服务
 - 启动前端开发服务器
-- 把前端代理需要的端口写入 `frontend/.env`
-- 自动打开浏览器
+- 自动写入 `frontend/.env` 的后端端口
 
-启动成功后，通常可以访问：
+默认地址：
 
-- 前端界面：`http://localhost:5173`
-- 后端接口文档：`http://localhost:8001/docs`
+- 前端：`http://localhost:5173`
+- 后端 Swagger：`http://localhost:8001/docs`
 - 后端健康检查：`http://localhost:8001/health`
 
-## 启动脚本的常用参数
+## 启动脚本常用参数
+
+### 发布模式
+
+```powershell
+.\start-release.ps1 -SkipInstall
+.\start-release.ps1 -Port 8010
+```
+
+```bash
+./start-release.sh --skip-install
+./start-release.sh --port=8010
+```
 
 ### Windows PowerShell
 
@@ -168,279 +191,169 @@ chmod +x ./start.sh
 ./start.sh --skip-install
 ```
 
-这些参数分别表示：
+## 第一次启动后还要做什么
 
-- 只启动后端
-- 只启动前端
-- 跳过依赖安装，适合你已经装好依赖后的二次启动
+打开网页后：
 
-## 启动后第一次怎么用
-
-### 1. 打开前端页面
-
-浏览器访问：
-
-```text
-http://localhost:5173
-```
-
-### 2. 先配置模型提供商
-
-进入网页后：
-
-1. 打开左侧设置
-2. 找到“模型配置”
-3. 新增一个提供商配置
-4. 填入你的 API Key
+1. 进入设置
+2. 打开“模型配置”
+3. 新增一个模型提供商
+4. 填入 API Key
 5. 选择模型
 6. 保存
+7. 再创建第一场辩论
 
-常见提供商包括：
+说明：
 
-- OpenAI
-- Anthropic
-- Gemini
-- DeepSeek
-- Groq
-- Ollama
+- LLM 的 API Key 不是写在 `.env` 里
+- 它们是在网页界面中配置的
+- 后端会把这些 Key 加密后存到本地数据库
 
-### 3. 创建一场辩论
+## `ELENCHUS_ENCRYPTION_KEY` 现在怎么处理
 
-配置好模型后：
+现在的策略是：
 
-1. 点击新建辩论
-2. 输入辩题
-3. 选择参与角色或保持默认
-4. 点击开始
+- 保留加密
+- 首次启动自动生成本地密钥
+- 自动写回 `backend/.env`
 
-## 如果你只想“先把项目跑起来看看”
+这样做的好处是：
 
-你可以先完成下面两步：
-
-1. 配好 `ELENCHUS_ENCRYPTION_KEY`
-2. 运行启动脚本
-
-这样界面和后端都能起来。
-
-但如果你想让 AI 真的开始辩论，你还需要在网页里配置至少一个可用的模型提供商 API Key。
+- 用户不需要再自己生成 Fernet key
+- 本地数据库里的模型 API Key 仍不是明文
+- 比之前少一步手工配置
 
 ## 手动启动方式
 
-如果你不想用一键脚本，也可以手动分别启动前后端。
+### 后端
 
-### 启动后端
-
-#### Windows PowerShell
+Windows PowerShell：
 
 ```powershell
 cd backend
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-Copy-Item .env.example .env
-```
-
-然后编辑 `backend/.env`，填好：
-
-```env
-ELENCHUS_ENCRYPTION_KEY=你生成的密钥
-```
-
-最后启动后端：
-
-```powershell
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
-#### macOS / Linux
+macOS / Linux：
 
 ```bash
 cd backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
-```
-
-然后编辑 `backend/.env`，填好：
-
-```env
-ELENCHUS_ENCRYPTION_KEY=你生成的密钥
-```
-
-最后启动后端：
-
-```bash
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 ```
-
-### 启动前端
-
-前端依赖后端端口。默认情况下，后端是 `8001`，所以前端需要知道这个端口。
-
-进入前端目录：
-
-```bash
-cd frontend
-npm install
-```
-
-创建或修改 `frontend/.env`：
-
-```env
-VITE_BACKEND_PORT=8001
-```
-
-然后启动前端：
-
-```bash
-npm run dev
-```
-
-打开：
-
-```text
-http://localhost:5173
-```
-
-## 另一种开发启动方式
-
-如果你已经手动准备好了：
-
-- `backend/venv`
-- `backend/.env`
-- `frontend/node_modules`
-- 根目录 `node_modules`
-
-那么在 Windows 开发环境下，也可以直接在项目根目录运行：
-
-```bash
-npm install
-npm run dev
-```
-
-说明：
-
-- 根目录 `npm run dev` 主要适合 Windows，因为当前根目录脚本默认使用的是 Windows 风格的虚拟环境路径
-- macOS / Linux 更推荐继续使用 `./start.sh`，或者按上面的“手动启动方式”分别启动前后端
-
-## 常用命令
-
-### 根目录（Windows 更适合）
-
-```bash
-npm run dev
-```
-
-同时启动前后端。
 
 ### 前端
 
 ```bash
 cd frontend
-npm run dev
-npm run build
-npm run test:run
+npm install
 ```
 
-### 后端
-
-```bash
-cd backend
-pytest
-```
-
-如果你不想让 pytest 生成缓存目录，可以用：
-
-```bash
-pytest -p no:cacheprovider
-```
-
-## 常见问题
-
-### 1. 打开设置时提示加密密钥相关错误
-
-大概率是 `backend/.env` 里的 `ELENCHUS_ENCRYPTION_KEY` 没填，或者填的是无效值。
-
-重新生成一条：
-
-```bash
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
-
-然后替换 `backend/.env` 中的值，再重启后端。
-
-### 2. 前端页面打开了，但无法真正开始辩论
-
-这通常表示：
-
-- 你还没有在网页里配置模型提供商
-- 或者 API Key 无效
-- 或者选中的模型名不对
-
-先去“模型配置”里新增一个可用配置，再重新创建辩论。
-
-### 3. 前端连不上后端
-
-先检查后端是否真的启动了：
-
-```text
-http://localhost:8001/health
-```
-
-如果后端不是 `8001` 端口，请确认 `frontend/.env` 里的：
+写入：
 
 ```env
-VITE_BACKEND_PORT=你的后端端口
+VITE_BACKEND_PORT=8001
 ```
 
-### 4. PowerShell 不让执行脚本
+启动：
 
-用这个命令启动：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\start.ps1
+```bash
+npm run dev
 ```
 
-### 5. 搜索一定要配置吗
+## 当前最常见的两个问题
 
-不一定。
+### 1. 为什么还是需要 Python / Node.js / npm
 
-默认搜索使用 `DuckDuckGo`，通常可以直接用。
+如果你跑的是开发模式，当前仓库默认跑的是：
 
-只有在你想接入自己的搜索服务时，才需要额外配置：
+- FastAPI 后端开发服务
+- Vite 前端开发服务
 
-- `SEARXNG_BASE_URL`
-- `TAVILY_API_KEY`
+这对开发者很方便，但对普通用户不够友好。
 
-## 项目结构概览
+如果你跑的是发布模式：
 
-```text
-Elenchus/
-├─ backend/                 后端 FastAPI + LangGraph
-├─ frontend/                前端 React + Vite
-├─ docs/                    项目文档
-├─ start.bat                Windows 一键启动
-├─ start.ps1                Windows PowerShell 一键启动
-├─ start.sh                 macOS / Linux 一键启动
-└─ README.md                你现在正在看的文件
+- 用户侧只需要 Python
+- Node.js / npm 只在维护者构建 `frontend/dist` 时需要
+
+### 2. 既然只在本地运行，为什么还保留加密
+
+因为被加密的不是整个数据库，而是模型提供商 API Key。
+
+本地运行时这不是强安全方案，但仍然比明文存储更稳妥一些。现在我们已经把“手工配置密钥”的负担去掉了，所以保留加密的成本小了很多。
+
+## 维护者如何制作普通用户可用的发布包
+
+先在开发机执行一次：
+
+```bash
+npm --prefix frontend run build
 ```
+
+如果你想本地直接产出轻量发布包，可以继续执行：
+
+```bash
+python scripts/package_lightweight_release.py --platform windows --version v1.0.0
+python scripts/package_lightweight_release.py --platform unix --version v1.0.0
+```
+
+然后把这些内容一起发给普通用户：
+
+- `backend/`
+- `frontend/dist/`
+- `start-release.bat`
+- `start-release.ps1`
+- `start-release.sh`
+
+这样普通用户运行时就不需要安装 Node.js / npm 了。
+
+## GitHub Actions 轻量发布
+
+仓库现在包含工作流：
+
+- `.github/workflows/build-lightweight-release.yml`
+
+它会做这些事：
+
+- 安装前端依赖
+- 构建 `frontend/dist`
+- 调用 `scripts/package_lightweight_release.py`
+- 生成 Windows 轻量包 `7z`
+- 生成 Unix 轻量包 `7z`
+- 为每个包生成 `.sha256` 校验文件
+- 在 tag 为 `v*` 时自动上传到 GitHub Release
+- 在 GitHub Actions 页面手动触发时，也可以直接创建并发布 Release
+
+触发方式：
+
+- 手动触发 `workflow_dispatch`
+- 推送 tag，例如 `v1.0.0`
+
+手动触发时可填写：
+
+- `release_version`：发行版本号，例如 `v1.0.0`
+- `release_title`：发行版标题，留空时自动生成
+- `release_notes`：自定义发行说明，支持 Markdown
+- `prerelease`：是否标记为预发布版本
+
+本地手动打包 `7z` 时，需要先确保命令行里的 `7z` 可用。
+
+## 下一步如果要继续降低用户启动门槛，最推荐做什么
+
+优先级建议：
+
+1. 继续做 PyInstaller / Nuitka 打包，把 Python 也一起带上
+2. 给 Windows 做安装器或便携版压缩包
+3. 再考虑 Tauri 桌面壳，做真正的本地桌面应用
 
 ## 文档入口
 
-- 总文档：[docs/README.md](./docs/README.md)
-- 后端说明：[backend/README.md](./backend/README.md)
-- 前端说明：[frontend/README.md](./frontend/README.md)
-- UI 设计文档：[docs/UI概念设计/README.md](./docs/UI概念设计/README.md)
-
-## 给第一次接手这个项目的人一句话
-
-最稳的流程就是：
-
-1. 装好 Python 和 Node.js
-2. 生成 `ELENCHUS_ENCRYPTION_KEY`
-3. 写进 `backend/.env`
-4. 运行 `start.bat` 或 `./start.sh`
-5. 打开 `http://localhost:5173`
-6. 在网页里先配置模型 API Key
-7. 再开始第一场辩论
+- 后端文档：[backend/README.md](./backend/README.md)
+- 前端文档：[frontend/README.md](./frontend/README.md)
+- 总文档索引：[docs/README.md](./docs/README.md)
