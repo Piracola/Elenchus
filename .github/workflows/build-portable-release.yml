@@ -1,12 +1,12 @@
-name: Build Lightweight Release
+name: Build Portable EXE Release
 
 on:
   workflow_dispatch:
     inputs:
       release_version:
-        description: "要发布的版本号或标签，例如 v1.0.0"
+        description: "要发布的版本号或标签，例如 v2.0.1"
         required: true
-        default: "v1.0.0"
+        default: "v2.0.1"
       release_title:
         description: "发行版标题；留空时自动使用 Elenchus <版本号>"
         required: false
@@ -29,20 +29,13 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.platform }} package
-    runs-on: ${{ matrix.os }}
+    name: Build Windows Portable EXE
+    runs-on: windows-latest
     outputs:
       version: ${{ steps.meta.outputs.version }}
       release_title: ${{ steps.meta.outputs.release_title }}
       prerelease: ${{ steps.meta.outputs.prerelease }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            platform: windows
-          - os: ubuntu-latest
-            platform: unix
+      artifact: ${{ steps.meta.outputs.artifact }}
 
     steps:
       - name: Check out source
@@ -82,17 +75,31 @@ jobs:
             release_title="Elenchus ${version}"
           fi
 
-          artifact="elenchus-lightweight-${version}-${{ matrix.platform }}.zip"
+          artifact="elenchus-portable-${version}-windows.zip"
 
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "release_title=${release_title}" >> "$GITHUB_OUTPUT"
           echo "prerelease=${prerelease}" >> "$GITHUB_OUTPUT"
           echo "artifact=${artifact}" >> "$GITHUB_OUTPUT"
 
-      - name: Run local release build pipeline
-        run: python scripts/build_local_release.py --platform ${{ matrix.platform }} --version ${{ steps.meta.outputs.version }}
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
 
-      - name: Upload artifact
+      - name: Build frontend
+        run: npm --prefix frontend run build
+
+      - name: Install backend build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt pyinstaller
+
+      - name: Smoke test backend startup
+        run: python scripts/smoke_test_release_backend.py
+
+      - name: Build portable EXE release
+        run: python scripts/build_pyinstaller_release.py --version ${{ steps.meta.outputs.version }}
+
+      - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.meta.outputs.artifact }}
@@ -111,7 +118,7 @@ jobs:
       - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: elenchus-lightweight-*
+          pattern: elenchus-portable-*
           path: dist/releases
           merge-multiple: true
 

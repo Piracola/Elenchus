@@ -9,7 +9,7 @@ import asyncio
 import logging
 from typing import Literal
 
-from app.config import get_settings
+from app.config import get_settings, persist_search_provider
 from app.search.base import SearchProvider, SearchResult
 from app.search.duckduckgo import DuckDuckGoProvider
 from app.search.searxng import SearXNGProvider
@@ -109,6 +109,10 @@ class SearchProviderFactory:
             return False
 
         self._current_provider = provider
+        try:
+            persist_search_provider(provider)
+        except Exception as exc:
+            logger.warning("Failed to persist search provider '%s': %s", provider, exc)
         logger.info("Search provider switched to: %s", provider)
         return True
 

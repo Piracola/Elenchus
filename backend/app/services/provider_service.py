@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_session_factory
 from app.db.models import ProviderRecord
 from app.models.schemas import ModelConfigCreate, ModelConfigUpdate, ModelConfigResponse
+from app.runtime_paths import get_runtime_paths
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ _ENCRYPTION_PLACEHOLDER = "replace-with-a-generated-key"
 
 
 def _backend_env_path() -> Path:
-    return Path(__file__).resolve().parents[2] / ".env"
+    return get_runtime_paths().env_file
 
 
 def _normalize_key(candidate: object | None) -> str:

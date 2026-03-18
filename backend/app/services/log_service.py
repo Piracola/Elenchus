@@ -10,14 +10,13 @@ import logging
 import sys
 from datetime import datetime
 from enum import IntEnum
-from pathlib import Path
 from logging.handlers import TimedRotatingFileHandler
+from pathlib import Path
 from typing import Optional
 
 from pydantic import BaseModel
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-_LOG_CONFIG_FILE = _PROJECT_ROOT / "data" / "log_config.json"
+from app.runtime_paths import get_runtime_paths
 
 
 class LogLevel(IntEnum):
@@ -73,9 +72,10 @@ class LogManager:
         return cls._instance
 
     def _load_persisted_level(self) -> LogLevel:
+        log_config_file = get_runtime_paths().log_config_file
         try:
-            if _LOG_CONFIG_FILE.exists():
-                with open(_LOG_CONFIG_FILE, "r", encoding="utf-8") as f:
+            if log_config_file.exists():
+                with open(log_config_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     level_str = data.get("level", "INFO")
                     return LogLevel.from_string(level_str)
@@ -84,9 +84,10 @@ class LogManager:
         return LogLevel.INFO
 
     def _persist_level(self, level: LogLevel) -> None:
+        log_config_file = get_runtime_paths().log_config_file
         try:
-            _LOG_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-            with open(_LOG_CONFIG_FILE, "w", encoding="utf-8") as f:
+            log_config_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_config_file, "w", encoding="utf-8") as f:
                 json.dump({"level": level.to_string()}, f)
         except OSError:
             pass
@@ -99,7 +100,12 @@ class LogManager:
     ) -> None:
         persisted_level = self._load_persisted_level()
         self._current_level = persisted_level
-        self._log_dir = _PROJECT_ROOT / log_dir
+        runtime_paths = get_runtime_paths()
+        self._log_dir = (
+            runtime_paths.logs_dir
+            if log_dir == "logs"
+            else runtime_paths.runtime_root / log_dir
+        )
 
         root_logger = logging.getLogger()
         root_logger.setLevel(self._current_level.value)

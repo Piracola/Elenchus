@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
 
 
 settings = get_settings()
-frontend_dist_dir = settings.project_root.parent / "frontend" / "dist"
+frontend_dist_dir = settings.frontend_dist_dir
 frontend_index_file = frontend_dist_dir / "index.html"
 frontend_reserved_roots = {"api", "docs", "redoc", "openapi.json", "health"}
 

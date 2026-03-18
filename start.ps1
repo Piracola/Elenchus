@@ -43,6 +43,8 @@ $BackendDir = Join-Path $ScriptDir "backend"
 $FrontendDir = Join-Path $ScriptDir "frontend"
 $VenvDir = Join-Path $BackendDir "venv"
 $RootDir = $ScriptDir
+$RuntimeDir = Join-Path $RootDir "runtime"
+$RuntimeBackendDir = Join-Path $RuntimeDir "backend"
 
 Write-Host ""
 Write-Host $CYAN"========================================"$RESET
@@ -135,18 +137,21 @@ if (-not $SkipInstall) {
     Print-Info "Skipping dependency installation"
 }
 
-$EnvFile = Join-Path $BackendDir ".env"
+$EnvFile = Join-Path $RuntimeBackendDir ".env"
 $EnvExample = Join-Path $BackendDir ".env.example"
+if (-not (Test-Path $RuntimeBackendDir)) {
+    New-Item -ItemType Directory -Path $RuntimeBackendDir -Force | Out-Null
+}
 if (-not (Test-Path $EnvFile)) {
     if (Test-Path $EnvExample) {
-        Print-Info "Creating .env config file..."
+        Print-Info "Creating runtime .env config file..."
         Copy-Item $EnvExample $EnvFile
-        Print-OK ".env file created"
+        Print-OK "runtime .env file created"
         Print-Info "A local encryption key will be generated automatically on first backend start"
         Print-Warn "Model provider API Keys are configured later in the web UI"
     }
 } else {
-    Print-OK ".env config file already exists"
+    Print-OK "runtime .env config file already exists"
 }
 
 Pop-Location

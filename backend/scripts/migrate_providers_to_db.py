@@ -22,14 +22,16 @@ from cryptography.fernet import Fernet
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.config import get_settings
 from app.db.database import get_session_factory, init_db
 from app.db.models import ProviderRecord
+from app.runtime_paths import get_runtime_paths
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-PROVIDERS_FILE = get_settings().project_root / "data" / "providers.json"
+_RUNTIME_PATHS = get_runtime_paths()
+PROVIDERS_FILE = _RUNTIME_PATHS.runtime_data_dir / "providers.json"
+LEGACY_PROVIDERS_FILE = _RUNTIME_PATHS.backend_bundle_dir / "data" / "providers.json"
 
 
 def _get_encryption_key() -> bytes:
@@ -69,14 +71,16 @@ async def migrate_providers():
     await init_db()
     logger.info("Database initialized.")
 
+    providers_file = PROVIDERS_FILE if PROVIDERS_FILE.exists() else LEGACY_PROVIDERS_FILE
+
     # Check if JSON file exists
-    if not PROVIDERS_FILE.exists():
+    if not providers_file.exists():
         logger.info(f"No providers.json file found at {PROVIDERS_FILE}. Nothing to migrate.")
         return
 
     # Read JSON data
     try:
-        with open(PROVIDERS_FILE, "r", encoding="utf-8") as f:
+        with open(providers_file, "r", encoding="utf-8") as f:
             providers_data = json.load(f)
     except (json.JSONDecodeError, FileNotFoundError) as e:
         logger.error(f"Failed to read providers.json: {e}")
@@ -135,9 +139,9 @@ async def migrate_providers():
         logger.info(f"Successfully migrated {migrated_count} provider(s) to database.")
 
     # Backup original JSON file
-    backup_path = PROVIDERS_FILE.with_suffix(".json.bak")
+    backup_path = providers_file.with_suffix(".json.bak")
     if not backup_path.exists():
-        shutil.copy2(PROVIDERS_FILE, backup_path)
+        shutil.copy2(providers_file, backup_path)
         logger.info(f"Original file backed up to: {backup_path}")
     else:
         logger.info(f"Backup already exists at: {backup_path}")
