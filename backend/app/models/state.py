@@ -39,3 +39,12 @@ class SharedKnowledgeEntry(TypedDict, total=False):
     query: str
     result: str
     timestamp: str | None
+    role: str
+    agent_name: str
+    content: str
+    source_timestamp: str
+    source_role: str
+    source_agent_name: str
+    source_excerpt: str
+    source_kind: str
+    source_turn: int

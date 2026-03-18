@@ -149,6 +149,10 @@ async def node_tool_executor(state: DebateGraphState) -> dict[str, Any]:
     last_message = messages[-1]
     results = []
     knowledge_updates = []
+    current_role = str(state.get("current_speaker", "") or "")
+    role_config = (state.get("agent_configs", {}) or {}).get(current_role, {})
+    current_agent_name = str(role_config.get("custom_name", current_role) or current_role)
+    current_turn = int(state.get("current_turn", 0) or 0)
     
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         skills = {s.name: s for s in get_all_skills()}
@@ -176,6 +180,10 @@ async def node_tool_executor(state: DebateGraphState) -> dict[str, Any]:
                         "type": "fact",
                         "query": tool_call["args"].get("query", ""),
                         "result": truncated_result,
+                        "source_kind": "tool_call",
+                        "source_role": current_role,
+                        "source_agent_name": current_agent_name,
+                        "source_turn": current_turn,
                     })
             
     return {

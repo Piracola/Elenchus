@@ -26,6 +26,9 @@ describe('memoryView utils', () => {
                 payload: {
                     memory_type: 'fact',
                     memory: { query: 'AI', result: 'Fact result' },
+                    source_kind: 'tool_call',
+                    source_role: 'proposer',
+                    source_agent_name: '正方',
                 },
             }),
             makeEvent({
@@ -35,6 +38,11 @@ describe('memoryView utils', () => {
                 payload: {
                     memory_type: 'memo',
                     memory: { agent_name: 'Proposer', content: 'Memo content' },
+                    source_kind: 'dialogue',
+                    source_timestamp: '2026-03-17T00:00:01+00:00',
+                    source_role: 'proposer',
+                    source_agent_name: '正方一辩',
+                    source_excerpt: '原始发言',
                 },
             }),
         ]);
@@ -43,6 +51,12 @@ describe('memoryView utils', () => {
         expect(items[0].title).toContain('事实');
         expect(items[1].title).toContain('备忘');
         expect(items[1].importance).toBeGreaterThanOrEqual(items[0].importance);
+        expect(items[0].sourceKey).toBe('context');
+        expect(items[1].sourceKey).toBe('tool');
+        expect(items[1].sourceLabel).toBe('工具检索');
+        expect(items[0].sourceSummary).toBe('来源检索：正方');
+        expect(items[1].sourceTimestamp).toBe('2026-03-17T00:00:01+00:00');
+        expect(items[1].sourceExcerpt).toBe('原始发言');
     });
 
     it('summarizes memory types', () => {
@@ -53,10 +67,21 @@ describe('memoryView utils', () => {
                 timestamp: '',
                 type: 'fact',
                 source: '',
+                sourceKey: 'runtime',
+                sourceLabel: '运行时写入',
                 title: '',
                 content: '',
                 importance: 80,
                 decay: 0.4,
+                agentName: '',
+                memoryIndex: 0,
+                totalMemories: 3,
+                sourceKind: 'runtime',
+                sourceTimestamp: '',
+                sourceRole: '',
+                sourceAgentName: '',
+                sourceExcerpt: '',
+                sourceSummary: '运行时写入',
             },
             {
                 eventId: '2',
@@ -64,10 +89,21 @@ describe('memoryView utils', () => {
                 timestamp: '',
                 type: 'memo',
                 source: '',
+                sourceKey: 'runtime',
+                sourceLabel: '运行时写入',
                 title: '',
                 content: '',
                 importance: 70,
                 decay: 0.5,
+                agentName: '',
+                memoryIndex: 1,
+                totalMemories: 3,
+                sourceKind: 'runtime',
+                sourceTimestamp: '',
+                sourceRole: '',
+                sourceAgentName: '',
+                sourceExcerpt: '',
+                sourceSummary: '运行时写入',
             },
             {
                 eventId: '3',
@@ -75,10 +111,21 @@ describe('memoryView utils', () => {
                 timestamp: '',
                 type: 'memo',
                 source: '',
+                sourceKey: 'runtime',
+                sourceLabel: '运行时写入',
                 title: '',
                 content: '',
                 importance: 75,
                 decay: 0.3,
+                agentName: '',
+                memoryIndex: 2,
+                totalMemories: 3,
+                sourceKind: 'runtime',
+                sourceTimestamp: '',
+                sourceRole: '',
+                sourceAgentName: '',
+                sourceExcerpt: '',
+                sourceSummary: '运行时写入',
             },
         ]);
 

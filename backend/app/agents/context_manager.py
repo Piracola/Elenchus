@@ -82,6 +82,11 @@ async def compress_context(
                     "role": role,
                     "agent_name": agent_name,
                     "content": summary,
+                    "source_kind": "dialogue",
+                    "source_timestamp": str(entry.get("timestamp", "") or ""),
+                    "source_role": role,
+                    "source_agent_name": agent_name,
+                    "source_excerpt": content[:180],
                 }
             )
             logger.info("Compressed message from %s into memo.", agent_name)

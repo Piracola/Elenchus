@@ -11,7 +11,7 @@ from app.runtime.engines import DebateEngine, LangGraphDebateEngine
 from app.runtime.session_repository import SessionRuntimeRepository
 
 if TYPE_CHECKING:
-    from app.runtime.event_gateway import EventStreamGateway
+    from app.runtime.bus import RuntimeBus
 
 logger = logging.getLogger(__name__)
 
@@ -52,12 +52,13 @@ class DebateOrchestrator:
         *,
         repository: SessionRuntimeRepository | None = None,
         engine: DebateEngine | None = None,
-        event_gateway: "EventStreamGateway" | None = None,
+        runtime_bus: "RuntimeBus" | None = None,
+        event_gateway: "RuntimeBus" | None = None,
         emit_event: EventEmitter = _noop_emit_event,
     ) -> None:
         self._repository = repository or SessionRuntimeRepository()
         self._engine = engine or LangGraphDebateEngine()
-        self._event_gateway = event_gateway
+        self._runtime_bus = runtime_bus or event_gateway
         self._emit_event = emit_event
 
     async def run_debate(
@@ -216,8 +217,8 @@ class DebateOrchestrator:
         source: str = "runtime.orchestrator",
         phase: str | None = None,
     ) -> None:
-        if self._event_gateway is not None:
-            await self._event_gateway.emit(
+        if self._runtime_bus is not None:
+            await self._runtime_bus.emit(
                 session_id=session_id,
                 event_type=event_type,
                 payload=payload,
@@ -417,6 +418,12 @@ class DebateOrchestrator:
                     "memory": item,
                     "memory_index": index,
                     "total_memories": total_count,
+                    "source_kind": item.get("source_kind"),
+                    "source_timestamp": item.get("source_timestamp"),
+                    "source_role": item.get("source_role") or item.get("role"),
+                    "source_agent_name": item.get("source_agent_name") or item.get("agent_name"),
+                    "source_excerpt": item.get("source_excerpt"),
+                    "source_turn": item.get("source_turn"),
                 },
                 source=source,
                 phase=phase,

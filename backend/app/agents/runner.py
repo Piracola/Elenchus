@@ -1,10 +1,10 @@
-"""Compatibility wrapper for the runtime orchestrator."""
+"""Compatibility wrapper for the simplified debate runner."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from app.runtime.orchestrator import DebateOrchestrator
+from app.runtime.runner import DebateRunner
 
 
 async def run_debate(
@@ -15,11 +15,11 @@ async def run_debate(
     agent_configs: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
-    Execute a debate using the default runtime orchestrator.
+    Execute a debate using the default runtime runner.
 
     Kept for backward compatibility with existing scripts and tests.
     """
-    orchestrator = DebateOrchestrator()
+    orchestrator = DebateRunner()
     return await orchestrator.run_debate(
         session_id=session_id,
         topic=topic,

@@ -88,4 +88,30 @@ describe('eventFocus', () => {
             system: false,
         });
     });
+
+    it('matches memory_write back to the original source row by source timestamp', () => {
+        const event = makeEvent({
+            type: 'memory_write',
+            source: 'runtime.node.manage_context',
+            payload: {
+                source_timestamp: '2026-03-17T01:00:00+00:00',
+                source_role: 'proposer',
+            },
+        });
+        const row = makeRow({
+            agent: {
+                role: 'proposer',
+                agent_name: '正方一辩',
+                content: '这是原始发言',
+                citations: [],
+                timestamp: '2026-03-17T01:00:00+00:00',
+            },
+        });
+
+        expect(resolveRowFocus(row, event)).toEqual({
+            agent: true,
+            judge: false,
+            system: false,
+        });
+    });
 });

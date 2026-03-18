@@ -10,19 +10,23 @@ from importlib import import_module
 from typing import Any
 
 __all__ = [
+    "DebateRunner",
     "DebateOrchestrator",
     "DebateRuntimeService",
     "SessionRuntimeRepository",
     "SessionStartResult",
+    "RuntimeBus",
     "EventStreamGateway",
     "RuntimeEvent",
 ]
 
 _EXPORTS: dict[str, tuple[str, str]] = {
+    "DebateRunner": ("app.runtime.runner", "DebateRunner"),
     "DebateOrchestrator": ("app.runtime.orchestrator", "DebateOrchestrator"),
     "DebateRuntimeService": ("app.runtime.service", "DebateRuntimeService"),
     "SessionStartResult": ("app.runtime.service", "SessionStartResult"),
     "SessionRuntimeRepository": ("app.runtime.session_repository", "SessionRuntimeRepository"),
+    "RuntimeBus": ("app.runtime.bus", "RuntimeBus"),
     "EventStreamGateway": ("app.runtime.event_gateway", "EventStreamGateway"),
     "RuntimeEvent": ("app.runtime.event_schema", "RuntimeEvent"),
 }
@@ -37,4 +41,3 @@ def __getattr__(name: str) -> Any:
     value = getattr(module, attr_name)
     globals()[name] = value
     return value
-

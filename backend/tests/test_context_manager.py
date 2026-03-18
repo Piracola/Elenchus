@@ -46,6 +46,10 @@ async def test_compress_context_only_summarizes_new_history(monkeypatch):
 
     assert compressed_count == 2
     assert [item["content"] for item in knowledge] == ["memo-1", "memo-2"]
+    assert knowledge[0]["source_kind"] == "dialogue"
+    assert knowledge[0]["source_role"] == "proposer"
+    assert knowledge[0]["source_agent_name"] == "A"
+    assert knowledge[0]["source_excerpt"] == "p1"
     assert [item["content"] for item in recent_entries] == ["p2", "o2"]
 
     knowledge_again, recent_again, compressed_count_again = await context_manager.compress_context(
@@ -68,4 +72,5 @@ async def test_compress_context_only_summarizes_new_history(monkeypatch):
 
     assert compressed_count_grown == 3
     assert [item["content"] for item in knowledge_grown] == ["memo-1", "memo-2", "memo-3"]
+    assert knowledge_grown[2]["source_timestamp"] == ""
     assert [item["content"] for item in recent_grown] == ["o2", "p3"]

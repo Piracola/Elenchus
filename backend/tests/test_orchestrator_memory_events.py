@@ -72,7 +72,17 @@ class _FakeEngine:
             "last_executed_node": "manage_context",
             "shared_knowledge": [
                 {"type": "fact", "query": "AI", "result": "fact-result"},
-                {"type": "memo", "role": "proposer", "agent_name": "Proposer", "content": "memo-content"},
+                {
+                    "type": "memo",
+                    "role": "proposer",
+                    "agent_name": "Proposer",
+                    "content": "memo-content",
+                    "source_kind": "dialogue",
+                    "source_timestamp": "2026-03-18T00:00:00+00:00",
+                    "source_role": "proposer",
+                    "source_agent_name": "Proposer",
+                    "source_excerpt": "原始发言片段",
+                },
             ],
             "current_turn": 1,
             "dialogue_history": [],
@@ -111,3 +121,7 @@ async def test_orchestrator_emits_memory_write_events_once_per_new_item():
 
     assert memory_events[1]["payload"]["memory_type"] == "memo"
     assert memory_events[1]["source"] == "runtime.node.manage_context"
+    assert memory_events[1]["payload"]["source_kind"] == "dialogue"
+    assert memory_events[1]["payload"]["source_timestamp"] == "2026-03-18T00:00:00+00:00"
+    assert memory_events[1]["payload"]["source_role"] == "proposer"
+    assert memory_events[1]["payload"]["source_excerpt"] == "原始发言片段"

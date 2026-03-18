@@ -81,5 +81,36 @@ export function resolveRowFocus(row: DialogueRow, event: RuntimeEvent | null): R
         return EMPTY_FOCUS;
     }
 
+    if (event.type === 'memory_write') {
+        const sourceTimestamp = payloadString(event, 'source_timestamp');
+        const sourceRole = payloadString(event, 'source_role');
+        if (!sourceTimestamp) {
+            return EMPTY_FOCUS;
+        }
+
+        if (
+            row.agent?.timestamp === sourceTimestamp &&
+            (sourceRole ? row.agent.role === sourceRole : true)
+        ) {
+            return { agent: true, judge: false, system: false };
+        }
+
+        if (
+            row.judge?.timestamp === sourceTimestamp &&
+            (sourceRole ? row.judge.role === sourceRole : true)
+        ) {
+            return { agent: false, judge: true, system: false };
+        }
+
+        if (
+            row.system?.timestamp === sourceTimestamp &&
+            (sourceRole ? row.system.role === sourceRole : true)
+        ) {
+            return { agent: false, judge: false, system: true };
+        }
+
+        return EMPTY_FOCUS;
+    }
+
     return EMPTY_FOCUS;
 }

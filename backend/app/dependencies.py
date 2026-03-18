@@ -26,11 +26,10 @@ from typing import TYPE_CHECKING
 # Use TYPE_CHECKING to avoid circular imports at runtime
 if TYPE_CHECKING:
     from app.agents.llm_router import LLMRouter
-    from app.runtime.event_gateway import EventStreamGateway
+    from app.runtime.bus import RuntimeBus
     from app.runtime.service import DebateRuntimeService
     from app.search.factory import SearchProviderFactory
     from app.services.agent_config_service import AgentConfigService
-    from app.services.connection_hub import ConnectionHub
     from app.services.provider_service import ProviderService
     from app.services.intervention_manager import InterventionManager
 
@@ -81,11 +80,18 @@ def get_intervention_manager() -> "InterventionManager":
 
 
 @lru_cache()
-def get_connection_hub() -> "ConnectionHub":
-    """Get the shared websocket connection hub."""
-    from app.services.connection_hub import ConnectionHub
+def get_runtime_bus() -> "RuntimeBus":
+    """Get the shared runtime bus for websocket delivery and event sequencing."""
+    from app.runtime.bus import RuntimeBus
+    from app.runtime.session_repository import SessionRuntimeRepository
 
-    return ConnectionHub()
+    repository = SessionRuntimeRepository()
+    return RuntimeBus(repository=repository)
+
+
+def get_connection_hub() -> "RuntimeBus":
+    """Compatibility accessor for code that still asks for the connection hub."""
+    return get_runtime_bus()
 
 
 @lru_cache()
@@ -96,15 +102,9 @@ def get_agent_config_service() -> "AgentConfigService":
     return AgentConfigService()
 
 
-@lru_cache()
-def get_event_stream_gateway() -> "EventStreamGateway":
-    """Get the shared event stream gateway for normalized runtime events."""
-    from app.runtime.event_gateway import EventStreamGateway
-    from app.runtime.session_repository import SessionRuntimeRepository
-
-    connection_hub = get_connection_hub()
-    repository = SessionRuntimeRepository()
-    return EventStreamGateway(connection_hub.broadcast, repository=repository)
+def get_event_stream_gateway() -> "RuntimeBus":
+    """Compatibility accessor for code that still asks for the event gateway."""
+    return get_runtime_bus()
 
 
 @lru_cache()
@@ -114,12 +114,12 @@ def get_debate_runtime_service() -> "DebateRuntimeService":
 
     This owns long-running debate tasks so API transports stay thin.
     """
+    from app.runtime.runner import DebateRunner
     from app.runtime.service import DebateRuntimeService
-    from app.runtime.orchestrator import DebateOrchestrator
 
-    event_gateway = get_event_stream_gateway()
-    orchestrator = DebateOrchestrator(
-        event_gateway=event_gateway,
+    runtime_bus = get_runtime_bus()
+    orchestrator = DebateRunner(
+        runtime_bus=runtime_bus,
     )
 
     return DebateRuntimeService(orchestrator=orchestrator)
@@ -136,7 +136,6 @@ def clear_dependency_cache() -> None:
     get_llm_router.cache_clear()
     get_search_factory.cache_clear()
     get_intervention_manager.cache_clear()
-    get_connection_hub.cache_clear()
     get_agent_config_service.cache_clear()
-    get_event_stream_gateway.cache_clear()
+    get_runtime_bus.cache_clear()
     get_debate_runtime_service.cache_clear()

@@ -13,9 +13,7 @@ import { useSettingsStore, MESSAGE_WIDTH_VALUES } from '../stores/settingsStore'
 import type { DialogueEntry } from '../types';
 import MessageRow from './chat/MessageRow';
 import DebateControls from './chat/DebateControls';
-import LiveGraph from './chat/LiveGraph';
-import MemoryPanel from './chat/MemoryPanel';
-import ExecutionTimeline from './chat/ExecutionTimeline';
+import RuntimeInspector from './chat/RuntimeInspector';
 import StatusBanner from './chat/StatusBanner';
 import { groupDialogue } from '../utils/groupDialogue';
 import { resolveRowFocus } from '../utils/eventFocus';
@@ -40,6 +38,10 @@ export default function ChatPanel() {
     const [topOverlayHeight, setTopOverlayHeight] = useState(0);
     const [bottomOverlayHeight, setBottomOverlayHeight] = useState(0);
     const [exportingFormat, setExportingFormat] = useState<'markdown' | 'json' | null>(null);
+    const [isWideLayout, setIsWideLayout] = useState(() => {
+        if (typeof window === 'undefined') return true;
+        return window.innerWidth >= 1280;
+    });
 
     useEffect(() => {
         if (replayEnabled) return;
@@ -61,9 +63,7 @@ export default function ChatPanel() {
         window.addEventListener('resize', updateHeights);
 
         if (typeof ResizeObserver === 'undefined') {
-            return () => {
-                window.removeEventListener('resize', updateHeights);
-            };
+            return () => window.removeEventListener('resize', updateHeights);
         }
 
         const observer = new ResizeObserver(() => updateHeights());
@@ -79,6 +79,18 @@ export default function ChatPanel() {
     useEffect(() => {
         overlayHeightsRef.current = null;
     }, [currentSession?.id]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const updateLayout = () => {
+            setIsWideLayout(window.innerWidth >= 1280);
+        };
+
+        updateLayout();
+        window.addEventListener('resize', updateLayout);
+        return () => window.removeEventListener('resize', updateLayout);
+    }, []);
 
     useLayoutEffect(() => {
         const container = scrollRef.current;
@@ -155,6 +167,9 @@ export default function ChatPanel() {
     }, [focusedRuntimeEventId, rows]);
 
     const maxWidthValue = MESSAGE_WIDTH_VALUES[displaySettings.messageWidth];
+    const panelMaxWidth = isWideLayout
+        ? (displaySettings.messageWidth === 'full' ? '100%' : `calc(${maxWidthValue} + 392px)`)
+        : maxWidthValue;
 
     const handleExport = async (format: 'markdown' | 'json') => {
         if (!currentSession || exportingFormat) return;
@@ -195,7 +210,7 @@ export default function ChatPanel() {
                     flex: 1,
                     display: 'flex',
                     flexDirection: 'column',
-                    maxWidth: maxWidthValue,
+                    maxWidth: panelMaxWidth,
                     margin: '0 auto',
                     width: '100%',
                     padding: '0 16px',
@@ -264,6 +279,7 @@ export default function ChatPanel() {
                                 >
                                     {currentSession ? currentSession.topic : 'Elenchus 辩论场'}
                                 </h2>
+
                                 {currentSession && (
                                     <div
                                         style={{
@@ -300,6 +316,7 @@ export default function ChatPanel() {
                                             <FileText size={14} />
                                             {exportingFormat === 'markdown' ? '导出中...' : '导出 Markdown'}
                                         </motion.button>
+
                                         <motion.button
                                             whileHover={{ y: -1 }}
                                             whileTap={{ scale: 0.98 }}
@@ -326,6 +343,7 @@ export default function ChatPanel() {
                                             <FileJson size={14} />
                                             {exportingFormat === 'json' ? '导出中...' : '导出 JSON'}
                                         </motion.button>
+
                                         <span
                                             style={{
                                                 display: 'inline-flex',
@@ -357,60 +375,82 @@ export default function ChatPanel() {
                                     </div>
                                 )}
                             </motion.div>
+
                             <div style={{ pointerEvents: 'auto' }}>
                                 <StatusBanner />
                             </div>
-                        </div>
-
-                        <div
-                            style={{
-                                display: 'flex',
-                                flexWrap: 'wrap',
-                                alignItems: 'flex-start',
-                                gap: '8px',
-                                pointerEvents: 'auto',
-                            }}
-                        >
-                            <LiveGraph compact />
-                            <MemoryPanel compact />
-                            <ExecutionTimeline compact />
                         </div>
                     </div>
                 </div>
 
                 <div
-                    ref={scrollRef}
                     style={{
                         flex: '1 1 0',
                         minHeight: 0,
-                        overflowY: 'auto',
                         paddingTop: topOverlayHeight + 12,
-                        paddingRight: '4px',
                         paddingBottom: bottomOverlayHeight + 28,
-                        paddingLeft: '4px',
                         display: 'flex',
-                        flexDirection: 'column',
-                        scrollBehavior: 'smooth',
-                        gap: '10px',
+                        flexDirection: isWideLayout ? 'row' : 'column',
+                        gap: '14px',
                     }}
                 >
-                    {rows.map((row, idx) => {
-                        const agentKey = row.agent?.timestamp || `agent-${idx}`;
-                        const judgeKey = row.judge?.timestamp || `judge-${idx}`;
-                        const focusState = resolveRowFocus(row, focusedRuntimeEvent);
+                    {!isWideLayout && (
+                        <div style={{ flex: '0 0 auto', minWidth: 0 }}>
+                            <RuntimeInspector key="inline-inspector" />
+                        </div>
+                    )}
 
-                        return (
-                            <MessageRow
-                                key={`${agentKey}-${judgeKey}`}
-                                agentEntry={row.agent}
-                                judgeEntry={row.judge}
-                                systemEntry={row.system}
-                                highlightAgent={focusState.agent}
-                                highlightJudge={focusState.judge}
-                                highlightSystem={focusState.system}
-                            />
-                        );
-                    })}
+                    <div
+                        ref={scrollRef}
+                        style={{
+                            flex: '1 1 0',
+                            minWidth: 0,
+                            minHeight: 0,
+                            overflowY: 'auto',
+                            paddingRight: '4px',
+                            paddingLeft: '4px',
+                            paddingBottom: '4px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            scrollBehavior: 'smooth',
+                            gap: '10px',
+                        }}
+                    >
+                        {rows.map((row, idx) => {
+                            const agentKey = row.agent?.timestamp || `agent-${idx}`;
+                            const judgeKey = row.judge?.timestamp || `judge-${idx}`;
+                            const focusState = resolveRowFocus(row, focusedRuntimeEvent);
+
+                            return (
+                                <MessageRow
+                                    key={`${agentKey}-${judgeKey}`}
+                                    agentEntry={row.agent}
+                                    judgeEntry={row.judge}
+                                    systemEntry={row.system}
+                                    highlightAgent={focusState.agent}
+                                    highlightJudge={focusState.judge}
+                                    highlightSystem={focusState.system}
+                                />
+                            );
+                        })}
+                    </div>
+
+                    {isWideLayout && (
+                        <aside
+                            style={{
+                                flex: '0 0 360px',
+                                width: '360px',
+                                minWidth: '320px',
+                                maxWidth: '380px',
+                                minHeight: 0,
+                                overflowY: 'auto',
+                                paddingRight: '4px',
+                                paddingBottom: '4px',
+                            }}
+                        >
+                            <RuntimeInspector key="sidebar-inspector" defaultExpanded />
+                        </aside>
+                    )}
                 </div>
 
                 <div
