@@ -1,0 +1,166 @@
+name: Build Lightweight Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "要发布的版本号或标签，例如 v1.0.0"
+        required: true
+        default: "v1.0.0"
+      release_title:
+        description: "发行版标题；留空时自动使用 Elenchus <版本号>"
+        required: false
+        default: ""
+      release_notes:
+        description: "发行说明（Markdown）；留空时自动生成"
+        required: false
+        default: ""
+      prerelease:
+        description: "是否标记为预发布版本"
+        required: false
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }} package
+    runs-on: ${{ matrix.os }}
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      release_title: ${{ steps.meta.outputs.release_title }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+          - os: ubuntu-latest
+            platform: unix
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install 7z on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y p7zip-full
+
+      - name: Install 7z on Windows
+        if: runner.os == 'Windows'
+        run: choco install 7zip -y
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            version="${GITHUB_REF_NAME}"
+            release_title="Elenchus ${version}"
+            prerelease="false"
+          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            version="${{ github.event.inputs.release_version }}"
+            release_title="${{ github.event.inputs.release_title }}"
+            prerelease="${{ github.event.inputs.prerelease }}"
+          else
+            version="snapshot-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}"
+            release_title="Elenchus ${version}"
+            prerelease="false"
+          fi
+
+          if [[ -z "${release_title}" ]]; then
+            release_title="Elenchus ${version}"
+          fi
+
+          artifact="elenchus-lightweight-${version}-${{ matrix.platform }}.7z"
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "release_title=${release_title}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${prerelease}" >> "$GITHUB_OUTPUT"
+          echo "artifact=${artifact}" >> "$GITHUB_OUTPUT"
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Build frontend
+        run: npm --prefix frontend run build
+
+      - name: Package lightweight release
+        run: python scripts/package_lightweight_release.py --platform ${{ matrix.platform }} --version ${{ steps.meta.outputs.version }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.artifact }}
+          path: |
+            dist/releases/${{ steps.meta.outputs.artifact }}
+            dist/releases/${{ steps.meta.outputs.artifact }}.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: elenchus-lightweight-*
+          path: dist/releases
+          merge-multiple: true
+
+      - name: Write manual release notes
+        id: notes
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_notes != ''
+        shell: bash
+        env:
+          RELEASE_NOTES: ${{ github.event.inputs.release_notes }}
+        run: |
+          notes_path="dist/releases/release-notes.md"
+          printf '%s\n' "$RELEASE_NOTES" > "$notes_path"
+          echo "notes_path=${notes_path}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish assets to GitHub Release with manual notes
+        if: steps.notes.outputs.notes_path != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.build.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ needs.build.outputs.release_title }}
+          prerelease: ${{ needs.build.outputs.prerelease }}
+          body_path: ${{ steps.notes.outputs.notes_path }}
+          files: dist/releases/*
+          generate_release_notes: false
+
+      - name: Publish assets to GitHub Release with generated notes
+        if: steps.notes.outputs.notes_path == ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.build.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ needs.build.outputs.release_title }}
+          prerelease: ${{ needs.build.outputs.prerelease }}
+          files: dist/releases/*
+          generate_release_notes: true
