@@ -33,10 +33,12 @@ export default function ChatPanel() {
     const scrollRef = useRef<HTMLDivElement>(null);
     const topOverlayRef = useRef<HTMLDivElement>(null);
     const bottomOverlayRef = useRef<HTMLDivElement>(null);
+    const rightOverlayRef = useRef<HTMLDivElement>(null);
     const overlayHeightsRef = useRef<{ top: number; bottom: number } | null>(null);
 
     const [topOverlayHeight, setTopOverlayHeight] = useState(0);
     const [bottomOverlayHeight, setBottomOverlayHeight] = useState(0);
+    const [floatingInspectorSize, setFloatingInspectorSize] = useState({ width: 360, height: 520 });
     const [exportingFormat, setExportingFormat] = useState<'markdown' | 'json' | null>(null);
     const [isWideLayout, setIsWideLayout] = useState(() => {
         if (typeof window === 'undefined') return true;
@@ -91,6 +93,30 @@ export default function ChatPanel() {
         window.addEventListener('resize', updateLayout);
         return () => window.removeEventListener('resize', updateLayout);
     }, []);
+
+    useEffect(() => {
+        if (!isWideLayout) return;
+        const inspectorElement = rightOverlayRef.current;
+        if (!inspectorElement || typeof ResizeObserver === 'undefined') return;
+
+        const observer = new ResizeObserver((entries) => {
+            const entry = entries[0];
+            if (!entry) return;
+
+            const nextWidth = Math.round(entry.contentRect.width);
+            const nextHeight = Math.round(entry.contentRect.height);
+            if (nextWidth <= 0 || nextHeight <= 0) return;
+
+            setFloatingInspectorSize((prev) => (
+                prev.width === nextWidth && prev.height === nextHeight
+                    ? prev
+                    : { width: nextWidth, height: nextHeight }
+            ));
+        });
+
+        observer.observe(inspectorElement);
+        return () => observer.disconnect();
+    }, [isWideLayout]);
 
     useLayoutEffect(() => {
         const container = scrollRef.current;
@@ -170,6 +196,10 @@ export default function ChatPanel() {
     const panelMaxWidth = isWideLayout
         ? (displaySettings.messageWidth === 'full' ? '100%' : `calc(${maxWidthValue} + 392px)`)
         : maxWidthValue;
+    const floatingInspectorTop = topOverlayHeight + 12;
+    const floatingInspectorBottom = bottomOverlayHeight + 28;
+    const floatingInspectorMaxHeight = `calc(100% - ${floatingInspectorTop + floatingInspectorBottom}px)`;
+    const scrollPaddingRight = isWideLayout ? `${Math.max(12, floatingInspectorSize.width + 20)}px` : '4px';
 
     const handleExport = async (format: 'markdown' | 'json') => {
         if (!currentSession || exportingFormat) return;
@@ -390,7 +420,7 @@ export default function ChatPanel() {
                         paddingTop: topOverlayHeight + 12,
                         paddingBottom: bottomOverlayHeight + 28,
                         display: 'flex',
-                        flexDirection: isWideLayout ? 'row' : 'column',
+                        flexDirection: 'column',
                         gap: '14px',
                     }}
                 >
@@ -407,7 +437,7 @@ export default function ChatPanel() {
                             minWidth: 0,
                             minHeight: 0,
                             overflowY: 'auto',
-                            paddingRight: '4px',
+                            paddingRight: scrollPaddingRight,
                             paddingLeft: '4px',
                             paddingBottom: '4px',
                             display: 'flex',
@@ -434,24 +464,35 @@ export default function ChatPanel() {
                             );
                         })}
                     </div>
+                </div>
 
-                    {isWideLayout && (
-                        <aside
+                {isWideLayout && (
+                    <div
+                        style={{
+                            position: 'absolute',
+                            top: floatingInspectorTop,
+                            right: 16,
+                            zIndex: 26,
+                        }}
+                    >
+                        <div
+                            ref={rightOverlayRef}
                             style={{
-                                flex: '0 0 360px',
-                                width: '360px',
-                                minWidth: '320px',
-                                maxWidth: '380px',
-                                minHeight: 0,
-                                overflowY: 'auto',
-                                paddingRight: '4px',
-                                paddingBottom: '4px',
+                                width: `${floatingInspectorSize.width}px`,
+                                height: `${floatingInspectorSize.height}px`,
+                                minWidth: '300px',
+                                minHeight: '260px',
+                                maxWidth: 'calc(100% - 32px)',
+                                maxHeight: floatingInspectorMaxHeight,
+                                resize: 'both',
+                                overflow: 'hidden',
+                                boxSizing: 'border-box',
                             }}
                         >
-                            <RuntimeInspector key="sidebar-inspector" defaultExpanded />
-                        </aside>
-                    )}
-                </div>
+                            <RuntimeInspector key="floating-inspector" defaultExpanded fillHeight />
+                        </div>
+                    </div>
+                )}
 
                 <div
                     ref={bottomOverlayRef}

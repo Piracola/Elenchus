@@ -21,6 +21,7 @@ type TimelineFilter = 'all' | 'status' | 'speech' | 'judge' | 'tool' | 'memory' 
 type ExecutionTimelineProps = {
     compact?: boolean;
     embedded?: boolean;
+    fillHeight?: boolean;
 };
 
 const FILTERS: TimelineFilter[] = ['all', 'status', 'speech', 'judge', 'tool', 'memory', 'system', 'error'];
@@ -87,6 +88,7 @@ function summarizeEvent(event: RuntimeEvent): string {
 export default function ExecutionTimeline({
     compact = false,
     embedded = false,
+    fillHeight = false,
 }: ExecutionTimelineProps) {
     const {
         runtimeEvents,
@@ -338,15 +340,15 @@ export default function ExecutionTimeline({
                 borderRadius: embedded ? 0 : 'var(--radius-lg)',
                 background: embedded ? 'transparent' : 'var(--bg-secondary)',
                 display: 'grid',
-                gridTemplateColumns: '1.2fr 1fr',
+                gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr)',
                 overflow: 'hidden',
                 boxShadow: embedded ? 'none' : '0 14px 34px rgba(15, 23, 42, 0.12)',
                 backdropFilter: embedded ? undefined : 'blur(14px)',
-                minHeight: embedded ? 360 : undefined,
-                height: embedded ? 360 : undefined,
+                minHeight: embedded ? 0 : 360,
+                height: embedded ? (fillHeight ? '100%' : 360) : 360,
             }}
         >
-            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
                 <div
                     style={{
                         display: 'flex',
@@ -396,7 +398,7 @@ export default function ExecutionTimeline({
                     />
                 </div>
 
-                <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
+                <div ref={listRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px' }}>
                     {canLoadOlder && (
                         <button
                             onClick={() => {
@@ -491,6 +493,7 @@ export default function ExecutionTimeline({
                     display: 'flex',
                     flexDirection: 'column',
                     minWidth: 0,
+                    minHeight: 0,
                     background: 'var(--bg-card)',
                 }}
             >
@@ -613,6 +616,7 @@ export default function ExecutionTimeline({
                 <div
                     style={{
                         flex: 1,
+                        minHeight: 0,
                         overflowY: 'auto',
                         padding: '10px',
                         fontSize: '11px',
@@ -670,6 +674,7 @@ export default function ExecutionTimeline({
                 flex: compact && !expanded && !embedded ? '0 0 auto' : '1 1 100%',
                 minWidth: compact && !expanded && !embedded ? 'auto' : 0,
                 maxWidth: '100%',
+                ...(embedded && fillHeight ? { height: '100%', minHeight: 0 } : {}),
             }}
         >
             {!embedded && (

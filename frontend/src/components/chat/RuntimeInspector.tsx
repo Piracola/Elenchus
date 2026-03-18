@@ -28,8 +28,10 @@ function tabAccent(tab: InspectorTab): string {
 
 export default function RuntimeInspector({
     defaultExpanded = false,
+    fillHeight = false,
 }: {
     defaultExpanded?: boolean;
+    fillHeight?: boolean;
 }) {
     const { runtimeEvents, visibleRuntimeEvents, replayEnabled, currentNode } = useDebateStore();
     const [expanded, setExpanded] = useState(defaultExpanded);
@@ -52,10 +54,19 @@ export default function RuntimeInspector({
     }, [activeTab, currentNode, memoryCount, replayEnabled, runtimeEvents.length]);
 
     return (
-        <div style={{ width: '100%' }}>
+        <div
+            style={{
+                width: '100%',
+                height: fillHeight ? '100%' : 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                minHeight: 0,
+            }}
+        >
             <button
                 onClick={() => setExpanded((prev) => !prev)}
                 style={{
+                    flex: '0 0 auto',
                     width: '100%',
                     border: '1px solid var(--border-subtle)',
                     borderRadius: 'var(--radius-lg)',
@@ -69,7 +80,6 @@ export default function RuntimeInspector({
                     cursor: 'pointer',
                     boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)',
                     backdropFilter: 'blur(14px)',
-                    overflow: 'hidden',
                 }}
             >
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
@@ -107,9 +117,9 @@ export default function RuntimeInspector({
             <AnimatePresence initial={false}>
                 {expanded && (
                     <motion.div
-                        initial={{ opacity: 0, y: -8, height: 0 }}
-                        animate={{ opacity: 1, y: 0, height: 'auto' }}
-                        exit={{ opacity: 0, y: -6, height: 0 }}
+                        initial={fillHeight ? { opacity: 0, y: -8 } : { opacity: 0, y: -8, height: 0 }}
+                        animate={fillHeight ? { opacity: 1, y: 0 } : { opacity: 1, y: 0, height: 'auto' }}
+                        exit={fillHeight ? { opacity: 0, y: -6 } : { opacity: 0, y: -6, height: 0 }}
                         transition={{ duration: 0.22 }}
                         style={{
                             marginTop: '8px',
@@ -119,10 +129,15 @@ export default function RuntimeInspector({
                             overflow: 'hidden',
                             boxShadow: '0 14px 34px rgba(15, 23, 42, 0.12)',
                             backdropFilter: 'blur(14px)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            minHeight: 0,
+                            ...(fillHeight ? { flex: 1 } : {}),
                         }}
                     >
                         <div
                             style={{
+                                flex: '0 0 auto',
                                 padding: '10px',
                                 borderBottom: '1px solid var(--border-subtle)',
                                 display: 'flex',
@@ -182,14 +197,19 @@ export default function RuntimeInspector({
                         <div
                             style={{
                                 padding: '10px',
-                                maxHeight: '480px',
-                                overflowY: 'auto',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                flex: 1,
+                                minHeight: 0,
+                                overflow: 'hidden',
                                 background: 'linear-gradient(180deg, rgba(248, 250, 252, 0.9), rgba(248, 250, 252, 0.7))',
                             }}
                         >
-                            {activeTab === 'timeline' && <ExecutionTimeline embedded />}
-                            {activeTab === 'graph' && <LiveGraph embedded />}
-                            {activeTab === 'memory' && <MemoryPanel embedded />}
+                            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                                {activeTab === 'timeline' && <ExecutionTimeline embedded fillHeight={fillHeight} />}
+                                {activeTab === 'graph' && <LiveGraph embedded />}
+                                {activeTab === 'memory' && <MemoryPanel embedded />}
+                            </div>
                         </div>
                     </motion.div>
                 )}
