@@ -11,14 +11,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.api.sessions import router as sessions_router
-from app.api.websocket import router as ws_router, manager as ws_manager
+from app.api.websocket import router as ws_router
 from app.api.models import router as models_router
 from app.api.log import router as log_router
 from app.api.search import router as search_router
 from app.db.database import init_db
 from app.dependencies import get_search_factory
 from app.services.log_service import setup_logging, get_logger
-from app.agents.events import set_broadcaster
 
 setup_logging(level="DEBUG" if get_settings().env.debug else "INFO", log_dir="logs")
 logger = get_logger(__name__)
@@ -29,8 +28,7 @@ async def lifespan(app: FastAPI):
     """Application startup / shutdown lifecycle."""
     logger.info("Elenchus starting up...")
     await init_db()
-    set_broadcaster(ws_manager)
-    logger.info("Database initialized. Event broadcaster configured.")
+    logger.info("Database initialized.")
     yield
     # Cleanup search provider resources
     search_factory = get_search_factory()

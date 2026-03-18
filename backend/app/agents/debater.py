@@ -92,6 +92,9 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
     max_turns = state["max_turns"]
 
     dialogue_history = state.get("dialogue_history", [])
+    recent_dialogue_history = state.get("recent_dialogue_history", dialogue_history)
+    if not isinstance(recent_dialogue_history, list):
+        recent_dialogue_history = dialogue_history if isinstance(dialogue_history, list) else []
     shared_knowledge = state.get("shared_knowledge", [])
     messages = state.get("messages", [])
     agent_configs = state.get("agent_configs", {})
@@ -116,7 +119,7 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
 
     context_block = build_context_for_agent(
         shared_knowledge=shared_knowledge,
-        recent_history=dialogue_history,
+        recent_history=recent_dialogue_history,
         topic=topic,
         current_turn=current_turn,
         max_turns=max_turns,
@@ -205,5 +208,6 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "dialogue_history": [entry],
+        "recent_dialogue_history": [*recent_dialogue_history, entry],
         "messages": [RemoveMessage(id=message.id) for message in messages if message.id],
     }

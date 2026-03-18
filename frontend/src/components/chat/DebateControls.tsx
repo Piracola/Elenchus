@@ -4,7 +4,6 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-
 import { useAgentConfigs } from '../../hooks/useAgentConfigs';
 import { useDebateWebSocket } from '../../hooks/useDebateWebSocket';
 import { useSessionCreate } from '../../hooks/useSessionCreate';
@@ -25,22 +24,21 @@ function ActiveSessionControls() {
         : DEFAULT_MAX_TURNS;
 
     const handleSendIntervention = () => {
-        if (!interventionText.trim() || !isConnected) {
-            return;
-        }
+        if (!interventionText.trim() || !isConnected) return;
         sendIntervention(interventionText.trim());
         setInterventionText('');
     };
 
-    const canIntervene = isConnected;
-
     return (
         <motion.div
             style={{
+                width: 'min(100%, 980px)',
                 padding: '10px 14px',
                 background: 'var(--bg-card)',
                 borderRadius: 'var(--radius-lg)',
-                boxShadow: 'var(--shadow-xs)',
+                border: '1px solid var(--border-subtle)',
+                boxShadow: '0 14px 34px rgba(15, 23, 42, 0.12)',
+                backdropFilter: 'blur(14px)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '10px',
@@ -113,8 +111,8 @@ function ActiveSessionControls() {
                 value={interventionText}
                 onChange={(event) => setInterventionText(event.target.value)}
                 onKeyDown={(event) => event.key === 'Enter' && handleSendIntervention()}
-                placeholder={canIntervene ? '随时发言参与辩论...' : '连接中断...'}
-                disabled={!canIntervene}
+                placeholder={isConnected ? '输入干预意见...' : '连接已断开...'}
+                disabled={!isConnected}
                 style={{
                     flex: 1,
                     padding: '9px 12px',
@@ -123,8 +121,8 @@ function ActiveSessionControls() {
                     background: 'var(--bg-tertiary)',
                     color: 'var(--text-primary)',
                     outline: 'none',
-                    cursor: canIntervene ? 'text' : 'not-allowed',
-                    opacity: canIntervene ? 1 : 0.5,
+                    cursor: isConnected ? 'text' : 'not-allowed',
+                    opacity: isConnected ? 1 : 0.5,
                     fontSize: '13px',
                     minWidth: 0,
                 }}
@@ -154,11 +152,13 @@ function ActiveSessionControls() {
                     <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        onClick={() => startDebate(
-                            useDebateStore.getState().currentSession?.topic || '新辩题',
-                            ['proposer', 'opposer'],
-                            maxTurns,
-                        )}
+                        onClick={() =>
+                            startDebate(
+                                useDebateStore.getState().currentSession?.topic || '新辩题',
+                                ['proposer', 'opposer'],
+                                maxTurns,
+                            )
+                        }
                         disabled={!isConnected}
                         style={{
                             padding: '8px 14px',
@@ -176,21 +176,21 @@ function ActiveSessionControls() {
                         开始辩论
                     </motion.button>
                     <motion.button
-                        whileHover={canIntervene && interventionText.trim() ? { scale: 1.02 } : {}}
-                        whileTap={canIntervene && interventionText.trim() ? { scale: 0.98 } : {}}
+                        whileHover={isConnected && interventionText.trim() ? { scale: 1.02 } : {}}
+                        whileTap={isConnected && interventionText.trim() ? { scale: 0.98 } : {}}
                         onClick={handleSendIntervention}
-                        disabled={!canIntervene || !interventionText.trim()}
+                        disabled={!isConnected || !interventionText.trim()}
                         style={{
                             padding: '8px 14px',
                             borderRadius: 'var(--radius-md)',
                             border: 'none',
-                            background: canIntervene && interventionText.trim()
+                            background: isConnected && interventionText.trim()
                                 ? 'var(--accent-indigo)'
                                 : 'var(--bg-tertiary)',
-                            color: canIntervene && interventionText.trim() ? '#fff' : 'var(--text-muted)',
+                            color: isConnected && interventionText.trim() ? '#fff' : 'var(--text-muted)',
                             fontWeight: 600,
-                            cursor: canIntervene && interventionText.trim() ? 'pointer' : 'not-allowed',
-                            opacity: canIntervene && interventionText.trim() ? 1 : 0.5,
+                            cursor: isConnected && interventionText.trim() ? 'pointer' : 'not-allowed',
+                            opacity: isConnected && interventionText.trim() ? 1 : 0.5,
                             fontSize: '12px',
                             flexShrink: 0,
                         }}
@@ -223,9 +223,7 @@ function SessionCreator() {
         : DEFAULT_MAX_TURNS;
 
     const handleStart = async () => {
-        if (!topic.trim()) {
-            return;
-        }
+        if (!topic.trim()) return;
         await createSession(topic, maxTurns, buildAgentConfigs());
         setTopic('');
     };
@@ -246,10 +244,13 @@ function SessionCreator() {
 
             <motion.div
                 style={{
+                    width: 'min(100%, 920px)',
                     padding: '12px 14px',
                     background: 'var(--bg-card)',
                     borderRadius: 'var(--radius-lg)',
-                    boxShadow: 'var(--shadow-xs)',
+                    border: '1px solid var(--border-subtle)',
+                    boxShadow: '0 14px 34px rgba(15, 23, 42, 0.12)',
+                    backdropFilter: 'blur(14px)',
                     display: 'flex',
                     gap: '8px',
                     alignItems: 'center',

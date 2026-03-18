@@ -43,6 +43,8 @@ export interface DialogueEntry {
     content: string;
     citations: string[];
     timestamp: string;
+    event_id?: string;
+    turn?: number;
     target_role?: string;
     scores?: TurnScore;
 }
@@ -163,6 +165,7 @@ export type WSMessageType =
     | 'speech_end'
     | 'fact_check_start'
     | 'fact_check_result'
+    | 'memory_write'
     | 'judge_start'
     | 'judge_score'
     | 'turn_complete'
@@ -172,7 +175,7 @@ export type WSMessageType =
     | 'pong';
 
 export interface WSMessage {
-    type: WSMessageType;
+    type: WSMessageType | string;
     // system / status / error
     content?: string;
     phase?: DebatePhase;
@@ -185,6 +188,11 @@ export interface WSMessage {
     // fact_check
     results?: SearchResult[];
     count?: number;
+    // memory
+    memory_type?: string;
+    memory?: Record<string, unknown>;
+    memory_index?: number;
+    total_memories?: number;
     // judge_score
     scores?: TurnScore;
     // turn_complete
@@ -196,4 +204,16 @@ export interface WSMessage {
     total_turns?: number;
     // audience_message
     timestamp?: string;
+}
+
+export interface RuntimeEvent {
+    schema_version: string;
+    event_id: string;
+    session_id: string;
+    seq: number;
+    timestamp: string;
+    source: string;
+    type: WSMessageType | string;
+    phase?: DebatePhase;
+    payload: Record<string, unknown>;
 }

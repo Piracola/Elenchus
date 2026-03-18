@@ -8,6 +8,9 @@ interface MessageRowProps {
     agentEntry?: (DialogueEntry & { isStreaming?: boolean; streamingContent?: string }) | null;
     judgeEntry?: (DialogueEntry & { isStreaming?: boolean; streamingContent?: string }) | null;
     systemEntry?: (DialogueEntry & { isStreaming?: boolean; streamingContent?: string }) | null;
+    highlightAgent?: boolean;
+    highlightJudge?: boolean;
+    highlightSystem?: boolean;
 }
 
 type RoleVisual = {
@@ -20,15 +23,15 @@ type RoleVisual = {
 
 const KNOWN_ROLE_VISUALS: Record<string, RoleVisual> = {
     proposer: {
-        badge: 'P',
-        label: 'Proposer',
+        badge: '正',
+        label: '正方',
         color: 'var(--color-proposer)',
         cardTint: 'rgba(52, 199, 89, 0.08)',
         glowTint: 'rgba(52, 199, 89, 0.35)',
     },
     opposer: {
-        badge: 'O',
-        label: 'Opposer',
+        badge: '反',
+        label: '反方',
         color: 'var(--color-opposer)',
         cardTint: 'rgba(255, 59, 48, 0.08)',
         glowTint: 'rgba(255, 59, 48, 0.35)',
@@ -54,11 +57,11 @@ const EXTRA_ROLE_VISUALS: Omit<RoleVisual, 'badge' | 'label'>[] = [
 ];
 
 function formatRoleLabel(role: string | undefined): string {
-    if (!role) return 'Speaker';
+    if (!role) return '辩手';
     return role
         .split(/[_-\s]+/)
         .filter(Boolean)
-        .map(part => part[0].toUpperCase() + part.slice(1))
+        .map((part) => part[0].toUpperCase() + part.slice(1))
         .join(' ');
 }
 
@@ -66,10 +69,10 @@ function getRoleBadge(text: string): string {
     const badge = text
         .split(/[_-\s]+/)
         .filter(Boolean)
-        .map(part => part[0]?.toUpperCase() ?? '')
+        .map((part) => part[0] ?? '')
         .join('')
         .slice(0, 2);
-    return badge || 'SP';
+    return badge || '辩';
 }
 
 function hashRole(role: string): number {
@@ -96,18 +99,133 @@ function getAgentVisual(agentEntry?: DialogueEntry | null): RoleVisual {
     const palette = EXTRA_ROLE_VISUALS[hashRole(role || label) % EXTRA_ROLE_VISUALS.length];
     return {
         badge: getRoleBadge(label || role),
-        label: label || 'Speaker',
+        label: label || '辩手',
         ...palette,
     };
 }
 
-export default function MessageRow({ agentEntry, judgeEntry, systemEntry }: MessageRowProps) {
+function Cursor({ color }: { color: string }) {
+    return (
+        <motion.span
+            animate={{ opacity: [1, 0, 1] }}
+            transition={{ repeat: Infinity, duration: 0.8 }}
+            style={{ display: 'inline-block', marginLeft: '4px', color }}
+        >
+            ▍
+        </motion.span>
+    );
+}
+
+function ScoreGrid({ judgeEntry }: { judgeEntry: NonNullable<MessageRowProps['judgeEntry']> }) {
+    if (!judgeEntry.scores || Object.keys(judgeEntry.scores).length === 0) {
+        return null;
+    }
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            style={{
+                marginTop: '20px',
+                padding: '20px',
+                background: 'var(--bg-tertiary)',
+                borderRadius: 'var(--radius-lg)',
+                boxShadow: 'var(--shadow-inner)',
+            }}
+        >
+            <div
+                style={{
+                    fontSize: '12px',
+                    color: 'var(--text-muted)',
+                    marginBottom: '12px',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                }}
+            >
+                多维度量化评分
+            </div>
+            <div
+                style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+                    gap: '10px',
+                }}
+            >
+                {SCORE_DIMENSIONS.map((dim) => {
+                    const dimData = judgeEntry.scores?.[dim.key];
+                    if (!dimData) return null;
+                    return (
+                        <motion.div
+                            key={dim.key}
+                            whileHover={{ scale: 1.02 }}
+                            style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                background: 'var(--bg-card)',
+                                padding: '12px',
+                                borderRadius: 'var(--radius-md)',
+                                boxShadow: 'var(--shadow-xs)',
+                            }}
+                        >
+                            <div
+                                style={{
+                                    fontSize: '12px',
+                                    color: 'var(--text-secondary)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                }}
+                            >
+                                <span>{dim.icon}</span>
+                                {dim.label}
+                            </div>
+                            <div
+                                style={{
+                                    fontSize: '20px',
+                                    fontWeight: 700,
+                                    color: 'var(--color-judge)',
+                                    marginTop: '6px',
+                                }}
+                            >
+                                {dimData.score}
+                                <span
+                                    style={{
+                                        fontSize: '12px',
+                                        color: 'var(--text-muted)',
+                                        fontWeight: 400,
+                                    }}
+                                >
+                                    /10
+                                </span>
+                            </div>
+                        </motion.div>
+                    );
+                })}
+            </div>
+        </motion.div>
+    );
+}
+
+export default function MessageRow({
+    agentEntry,
+    judgeEntry,
+    systemEntry,
+    highlightAgent = false,
+    highlightJudge = false,
+    highlightSystem = false,
+}: MessageRowProps) {
     const neutralColor = 'var(--color-neutral, #6b7280)';
+    const rowFocused = highlightAgent || highlightJudge || highlightSystem;
 
     if (systemEntry) {
         if (systemEntry.role === 'audience') {
             return (
-                <div style={{ display: 'flex', justifyContent: 'center', margin: '16px 0' }}>
+                <div
+                    data-row-focused={rowFocused ? 'true' : 'false'}
+                    style={{ display: 'flex', justifyContent: 'center', margin: '16px 0' }}
+                >
                     <motion.div
                         initial={{ opacity: 0, y: 6, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -120,17 +238,20 @@ export default function MessageRow({ agentEntry, judgeEntry, systemEntry }: Mess
                             alignItems: 'center',
                             gap: '12px',
                             boxShadow: 'var(--shadow-md), 0 2px 8px rgba(107, 114, 128, 0.15)',
+                            border: highlightSystem ? '1px solid var(--accent-indigo)' : '1px solid transparent',
                         }}
                     >
-                        <span style={{
-                            fontSize: '12px',
-                            color: neutralColor,
-                            fontWeight: 700,
-                            whiteSpace: 'nowrap',
-                            padding: '4px 10px',
-                            background: 'rgba(107, 114, 128, 0.12)',
-                            borderRadius: 'var(--radius-full)',
-                        }}>
+                        <span
+                            style={{
+                                fontSize: '12px',
+                                color: neutralColor,
+                                fontWeight: 700,
+                                whiteSpace: 'nowrap',
+                                padding: '4px 10px',
+                                background: 'rgba(107, 114, 128, 0.12)',
+                                borderRadius: 'var(--radius-full)',
+                            }}
+                        >
                             观众介入
                         </span>
                         <span style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
@@ -140,8 +261,12 @@ export default function MessageRow({ agentEntry, judgeEntry, systemEntry }: Mess
                 </div>
             );
         }
+
         return (
-            <div style={{ display: 'flex', justifyContent: 'center', margin: '16px 0' }}>
+            <div
+                data-row-focused={rowFocused ? 'true' : 'false'}
+                style={{ display: 'flex', justifyContent: 'center', margin: '16px 0' }}
+            >
                 <motion.div
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -152,6 +277,7 @@ export default function MessageRow({ agentEntry, judgeEntry, systemEntry }: Mess
                         fontSize: '13px',
                         color: 'var(--text-muted)',
                         boxShadow: 'var(--shadow-xs)',
+                        border: highlightSystem ? '1px solid var(--accent-indigo)' : '1px solid transparent',
                     }}
                 >
                     {systemEntry.content}
@@ -165,15 +291,20 @@ export default function MessageRow({ agentEntry, judgeEntry, systemEntry }: Mess
     const agentVisual = getAgentVisual(agentEntry);
 
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'row',
-            width: '100%',
-            gap: '20px',
-            marginBottom: '32px',
-            opacity: (!agentEntry && judgeEntry) ? 0.8 : 1
-        }}>
-            {/* ========== Left Column: Debater (Flex 6) ========== */}
+        <div
+            data-row-focused={rowFocused ? 'true' : 'false'}
+            style={{
+                display: 'flex',
+                flexDirection: 'row',
+                width: '100%',
+                gap: '20px',
+                marginBottom: '32px',
+                opacity: !agentEntry && judgeEntry ? 0.8 : 1,
+                borderRadius: 'var(--radius-xl)',
+                background: rowFocused ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
+                transition: 'background var(--transition-fast)',
+            }}
+        >
             <div style={{ flex: '6 1 0', display: 'flex', flexDirection: 'column' }}>
                 {agentEntry && (
                     <motion.div
@@ -185,20 +316,22 @@ export default function MessageRow({ agentEntry, judgeEntry, systemEntry }: Mess
                             background: 'var(--bg-card)',
                             padding: '28px',
                             borderRadius: 'var(--radius-xl)',
-                            boxShadow: `var(--shadow-sm), 0 4px 20px ${agentVisual.cardTint}`,
+                            boxShadow: highlightAgent
+                                ? `0 0 0 2px rgba(99, 102, 241, 0.55), var(--shadow-sm), 0 4px 20px ${agentVisual.cardTint}`
+                                : `var(--shadow-sm), 0 4px 20px ${agentVisual.cardTint}`,
                             marginTop: '20px',
-                            transition: 'box-shadow var(--transition-fast)',
                         }}
                     >
-                        {/* Floating Avatar Badge */}
-                        <div style={{
-                            position: 'absolute',
-                            top: '-16px',
-                            left: '24px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '10px',
-                        }}>
+                        <div
+                            style={{
+                                position: 'absolute',
+                                top: '-16px',
+                                left: '24px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                            }}
+                        >
                             <motion.div
                                 whileHover={{ scale: 1.05 }}
                                 style={{
@@ -217,44 +350,39 @@ export default function MessageRow({ agentEntry, judgeEntry, systemEntry }: Mess
                             >
                                 {agentVisual.badge}
                             </motion.div>
-                            <span style={{
-                                fontSize: '13px',
-                                color: 'var(--text-secondary)',
-                                background: 'var(--bg-card)',
-                                padding: '6px 14px',
-                                borderRadius: 'var(--radius-full)',
-                                boxShadow: 'var(--shadow-xs)',
-                                fontWeight: 500,
-                            }}>
+                            <span
+                                style={{
+                                    fontSize: '13px',
+                                    color: 'var(--text-secondary)',
+                                    background: 'var(--bg-card)',
+                                    padding: '6px 14px',
+                                    borderRadius: 'var(--radius-full)',
+                                    boxShadow: 'var(--shadow-xs)',
+                                    fontWeight: 500,
+                                }}
+                            >
                                 {agentVisual.label}
                             </span>
                         </div>
 
-                        {/* Speech Content */}
-                        <div className="markdown-body" style={{
-                            color: 'var(--text-primary)',
-                            fontSize: '15px',
-                            lineHeight: 1.7,
-                            marginTop: '16px'
-                        }}>
+                        <div
+                            className="markdown-body"
+                            style={{
+                                color: 'var(--text-primary)',
+                                fontSize: '15px',
+                                lineHeight: 1.7,
+                                marginTop: '16px',
+                            }}
+                        >
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                                 {agentEntry.isStreaming ? agentEntry.streamingContent || '' : agentEntry.content || ''}
                             </ReactMarkdown>
-                            {agentEntry.isStreaming && (
-                                <motion.span
-                                    animate={{ opacity: [1, 0, 1] }}
-                                    transition={{ repeat: Infinity, duration: 0.8 }}
-                                    style={{ display: 'inline-block', marginLeft: '4px', color: agentVisual.color }}
-                                >
-                                    ▍
-                                </motion.span>
-                            )}
+                            {agentEntry.isStreaming && <Cursor color={agentVisual.color} />}
                         </div>
                     </motion.div>
                 )}
             </div>
 
-            {/* ========== Right Column: Judge (Flex 4) ========== */}
             <div style={{ flex: '4 1 0', display: 'flex', flexDirection: 'column' }}>
                 {judgeEntry && (
                     <motion.div
@@ -266,20 +394,25 @@ export default function MessageRow({ agentEntry, judgeEntry, systemEntry }: Mess
                             background: 'var(--bg-secondary)',
                             padding: '24px',
                             borderRadius: 'var(--radius-xl)',
-                            boxShadow: 'var(--shadow-sm), 0 4px 20px rgba(255, 149, 0, 0.08)',
+                            boxShadow: highlightJudge
+                                ? '0 0 0 2px rgba(99, 102, 241, 0.55), var(--shadow-sm), 0 4px 20px rgba(255, 149, 0, 0.08)'
+                                : 'var(--shadow-sm), 0 4px 20px rgba(255, 149, 0, 0.08)',
                             marginTop: '20px',
-                            border: '1px solid rgba(255, 149, 0, 0.1)',
+                            border: highlightJudge
+                                ? '1px solid rgba(99, 102, 241, 0.45)'
+                                : '1px solid rgba(255, 149, 0, 0.1)',
                         }}
                     >
-                        {/* Judge Floating Badge */}
-                        <div style={{
-                            position: 'absolute',
-                            top: '-16px',
-                            left: '20px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '10px',
-                        }}>
+                        <div
+                            style={{
+                                position: 'absolute',
+                                top: '-16px',
+                                left: '20px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                            }}
+                        >
                             <motion.div
                                 whileHover={{ scale: 1.05 }}
                                 style={{
@@ -298,107 +431,37 @@ export default function MessageRow({ agentEntry, judgeEntry, systemEntry }: Mess
                             >
                                 裁
                             </motion.div>
-                            <span style={{
-                                fontSize: '12px',
-                                color: 'var(--text-secondary)',
-                                background: 'var(--bg-card)',
-                                padding: '5px 12px',
-                                borderRadius: 'var(--radius-full)',
-                                boxShadow: 'var(--shadow-xs)',
-                                fontWeight: 500,
-                            }}>
+                            <span
+                                style={{
+                                    fontSize: '12px',
+                                    color: 'var(--text-secondary)',
+                                    background: 'var(--bg-card)',
+                                    padding: '5px 12px',
+                                    borderRadius: 'var(--radius-full)',
+                                    boxShadow: 'var(--shadow-xs)',
+                                    fontWeight: 500,
+                                }}
+                            >
                                 裁判组视角
                             </span>
                         </div>
 
-                        {/* Judge Content */}
-                        <div className="markdown-body" style={{
-                            color: 'var(--text-secondary)',
-                            fontSize: '14px',
-                            lineHeight: 1.7,
-                            marginTop: '12px'
-                        }}>
+                        <div
+                            className="markdown-body"
+                            style={{
+                                color: 'var(--text-secondary)',
+                                fontSize: '14px',
+                                lineHeight: 1.7,
+                                marginTop: '12px',
+                            }}
+                        >
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                                 {judgeEntry.isStreaming ? judgeEntry.streamingContent || '' : judgeEntry.content || ''}
                             </ReactMarkdown>
-                            {judgeEntry.isStreaming && (
-                                <motion.span
-                                    animate={{ opacity: [1, 0, 1] }}
-                                    transition={{ repeat: Infinity, duration: 0.8 }}
-                                    style={{ display: 'inline-block', marginLeft: '4px', color: 'var(--color-judge)' }}
-                                >
-                                    ▍
-                                </motion.span>
-                            )}
+                            {judgeEntry.isStreaming && <Cursor color="var(--color-judge)" />}
                         </div>
 
-                        {/* Quantitative Scores Breakdown */}
-                        {judgeEntry.scores && Object.keys(judgeEntry.scores).length > 0 && (
-                            <motion.div
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.2 }}
-                                style={{
-                                    marginTop: '20px',
-                                    padding: '20px',
-                                    background: 'var(--bg-tertiary)',
-                                    borderRadius: 'var(--radius-lg)',
-                                    boxShadow: 'var(--shadow-inner)',
-                                }}
-                            >
-                                <div style={{
-                                    fontSize: '12px',
-                                    color: 'var(--text-muted)',
-                                    marginBottom: '12px',
-                                    fontWeight: 600,
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.05em',
-                                }}>多维度量化评分</div>
-                                <div style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
-                                    gap: '10px'
-                                }}>
-                                    {SCORE_DIMENSIONS.map(dim => {
-                                        const dimData = judgeEntry!.scores?.[dim.key];
-                                        if (!dimData) return null;
-                                        return (
-                                            <motion.div
-                                                key={dim.key}
-                                                whileHover={{ scale: 1.02 }}
-                                                style={{
-                                                    display: 'flex',
-                                                    flexDirection: 'column',
-                                                    background: 'var(--bg-card)',
-                                                    padding: '12px',
-                                                    borderRadius: 'var(--radius-md)',
-                                                    boxShadow: 'var(--shadow-xs)',
-                                                    transition: 'box-shadow var(--transition-fast)',
-                                                }}
-                                            >
-                                                <div style={{
-                                                    fontSize: '12px',
-                                                    color: 'var(--text-secondary)',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '6px'
-                                                }}>
-                                                    <span>{dim.icon}</span> {dim.label}
-                                                </div>
-                                                <div style={{
-                                                    fontSize: '20px',
-                                                    fontWeight: 700,
-                                                    color: 'var(--color-judge)',
-                                                    marginTop: '6px'
-                                                }}>
-                                                    {dimData.score}<span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 400 }}>/10</span>
-                                                </div>
-                                            </motion.div>
-                                        );
-                                    })}
-                                </div>
-                            </motion.div>
-                        )}
+                        <ScoreGrid judgeEntry={judgeEntry} />
                     </motion.div>
                 )}
             </div>

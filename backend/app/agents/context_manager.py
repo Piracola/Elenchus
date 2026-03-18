@@ -29,7 +29,9 @@ async def compress_context(
     dialogue_history: list[dict[str, Any]],
     shared_knowledge: list[dict[str, Any]],
     agent_configs: dict[str, Any] | None = None,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    *,
+    compressed_history_count: int = 0,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
     """
     Compress older dialogue entries into shared knowledge memo entries.
 
@@ -40,14 +42,18 @@ async def compress_context(
     ctx_cfg = settings.debate.context_window
 
     if not ctx_cfg.enable_summary_compression:
-        return shared_knowledge, dialogue_history
+        return shared_knowledge, dialogue_history, compressed_history_count
 
     keep_entries = ctx_cfg.recent_turns_to_keep * 2
     if len(dialogue_history) <= keep_entries:
-        return shared_knowledge, dialogue_history
+        return shared_knowledge, dialogue_history, compressed_history_count
 
-    old_entries = dialogue_history[:-keep_entries]
-    recent_entries = dialogue_history[-keep_entries:]
+    compress_upto = max(0, len(dialogue_history) - keep_entries)
+    if compress_upto <= compressed_history_count:
+        return shared_knowledge, dialogue_history[compress_upto:], compressed_history_count
+
+    old_entries = dialogue_history[compressed_history_count:compress_upto]
+    recent_entries = dialogue_history[compress_upto:]
     new_knowledge = list(shared_knowledge)
     override = (agent_configs or {}).get("fact_checker")
 
@@ -82,7 +88,7 @@ async def compress_context(
         except Exception as exc:
             logger.error("Failed to compress message from %s: %s", agent_name, exc)
 
-    return new_knowledge, recent_entries
+    return new_knowledge, recent_entries, compress_upto
 
 
 def build_context_for_agent(

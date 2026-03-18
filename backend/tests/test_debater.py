@@ -60,3 +60,4 @@ async def test_debater_repairs_search_dump_into_final_speech(monkeypatch):
     )
 
     assert result["dialogue_history"][0]["content"] == "这是整理后的正式辩论发言。"
+    assert result["recent_dialogue_history"][-1]["content"] == "这是整理后的正式辩论发言。"

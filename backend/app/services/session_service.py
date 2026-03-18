@@ -4,6 +4,7 @@ Session CRUD service backed by the async database layer.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import func, select
@@ -11,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.safe_invoke import normalize_model_text
 from app.db.models import SessionRecord, _gen_id, _utcnow
-from app.dependencies import get_provider_service
+from app.dependencies import get_agent_config_service
 from app.models.schemas import SessionCreate, SessionStatus
 
 
@@ -38,11 +39,53 @@ def _sanitize_state_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     sanitized["dialogue_history"] = _sanitize_dialogue_history(
         sanitized.get("dialogue_history", [])
     )
+    if "judge_history" in sanitized:
+        sanitized["judge_history"] = _sanitize_dialogue_history(
+            sanitized.get("judge_history", [])
+        )
+    if "recent_dialogue_history" in sanitized:
+        sanitized["recent_dialogue_history"] = _sanitize_dialogue_history(
+            sanitized.get("recent_dialogue_history", [])
+        )
     return sanitized
+
+
+def _parse_timestamp(value: Any) -> datetime:
+    if not isinstance(value, str) or not value:
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+    normalized = value
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1]
+
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _merge_dialogue_for_display(
+    dialogue_history: list[dict[str, Any]],
+    judge_history: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    merged = [*dialogue_history, *judge_history]
+    merged.sort(
+        key=lambda entry: (
+            _parse_timestamp(entry.get("timestamp")),
+            1 if entry.get("role") == "judge" else 0,
+        )
+    )
+    return merged
 
 
 def _record_to_dict(record: SessionRecord) -> dict[str, Any]:
     snapshot = _sanitize_state_snapshot(record.state_snapshot or {})
+    dialogue_history = snapshot.get("dialogue_history", [])
+    judge_history = snapshot.get("judge_history", [])
     return {
         "id": record.id,
         "topic": record.topic,
@@ -52,7 +95,7 @@ def _record_to_dict(record: SessionRecord) -> dict[str, Any]:
         "status": record.status,
         "created_at": record.created_at,
         "updated_at": record.updated_at,
-        "dialogue_history": snapshot.get("dialogue_history", []),
+        "dialogue_history": _merge_dialogue_for_display(dialogue_history, judge_history),
         "shared_knowledge": snapshot.get("shared_knowledge", []),
         "current_scores": snapshot.get("current_scores", {}),
         "cumulative_scores": snapshot.get("cumulative_scores", {}),
@@ -63,38 +106,11 @@ def _record_to_dict(record: SessionRecord) -> dict[str, Any]:
 async def create_session(db: AsyncSession, body: SessionCreate) -> dict[str, Any]:
     """Create a new debate session in the database."""
     now = _utcnow()
-    provider_service = get_provider_service()
-    agent_configs = body.agent_configs or {}
-
-    all_providers = {provider["id"]: provider for provider in await provider_service.list_configs_raw()}
-    for role, config in list(agent_configs.items()):
-        provider_id = config.get("provider_id")
-        if provider_id and provider_id in all_providers:
-            provider = all_providers[provider_id]
-            config["api_key"] = provider.get("api_key", "")
-            config["api_base_url"] = config.get("api_base_url") or provider.get("api_base_url", "")
-            config["provider_type"] = config.get("provider_type") or provider.get("provider_type", "openai")
-        config.pop("provider_id", None)
-
-    default_provider = await provider_service.get_default_config()
-    roles_needed = set(body.participants + ["judge", "fact_checker"])
-    for role in roles_needed:
-        if role in agent_configs or not default_provider:
-            continue
-
-        raw_provider = all_providers.get(default_provider.id, {})
-        default_model = default_provider.models[0] if default_provider.models else ""
-        agent_configs[role] = {
-            "model": default_model,
-            "provider_type": default_provider.provider_type,
-            "api_key": raw_provider.get("api_key", ""),
-            "api_base_url": default_provider.api_base_url,
-        }
-
-    agent_configs_for_storage = {
-        role: {key: value for key, value in config.items() if key != "api_key"}
-        for role, config in agent_configs.items()
-    }
+    agent_config_service = get_agent_config_service()
+    agent_configs_for_storage = await agent_config_service.build_session_agent_configs(
+        body.agent_configs,
+        body.participants,
+    )
 
     record = SessionRecord(
         id=_gen_id(),
@@ -105,6 +121,7 @@ async def create_session(db: AsyncSession, body: SessionCreate) -> dict[str, Any
         status=SessionStatus.PENDING.value,
         state_snapshot={
             "dialogue_history": [],
+            "judge_history": [],
             "shared_knowledge": [],
             "current_scores": {},
             "cumulative_scores": {},

@@ -37,9 +37,9 @@
 - API Key 使用 Fernet 对称加密存储
 
 **修改文件**：
-- [backend/app/db/models.py](backend/app/db/models.py) - 新增 `ProviderRecord`
-- [backend/app/services/provider_service.py](backend/app/services/provider_service.py) - 完全重构
-- [backend/scripts/migrate_providers_to_db.py](backend/scripts/migrate_providers_to_db.py) - 迁移脚本
+- [backend/app/db/models.py](../../backend/app/db/models.py) - 新增 `ProviderRecord`
+- [backend/app/services/provider_service.py](../../backend/app/services/provider_service.py) - 完全重构
+- [backend/scripts/migrate_providers_to_db.py](../../backend/scripts/migrate_providers_to_db.py) - 迁移脚本
 
 ---
 
@@ -86,8 +86,8 @@
 - 支持可选认证模式（`AUTH_ENABLED` 环境变量）
 
 **新增文件**：
-- [backend/app/auth/](backend/app/auth/) - 认证模块
-- [backend/app/api/users.py](backend/app/api/users.py) - 用户 API
+- [backend/app/auth/](../../backend/app/auth/) - 认证模块
+- `backend/app/api/users.py` - 用户 API（历史规划路径，当前代码库未落地）
 
 ---
 
@@ -101,7 +101,7 @@
 - 多租户限制
 
 **解决方案**：
-- 创建依赖注入容器 [backend/app/dependencies.py](backend/app/dependencies.py)
+- 创建依赖注入容器 [backend/app/dependencies.py](../../backend/app/dependencies.py)
 - 使用 FastAPI 原生 `Depends` 机制
 - 提供 `clear_dependency_cache()` 用于测试重置
 

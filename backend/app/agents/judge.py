@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -100,10 +101,10 @@ def _parse_score_response(text: str) -> TurnScore | None:
 
 def _default_scores() -> dict[str, Any]:
     fallback_scores: dict[str, Any] = {
-        dim: {"score": 5, "rationale": "Scoring failed - using default"}
+        dim: {"score": 5, "rationale": "评分解析失败，已采用中性分"}
         for dim in _SCORE_DIMS
     }
-    fallback_scores["overall_comment"] = "Scoring failed, so a neutral fallback score was used."
+    fallback_scores["overall_comment"] = "评分解析失败，本轮暂按中性分处理。"
     return fallback_scores
 
 
@@ -117,6 +118,7 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
     topic = state["topic"]
     participants = state["participants"]
     dialogue_history = state.get("dialogue_history", [])
+    recent_dialogue_history = state.get("recent_dialogue_history", dialogue_history)
     shared_knowledge = state.get("shared_knowledge", [])
     current_turn = state.get("current_turn", 0)
     cumulative_scores = dict(state.get("cumulative_scores", {}))
@@ -127,12 +129,29 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
     agent_configs = state.get("agent_configs", {})
     override = agent_configs.get("judge")
     current_scores: dict[str, Any] = {}
+    judge_history_entries: list[dict[str, Any]] = []
+
+    participant_set = set(participants)
+    preferred_history = (
+        recent_dialogue_history if isinstance(recent_dialogue_history, list) else dialogue_history
+    )
+    evaluation_history = [
+        entry
+        for entry in preferred_history
+        if isinstance(entry, dict) and entry.get("role") in participant_set
+    ]
+    if not evaluation_history:
+        evaluation_history = [
+            entry
+            for entry in dialogue_history
+            if isinstance(entry, dict) and entry.get("role") in participant_set
+        ]
 
     for role in participants:
         instruction = _build_judge_instruction(
             topic=topic,
             role_to_judge=role,
-            dialogue_history=dialogue_history,
+            dialogue_history=evaluation_history,
             shared_knowledge=shared_knowledge,
             current_turn=current_turn,
         )
@@ -175,9 +194,23 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
             logger.info("Judge scored [%s]: avg=%.1f", role, score.average_score)
         else:
             logger.error("Judge failed to score [%s] after retries", role)
-            current_scores[role] = _default_scores()
+            score_dict = _default_scores()
+            current_scores[role] = score_dict
+
+        judge_history_entries.append(
+            {
+                "role": "judge",
+                "target_role": role,
+                "agent_name": "裁判组视角",
+                "content": score_dict.get("overall_comment", ""),
+                "scores": score_dict,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "citations": [],
+            }
+        )
 
     return {
         "current_scores": current_scores,
         "cumulative_scores": cumulative_scores,
+        "judge_history": judge_history_entries,
     }

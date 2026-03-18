@@ -14,7 +14,7 @@ from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 
-from app.dependencies import get_llm_router, get_provider_service
+from app.dependencies import get_agent_config_service, get_llm_router
 
 logger = logging.getLogger(__name__)
 
@@ -39,38 +39,9 @@ async def _resolve_provider_info(
 
     Returns: (provider_type, api_base_url, api_key)
     """
-    provider_type = override.get("provider_type")
-    api_base_url = override.get("api_base_url")
-    api_key = override.get("api_key")
-    provider_id = override.get("provider_id")
-
-    provider_service = get_provider_service()
-
-    if provider_id:
-        providers = await provider_service.list_configs_raw()
-        for provider in providers:
-            if provider.get("id") != provider_id:
-                continue
-            if not provider_type:
-                provider_type = provider.get("provider_type")
-            if not api_base_url:
-                api_base_url = provider.get("api_base_url")
-            if not api_key:
-                api_key = provider.get("api_key")
-            break
-    elif not api_key:
-        default_config = await provider_service.get_default_config()
-        if default_config:
-            providers = await provider_service.list_configs_raw()
-            for provider in providers:
-                if provider.get("id") != default_config.id:
-                    continue
-                provider_type = provider_type or provider.get("provider_type")
-                api_base_url = api_base_url or provider.get("api_base_url")
-                api_key = provider.get("api_key")
-                break
-
-    return provider_type, api_base_url, api_key
+    agent_config_service = get_agent_config_service()
+    selection = await agent_config_service.resolve_provider_selection(override)
+    return selection.provider_type, selection.api_base_url, selection.api_key
 
 
 async def resolve_llm_config(

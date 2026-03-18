@@ -44,6 +44,9 @@ class DebateGraphState(TypedDict, total=False):
     current_speaker_index: int
 
     dialogue_history: Annotated[list[DialogueEntryDict], add]
+    judge_history: Annotated[list[DialogueEntryDict], add]
+    recent_dialogue_history: list[DialogueEntryDict]
+    compressed_history_count: int
     shared_knowledge: Annotated[list[SharedKnowledgeEntry], add]
     
     messages: Annotated[list[BaseMessage], add_messages]
@@ -64,12 +67,18 @@ class DebateGraphState(TypedDict, total=False):
 async def node_manage_context(state: DebateGraphState) -> dict[str, Any]:
     """Compress old dialogue history if it exceeds the context window."""
     history = state.get("dialogue_history", [])
+    compressed_history_count = state.get("compressed_history_count", 0)
     knowledge = state.get("shared_knowledge", [])
     agent_configs = state.get("agent_configs", {})
 
     history_dicts = [dict(e) if not isinstance(e, dict) else e for e in history]
 
-    new_knowledge, _ = await compress_context(history_dicts, knowledge, agent_configs)
+    new_knowledge, recent_entries, new_compressed_history_count = await compress_context(
+        history_dicts,
+        knowledge,
+        agent_configs,
+        compressed_history_count=compressed_history_count,
+    )
 
     # Compute delta: only items added by compression (memos not already in knowledge)
     delta = new_knowledge[len(knowledge):]
@@ -90,9 +99,16 @@ async def node_manage_context(state: DebateGraphState) -> dict[str, Any]:
         for content in queued
     ]
 
+    effective_recent_history = [
+        *recent_entries,
+        *intervention_entries,
+    ]
+
     return {
         "shared_knowledge": delta,
         "dialogue_history": intervention_entries,
+        "recent_dialogue_history": effective_recent_history,
+        "compressed_history_count": new_compressed_history_count,
         "last_executed_node": "manage_context",
     }
 

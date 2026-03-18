@@ -113,6 +113,68 @@ async def test_get_session_flattens_shared_knowledge(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
+async def test_get_session_merges_judge_history_into_dialogue_timeline(db_session: AsyncSession):
+    created = await session_service.create_session(
+        db_session,
+        SessionCreate(topic="Judge timeline"),
+    )
+
+    await session_service.update_session_state(
+        db_session,
+        created["id"],
+        state_snapshot={
+            "dialogue_history": [
+                {
+                    "role": "proposer",
+                    "agent_name": "Proposer",
+                    "content": "开场陈词",
+                    "citations": [],
+                    "timestamp": "2026-03-17T00:00:00Z",
+                },
+                {
+                    "role": "opposer",
+                    "agent_name": "Opposer",
+                    "content": "反方回应",
+                    "citations": [],
+                    "timestamp": "2026-03-17T00:00:03Z",
+                },
+            ],
+            "judge_history": [
+                {
+                    "role": "judge",
+                    "target_role": "proposer",
+                    "agent_name": "裁判组视角",
+                    "content": "正方点评",
+                    "scores": {},
+                    "citations": [],
+                    "timestamp": "2026-03-17T00:00:01Z",
+                },
+                {
+                    "role": "judge",
+                    "target_role": "opposer",
+                    "agent_name": "裁判组视角",
+                    "content": "反方点评",
+                    "scores": {},
+                    "citations": [],
+                    "timestamp": "2026-03-17T00:00:04Z",
+                },
+            ],
+            "shared_knowledge": [],
+            "current_scores": {},
+            "cumulative_scores": {},
+            "agent_configs": {},
+        },
+    )
+
+    fetched = await session_service.get_session(db_session, created["id"])
+    assert fetched is not None
+
+    roles = [item["role"] for item in fetched["dialogue_history"]]
+    assert roles == ["proposer", "judge", "opposer", "judge"]
+    assert fetched["dialogue_history"][1]["content"] == "正方点评"
+
+
+@pytest.mark.asyncio
 async def test_get_session_sanitizes_malformed_sse_dialogue_history(db_session: AsyncSession):
     created = await session_service.create_session(
         db_session,
@@ -152,3 +214,36 @@ async def test_get_session_sanitizes_malformed_sse_dialogue_history(db_session: 
 
     assert fetched is not None
     assert fetched["dialogue_history"][0]["content"] == "Recovered speech"
+
+
+@pytest.mark.asyncio
+async def test_create_session_persists_provider_identity(db_session: AsyncSession, monkeypatch):
+    class _FakeAgentConfigService:
+        async def build_session_agent_configs(self, agent_configs, participants):
+            assert agent_configs == {"proposer": {"provider_id": "anthropic-team"}}
+            assert participants == ["proposer"]
+            return {
+                "proposer": {
+                    "provider_id": "anthropic-team",
+                    "provider_type": "anthropic",
+                    "model": "claude-3-7-sonnet",
+                }
+            }
+
+    monkeypatch.setattr(
+        session_service,
+        "get_agent_config_service",
+        lambda: _FakeAgentConfigService(),
+    )
+
+    created = await session_service.create_session(
+        db_session,
+        SessionCreate(
+            topic="Provider identity",
+            participants=["proposer"],
+            agent_configs={"proposer": {"provider_id": "anthropic-team"}},
+        ),
+    )
+
+    assert created["agent_configs"]["proposer"]["provider_id"] == "anthropic-team"
+    assert created["agent_configs"]["proposer"]["provider_type"] == "anthropic"

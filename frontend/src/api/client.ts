@@ -6,25 +6,68 @@ import type { Session, SessionListItem, SessionCreatePayload, ModelConfig, Model
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
+async function readErrorMessage(res: Response): Promise<string> {
+    const text = await res.text();
+    let message = `API ${res.status}`;
+    try {
+        const json = JSON.parse(text);
+        message = json.detail ?? json.message ?? text;
+    } catch {
+        message = text || message;
+    }
+    return message;
+}
+
+function getFilename(contentDisposition: string | null, fallback: string): string {
+    if (!contentDisposition) {
+        return fallback;
+    }
+
+    const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utf8Match?.[1]) {
+        try {
+            return decodeURIComponent(utf8Match[1]);
+        } catch {
+            return utf8Match[1];
+        }
+    }
+
+    const plainMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+    if (plainMatch?.[1]) {
+        return plainMatch[1];
+    }
+
+    return fallback;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await fetch(`${BASE}${path}`, {
         headers: { 'Content-Type': 'application/json' },
         ...init,
     });
     if (!res.ok) {
-        const text = await res.text();
-        let message = `API ${res.status}`;
-        try {
-            const json = JSON.parse(text);
-            message = json.detail ?? json.message ?? text;
-        } catch {
-            message = text || message;
-        }
-        throw new Error(message);
+        throw new Error(await readErrorMessage(res));
     }
     // 204 No Content
     if (res.status === 204) return undefined as T;
     return res.json();
+}
+
+async function download(path: string, fallbackFilename: string): Promise<void> {
+    const res = await fetch(`${BASE}${path}`);
+    if (!res.ok) {
+        throw new Error(await readErrorMessage(res));
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = getFilename(res.headers.get('Content-Disposition'), fallbackFilename);
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
 }
 
 // ── Sessions ─────────────────────────────────────────────────────
@@ -46,12 +89,12 @@ export const api = {
         delete: (id: string): Promise<void> =>
             request(`/sessions/${id}`, { method: 'DELETE' }),
 
-        exportJson: (id: string): void => {
-            window.open(`${BASE}/sessions/${id}/export?format=json`, '_blank');
+        exportJson: (id: string): Promise<void> => {
+            return download(`/sessions/${id}/export?format=json`, `elenchus_session_${id}.json`);
         },
 
-        exportMarkdown: (id: string): void => {
-            window.open(`${BASE}/sessions/${id}/export?format=markdown`, '_blank');
+        exportMarkdown: (id: string): Promise<void> => {
+            return download(`/sessions/${id}/export?format=markdown`, `elenchus_session_${id}.md`);
         },
     },
 

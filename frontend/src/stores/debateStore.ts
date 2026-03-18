@@ -1,6 +1,6 @@
 /**
  * Zustand store — single source of truth for all debate state.
- * Handles WebSocket messages, dialogue accumulation, scores, and UI state.
+ * Runtime state is updated through an event-reducer style `applyRuntimeEvent`.
  */
 
 import { create } from 'zustand';
@@ -11,7 +11,12 @@ import type {
     TurnScore,
     SearchResult,
     DebatePhase,
+    RuntimeEvent,
 } from '../types';
+import { clampReplayCursor, getVisibleRuntimeEvents } from '../utils/replay';
+
+const MAX_SAFE_CONTENT_LENGTH = 50000;
+const MAX_RUNTIME_EVENTS = 1200;
 
 // ── Store shape ─────────────────────────────────────────────────
 
@@ -19,6 +24,14 @@ interface DebateState {
     // Session list (sidebar)
     sessions: SessionListItem[];
     currentSession: Session | null;
+
+    // Runtime observability
+    runtimeEvents: RuntimeEvent[];
+    visibleRuntimeEvents: RuntimeEvent[];
+    lastEventSeq: number;
+    focusedRuntimeEventId: string | null;
+    replayEnabled: boolean;
+    replayCursor: number;
 
     // Real-time debate state
     isConnected: boolean;
@@ -43,6 +56,15 @@ interface DebateState {
     setConnected: (connected: boolean) => void;
     setDebating: (debating: boolean) => void;
     setPhase: (phase: DebatePhase, status?: string, node?: string) => void;
+
+    // Event reducer entrypoint
+    applyRuntimeEvent: (event: RuntimeEvent) => void;
+    setFocusedRuntimeEventId: (eventId: string | null) => void;
+    setReplayEnabled: (enabled: boolean) => void;
+    setReplayCursor: (cursor: number) => void;
+    stepReplay: (offset: number) => void;
+    exitReplay: () => void;
+    loadRuntimeEventSnapshot: (events: RuntimeEvent[]) => void;
 
     // Actions — dialogue
     appendDialogueEntry: (entry: DialogueEntry) => void;
@@ -70,6 +92,12 @@ interface DebateState {
 const initialState = {
     sessions: [] as SessionListItem[],
     currentSession: null as Session | null,
+    runtimeEvents: [] as RuntimeEvent[],
+    visibleRuntimeEvents: [] as RuntimeEvent[],
+    lastEventSeq: -1,
+    focusedRuntimeEventId: null as string | null,
+    replayEnabled: false,
+    replayCursor: -1,
     isConnected: false,
     isDebating: false,
     phase: 'idle' as DebatePhase,
@@ -81,6 +109,103 @@ const initialState = {
     searchResultCount: 0,
 };
 
+function sanitizeIncomingContent(content: unknown): string {
+    const text = typeof content === 'string' ? content : '';
+    if (!text) return text;
+
+    if (text.includes('Scoring failed, so a neutral fallback score was used.')) {
+        return '评分解析失败，本轮暂按中性分处理。';
+    }
+
+    if (text.startsWith('data: {')) {
+        return '[已过滤异常的流式响应数据]';
+    }
+
+    if (text.length > MAX_SAFE_CONTENT_LENGTH) {
+        return `${text.slice(0, MAX_SAFE_CONTENT_LENGTH)}\n\n[内容过长，已截断以保护界面]`;
+    }
+
+    return text;
+}
+
+function getPayloadString(payload: Record<string, unknown>, key: string): string | undefined {
+    const value = payload[key];
+    return typeof value === 'string' ? value : undefined;
+}
+
+function getPayloadNumber(payload: Record<string, unknown>, key: string): number | undefined {
+    const value = payload[key];
+    return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function getPayloadCitations(payload: Record<string, unknown>): string[] {
+    const value = payload.citations;
+    if (!Array.isArray(value)) return [];
+    return value.filter((item): item is string => typeof item === 'string');
+}
+
+function sameCitations(a: string[] = [], b: string[] = []): boolean {
+    if (a.length !== b.length) return false;
+    return a.every((item, index) => item === b[index]);
+}
+
+function sameDialogueContent(a: DialogueEntry, b: DialogueEntry): boolean {
+    const aScores = JSON.stringify(a.scores ?? null);
+    const bScores = JSON.stringify(b.scores ?? null);
+    return (
+        a.role === b.role &&
+        (a.turn ?? -1) === (b.turn ?? -1) &&
+        (a.target_role ?? '') === (b.target_role ?? '') &&
+        a.agent_name === b.agent_name &&
+        a.content === b.content &&
+        sameCitations(a.citations, b.citations) &&
+        aScores === bScores
+    );
+}
+
+function appendDialogueWithDedupe(history: DialogueEntry[], entry: DialogueEntry): DialogueEntry[] {
+    if (entry.role === 'judge' && entry.turn !== undefined) {
+        const duplicatedJudge = history.some(
+            (item) =>
+                item.role === 'judge' &&
+                item.turn === entry.turn &&
+                (item.target_role ?? '') === (entry.target_role ?? '') &&
+                sameDialogueContent(item, entry),
+        );
+        if (duplicatedJudge) {
+            return history;
+        }
+    }
+
+    const lastEntry = history[history.length - 1];
+    if (lastEntry && sameDialogueContent(lastEntry, entry)) {
+        return history;
+    }
+
+    return [...history, entry];
+}
+
+function coerceSearchResults(payload: Record<string, unknown>): SearchResult[] {
+    const value = payload.results;
+    if (!Array.isArray(value)) return [];
+    return value.filter((item): item is SearchResult => typeof item === 'object' && item !== null) as SearchResult[];
+}
+
+function sanitizeDialogueEntry(entry: DialogueEntry): DialogueEntry {
+    return {
+        ...entry,
+        content: sanitizeIncomingContent(entry.content),
+    };
+}
+
+function sanitizeSession(session: Session | null): Session | null {
+    if (!session) return null;
+    return {
+        ...session,
+        dialogue_history: session.dialogue_history.map(sanitizeDialogueEntry),
+    };
+}
+
 // ── Store ───────────────────────────────────────────────────────
 
 export const useDebateStore = create<DebateState>((set) => ({
@@ -88,7 +213,25 @@ export const useDebateStore = create<DebateState>((set) => ({
 
     // Session list
     setSessions: (sessions) => set({ sessions }),
-    setCurrentSession: (session) => set({ currentSession: session }),
+    setCurrentSession: (session) =>
+        set((state) => {
+            const safeSession = sanitizeSession(session);
+            const changedSession = state.currentSession?.id !== session?.id;
+            if (!changedSession) {
+                return { currentSession: safeSession };
+            }
+            return {
+                currentSession: safeSession,
+                runtimeEvents: [],
+                visibleRuntimeEvents: [],
+                lastEventSeq: -1,
+                focusedRuntimeEventId: null,
+                replayEnabled: false,
+                replayCursor: -1,
+                streamingRole: '',
+                streamingContent: '',
+            };
+        }),
 
     // Connection / debate flow
     setConnected: (connected) => set({ isConnected: connected }),
@@ -96,16 +239,370 @@ export const useDebateStore = create<DebateState>((set) => ({
     setPhase: (phase, status = '', node = '') =>
         set({ phase, currentStatus: status, currentNode: node }),
 
+    // Event reducer
+    applyRuntimeEvent: (event) =>
+        set((state) => {
+            if (state.currentSession && event.session_id && event.session_id !== state.currentSession.id) {
+                return {};
+            }
+
+            if (state.runtimeEvents.some((item) => item.event_id === event.event_id)) {
+                return {};
+            }
+
+            if (event.seq >= 0 && event.seq <= state.lastEventSeq) {
+                return {};
+            }
+
+            const payload = event.payload ?? {};
+            const runtimeEvents = [...state.runtimeEvents, event];
+            const trimmedEvents =
+                runtimeEvents.length > MAX_RUNTIME_EVENTS
+                    ? runtimeEvents.slice(-MAX_RUNTIME_EVENTS)
+                    : runtimeEvents;
+            const nextReplayCursor = state.replayEnabled
+                ? clampReplayCursor(state.replayCursor, trimmedEvents.length)
+                : clampReplayCursor(trimmedEvents.length - 1, trimmedEvents.length);
+            const visibleRuntimeEvents = getVisibleRuntimeEvents(
+                trimmedEvents,
+                state.replayEnabled,
+                nextReplayCursor,
+            );
+
+            const patch: Partial<DebateState> = {
+                runtimeEvents: trimmedEvents,
+                visibleRuntimeEvents,
+                lastEventSeq: event.seq >= 0 ? event.seq : state.lastEventSeq,
+                replayCursor: nextReplayCursor,
+            };
+            if (
+                state.focusedRuntimeEventId &&
+                !trimmedEvents.some((item) => item.event_id === state.focusedRuntimeEventId)
+            ) {
+                patch.focusedRuntimeEventId =
+                    state.replayEnabled && nextReplayCursor >= 0
+                        ? trimmedEvents[nextReplayCursor].event_id
+                        : null;
+            } else if (state.replayEnabled && !state.focusedRuntimeEventId && nextReplayCursor >= 0) {
+                patch.focusedRuntimeEventId = trimmedEvents[nextReplayCursor].event_id;
+            }
+
+            switch (event.type) {
+                case 'system':
+                    break;
+
+                case 'status':
+                    patch.phase = (event.phase ?? getPayloadString(payload, 'phase') ?? 'processing') as DebatePhase;
+                    patch.currentStatus = sanitizeIncomingContent(getPayloadString(payload, 'content')) || '';
+                    patch.currentNode = getPayloadString(payload, 'node') ?? '';
+                    break;
+
+                case 'speech_start':
+                    patch.streamingRole = getPayloadString(payload, 'role') ?? '';
+                    patch.streamingContent = '';
+                    break;
+
+                case 'speech_token':
+                    patch.streamingContent = `${state.streamingContent}${getPayloadString(payload, 'token') ?? ''}`;
+                    break;
+
+                case 'speech_end': {
+                    patch.streamingRole = '';
+                    patch.streamingContent = '';
+                    if (!state.currentSession) break;
+
+                    const entry: DialogueEntry = {
+                        role: getPayloadString(payload, 'role') ?? '',
+                        agent_name: getPayloadString(payload, 'agent_name') ?? getPayloadString(payload, 'role') ?? '',
+                        content: sanitizeIncomingContent(getPayloadString(payload, 'content')),
+                        citations: getPayloadCitations(payload),
+                        timestamp: event.timestamp || new Date().toISOString(),
+                        event_id: event.event_id,
+                    };
+
+                    patch.currentSession = {
+                        ...state.currentSession,
+                        dialogue_history: appendDialogueWithDedupe(state.currentSession.dialogue_history, entry),
+                    };
+                    break;
+                }
+
+                case 'fact_check_start':
+                    patch.phase = 'fact_checking';
+                    patch.currentStatus = '正在核查事实...';
+                    patch.currentNode = 'tool_executor';
+                    break;
+
+                case 'fact_check_result':
+                    patch.lastSearchResults = coerceSearchResults(payload);
+                    patch.searchResultCount = getPayloadNumber(payload, 'count') ?? 0;
+                    break;
+
+                case 'judge_start':
+                    patch.phase = 'judging';
+                    patch.currentStatus = '裁判评估中...';
+                    patch.currentNode = 'judge';
+                    break;
+
+                case 'judge_score': {
+                    if (!state.currentSession) break;
+                    const role = getPayloadString(payload, 'role');
+                    const turn = getPayloadNumber(payload, 'turn');
+                    const scoresRaw = payload.scores;
+                    if (!role || typeof scoresRaw !== 'object' || scoresRaw === null) {
+                        break;
+                    }
+                    const scores = scoresRaw as TurnScore;
+                    const judgeEntry: DialogueEntry = {
+                        role: 'judge',
+                        target_role: role,
+                        turn,
+                        agent_name: '裁判组视角',
+                        content: sanitizeIncomingContent(scores.overall_comment),
+                        scores,
+                        timestamp: event.timestamp || new Date().toISOString(),
+                        citations: [],
+                        event_id: event.event_id,
+                    };
+
+                    patch.currentSession = {
+                        ...state.currentSession,
+                        current_scores: {
+                            ...state.currentSession.current_scores,
+                            [role]: scores,
+                        },
+                        dialogue_history: appendDialogueWithDedupe(
+                            state.currentSession.dialogue_history,
+                            judgeEntry,
+                        ),
+                    };
+                    break;
+                }
+
+                case 'turn_complete': {
+                    if (!state.currentSession) break;
+                    const turn = getPayloadNumber(payload, 'turn');
+                    const cumulativeRaw = payload.cumulative_scores;
+                    patch.currentSession = {
+                        ...state.currentSession,
+                        current_turn: turn ?? state.currentSession.current_turn,
+                        cumulative_scores:
+                            typeof cumulativeRaw === 'object' && cumulativeRaw !== null
+                                ? (cumulativeRaw as Record<string, Record<string, number[]>>)
+                                : state.currentSession.cumulative_scores,
+                    };
+                    break;
+                }
+
+                case 'debate_complete': {
+                    if (!state.currentSession) {
+                        patch.isDebating = false;
+                        patch.phase = 'complete';
+                        patch.currentStatus = '辩论已完成';
+                        break;
+                    }
+                    const totalTurns = getPayloadNumber(payload, 'total_turns') ?? state.currentSession.current_turn;
+                    const finalScoresRaw = payload.final_scores;
+                    patch.isDebating = false;
+                    patch.phase = 'complete';
+                    patch.currentStatus = '辩论已完成';
+                    patch.currentSession = {
+                        ...state.currentSession,
+                        status: 'completed',
+                        current_turn: totalTurns,
+                        cumulative_scores:
+                            typeof finalScoresRaw === 'object' && finalScoresRaw !== null
+                                ? (finalScoresRaw as Record<string, Record<string, number[]>>)
+                                : state.currentSession.cumulative_scores,
+                    };
+                    break;
+                }
+
+                case 'error': {
+                    patch.phase = 'error';
+                    patch.currentStatus = sanitizeIncomingContent(getPayloadString(payload, 'content')) || '出现错误';
+                    patch.isDebating = false;
+                    if (!state.currentSession) break;
+                    const errorEntry: DialogueEntry = {
+                        role: 'error',
+                        content: patch.currentStatus,
+                        timestamp: event.timestamp || new Date().toISOString(),
+                        citations: [],
+                        event_id: event.event_id,
+                        agent_name: '系统错误',
+                    };
+                    patch.currentSession = {
+                        ...state.currentSession,
+                        dialogue_history: appendDialogueWithDedupe(
+                            state.currentSession.dialogue_history,
+                            errorEntry,
+                        ),
+                    };
+                    break;
+                }
+
+                case 'audience_message': {
+                    if (!state.currentSession) break;
+                    const audienceEntry: DialogueEntry = {
+                        role: 'audience',
+                        content: sanitizeIncomingContent(getPayloadString(payload, 'content')),
+                        timestamp: getPayloadString(payload, 'timestamp') ?? event.timestamp ?? new Date().toISOString(),
+                        citations: [],
+                        event_id: event.event_id,
+                        agent_name: '观众发言',
+                    };
+                    patch.currentSession = {
+                        ...state.currentSession,
+                        dialogue_history: appendDialogueWithDedupe(
+                            state.currentSession.dialogue_history,
+                            audienceEntry,
+                        ),
+                    };
+                    break;
+                }
+
+                case 'pong':
+                default:
+                    break;
+            }
+
+            return patch;
+        }),
+    setFocusedRuntimeEventId: (eventId) =>
+        set((state) => {
+            if (!state.replayEnabled) {
+                return { focusedRuntimeEventId: eventId };
+            }
+
+            if (!eventId) {
+                return { focusedRuntimeEventId: null };
+            }
+
+            const index = state.runtimeEvents.findIndex((event) => event.event_id === eventId);
+            if (index < 0) {
+                return { focusedRuntimeEventId: eventId };
+            }
+
+            const replayCursor = clampReplayCursor(index, state.runtimeEvents.length);
+            return {
+                focusedRuntimeEventId: eventId,
+                replayCursor,
+                visibleRuntimeEvents: getVisibleRuntimeEvents(state.runtimeEvents, true, replayCursor),
+            };
+        }),
+    setReplayEnabled: (enabled) =>
+        set((state) => {
+            if (!enabled) {
+                const realtimeCursor = clampReplayCursor(
+                    state.runtimeEvents.length - 1,
+                    state.runtimeEvents.length,
+                );
+                return {
+                    replayEnabled: false,
+                    replayCursor: realtimeCursor,
+                    visibleRuntimeEvents: state.runtimeEvents,
+                };
+            }
+
+            let replayCursor = state.replayCursor;
+            if (state.focusedRuntimeEventId) {
+                const focusedIndex = state.runtimeEvents.findIndex(
+                    (event) => event.event_id === state.focusedRuntimeEventId,
+                );
+                if (focusedIndex >= 0) {
+                    replayCursor = focusedIndex;
+                }
+            }
+            if (replayCursor < 0) {
+                replayCursor = state.runtimeEvents.length - 1;
+            }
+
+            replayCursor = clampReplayCursor(replayCursor, state.runtimeEvents.length);
+            return {
+                replayEnabled: true,
+                replayCursor,
+                visibleRuntimeEvents: getVisibleRuntimeEvents(state.runtimeEvents, true, replayCursor),
+                focusedRuntimeEventId:
+                    replayCursor >= 0 ? state.runtimeEvents[replayCursor].event_id : null,
+            };
+        }),
+    setReplayCursor: (cursor) =>
+        set((state) => {
+            const replayCursor = clampReplayCursor(cursor, state.runtimeEvents.length);
+            return {
+                replayEnabled: true,
+                replayCursor,
+                visibleRuntimeEvents: getVisibleRuntimeEvents(state.runtimeEvents, true, replayCursor),
+                focusedRuntimeEventId:
+                    replayCursor >= 0 ? state.runtimeEvents[replayCursor].event_id : null,
+            };
+        }),
+    stepReplay: (offset) =>
+        set((state) => {
+            const baselineCursor = state.replayEnabled
+                ? state.replayCursor
+                : state.runtimeEvents.length - 1;
+            const replayCursor = clampReplayCursor(
+                baselineCursor + offset,
+                state.runtimeEvents.length,
+            );
+            return {
+                replayEnabled: true,
+                replayCursor,
+                visibleRuntimeEvents: getVisibleRuntimeEvents(state.runtimeEvents, true, replayCursor),
+                focusedRuntimeEventId:
+                    replayCursor >= 0 ? state.runtimeEvents[replayCursor].event_id : null,
+            };
+        }),
+    exitReplay: () =>
+        set((state) => {
+            const replayCursor = clampReplayCursor(
+                state.runtimeEvents.length - 1,
+                state.runtimeEvents.length,
+            );
+            return {
+                replayEnabled: false,
+                replayCursor,
+                visibleRuntimeEvents: state.runtimeEvents,
+                focusedRuntimeEventId: null,
+            };
+        }),
+    loadRuntimeEventSnapshot: (events) =>
+        set(() => {
+            const safeEvents =
+                events.length > MAX_RUNTIME_EVENTS
+                    ? events.slice(-MAX_RUNTIME_EVENTS)
+                    : events;
+            const replayCursor = clampReplayCursor(safeEvents.length - 1, safeEvents.length);
+            const lastEventSeq = safeEvents.reduce((maxSeq, event) => {
+                if (event.seq >= 0 && event.seq > maxSeq) return event.seq;
+                return maxSeq;
+            }, -1);
+            return {
+                runtimeEvents: safeEvents,
+                visibleRuntimeEvents: getVisibleRuntimeEvents(safeEvents, true, replayCursor),
+                lastEventSeq,
+                replayEnabled: true,
+                replayCursor,
+                focusedRuntimeEventId: replayCursor >= 0 ? safeEvents[replayCursor].event_id : null,
+                streamingRole: '',
+                streamingContent: '',
+            };
+        }),
+
     // Dialogue
     appendDialogueEntry: (entry) =>
-        set((state) => ({
-            currentSession: state.currentSession
-                ? {
+        set((state) => {
+            if (!state.currentSession) {
+                return {};
+            }
+            return {
+                currentSession: {
                     ...state.currentSession,
-                    dialogue_history: [...state.currentSession.dialogue_history, entry],
-                }
-                : null,
-        })),
+                    dialogue_history: appendDialogueWithDedupe(state.currentSession.dialogue_history, entry),
+                },
+            };
+        }),
 
     startStreaming: (role) => set({ streamingRole: role, streamingContent: '' }),
 
@@ -114,23 +611,24 @@ export const useDebateStore = create<DebateState>((set) => ({
 
     endStreaming: (role, content, citations, agentName) =>
         set((state) => {
-            const history = state.currentSession?.dialogue_history || [];
+            if (!state.currentSession) {
+                return { streamingRole: '', streamingContent: '' };
+            }
+
             const entry: DialogueEntry = {
                 role,
                 agent_name: agentName || role,
-                content,
+                content: sanitizeIncomingContent(content),
                 citations,
                 timestamp: new Date().toISOString(),
             };
             return {
                 streamingRole: '',
                 streamingContent: '',
-                currentSession: state.currentSession
-                    ? {
-                        ...state.currentSession,
-                        dialogue_history: [...history, entry],
-                    }
-                    : null,
+                currentSession: {
+                    ...state.currentSession,
+                    dialogue_history: appendDialogueWithDedupe(state.currentSession.dialogue_history, entry),
+                },
             };
         }),
 
