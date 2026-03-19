@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.dependencies import get_search_factory
-from app.search.factory import SearchProviderFactory, ProviderType
+from app.search.factory import SearchProviderFactory
 
 router = APIRouter(prefix="/search", tags=["search"])
 

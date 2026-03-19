@@ -209,9 +209,11 @@ function SessionCreator() {
         setShowAdvanced,
         savedConfigs,
         selectedConfigIds,
+        temperatureInputs,
         showConfigManager,
         setShowConfigManager,
         handleConfigSelect,
+        handleTemperatureChange,
         buildAgentConfigs,
     } = useAgentConfigs();
 
@@ -230,9 +232,11 @@ function SessionCreator() {
                     <AgentConfigPanel
                         savedConfigs={savedConfigs}
                         selectedConfigIds={selectedConfigIds}
+                        temperatureInputs={temperatureInputs}
                         showConfigManager={showConfigManager}
                         setShowConfigManager={setShowConfigManager}
                         handleConfigSelect={handleConfigSelect}
+                        handleTemperatureChange={handleTemperatureChange}
                     />
                 </div>
             )}

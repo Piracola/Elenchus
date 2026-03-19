@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
-from app.runtime.orchestrator import DebateOrchestrator, _noop_emit_event
+from app.runtime.event_emitter import noop_emit_event
+from app.runtime.orchestrator import DebateOrchestrator
 from app.runtime.session_repository import SessionRuntimeRepository
 
 if TYPE_CHECKING:
@@ -30,5 +31,5 @@ class DebateRunner(DebateOrchestrator):
             repository=repository,
             engine=engine,
             runtime_bus=runtime_bus,
-            emit_event=emit_event or _noop_emit_event,
+            emit_event=emit_event or noop_emit_event,
         )

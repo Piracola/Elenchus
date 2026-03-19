@@ -196,7 +196,7 @@ class ProviderService:
         """Get the default provider configuration."""
         async with await self._get_session() as session:
             result = await session.execute(
-                select(ProviderRecord).where(ProviderRecord.is_default == True)
+                select(ProviderRecord).where(ProviderRecord.is_default)
             )
             record = result.scalar_one_or_none()
             if record:
@@ -300,7 +300,7 @@ class ProviderService:
     async def _clear_defaults(self, session: AsyncSession) -> None:
         """Clear all default flags in the current session."""
         result = await session.execute(
-            select(ProviderRecord).where(ProviderRecord.is_default == True)
+            select(ProviderRecord).where(ProviderRecord.is_default)
         )
         for record in result.scalars().all():
             record.is_default = False

@@ -13,7 +13,7 @@ import type {
 } from '../types';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
-const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\u0000-\u001f]/g;
+const INVALID_FILENAME_CHARACTERS = new Set(['<', '>', ':', '"', '/', '\\', '|', '?', '*']);
 
 async function readErrorMessage(res: Response): Promise<string> {
     const text = await res.text();
@@ -49,10 +49,18 @@ function getFilename(contentDisposition: string | null, fallback: string): strin
     return fallback;
 }
 
+function sanitizeFilenameSegment(value: string): string {
+    return Array.from(value, (char) => {
+        const code = char.charCodeAt(0);
+        if (code < 32 || INVALID_FILENAME_CHARACTERS.has(char)) {
+            return '_';
+        }
+        return char;
+    }).join('');
+}
+
 function buildTopicFilename(topic: string, extension: string): string {
-    const normalized = topic
-        .trim()
-        .replace(INVALID_FILENAME_CHARS, '_')
+    const normalized = sanitizeFilenameSegment(topic.trim())
         .replace(/\s+/g, ' ')
         .replace(/[. ]+$/g, '');
     const base = normalized || '未命名辩题';
@@ -60,7 +68,11 @@ function buildTopicFilename(topic: string, extension: string): string {
     return `${base}.${suffix}`;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function requestWithParser<T>(
+    path: string,
+    parser: (res: Response) => Promise<T>,
+    init?: RequestInit,
+): Promise<T> {
     const res = await fetch(`${BASE}${path}`, {
         headers: { 'Content-Type': 'application/json' },
         ...init,
@@ -68,20 +80,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     if (!res.ok) {
         throw new Error(await readErrorMessage(res));
     }
-    // 204 No Content
-    if (res.status === 204) return undefined as T;
-    return res.json();
+    return parser(res);
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+    return requestWithParser(path, async (res) => {
+        if (res.status === 204) return undefined as T;
+        return res.json() as Promise<T>;
+    }, init);
 }
 
 async function requestText(path: string, init?: RequestInit): Promise<string> {
-    const res = await fetch(`${BASE}${path}`, {
-        headers: { 'Content-Type': 'application/json' },
-        ...init,
-    });
-    if (!res.ok) {
-        throw new Error(await readErrorMessage(res));
-    }
-    return res.text();
+    return requestWithParser(path, (res) => res.text(), init);
 }
 
 async function download(path: string, fallbackFilename: string): Promise<void> {

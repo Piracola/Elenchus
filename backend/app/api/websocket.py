@@ -74,14 +74,14 @@ async def debate_ws(websocket: WebSocket, session_id: str):
             if action == "start":
                 result = await runtime_service.start_session(session_id)
                 if not result.started:
-                    start_failed_event = await event_gateway.create_event(
+                    start_failed_event = await runtime_bus.create_event(
                         session_id=session_id,
                         event_type="error",
                         payload={"content": result.message or "Failed to start session."},
                         source="ws.gateway",
                         phase="error",
                     )
-                    await connection_hub.send(session_id, websocket, start_failed_event)
+                    await runtime_bus.send(session_id, websocket, start_failed_event)
                     continue
 
                 session_db = result.session or {}

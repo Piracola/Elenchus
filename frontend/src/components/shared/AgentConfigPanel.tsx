@@ -8,6 +8,11 @@ import { Settings2 } from 'lucide-react';
 import CustomSelect from './CustomSelect';
 import SettingsPanel from '../sidebar/SettingsPanel';
 import type { ModelConfig } from '../../types';
+import {
+    AGENT_ROLES,
+    DEFAULT_AGENT_TEMPERATURE,
+    type AgentRole,
+} from '../../utils/agentConfigs';
 
 export type { AgentConfigResult } from '../../types';
 
@@ -25,19 +30,20 @@ const AGENT_ICONS: Record<string, string> = {
     fact_checker: '●',
 };
 
-const AGENTS = ['proposer', 'opposer', 'judge', 'fact_checker'] as const;
-
 interface AgentConfigPanelProps {
     savedConfigs: ModelConfig[];
-    selectedConfigIds: Record<string, string>;
+    selectedConfigIds: Record<AgentRole, string>;
+    temperatureInputs: Record<AgentRole, string>;
     showConfigManager: boolean;
     setShowConfigManager: (v: boolean) => void;
-    handleConfigSelect: (agent: string, value: string) => void;
+    handleConfigSelect: (agent: AgentRole, value: string) => void;
+    handleTemperatureChange: (agent: AgentRole, value: string) => void;
 }
 
 export default function AgentConfigPanel({
     savedConfigs, selectedConfigIds,
-    showConfigManager, setShowConfigManager, handleConfigSelect,
+    temperatureInputs,
+    showConfigManager, setShowConfigManager, handleConfigSelect, handleTemperatureChange,
 }: AgentConfigPanelProps) {
 
     const buildOptions = () => {
@@ -102,8 +108,8 @@ export default function AgentConfigPanel({
                     gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', 
                     gap: '12px' 
                 }}>
-                    {AGENTS.map(agent => (
-                        <div key={agent} style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    {AGENT_ROLES.map(agent => (
+                        <div key={agent} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <div style={{ 
                                 fontSize: '11px', 
                                 fontWeight: 600, 
@@ -121,8 +127,49 @@ export default function AgentConfigPanel({
                                 onChange={(value) => handleConfigSelect(agent, value)}
                                 size="sm"
                             />
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                            }}>
+                                <span style={{
+                                    minWidth: '28px',
+                                    fontSize: '11px',
+                                    color: 'var(--text-muted)',
+                                    fontWeight: 600,
+                                }}>
+                                    Temp
+                                </span>
+                                <input
+                                    type="number"
+                                    value={temperatureInputs[agent]}
+                                    onChange={(event) => handleTemperatureChange(agent, event.target.value)}
+                                    placeholder={String(DEFAULT_AGENT_TEMPERATURE)}
+                                    min={0}
+                                    max={2}
+                                    step={0.1}
+                                    style={{
+                                        width: '100%',
+                                        padding: '8px 10px',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid var(--border-subtle)',
+                                        background: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)',
+                                        fontSize: '12px',
+                                        outline: 'none',
+                                        boxSizing: 'border-box',
+                                    }}
+                                />
+                            </div>
                         </div>
                     ))}
+                </div>
+                <div style={{
+                    marginTop: '12px',
+                    fontSize: '11px',
+                    color: 'var(--text-muted)',
+                }}>
+                    Temperature range: 0-2. Leave blank to use the default value ({DEFAULT_AGENT_TEMPERATURE}).
                 </div>
             </motion.div>
             <SettingsPanel

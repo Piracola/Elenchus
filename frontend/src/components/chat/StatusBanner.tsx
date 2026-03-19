@@ -3,7 +3,7 @@
  * Default state is collapsed to reduce top-bar space usage.
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useDebateStore } from '../../stores/debateStore';
 import { getEventNode } from '../../utils/eventFocus';
@@ -12,10 +12,14 @@ import { deriveRuntimeViewState } from '../../utils/replay';
 
 const PHASE_LABELS: Record<string, string> = {
     idle: '空闲',
+    initializing: '初始化',
+    context: '上下文',
+    preparing: '准备',
     speaking: '发言',
     fact_checking: '核查',
     judging: '评估',
     advancing: '推进',
+    processing: '处理中',
     complete: '完成',
     error: '错误',
 };
@@ -59,12 +63,6 @@ export default function StatusBanner() {
 
     const hasStatus =
         !((!isDebating || phase === 'idle' || phase === 'complete') && !focusedEvent && !replayEnabled);
-
-    useEffect(() => {
-        if (!hasStatus) {
-            setExpanded(false);
-        }
-    }, [hasStatus]);
 
     if (!hasStatus) {
         return null;

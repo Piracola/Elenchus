@@ -76,20 +76,14 @@ export default function MemoryPanel({ compact = false, embedded = false }: Memor
     const latestWrites = writes.slice(-4).reverse();
     const graph = useMemo(() => buildMemoryGraph(writes), [writes]);
 
-    const sourceNodeMap = useMemo(
-        () =>
-            Object.fromEntries(
-                graph.sourceNodes.map((node) => [node.id, node]),
-            ) as Record<string, (typeof graph.sourceNodes)[number]>,
-        [graph.sourceNodes],
-    );
-    const memoryNodeMap = useMemo(
-        () =>
-            Object.fromEntries(
-                graph.memoryNodes.map((node) => [node.id, node]),
-            ) as Record<string, (typeof graph.memoryNodes)[number]>,
-        [graph.memoryNodes],
-    );
+    const { sourceNodeMap, memoryNodeMap } = useMemo(() => ({
+        sourceNodeMap: Object.fromEntries(
+            graph.sourceNodes.map((node) => [node.id, node]),
+        ) as Record<string, (typeof graph.sourceNodes)[number]>,
+        memoryNodeMap: Object.fromEntries(
+            graph.memoryNodes.map((node) => [node.id, node]),
+        ) as Record<string, (typeof graph.memoryNodes)[number]>,
+    }), [graph]);
 
     const sectionStyle = {
         border: '1px solid rgba(148, 163, 184, 0.16)',

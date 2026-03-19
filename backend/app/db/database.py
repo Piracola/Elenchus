@@ -52,5 +52,6 @@ async def init_db():
     """Create all tables on startup."""
     engine = _get_engine()
     async with engine.begin() as conn:
-        from app.db import models as _  # noqa: ensure models are imported
+        import app.db.models  # noqa: F401
+
         await conn.run_sync(Base.metadata.create_all)
