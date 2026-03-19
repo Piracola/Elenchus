@@ -27,21 +27,27 @@ class ResolvedLLMConfig:
     provider_type: str
     api_key: str
     api_base_url: str | None
+    custom_parameters: dict[str, Any]
     temperature: float
     max_tokens: int
 
 
 async def _resolve_provider_info(
     override: dict[str, Any],
-) -> tuple[str | None, str | None, str | None]:
+) -> tuple[str | None, str | None, str | None, dict[str, Any]]:
     """
     Resolve provider_type and api_base_url from override config or database.
 
-    Returns: (provider_type, api_base_url, api_key)
+    Returns: (provider_type, api_base_url, api_key, custom_parameters)
     """
     agent_config_service = get_agent_config_service()
     selection = await agent_config_service.resolve_provider_selection(override)
-    return selection.provider_type, selection.api_base_url, selection.api_key
+    return (
+        selection.provider_type,
+        selection.api_base_url,
+        selection.api_key,
+        selection.custom_parameters,
+    )
 
 
 async def resolve_llm_config(
@@ -50,7 +56,7 @@ async def resolve_llm_config(
     """Resolve provider, credentials, and generation settings for one call."""
     override = override or {}
     model = override.get("model", "gpt-4o")
-    provider_type, api_base_url, api_key = await _resolve_provider_info(override)
+    provider_type, api_base_url, api_key, custom_parameters = await _resolve_provider_info(override)
     temperature = override.get("temperature", 0.7)
     max_tokens = override.get("max_tokens", 1500)
 
@@ -65,6 +71,7 @@ async def resolve_llm_config(
         provider_type=provider_type or "openai",
         api_key=api_key,
         api_base_url=api_base_url,
+        custom_parameters=custom_parameters,
         temperature=temperature,
         max_tokens=max_tokens,
     )
@@ -88,7 +95,7 @@ def create_llm_from_config(
         config.provider_type,
         config.model,
         log_base,
-        {**kwargs, "api_key": "***"},
+        {**kwargs, "custom_parameters": config.custom_parameters, "api_key": "***"},
     )
 
     llm_router = get_llm_router()
@@ -97,6 +104,7 @@ def create_llm_from_config(
         model=config.model,
         api_key=config.api_key,
         api_base_url=config.api_base_url,
+        custom_parameters=config.custom_parameters,
         **kwargs,
     )
 

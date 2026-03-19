@@ -1,6 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
+
 import { api } from '../api/client';
 import type { ModelConfig, ProviderFormData } from '../types';
+import { formatCustomParameters, parseCustomParametersInput } from '../utils/customParameters';
 
 export function useModelConfigManager() {
     const [providers, setProviders] = useState<ModelConfig[]>([]);
@@ -12,24 +14,28 @@ export function useModelConfigManager() {
         providerType: 'openai',
         apiKey: '',
         apiBaseUrl: '',
+        customParametersText: '',
         models: [],
         isDefault: false,
     });
     const [newModelInput, setNewModelInput] = useState('');
 
-    const getActiveIndexClamped = useCallback((len: number, idx: number) => {
-        if (len === 0) return 0;
-        return Math.min(idx, len - 1);
+    const getActiveIndexClamped = useCallback((length: number, index: number) => {
+        if (length === 0) {
+            return 0;
+        }
+        return Math.min(index, length - 1);
     }, []);
 
-    const fillForm = useCallback((p: ModelConfig) => {
+    const fillForm = useCallback((provider: ModelConfig) => {
         setFormData({
-            name: p.name,
-            providerType: p.provider_type || 'openai',
-            apiKey: p.api_key || '',
-            apiBaseUrl: p.api_base_url || '',
-            models: p.models || [],
-            isDefault: p.is_default || false,
+            name: provider.name,
+            providerType: provider.provider_type || 'openai',
+            apiKey: provider.api_key || '',
+            apiBaseUrl: provider.api_base_url || '',
+            customParametersText: formatCustomParameters(provider.custom_parameters),
+            models: provider.models || [],
+            isDefault: provider.is_default || false,
         });
         setIsCreatingNew(false);
     }, []);
@@ -41,6 +47,7 @@ export function useModelConfigManager() {
             providerType: 'openai',
             apiKey: '',
             apiBaseUrl: '',
+            customParametersText: '',
             models: [],
             isDefault: false,
         });
@@ -51,39 +58,43 @@ export function useModelConfigManager() {
             setIsLoading(true);
             const data = await api.models.list();
             setProviders(data);
+
             if (data.length > 0 && !isCreatingNew) {
-                const p = data[getActiveIndexClamped(data.length, activeIndex)];
-                fillForm(p);
+                const provider = data[getActiveIndexClamped(data.length, activeIndex)];
+                fillForm(provider);
             } else if (data.length === 0) {
                 startNew();
             }
         } catch (err) {
-            console.error("Failed to load providers", err);
+            console.error('Failed to load providers', err);
         } finally {
             setIsLoading(false);
         }
-    }, [activeIndex, isCreatingNew, getActiveIndexClamped, fillForm, startNew]);
+    }, [activeIndex, fillForm, getActiveIndexClamped, isCreatingNew, startNew]);
 
-    const handleSelectProvider = useCallback((idx: number) => {
+    const handleSelectProvider = useCallback((index: number) => {
         setIsCreatingNew(false);
-        setActiveIndex(idx);
-        fillForm(providers[idx]);
-    }, [providers, fillForm]);
+        setActiveIndex(index);
+        fillForm(providers[index]);
+    }, [fillForm, providers]);
 
-    const handleDeleteProvider = useCallback(async (id: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (!confirm("确定要删除这个提供商配置吗？")) return;
+    const handleDeleteProvider = useCallback(async (id: string, event: React.MouseEvent) => {
+        event.stopPropagation();
+        if (!confirm('确定要删除这个提供商配置吗？')) {
+            return;
+        }
+
         try {
             await api.models.delete(id);
-            fetchConfigs();
+            await fetchConfigs();
         } catch (err) {
-            console.error("Delete failed", err);
+            console.error('Delete failed', err);
         }
     }, [fetchConfigs]);
 
     const handleSave = useCallback(async () => {
         if (!formData.name.trim()) {
-            alert("提供商名称为必填项。");
+            alert('提供商名称为必填项。');
             return;
         }
 
@@ -92,6 +103,7 @@ export function useModelConfigManager() {
             provider_type: formData.providerType,
             api_key: formData.apiKey.trim() || null,
             api_base_url: formData.apiBaseUrl.trim() || null,
+            custom_parameters: parseCustomParametersInput(formData.customParametersText),
             models: formData.models,
             is_default: formData.isDefault,
         };
@@ -102,31 +114,48 @@ export function useModelConfigManager() {
                 setIsCreatingNew(false);
                 await fetchConfigs();
                 setActiveIndex(providers.length);
-            } else {
-                const currentId = providers[activeIndex].id;
-                await api.models.update(currentId, payload);
-                await fetchConfigs();
+                return;
             }
+
+            const currentId = providers[activeIndex]?.id;
+            if (!currentId) {
+                throw new Error('未找到当前提供商配置。');
+            }
+            await api.models.update(currentId, payload);
+            await fetchConfigs();
         } catch (err) {
-            console.error("Save failed", err);
-            alert(`保存失败：${err instanceof Error ? err.message : "未知错误"}`);
+            console.error('Save failed', err);
+            alert(`保存失败：${err instanceof Error ? err.message : '未知错误'}`);
         }
-    }, [formData, isCreatingNew, providers, activeIndex, fetchConfigs]);
+    }, [activeIndex, fetchConfigs, formData, isCreatingNew, providers]);
 
     const handleAddModel = useCallback(() => {
-        if (!newModelInput.trim()) return;
-        if (!formData.models.includes(newModelInput.trim())) {
-            setFormData(prev => ({ ...prev, models: [...prev.models, newModelInput.trim()] }));
+        const nextModel = newModelInput.trim();
+        if (!nextModel) {
+            return;
+        }
+
+        if (!formData.models.includes(nextModel)) {
+            setFormData((previous) => ({
+                ...previous,
+                models: [...previous.models, nextModel],
+            }));
         }
         setNewModelInput('');
-    }, [newModelInput, formData.models]);
+    }, [formData.models, newModelInput]);
 
-    const handleRemoveModel = useCallback((mod: string) => {
-        setFormData(prev => ({ ...prev, models: prev.models.filter(m => m !== mod) }));
+    const handleRemoveModel = useCallback((model: string) => {
+        setFormData((previous) => ({
+            ...previous,
+            models: previous.models.filter((item) => item !== model),
+        }));
     }, []);
 
-    const updateFormField = useCallback(<K extends keyof ProviderFormData>(field: K, value: ProviderFormData[K]) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
+    const updateFormField = useCallback(<K extends keyof ProviderFormData>(
+        field: K,
+        value: ProviderFormData[K],
+    ) => {
+        setFormData((previous) => ({ ...previous, [field]: value }));
     }, []);
 
     return {

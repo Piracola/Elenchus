@@ -16,6 +16,7 @@ class ResolvedProviderSelection:
     provider_type: str | None
     api_base_url: str | None
     api_key: str | None
+    custom_parameters: dict[str, Any]
 
 
 class AgentConfigService:
@@ -60,6 +61,9 @@ class AgentConfigService:
         provider_type = override.get("provider_type")
         api_base_url = override.get("api_base_url")
         api_key = override.get("api_key")
+        custom_parameters = self._normalize_custom_parameters(
+            override.get("custom_parameters")
+        )
 
         providers_by_id, default_provider = await self._load_providers()
         selected_provider = providers_by_id.get(provider_id) if provider_id else None
@@ -79,6 +83,12 @@ class AgentConfigService:
                 provider_type=provider_type,
                 api_base_url=api_base_url,
                 api_key=api_key,
+                custom_parameters={
+                    **self._normalize_custom_parameters(
+                        selected_provider.get("custom_parameters")
+                    ),
+                    **custom_parameters,
+                },
             )
 
         if api_key:
@@ -87,6 +97,7 @@ class AgentConfigService:
                 provider_type=provider_type,
                 api_base_url=api_base_url,
                 api_key=api_key,
+                custom_parameters=custom_parameters,
             )
 
         if provider_type or api_base_url:
@@ -100,6 +111,12 @@ class AgentConfigService:
                     provider_type=provider_type or default_provider.get("provider_type"),
                     api_base_url=api_base_url or default_provider.get("api_base_url"),
                     api_key=default_provider.get("api_key"),
+                    custom_parameters={
+                        **self._normalize_custom_parameters(
+                            default_provider.get("custom_parameters")
+                        ),
+                        **custom_parameters,
+                    },
                 )
 
             raise ValueError(
@@ -114,6 +131,9 @@ class AgentConfigService:
                 provider_type=default_provider.get("provider_type"),
                 api_base_url=default_provider.get("api_base_url"),
                 api_key=default_provider.get("api_key"),
+                custom_parameters=self._normalize_custom_parameters(
+                    default_provider.get("custom_parameters")
+                ),
             )
 
         return ResolvedProviderSelection(
@@ -121,6 +141,7 @@ class AgentConfigService:
             provider_type=provider_type,
             api_base_url=api_base_url,
             api_key=None,
+            custom_parameters=custom_parameters,
         )
 
     async def _load_providers(
@@ -203,3 +224,13 @@ class AgentConfigService:
             or api_base_url == provider.get("api_base_url")
         )
         return provider_type_matches and api_base_matches
+
+    @staticmethod
+    def _normalize_custom_parameters(value: Any) -> dict[str, Any]:
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            raise ValueError(
+                "Model invocation blocked: custom parameters must be a JSON object."
+            )
+        return dict(value)

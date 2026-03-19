@@ -30,6 +30,7 @@ def build_openai_chat_payload(
     payload: dict[str, Any] = {
         "model": config.model,
         "messages": [_convert_message_to_dict(message) for message in messages],
+        **config.custom_parameters,
         "temperature": config.temperature,
         "max_tokens": config.max_tokens,
         "stream": False,

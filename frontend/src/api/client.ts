@@ -10,6 +10,9 @@ import type {
     ModelConfigCreatePayload,
     LogLevel,
     RuntimeEventPage,
+    SearchConfig,
+    SearchConfigUpdatePayload,
+    SearchProviderStatus,
 } from '../types';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
@@ -203,7 +206,7 @@ export const api = {
     },
 
     search: {
-        getConfig: (): Promise<{ provider: string; available_providers: Array<{ name: string; available: boolean; is_primary: boolean }> }> =>
+        getConfig: (): Promise<SearchConfig> =>
             request('/search/config'),
 
         setProvider: (provider: string): Promise<{ status: string; provider: string }> =>
@@ -212,7 +215,13 @@ export const api = {
                 body: JSON.stringify({ provider }),
             }),
 
-        getProviders: (): Promise<Array<{ name: string; available: boolean; is_primary: boolean }>> =>
+        updateConfig: (payload: SearchConfigUpdatePayload): Promise<SearchConfig> =>
+            request('/search/config', {
+                method: 'PUT',
+                body: JSON.stringify(payload),
+            }),
+
+        getProviders: (): Promise<SearchProviderStatus[]> =>
             request('/search/providers'),
 
         getHealth: (): Promise<{ status: string; provider: string | null }> =>

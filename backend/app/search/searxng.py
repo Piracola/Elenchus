@@ -21,9 +21,18 @@ class SearXNGProvider(SearchProvider):
     Expects the instance to have JSON output enabled in settings.yml.
     """
 
-    def __init__(self, base_url: str = "http://localhost:8080"):
+    def __init__(self, base_url: str = "http://localhost:8080", api_key: str | None = None):
         self.base_url = base_url.rstrip("/")
+        self.api_key = (api_key or "").strip()
         self._client = httpx.AsyncClient(timeout=15.0)
+
+    def _auth_headers(self) -> dict[str, str]:
+        if not self.api_key:
+            return {}
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "X-API-Key": self.api_key,
+        }
 
     async def search(self, query: str, num_results: int = 5) -> list[SearchResult]:
         """
@@ -36,7 +45,11 @@ class SearXNGProvider(SearchProvider):
             "safesearch": 0,
         }
         try:
-            resp = await self._client.get(f"{self.base_url}/search", params=params)
+            resp = await self._client.get(
+                f"{self.base_url}/search",
+                params=params,
+                headers=self._auth_headers(),
+            )
             resp.raise_for_status()
             data = resp.json()
         except httpx.HTTPError as exc:
@@ -60,7 +73,8 @@ class SearXNGProvider(SearchProvider):
         try:
             resp = await self._client.get(
                 f"{self.base_url}/healthz",
-                timeout=httpx.Timeout(0.8, connect=0.3)
+                timeout=httpx.Timeout(0.8, connect=0.3),
+                headers=self._auth_headers(),
             )
             return resp.status_code == 200
         except Exception:

@@ -20,6 +20,7 @@ def test_create_model_config_without_trailing_slash(
             "provider_type": "openai",
             "api_key": "sk-test",
             "api_base_url": "https://example.com/v1",
+            "custom_parameters": {"reasoning_effort": "medium"},
             "models": ["gpt-4o"],
             "is_default": False,
         },
@@ -29,6 +30,7 @@ def test_create_model_config_without_trailing_slash(
     data = response.json()
     assert data["name"] == "test-provider"
     assert data["provider_type"] == "openai"
+    assert data["custom_parameters"] == {"reasoning_effort": "medium"}
 
 
 def test_list_model_configs_without_trailing_slash(
@@ -45,6 +47,7 @@ def test_list_model_configs_without_trailing_slash(
             "provider_type": "openai",
             "api_key": "sk-test",
             "api_base_url": "https://example.com/v1",
+            "custom_parameters": {"reasoning_effort": "high"},
             "models": ["gpt-4o"],
             "is_default": False,
         },
@@ -57,3 +60,4 @@ def test_list_model_configs_without_trailing_slash(
     providers = list_response.json()
     assert len(providers) == 1
     assert providers[0]["name"] == "list-provider"
+    assert providers[0]["custom_parameters"] == {"reasoning_effort": "high"}

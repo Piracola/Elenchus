@@ -22,6 +22,7 @@ def _providers() -> list[dict[str, object]]:
             "provider_type": "openai",
             "api_key": "openai-key",
             "api_base_url": "https://openai.example/v1",
+            "custom_parameters": {"reasoning_effort": "medium"},
             "models": ["gpt-4o"],
             "is_default": True,
         },
@@ -30,6 +31,7 @@ def _providers() -> list[dict[str, object]]:
             "provider_type": "anthropic",
             "api_key": "anthropic-key",
             "api_base_url": "https://anthropic.example",
+            "custom_parameters": {"thinking": {"type": "enabled", "budget_tokens": 2048}},
             "models": ["claude-3-7-sonnet"],
             "is_default": False,
         },
@@ -77,6 +79,30 @@ async def test_resolve_provider_selection_uses_selected_provider_credentials():
     assert selection.provider_type == "anthropic"
     assert selection.api_base_url == "https://anthropic.example"
     assert selection.api_key == "anthropic-key"
+    assert selection.custom_parameters == {
+        "thinking": {"type": "enabled", "budget_tokens": 2048}
+    }
+
+
+@pytest.mark.asyncio
+async def test_resolve_provider_selection_merges_override_custom_parameters():
+    service = AgentConfigService(provider_service=_FakeProviderService(_providers()))
+
+    selection = await service.resolve_provider_selection(
+        {
+            "provider_id": "default-openai",
+            "custom_parameters": {
+                "reasoning_effort": "high",
+                "verbosity": "low",
+            },
+        }
+    )
+
+    assert selection.provider_id == "default-openai"
+    assert selection.custom_parameters == {
+        "reasoning_effort": "high",
+        "verbosity": "low",
+    }
 
 
 @pytest.mark.asyncio

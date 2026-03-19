@@ -34,6 +34,7 @@ class LLMRouter:
         model: str,
         api_key: str | None = None,
         api_base_url: str | None = None,
+        custom_parameters: dict[str, Any] | None = None,
         **kwargs: Any
     ) -> BaseChatModel:
         """
@@ -51,5 +52,6 @@ class LLMRouter:
             model=model,
             api_key=api_key,
             api_base_url=api_base_url,
+            custom_parameters=custom_parameters,
             **kwargs
         )

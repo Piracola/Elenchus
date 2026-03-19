@@ -73,6 +73,7 @@ class ModelConfigCreate(BaseModel):
     provider_type: str = Field(default="openai", description="Protocol: openai, anthropic, or gemini")
     api_key: str | None = Field(default=None, max_length=255)
     api_base_url: str | None = Field(default=None, max_length=255)
+    custom_parameters: dict[str, Any] = Field(default_factory=dict)
     models: list[str] = Field(default_factory=list)
     is_default: bool = Field(default=False)
 
@@ -84,6 +85,7 @@ class ModelConfigUpdate(BaseModel):
     provider_type: str | None = Field(default=None)
     api_key: str | None = Field(default=None, max_length=255)
     api_base_url: str | None = Field(default=None, max_length=255)
+    custom_parameters: dict[str, Any] | None = Field(default=None)
     models: list[str] | None = Field(default=None)
     is_default: bool | None = Field(default=None)
 
@@ -161,6 +163,7 @@ class ModelConfigResponse(BaseModel):
     provider_type: str
     api_key: str | None
     api_base_url: str | None
+    custom_parameters: dict[str, Any] = Field(default_factory=dict)
     models: list[str]
     is_default: bool
     created_at: datetime

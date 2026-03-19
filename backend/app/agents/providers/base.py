@@ -11,7 +11,8 @@ class BaseProviderClient(ABC):
         self, 
         model: str, 
         api_key: str | None = None, 
-        api_base_url: str | None = None, 
+        api_base_url: str | None = None,
+        custom_parameters: dict[str, Any] | None = None,
         **kwargs: Any
     ) -> BaseChatModel:
         """Instantiate and return the specific Langchain BaseChatModel."""

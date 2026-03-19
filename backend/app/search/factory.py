@@ -61,12 +61,16 @@ class SearchProviderFactory:
 
         # Create SearXNG provider
         self._providers["searxng"] = SearXNGProvider(
-            base_url=settings.env.searxng_base_url
+            base_url=settings.env.searxng_base_url,
+            api_key=settings.env.searxng_api_key or None,
         )
 
         # Create Tavily provider if API key is available
         if settings.env.tavily_api_key:
-            self._providers["tavily"] = TavilyProvider(api_key=settings.env.tavily_api_key)
+            self._providers["tavily"] = TavilyProvider(
+                api_key=settings.env.tavily_api_key,
+                api_url=settings.env.tavily_api_url,
+            )
 
         # Set initial provider from config (default to duckduckgo)
         config_provider = settings.search.provider
@@ -240,3 +244,9 @@ class SearchProviderFactory:
                     logger.warning("Error closing provider %s: %s", name, exc)
         self._providers = {}
         self._initialized = False
+
+    async def reload(self) -> None:
+        """Rebuild provider instances after runtime settings change."""
+        await self.close()
+        self._current_provider = "duckduckgo"
+        self._init_providers()

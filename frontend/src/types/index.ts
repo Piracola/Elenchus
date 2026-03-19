@@ -65,6 +65,47 @@ export interface SearchResult {
     source_engine: string;
 }
 
+export type SearchProviderType = 'duckduckgo' | 'searxng' | 'tavily';
+
+export interface SearchProviderStatus {
+    name: SearchProviderType;
+    available: boolean;
+    is_primary: boolean;
+}
+
+export interface SearchProviderSettings {
+    searxng: {
+        base_url: string;
+        api_key_configured: boolean;
+    };
+    tavily: {
+        api_url: string;
+        api_key_configured: boolean;
+    };
+}
+
+export interface SearchConfig {
+    provider: SearchProviderType | string;
+    available_providers: SearchProviderStatus[];
+    provider_settings: SearchProviderSettings;
+}
+
+export interface SearchConfigUpdatePayload {
+    provider?: SearchProviderType | string;
+    provider_settings?: {
+        searxng?: {
+            base_url?: string | null;
+            api_key?: string | null;
+            clear_api_key?: boolean;
+        };
+        tavily?: {
+            api_url?: string | null;
+            api_key?: string | null;
+            clear_api_key?: boolean;
+        };
+    };
+}
+
 // ── Session ─────────────────────────────────────────────────────
 
 export type SessionStatus = 'pending' | 'in_progress' | 'completed' | 'error';
@@ -140,6 +181,7 @@ export interface ModelConfig {
     provider_type: string;
     api_key: string | null;
     api_base_url: string | null;
+    custom_parameters: Record<string, unknown>;
     models: string[];
     is_default: boolean;
     created_at: string;
@@ -151,6 +193,7 @@ export interface ModelConfigCreatePayload {
     provider_type: string;
     api_key?: string | null;
     api_base_url?: string | null;
+    custom_parameters?: Record<string, unknown>;
     models: string[];
     is_default?: boolean;
 }
@@ -162,6 +205,7 @@ export interface ProviderFormData {
     providerType: string;
     apiKey: string;
     apiBaseUrl: string;
+    customParametersText: string;
     models: string[];
     isDefault: boolean;
 }

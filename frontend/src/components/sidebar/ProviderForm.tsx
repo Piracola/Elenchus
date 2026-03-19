@@ -158,6 +158,39 @@ export function ProviderForm({
                         />
                     </div>
 
+                    <div>
+                        <label style={{ display: 'block', fontSize: '12px', marginBottom: '5px', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                            原始参数
+                        </label>
+                        <textarea
+                            value={formData.customParametersText}
+                            onChange={e => onFieldChange('customParametersText', e.target.value)}
+                            placeholder={`{\n  "reasoning_effort": "medium"\n}`}
+                            spellCheck={false}
+                            rows={7}
+                            style={{
+                                width: '100%',
+                                padding: '10px 12px',
+                                borderRadius: 'var(--radius-md)',
+                                background: 'var(--bg-secondary)',
+                                border: '1px solid var(--border-subtle)',
+                                color: 'var(--text-primary)',
+                                fontSize: '12px',
+                                fontFamily: 'Consolas, "SFMono-Regular", Menlo, monospace',
+                                outline: 'none',
+                                resize: 'vertical',
+                                lineHeight: 1.5,
+                                transition: 'border-color 0.15s ease',
+                                minHeight: '120px',
+                            }}
+                            onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent-indigo)'}
+                            onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border-subtle)'}
+                        />
+                        <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                            可填写 JSON 对象，或直接写键值行，例如 `"reasoning_effort": "medium",`。
+                        </div>
+                    </div>
+
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
                         <input
                             type="checkbox"

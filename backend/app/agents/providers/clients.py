@@ -15,13 +15,15 @@ class OpenAIProviderClient(BaseProviderClient):
         self, 
         model: str, 
         api_key: str | None = None, 
-        api_base_url: str | None = None, 
+        api_base_url: str | None = None,
+        custom_parameters: dict[str, Any] | None = None,
         **kwargs: Any
     ) -> BaseChatModel:
         # ChatOpenAI natively handles base_url overrides 
         # and seamlessly falls back to os.environ["OPENAI_API_KEY"] if key is omit.
         client_kwargs: dict[str, Any] = {
             "model": model,
+            **(custom_parameters or {}),
             **kwargs
         }
         if api_key:
@@ -39,11 +41,13 @@ class AnthropicProviderClient(BaseProviderClient):
         self, 
         model: str, 
         api_key: str | None = None, 
-        api_base_url: str | None = None, 
+        api_base_url: str | None = None,
+        custom_parameters: dict[str, Any] | None = None,
         **kwargs: Any
     ) -> BaseChatModel:
         client_kwargs: dict[str, Any] = {
             "model": model,
+            **(custom_parameters or {}),
             **kwargs
         }
         if api_key:
@@ -61,11 +65,13 @@ class GeminiProviderClient(BaseProviderClient):
         self, 
         model: str, 
         api_key: str | None = None, 
-        api_base_url: str | None = None, 
+        api_base_url: str | None = None,
+        custom_parameters: dict[str, Any] | None = None,
         **kwargs: Any
     ) -> BaseChatModel:
         client_kwargs: dict[str, Any] = {
             "model": model,
+            **(custom_parameters or {}),
             **kwargs
         }
         if api_key:

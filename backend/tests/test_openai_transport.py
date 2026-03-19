@@ -22,6 +22,7 @@ def _config() -> ResolvedLLMConfig:
         provider_type="openai",
         api_key="test-key",
         api_base_url="https://example.invalid/v1",
+        custom_parameters={"reasoning_effort": "medium"},
         temperature=0.7,
         max_tokens=1500,
     )
@@ -39,6 +40,16 @@ def test_build_openai_chat_payload_includes_tools():
     assert payload["messages"][0]["content"] == "hello"
     assert payload["tool_choice"] == "auto"
     assert payload["tools"][0]["function"]["name"] == "echo_tool"
+
+
+def test_build_openai_chat_payload_includes_custom_parameters():
+    payload = openai_transport.build_openai_chat_payload(
+        messages=[HumanMessage(content="hello")],
+        config=_config(),
+    )
+
+    assert payload["reasoning_effort"] == "medium"
+    assert payload["temperature"] == 0.7
 
 
 @pytest.mark.asyncio

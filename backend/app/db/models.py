@@ -71,6 +71,7 @@ class ProviderRecord(Base):
     provider_type: Mapped[str] = mapped_column(String(50), nullable=False)
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     api_base_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    custom_parameters: Mapped[dict | None] = mapped_column(JSON, default=dict, nullable=True)
     models: Mapped[list] = mapped_column(JSON, default=list)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

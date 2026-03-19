@@ -22,8 +22,9 @@ class TavilyProvider(SearchProvider):
     Queries the Tavily Deep Search API as a fallback search backend.
     """
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, api_url: str = _TAVILY_API_URL):
         self.api_key = api_key
+        self.api_url = (api_url or "").strip() or _TAVILY_API_URL
         self._client = httpx.AsyncClient(timeout=20.0)
 
     async def search(self, query: str, num_results: int = 5) -> list[SearchResult]:
@@ -35,7 +36,7 @@ class TavilyProvider(SearchProvider):
             "include_answer": False,
         }
         try:
-            resp = await self._client.post(_TAVILY_API_URL, json=payload)
+            resp = await self._client.post(self.api_url, json=payload)
             resp.raise_for_status()
             data = resp.json()
         except httpx.HTTPError as exc:

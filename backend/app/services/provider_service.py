@@ -139,6 +139,7 @@ class ProviderService:
             provider_type=record.provider_type,
             api_key=api_key,
             api_base_url=record.api_base_url,
+            custom_parameters=record.custom_parameters or {},
             models=record.models or [],
             is_default=record.is_default,
             created_at=record.created_at,
@@ -153,6 +154,7 @@ class ProviderService:
             "provider_type": record.provider_type,
             "api_key": self._decrypt_api_key(record.api_key_encrypted),
             "api_base_url": record.api_base_url,
+            "custom_parameters": record.custom_parameters or {},
             "models": record.models or [],
             "is_default": record.is_default,
             "created_at": record.created_at,
@@ -226,6 +228,7 @@ class ProviderService:
                 provider_type=config_in.provider_type,
                 api_key_encrypted=self._encrypt_api_key(config_in.api_key),
                 api_base_url=config_in.api_base_url,
+                custom_parameters=config_in.custom_parameters or {},
                 models=config_in.models,
                 is_default=make_default,
                 created_at=now,
@@ -261,6 +264,8 @@ class ProviderService:
                 record.api_key_encrypted = self._encrypt_api_key(update_data["api_key"])
             if "api_base_url" in update_data:
                 record.api_base_url = update_data["api_base_url"]
+            if "custom_parameters" in update_data:
+                record.custom_parameters = update_data["custom_parameters"] or {}
             if "models" in update_data:
                 record.models = update_data["models"]
             if "is_default" in update_data:

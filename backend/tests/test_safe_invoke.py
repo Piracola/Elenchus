@@ -31,6 +31,7 @@ async def test_invoke_chat_model_falls_back_for_openai_shape_errors(monkeypatch)
             provider_type="openai",
             api_key="test-key",
             api_base_url="https://example.invalid/v1",
+            custom_parameters={"reasoning_effort": "medium"},
             temperature=0.7,
             max_tokens=1500,
         )

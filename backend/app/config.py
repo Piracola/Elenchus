@@ -8,12 +8,13 @@ from __future__ import annotations
 
 from functools import lru_cache
 import logging
+import os
 from pathlib import Path
 from threading import Lock
 from typing import Any
 
 import yaml
-from dotenv import load_dotenv
+from dotenv import load_dotenv, set_key, unset_key
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
@@ -24,6 +25,10 @@ _PROJECT_ROOT = _RUNTIME_PATHS.runtime_root
 _CONFIG_WRITE_LOCK = Lock()
 logger = logging.getLogger(__name__)
 load_dotenv(_RUNTIME_PATHS.env_file)
+
+SUPPORTED_SEARCH_PROVIDERS = {"duckduckgo", "searxng", "tavily"}
+DEFAULT_SEARXNG_BASE_URL = "http://localhost:8080"
+DEFAULT_TAVILY_API_URL = "https://api.tavily.com/search"
 
 
 def _sqlite_url(path: Path, driver: str = "sqlite+aiosqlite") -> str:
@@ -64,27 +69,116 @@ def _write_yaml_config(data: dict[str, Any]) -> None:
         yaml.safe_dump(data, handle, allow_unicode=True, sort_keys=False)
 
 
+def _normalize_search_provider(provider: str) -> str:
+    normalized = (provider or "").strip().lower()
+    if normalized not in SUPPORTED_SEARCH_PROVIDERS:
+        raise ValueError(f"Unsupported search provider: {provider}")
+    return normalized
+
+
+def _write_env_value(key: str, value: str | None) -> None:
+    env_path = _RUNTIME_PATHS.env_file
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    if not env_path.exists():
+        env_path.touch()
+
+    if value is None:
+        unset_key(str(env_path), key)
+        os.environ.pop(key, None)
+        return
+
+    set_key(str(env_path), key, value, quote_mode="never")
+    os.environ[key] = value
+
+
+def _clear_settings_cache() -> None:
+    get_settings.cache_clear()
+
+
 def persist_search_provider(provider: str) -> None:
     """
     Persist selected search provider into runtime config.yaml.
 
     This keeps the UI-selected provider stable across app restarts and upgrades.
     """
-    normalized = (provider or "").strip().lower()
-    if normalized not in {"duckduckgo", "searxng", "tavily"}:
-        raise ValueError(f"Unsupported search provider: {provider}")
+    persist_search_settings(provider=provider)
+
+
+def persist_search_settings(
+    *,
+    provider: str | None = None,
+    searxng_base_url: str | None = None,
+    searxng_api_key: str | None = None,
+    clear_searxng_api_key: bool = False,
+    tavily_api_key: str | None = None,
+    clear_tavily_api_key: bool = False,
+    tavily_api_url: str | None = None,
+) -> None:
+    """
+    Persist runtime-editable search settings.
+
+    Provider choice is stored in config.yaml while provider credentials and
+    endpoint overrides are stored in the runtime .env file.
+    """
+    normalized_provider = _normalize_search_provider(provider) if provider is not None else None
+    normalized_searxng_base_url = (
+        (searxng_base_url or "").strip() or DEFAULT_SEARXNG_BASE_URL
+        if searxng_base_url is not None
+        else None
+    )
+    normalized_tavily_api_url = (
+        (tavily_api_url or "").strip() or DEFAULT_TAVILY_API_URL
+        if tavily_api_url is not None
+        else None
+    )
+    normalized_searxng_api_key = (searxng_api_key or "").strip()
+    normalized_tavily_api_key = (tavily_api_key or "").strip()
 
     with _CONFIG_WRITE_LOCK:
-        config = _load_yaml_config()
-        search = config.get("search")
-        if not isinstance(search, dict):
-            search = {}
-            config["search"] = search
-        search["provider"] = normalized
-        if "max_results_per_query" not in search:
-            search["max_results_per_query"] = 5
-        _write_yaml_config(config)
-        logger.info("Persisted runtime search provider: %s", normalized)
+        if normalized_provider is not None:
+            config = _load_yaml_config()
+            search = config.get("search")
+            if not isinstance(search, dict):
+                search = {}
+                config["search"] = search
+            search["provider"] = normalized_provider
+            if "max_results_per_query" not in search:
+                search["max_results_per_query"] = 5
+            _write_yaml_config(config)
+            logger.info("Persisted runtime search provider: %s", normalized_provider)
+
+        if normalized_searxng_base_url is not None:
+            _write_env_value("SEARXNG_BASE_URL", normalized_searxng_base_url)
+
+        if clear_searxng_api_key:
+            _write_env_value("SEARXNG_API_KEY", None)
+        elif normalized_searxng_api_key:
+            _write_env_value("SEARXNG_API_KEY", normalized_searxng_api_key)
+
+        if normalized_tavily_api_url is not None:
+            _write_env_value("TAVILY_API_URL", normalized_tavily_api_url)
+
+        if clear_tavily_api_key:
+            _write_env_value("TAVILY_API_KEY", None)
+        elif normalized_tavily_api_key:
+            _write_env_value("TAVILY_API_KEY", normalized_tavily_api_key)
+
+    _clear_settings_cache()
+
+
+def get_search_provider_settings_snapshot() -> dict[str, dict[str, Any]]:
+    """Return the current runtime-editable search provider settings."""
+    settings = get_settings()
+    return {
+        "searxng": {
+            "base_url": settings.env.searxng_base_url,
+            "api_key_configured": bool(settings.env.searxng_api_key),
+        },
+        "tavily": {
+            "api_url": settings.env.tavily_api_url,
+            "api_key_configured": bool(settings.env.tavily_api_key),
+        },
+    }
 
 
 class SearchConfig:
@@ -113,8 +207,10 @@ class DebateConfig:
 class EnvSettings(BaseSettings):
     """Environment-specific values loaded from `.env`."""
 
-    searxng_base_url: str = Field(default="http://localhost:8080", alias="SEARXNG_BASE_URL")
+    searxng_base_url: str = Field(default=DEFAULT_SEARXNG_BASE_URL, alias="SEARXNG_BASE_URL")
+    searxng_api_key: str = Field(default="", alias="SEARXNG_API_KEY")
     tavily_api_key: str = Field(default="", alias="TAVILY_API_KEY")
+    tavily_api_url: str = Field(default=DEFAULT_TAVILY_API_URL, alias="TAVILY_API_URL")
 
     database_url: str = Field(
         default=_default_database_url(),
