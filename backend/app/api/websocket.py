@@ -43,6 +43,16 @@ async def debate_ws(websocket: WebSocket, session_id: str):
         )
         await runtime_bus.send(session_id, websocket, connected_event)
 
+        if runtime_service.is_running(session_id):
+            resumed_event = await runtime_bus.create_event(
+                session_id=session_id,
+                event_type="status",
+                payload={"content": "Live debate is currently running.", "node": ""},
+                source="ws.gateway",
+                phase="processing",
+            )
+            await runtime_bus.send(session_id, websocket, resumed_event)
+
         while True:
             try:
                 data = await websocket.receive_json()

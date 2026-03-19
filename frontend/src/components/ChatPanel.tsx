@@ -19,6 +19,10 @@ import StatusBanner from './chat/StatusBanner';
 import RoundInsights from './chat/RoundInsights';
 import { groupDialogue } from '../utils/groupDialogue';
 import { resolveRowFocus } from '../utils/eventFocus';
+import {
+    FLOATING_INSPECTOR_RESET_EVENT,
+    FLOATING_INSPECTOR_STORAGE_KEY,
+} from '../utils/floatingInspector';
 import { toast } from '../utils/toast';
 import type { InsightSection } from './chat/RoundInsights';
 
@@ -65,7 +69,6 @@ const FLOATING_INSPECTOR_DEFAULT_SIZE = { width: 360, height: 520 };
 const FLOATING_INSPECTOR_MIN_SIZE = { width: 300, height: 260 };
 const FLOATING_INSPECTOR_MARGIN = 8;
 const FLOATING_INSPECTOR_DOCK_GAP = 16;
-const FLOATING_INSPECTOR_DOCK_THRESHOLD = 24;
 const FLOATING_INSPECTOR_RESIZE_HANDLES: ReadonlyArray<{
     key: FloatingInspectorResizeHandle;
     style: CSSProperties;
@@ -106,6 +109,25 @@ const FLOATING_INSPECTOR_RESIZE_HANDLES: ReadonlyArray<{
 
 function clampNumber(value: number, min: number, max: number): number {
     return Math.min(max, Math.max(min, value));
+}
+
+function parseStoredFloatingInspectorRect(raw: string | null): FloatingInspectorRect | null {
+    if (!raw) return null;
+
+    try {
+        const parsed = JSON.parse(raw) as Partial<FloatingInspectorRect>;
+        if (
+            typeof parsed.x !== 'number' ||
+            typeof parsed.y !== 'number' ||
+            typeof parsed.width !== 'number' ||
+            typeof parsed.height !== 'number'
+        ) {
+            return null;
+        }
+        return parsed as FloatingInspectorRect;
+    } catch {
+        return null;
+    }
 }
 
 function getFloatingInspectorSizeRange(size: number, preferredMin: number): { min: number; max: number } {
@@ -301,6 +323,7 @@ export default function ChatPanel() {
     });
     const [floatingInspectorRect, setFloatingInspectorRect] = useState<FloatingInspectorRect | null>(null);
     const [floatingInspectorActive, setFloatingInspectorActive] = useState(false);
+    const [floatingInspectorExpanded, setFloatingInspectorExpanded] = useState(false);
     const [exportingFormat, setExportingFormat] = useState<'markdown' | 'json' | null>(null);
     const [isWideLayout, setIsWideLayout] = useState(() => {
         if (typeof window === 'undefined') return true;
@@ -370,6 +393,17 @@ export default function ChatPanel() {
     }, [floatingInspectorRect]);
 
     useEffect(() => {
+        if (typeof window === 'undefined' || !floatingInspectorRect) {
+            return;
+        }
+
+        window.localStorage.setItem(
+            FLOATING_INSPECTOR_STORAGE_KEY,
+            JSON.stringify(floatingInspectorRect),
+        );
+    }, [floatingInspectorRect]);
+
+    useEffect(() => {
         const panelElement = panelRef.current;
         if (!panelElement) return;
 
@@ -407,8 +441,43 @@ export default function ChatPanel() {
         setFloatingInspectorRect((prev) => (
             prev
                 ? clampFloatingInspectorRect(prev, bounds)
-                : createDefaultFloatingInspectorRect(bounds, topOverlayHeight + 12)
+                : clampFloatingInspectorRect(
+                    parseStoredFloatingInspectorRect(
+                        typeof window === 'undefined'
+                            ? null
+                            : window.localStorage.getItem(FLOATING_INSPECTOR_STORAGE_KEY),
+                    ) ?? createDefaultFloatingInspectorRect(bounds, topOverlayHeight + 12),
+                    bounds,
+                )
         ));
+    }, [floatingInspectorHeight, floatingInspectorWidth, isWideLayout, topOverlayHeight]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        const handleReset = () => {
+            if (!isWideLayout || floatingInspectorWidth <= 0 || floatingInspectorHeight <= 0) {
+                setFloatingInspectorRect(null);
+                setFloatingInspectorActive(false);
+                return;
+            }
+
+            setFloatingInspectorRect(
+                createDefaultFloatingInspectorRect(
+                    {
+                        width: floatingInspectorWidth,
+                        height: floatingInspectorHeight,
+                    },
+                    topOverlayHeight + 12,
+                ),
+            );
+            setFloatingInspectorActive(false);
+        };
+
+        window.addEventListener(FLOATING_INSPECTOR_RESET_EVENT, handleReset);
+        return () => window.removeEventListener(FLOATING_INSPECTOR_RESET_EVENT, handleReset);
     }, [floatingInspectorHeight, floatingInspectorWidth, isWideLayout, topOverlayHeight]);
 
     useEffect(() => {
@@ -632,19 +701,8 @@ export default function ChatPanel() {
             };
 
     const maxWidthValue = MESSAGE_WIDTH_VALUES[displaySettings.messageWidth];
-    const panelMaxWidth = isWideLayout
-        ? (displaySettings.messageWidth === 'full' ? '100%' : `calc(${maxWidthValue} + 392px)`)
-        : maxWidthValue;
-    const isFloatingInspectorDockedRight = Boolean(
-        isWideLayout &&
-        floatingInspectorRect &&
-        floatingInspectorBounds.width > 0 &&
-        floatingInspectorRect.x + floatingInspectorRect.width >=
-            floatingInspectorBounds.width - FLOATING_INSPECTOR_DOCK_THRESHOLD,
-    );
-    const scrollPaddingRight = isFloatingInspectorDockedRight && floatingInspectorRect
-        ? `${Math.max(12, floatingInspectorRect.width + 20)}px`
-        : '4px';
+    const panelMaxWidth = maxWidthValue;
+    const scrollPaddingRight = '4px';
 
     const handleExport = async (format: 'markdown' | 'json') => {
         if (!currentSession || exportingFormat) return;
@@ -997,16 +1055,16 @@ export default function ChatPanel() {
                             left: `${floatingInspectorRect.x}px`,
                             top: `${floatingInspectorRect.y}px`,
                             zIndex: 26,
-                            width: `${floatingInspectorRect.width}px`,
-                            height: `${floatingInspectorRect.height}px`,
+                            width: floatingInspectorExpanded ? `${floatingInspectorRect.width}px` : 'auto',
+                            height: floatingInspectorExpanded ? `${floatingInspectorRect.height}px` : 'auto',
                             pointerEvents: 'auto',
                         }}
                     >
                         <div
                             style={{
                                 position: 'relative',
-                                width: '100%',
-                                height: '100%',
+                                width: floatingInspectorExpanded ? '100%' : 'auto',
+                                height: floatingInspectorExpanded ? '100%' : 'auto',
                                 overflow: 'visible',
                             }}
                         >
@@ -1015,7 +1073,7 @@ export default function ChatPanel() {
                                 title="拖动运行观察器"
                                 style={{
                                     position: 'absolute',
-                                    top: '8px',
+                                    top: floatingInspectorExpanded ? '8px' : '-10px',
                                     left: '50%',
                                     transform: 'translateX(-50%)',
                                     zIndex: 3,
@@ -1034,7 +1092,9 @@ export default function ChatPanel() {
                                     border: '1px solid var(--border-subtle)',
                                     background: 'var(--glass-bg)',
                                     backdropFilter: 'blur(10px)',
-                                    boxShadow: '0 6px 18px rgba(15, 23, 42, 0.12)',
+                                    boxShadow: floatingInspectorExpanded
+                                        ? '0 6px 18px rgba(15, 23, 42, 0.12)'
+                                        : '0 2px 8px rgba(15, 23, 42, 0.10)',
                                     userSelect: 'none',
                                     touchAction: 'none',
                                 }}
@@ -1051,8 +1111,7 @@ export default function ChatPanel() {
                                     />
                                 ))}
                             </div>
-
-                            {FLOATING_INSPECTOR_RESIZE_HANDLES.map((handle) => (
+                            {floatingInspectorExpanded && FLOATING_INSPECTOR_RESIZE_HANDLES.map((handle) => (
                                 <div
                                     key={handle.key}
                                     onPointerDown={handleFloatingInspectorResizeStart(handle.key)}
@@ -1067,17 +1126,31 @@ export default function ChatPanel() {
 
                             <div
                                 style={{
-                                    width: '100%',
-                                    height: '100%',
+                                    width: floatingInspectorExpanded ? '100%' : 'auto',
+                                    height: floatingInspectorExpanded ? '100%' : 'auto',
                                     borderRadius: 'var(--radius-lg)',
-                                    overflow: 'hidden',
+                                    overflow: floatingInspectorExpanded ? 'hidden' : 'visible',
                                     boxSizing: 'border-box',
-                                    boxShadow: floatingInspectorActive
-                                        ? '0 20px 48px rgba(15, 23, 42, 0.18)'
-                                        : '0 14px 34px rgba(15, 23, 42, 0.12)',
+                                    boxShadow: floatingInspectorExpanded
+                                        ? (
+                                            floatingInspectorActive
+                                                ? '0 20px 48px rgba(15, 23, 42, 0.18)'
+                                                : '0 14px 34px rgba(15, 23, 42, 0.12)'
+                                        )
+                                        : 'none',
                                 }}
                             >
-                                <RuntimeInspector key="floating-inspector" defaultExpanded fillHeight />
+                                <RuntimeInspector
+                                    key="floating-inspector"
+                                    defaultExpanded={false}
+                                    fillHeight={floatingInspectorExpanded}
+                                    onExpandedChange={(expanded) => {
+                                        setFloatingInspectorExpanded(expanded);
+                                        if (!expanded) {
+                                            setFloatingInspectorActive(false);
+                                        }
+                                    }}
+                                />
                             </div>
                         </div>
                     </div>

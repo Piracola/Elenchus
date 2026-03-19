@@ -29,14 +29,24 @@ function tabAccent(tab: InspectorTab): string {
 export default function RuntimeInspector({
     defaultExpanded = false,
     fillHeight = false,
+    onExpandedChange,
 }: {
     defaultExpanded?: boolean;
     fillHeight?: boolean;
+    onExpandedChange?: (expanded: boolean) => void;
 }) {
     const { runtimeEvents, visibleRuntimeEvents, replayEnabled, currentNode } = useDebateStore();
     const [expanded, setExpanded] = useState(defaultExpanded);
     const [activeTab, setActiveTab] = useState<InspectorTab>('timeline');
     const isCollapsed = !expanded && !fillHeight;
+
+    const setExpandedState = (value: boolean | ((previous: boolean) => boolean)) => {
+        setExpanded((previous) => {
+            const next = typeof value === 'function' ? value(previous) : value;
+            onExpandedChange?.(next);
+            return next;
+        });
+    };
 
     const memoryCount = useMemo(
         () => visibleRuntimeEvents.filter((event) => event.type === 'memory_write').length,
@@ -67,7 +77,7 @@ export default function RuntimeInspector({
             }}
         >
             <button
-                onClick={() => setExpanded((prev) => !prev)}
+                onClick={() => setExpandedState((prev) => !prev)}
                 style={{
                     flex: '0 0 auto',
                     width: isCollapsed ? 'auto' : '100%',
@@ -126,10 +136,10 @@ export default function RuntimeInspector({
             <AnimatePresence initial={false}>
                 {expanded && (
                     <motion.div
-                        initial={fillHeight ? { opacity: 0, y: -8 } : { opacity: 0, y: -8, height: 0 }}
-                        animate={fillHeight ? { opacity: 1, y: 0 } : { opacity: 1, y: 0, height: 'auto' }}
-                        exit={fillHeight ? { opacity: 0, y: -6 } : { opacity: 0, y: -6, height: 0 }}
-                        transition={{ duration: 0.22 }}
+                        initial={fillHeight ? { opacity: 0 } : { opacity: 0, y: -8, height: 0 }}
+                        animate={fillHeight ? { opacity: 1 } : { opacity: 1, y: 0, height: 'auto' }}
+                        exit={fillHeight ? { opacity: 0 } : { opacity: 0, y: -6, height: 0 }}
+                        transition={{ duration: fillHeight ? 0.16 : 0.22 }}
                         style={{
                             marginTop: '8px',
                             border: '1px solid var(--border-subtle)',
@@ -141,6 +151,7 @@ export default function RuntimeInspector({
                             display: 'flex',
                             flexDirection: 'column',
                             minHeight: 0,
+                            willChange: 'opacity',
                             ...(fillHeight ? { flex: 1 } : {}),
                         }}
                     >
@@ -187,7 +198,7 @@ export default function RuntimeInspector({
                                 {TAB_DESCRIPTIONS[activeTab]}
                             </span>
                             <button
-                                onClick={() => setExpanded(false)}
+                                onClick={() => setExpandedState(false)}
                                 style={{
                                     marginLeft: 'auto',
                                     border: 'none',

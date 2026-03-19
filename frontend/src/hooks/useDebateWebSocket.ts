@@ -117,7 +117,17 @@ export function useDebateWebSocket(sessionId: string | null) {
     const startDebate = useCallback(
         (topic: string, participants: string[], maxTurns: number) => {
             if (ws.current?.readyState !== WebSocket.OPEN) return;
-            getStore().setDebating(true);
+            const store = getStore();
+            if (store.currentSession) {
+                store.setCurrentSession({
+                    ...store.currentSession,
+                    topic,
+                    participants: participants.length ? participants : store.currentSession.participants,
+                    max_turns: maxTurns,
+                    status: 'in_progress',
+                });
+            }
+            store.setDebating(true);
             getStore().setPhase('initializing', '辩论准备中...');
             ws.current.send(
                 JSON.stringify({

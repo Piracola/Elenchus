@@ -8,6 +8,8 @@ import { ProviderSidebar } from './ProviderSidebar';
 import { ProviderForm } from './ProviderForm';
 import { SearchConfigTab } from './SearchConfigTab';
 import type { LogLevel, DisplaySettings } from '../../types';
+import { resetStoredFloatingInspectorRect } from '../../utils/floatingInspector';
+import { toast } from '../../utils/toast';
 
 export type SettingsTab = 'providers' | 'display' | 'logging' | 'search';
 
@@ -70,6 +72,11 @@ export default function SettingsPanel({
         } catch (err) {
             console.error("Failed to set log level", err);
         }
+    };
+
+    const handleFloatingInspectorReset = () => {
+        resetStoredFloatingInspectorRect();
+        toast('运行观察器已重置到默认位置', 'success');
     };
 
     const renderProvidersTab = () => (
@@ -204,6 +211,67 @@ export default function SettingsPanel({
                 }}>
                     提示：当屏幕缩放比例较小时，建议选择较宽的显示模式以获得更好的阅读体验。
                 </div>
+            </div>
+
+            <div style={{
+                marginTop: '24px',
+                padding: '20px',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--border-subtle)',
+                background: 'var(--bg-secondary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '16px',
+                flexWrap: 'wrap',
+            }}>
+                <div style={{ flex: '1 1 320px' }}>
+                    <h4 style={{
+                        fontSize: '14px',
+                        margin: '0 0 8px',
+                        color: 'var(--text-primary)',
+                        fontWeight: 600,
+                    }}>
+                        运行观察器
+                    </h4>
+                    <div style={{
+                        fontSize: '14px',
+                        color: 'var(--text-secondary)',
+                        fontWeight: 600,
+                        marginBottom: '4px',
+                    }}>
+                        重置到默认位置
+                    </div>
+                    <p style={{
+                        margin: 0,
+                        fontSize: '13px',
+                        color: 'var(--text-muted)',
+                        lineHeight: 1.6,
+                    }}>
+                        如果观察器被拖到异常位置或尺寸不合适，可以恢复到默认位置和大小。
+                    </p>
+                </div>
+
+                <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleFloatingInspectorReset}
+                    style={{
+                        border: 'none',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'var(--accent-indigo)',
+                        color: 'white',
+                        padding: '10px 16px',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        boxShadow: 'var(--shadow-sm)',
+                        flexShrink: 0,
+                    }}
+                >
+                    立即重置
+                </motion.button>
             </div>
         </div>
     );

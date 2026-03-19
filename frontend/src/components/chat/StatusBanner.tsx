@@ -26,6 +26,7 @@ const PHASE_LABELS: Record<string, string> = {
 
 export default function StatusBanner() {
     const {
+        currentSession,
         isDebating,
         phase,
         currentStatus,
@@ -54,14 +55,16 @@ export default function StatusBanner() {
         })
         : null;
     const replayCursorDisplay = Math.max(0, replayCursor + 1);
+    const sessionIsRunning = isDebating || currentSession?.status === 'in_progress';
     const displayStatus = focusedEvent
         ? `定位事件 #${focusedEvent.seq} · ${focusedEvent.type}`
         : replayEnabled
             ? `回放 ${replayCursorDisplay}/${runtimeEvents.length}${replayEvent ? ` · ${replayEvent.type}` : ''}`
-            : currentStatus;
+            : (currentStatus || (sessionIsRunning ? '辩论进行中...' : ''));
     const focusedNodeLabel = getLiveGraphNodeLabel(getEventNode(focusedEvent ?? replayEvent));
 
     const hasStatus =
+        sessionIsRunning ||
         !((!isDebating || phase === 'idle' || phase === 'complete') && !focusedEvent && !replayEnabled);
 
     if (!hasStatus) {

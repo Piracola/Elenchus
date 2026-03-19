@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const backendPort = env.VITE_BACKEND_PORT || '8001'
+  const backendPort = process.env.VITE_BACKEND_PORT || env.VITE_BACKEND_PORT || '8001'
 
   const manualChunks = (id: string) => {
     if (!id.includes('node_modules')) return undefined

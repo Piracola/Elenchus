@@ -63,6 +63,84 @@ describe('debateStore replay state', () => {
         useDebateStore.getState().reset();
     });
 
+    it('adds the current session to the sidebar list immediately', () => {
+        useDebateStore.getState().reset();
+
+        const session = {
+            ...makeSession(),
+            id: 'session_2',
+            topic: 'Fresh debate',
+            status: 'pending' as const,
+            created_at: '2026-03-18T12:00:00+00:00',
+            updated_at: '2026-03-18T12:00:00+00:00',
+        };
+
+        useDebateStore.getState().setCurrentSession(session);
+
+        expect(useDebateStore.getState().sessions).toEqual([
+            {
+                id: 'session_2',
+                topic: 'Fresh debate',
+                status: 'pending',
+                current_turn: 0,
+                max_turns: 3,
+                created_at: '2026-03-18T12:00:00+00:00',
+            },
+        ]);
+    });
+
+    it('restores running session state when re-opening an in-progress session', () => {
+        useDebateStore.getState().reset();
+
+        useDebateStore.getState().setCurrentSession({
+            ...makeSession(),
+            status: 'in_progress',
+        });
+
+        useDebateStore.getState().hydrateRuntimeEvents([], false);
+
+        const state = useDebateStore.getState();
+        expect(state.isDebating).toBe(true);
+        expect(state.phase).toBe('processing');
+        expect(state.currentStatus).toBe('辩论进行中...');
+    });
+
+    it('keeps the sidebar summary in sync with runtime progress', () => {
+        const store = useDebateStore.getState();
+
+        store.applyRuntimeEvent(makeEvent({
+            event_id: 'evt_turn',
+            seq: 1,
+            type: 'turn_complete',
+            payload: {
+                turn: 2,
+                cumulative_scores: {},
+            },
+        }));
+
+        expect(useDebateStore.getState().sessions[0]).toMatchObject({
+            id: 'session_1',
+            current_turn: 2,
+            status: 'in_progress',
+        });
+
+        store.applyRuntimeEvent(makeEvent({
+            event_id: 'evt_done',
+            seq: 2,
+            type: 'debate_complete',
+            payload: {
+                total_turns: 3,
+                final_scores: {},
+            },
+        }));
+
+        expect(useDebateStore.getState().sessions[0]).toMatchObject({
+            id: 'session_1',
+            current_turn: 3,
+            status: 'completed',
+        });
+    });
+
     it('locks visible window while replay mode is active', () => {
         const store = useDebateStore.getState();
         store.applyRuntimeEvent(makeEvent({

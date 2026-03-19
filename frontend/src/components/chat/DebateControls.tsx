@@ -19,6 +19,7 @@ function ActiveSessionControls() {
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
 
     const maxTurns = parseMaxTurnsInput(maxTurnsInput);
+    const sessionIsRunning = isDebating || currentSession?.status === 'in_progress';
 
     const handleSendIntervention = () => {
         if (!interventionText.trim() || !isConnected) return;
@@ -67,7 +68,7 @@ function ActiveSessionControls() {
                 </span>
             </div>
 
-            {!isDebating && (
+            {!sessionIsRunning && (
                 <div
                     style={{
                         display: 'flex',
@@ -125,7 +126,7 @@ function ActiveSessionControls() {
                 }}
             />
 
-            {isDebating ? (
+            {sessionIsRunning ? (
                 <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}

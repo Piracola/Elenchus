@@ -26,6 +26,68 @@ function Print-Err { param($Text) Write-Host $RED"[ERROR]"$RESET" $Text" }
 function Print-Warn { param($Text) Write-Host $YELLOW"[WARN]"$RESET" $Text" }
 function Print-Info { param($Text) Write-Host $BLUE"[INFO]"$RESET" $Text" }
 
+function Get-DependencyFingerprint {
+    param(
+        [string[]]$Paths
+    )
+
+    $entries = foreach ($path in $Paths) {
+        if (-not (Test-Path $path)) {
+            "missing::$path"
+            continue
+        }
+
+        $item = Get-Item $path
+        $hash = (Get-FileHash -Algorithm SHA256 -Path $path).Hash
+        "$($item.FullName)|$($item.Length)|$hash"
+    }
+
+    ($entries -join "`n")
+}
+
+function Test-DependencyRefreshNeeded {
+    param(
+        [string]$StateFile,
+        [string[]]$DependencyFiles
+    )
+
+    if (-not (Test-Path $StateFile)) {
+        return $true
+    }
+
+    $savedFingerprint = Get-Content $StateFile -Raw -ErrorAction SilentlyContinue
+    $currentFingerprint = Get-DependencyFingerprint -Paths $DependencyFiles
+    return $savedFingerprint -ne $currentFingerprint
+}
+
+function Save-DependencyFingerprint {
+    param(
+        [string]$StateFile,
+        [string[]]$DependencyFiles
+    )
+
+    $stateDir = Split-Path -Parent $StateFile
+    if ($stateDir -and -not (Test-Path $stateDir)) {
+        New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
+    }
+
+    Set-Content -Path $StateFile -Value (Get-DependencyFingerprint -Paths $DependencyFiles) -NoNewline
+}
+
+function Start-DelayedBrowser {
+    param(
+        [string]$Url,
+        [int]$DelaySeconds = 4
+    )
+
+    $escapedUrl = $Url.Replace("'", "''")
+    $command = "Start-Sleep -Seconds $DelaySeconds; Start-Process '$escapedUrl'"
+
+    Start-Process -FilePath "powershell.exe" `
+        -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $command `
+        -WindowStyle Hidden | Out-Null
+}
+
 Clear-Host
 Write-Host ""
 Write-Host $BOLD$CYAN"   __                                         "$RESET
@@ -39,12 +101,30 @@ Write-Host $BOLD"   AI Debate Framework - One-Click Start Script"$RESET
 Write-Host ""
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$BackendDir = Join-Path $ScriptDir "backend"
-$FrontendDir = Join-Path $ScriptDir "frontend"
-$VenvDir = Join-Path $BackendDir "venv"
 $RootDir = $ScriptDir
+$BackendDir = Join-Path $RootDir "backend"
+$FrontendDir = Join-Path $RootDir "frontend"
+$VenvDir = Join-Path $BackendDir "venv"
 $RuntimeDir = Join-Path $RootDir "runtime"
 $RuntimeBackendDir = Join-Path $RuntimeDir "backend"
+$InstallStateDir = Join-Path $RuntimeDir ".install-state"
+
+$BackendPython = Join-Path $VenvDir "Scripts\python.exe"
+$BackendPip = Join-Path $VenvDir "Scripts\pip.exe"
+$BackendStateFile = Join-Path $InstallStateDir "backend.txt"
+$FrontendStateFile = Join-Path $InstallStateDir "frontend.txt"
+$RootStateFile = Join-Path $InstallStateDir "root.txt"
+$BackendDependencyFiles = @(
+    (Join-Path $BackendDir "requirements.txt")
+)
+$FrontendDependencyFiles = @(
+    (Join-Path $FrontendDir "package.json"),
+    (Join-Path $FrontendDir "package-lock.json")
+)
+$RootDependencyFiles = @(
+    (Join-Path $RootDir "package.json"),
+    (Join-Path $RootDir "package-lock.json")
+)
 
 Write-Host ""
 Write-Host $CYAN"========================================"$RESET
@@ -108,53 +188,70 @@ if (-not $checksPassed) {
     exit 1
 }
 
-Write-Host ""
-Write-Host $CYAN"========================================"$RESET
-Write-Host $BOLD"Step 2/5: Backend Setup"$RESET
-Write-Host $CYAN"========================================"$RESET
-Write-Host ""
+if (-not $FrontendOnly) {
+    Write-Host ""
+    Write-Host $CYAN"========================================"$RESET
+    Write-Host $BOLD"Step 2/5: Backend Setup"$RESET
+    Write-Host $CYAN"========================================"$RESET
+    Write-Host ""
 
-Push-Location $BackendDir
+    Push-Location $BackendDir
 
-if (-not (Test-Path $VenvDir)) {
-    Print-Info "Creating Python virtual environment..."
-    python -m venv $VenvDir
-    Print-OK "Virtual environment created"
-} else {
-    Print-OK "Virtual environment already exists"
-}
+    $venvCreated = $false
 
-Print-Info "Activating virtual environment..."
-& "$VenvDir\Scripts\Activate.ps1"
+    if (-not (Test-Path $BackendPython)) {
+        Print-Info "Creating Python virtual environment..."
+        python -m venv $VenvDir
+        if ($LASTEXITCODE -ne 0) {
+            Print-Err "Failed to create Python virtual environment"
+            exit $LASTEXITCODE
+        }
 
-if (-not $SkipInstall) {
-    Print-Info "Installing backend dependencies..."
-    $ErrorActionPreference = "Continue"
-    & "$VenvDir\Scripts\pip.exe" install -r requirements.txt 2>&1 | Out-Null
-    $ErrorActionPreference = "Stop"
-    Print-OK "Backend dependencies installed"
-} else {
-    Print-Info "Skipping dependency installation"
-}
-
-$EnvFile = Join-Path $RuntimeBackendDir ".env"
-$EnvExample = Join-Path $BackendDir ".env.example"
-if (-not (Test-Path $RuntimeBackendDir)) {
-    New-Item -ItemType Directory -Path $RuntimeBackendDir -Force | Out-Null
-}
-if (-not (Test-Path $EnvFile)) {
-    if (Test-Path $EnvExample) {
-        Print-Info "Creating runtime .env config file..."
-        Copy-Item $EnvExample $EnvFile
-        Print-OK "runtime .env file created"
-        Print-Info "A local encryption key will be generated automatically on first backend start"
-        Print-Warn "Model provider API Keys are configured later in the web UI"
+        $venvCreated = $true
+        Print-OK "Virtual environment created"
+    } else {
+        Print-OK "Virtual environment already exists"
     }
-} else {
-    Print-OK "runtime .env config file already exists"
-}
 
-Pop-Location
+    if (-not $SkipInstall) {
+        $backendInstallNeeded = $venvCreated -or (Test-DependencyRefreshNeeded -StateFile $BackendStateFile -DependencyFiles $BackendDependencyFiles)
+
+        if ($backendInstallNeeded) {
+            Print-Info "Installing backend dependencies..."
+            & $BackendPip install --disable-pip-version-check --quiet -r requirements.txt
+            if ($LASTEXITCODE -ne 0) {
+                Print-Err "Backend dependency installation failed"
+                exit $LASTEXITCODE
+            }
+
+            Save-DependencyFingerprint -StateFile $BackendStateFile -DependencyFiles $BackendDependencyFiles
+            Print-OK "Backend dependencies installed"
+        } else {
+            Print-OK "Backend dependencies are up to date"
+        }
+    } else {
+        Print-Info "Skipping dependency installation"
+    }
+
+    $EnvFile = Join-Path $RuntimeBackendDir ".env"
+    $EnvExample = Join-Path $BackendDir ".env.example"
+    if (-not (Test-Path $RuntimeBackendDir)) {
+        New-Item -ItemType Directory -Path $RuntimeBackendDir -Force | Out-Null
+    }
+    if (-not (Test-Path $EnvFile)) {
+        if (Test-Path $EnvExample) {
+            Print-Info "Creating runtime .env config file..."
+            Copy-Item $EnvExample $EnvFile
+            Print-OK "runtime .env file created"
+            Print-Info "A local encryption key will be generated automatically on first backend start"
+            Print-Warn "Model provider API Keys are configured later in the web UI"
+        }
+    } else {
+        Print-OK "runtime .env config file already exists"
+    }
+
+    Pop-Location
+}
 
 if (-not $BackendOnly) {
     Write-Host ""
@@ -165,37 +262,71 @@ if (-not $BackendOnly) {
 
     Push-Location $FrontendDir
 
-    if (-not (Test-Path "node_modules")) {
-        if (-not $SkipInstall) {
+    $frontendModulesDir = Join-Path $FrontendDir "node_modules"
+    $frontendInstallNeeded = (-not (Test-Path $frontendModulesDir)) -or (Test-DependencyRefreshNeeded -StateFile $FrontendStateFile -DependencyFiles $FrontendDependencyFiles)
+
+    if ($frontendInstallNeeded) {
+        if ($SkipInstall) {
+            if (-not (Test-Path $frontendModulesDir)) {
+                Print-Err "Frontend dependencies are missing. Run once without -SkipInstall."
+                exit 1
+            }
+
+            Print-Warn "Frontend dependency files changed, but installation was skipped"
+        } else {
             Print-Info "Installing frontend dependencies..."
             npm install --silent 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                Print-Err "Frontend dependency installation failed"
+                exit $LASTEXITCODE
+            }
+
+            Save-DependencyFingerprint -StateFile $FrontendStateFile -DependencyFiles $FrontendDependencyFiles
             Print-OK "Frontend dependencies installed"
-        } else {
-            Print-Info "Skipping dependency installation"
         }
     } else {
-        Print-OK "node_modules already exists"
+        Print-OK "Frontend dependencies are up to date"
     }
 
     Pop-Location
 }
 
-Write-Host ""
-Write-Host $CYAN"========================================"$RESET
-Write-Host $BOLD"Step 4/5: Installing Process Manager"$RESET
-Write-Host $CYAN"========================================"$RESET
-Write-Host ""
+if (-not $BackendOnly -and -not $FrontendOnly) {
+    Write-Host ""
+    Write-Host $CYAN"========================================"$RESET
+    Write-Host $BOLD"Step 4/5: Installing Process Manager"$RESET
+    Write-Host $CYAN"========================================"$RESET
+    Write-Host ""
 
-$RootPackageJson = Join-Path $RootDir "package.json"
-
-if (-not (Test-Path (Join-Path $RootDir "node_modules"))) {
-    Print-Info "Installing concurrently for unified process management..."
     Push-Location $RootDir
-    npm install --silent 2>$null
+
+    $rootModulesDir = Join-Path $RootDir "node_modules"
+    $rootInstallNeeded = (-not (Test-Path $rootModulesDir)) -or (Test-DependencyRefreshNeeded -StateFile $RootStateFile -DependencyFiles $RootDependencyFiles)
+
+    if ($rootInstallNeeded) {
+        if ($SkipInstall) {
+            if (-not (Test-Path $rootModulesDir)) {
+                Print-Err "Process manager dependencies are missing. Run once without -SkipInstall."
+                exit 1
+            }
+
+            Print-Warn "Root dependency files changed, but installation was skipped"
+        } else {
+            Print-Info "Installing concurrently for unified process management..."
+            npm install --silent 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                Print-Err "Process manager installation failed"
+                exit $LASTEXITCODE
+            }
+
+            Save-DependencyFingerprint -StateFile $RootStateFile -DependencyFiles $RootDependencyFiles
+            Print-OK "Process manager installed"
+        }
+    } else {
+        Print-OK "Process manager already installed"
+    }
+
     Pop-Location
-    Print-OK "Process manager installed"
-} else {
-    Print-OK "Process manager already installed"
 }
 
 Write-Host ""
@@ -206,63 +337,73 @@ Write-Host ""
 
 Push-Location $RootDir
 
-$backendJob = $null
-$frontendJob = $null
 $BackendPort = 8001
+$localKillPort = Join-Path $RootDir "node_modules\.bin\kill-port.cmd"
 
 if (-not $FrontendOnly) {
     Print-Info "Checking port 8001..."
-    
+
     $portToUse = 8001
     $maxPortAttempts = 10
-    
+
     for ($portAttempt = 0; $portAttempt -lt $maxPortAttempts; $portAttempt++) {
         $currentPort = 8001 + $portAttempt
         $portCheck = netstat -ano 2>$null | Select-String ":$currentPort\s"
-        
+
         if (-not $portCheck) {
             $portToUse = $currentPort
             break
         }
-        
+
         if ($portAttempt -eq 0) {
             Print-Info "Port 8001 is in use, trying to free it..."
-            
+
             for ($attempt = 0; $attempt -lt 3; $attempt++) {
                 try {
                     Get-NetTCPConnection -LocalPort $currentPort -ErrorAction SilentlyContinue | ForEach-Object {
                         Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue
                     }
                 } catch {}
-                
+
                 Start-Sleep -Seconds 1
-                
+
                 $portCheck = netstat -ano 2>$null | Select-String ":$currentPort\s"
                 if (-not $portCheck) {
                     $portToUse = $currentPort
                     break
                 }
-                
-                Print-Info "Using kill-port to free port $currentPort..."
-                npx kill-port $currentPort 2>$null
-                Start-Sleep -Seconds 2
-                
-                $portCheck = netstat -ano 2>$null | Select-String ":$currentPort\s"
-                if (-not $portCheck) {
-                    $portToUse = $currentPort
-                    break
+
+                if (Test-Path $localKillPort) {
+                    Print-Info "Using local kill-port to free port $currentPort..."
+                    & $localKillPort $currentPort 2>$null
+                    Start-Sleep -Seconds 2
+
+                    $portCheck = netstat -ano 2>$null | Select-String ":$currentPort\s"
+                    if (-not $portCheck) {
+                        $portToUse = $currentPort
+                        break
+                    }
                 }
             }
-            
-            if (-not $portCheck) { break }
+
+            if (-not $portCheck) {
+                break
+            }
         }
     }
-    
+
     if ($portToUse -ne 8001) {
         Print-Warn "Port 8001 unavailable, using port $portToUse"
     }
-    
+
     $BackendPort = $portToUse
+    $env:ELENCHUS_BACKEND_PORT = "$BackendPort"
+}
+
+if (-not $BackendOnly) {
+    if (-not $FrontendOnly -or -not $env:VITE_BACKEND_PORT) {
+        $env:VITE_BACKEND_PORT = if ($FrontendOnly) { "8001" } else { "$BackendPort" }
+    }
 }
 
 Write-Host ""
@@ -289,93 +430,13 @@ Write-Host ""
 if ($BackendOnly) {
     npm run dev:backend
 } elseif ($FrontendOnly) {
+    Print-Info "Starting frontend service in this window..."
+    Start-DelayedBrowser -Url "http://localhost:5173"
     npm run dev:frontend
 } else {
-    Print-Info "Starting backend service..."
-    
-    $backendProcess = Start-Process -FilePath "$VenvDir\Scripts\python.exe" `
-        -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "$BackendPort" `
-        -WorkingDirectory $BackendDir `
-        -WindowStyle Hidden `
-        -PassThru
-    
-    Start-Sleep -Seconds 2
-    
-    if ($backendProcess -and $backendProcess.HasExited) {
-        Print-Err "Backend process exited immediately."
-        exit 1
-    }
-    
-    Print-Info "Waiting for backend to be ready..."
-    $maxRetries = 30
-    $backendReady = $false
-    
-    for ($i = 0; $i -lt $maxRetries; $i++) {
-        try {
-            $result = curl.exe -s "http://localhost:$BackendPort/health" 2>$null
-            if ($result -and $result -match '"status"\s*:\s*"ok"') {
-                $backendReady = $true
-                Print-OK "Backend is ready"
-                break
-            }
-        } catch {}
-        Write-Host "." -NoNewline
-        Start-Sleep -Milliseconds 500
-    }
-    Write-Host ""
-    
-    if (-not $backendReady) {
-        Print-Err "Backend failed to start."
-        if ($backendProcess -and -not $backendProcess.HasExited) {
-            Stop-Process -Id $backendProcess.Id -Force -ErrorAction SilentlyContinue
-        }
-        exit 1
-    }
-    
-    Print-Info "Starting frontend service..."
-    
-    $npmPath = (Get-Command npm -ErrorAction SilentlyContinue).Source
-    if (-not $npmPath) {
-        Print-Err "npm not found in PATH"
-        exit 1
-    }
-    
-    $FrontendEnvFile = Join-Path $FrontendDir ".env"
-    $envContent = "VITE_BACKEND_PORT=$BackendPort"
-    Set-Content -Path $FrontendEnvFile -Value $envContent -Force
-    Print-OK "Frontend .env configured with port $BackendPort"
-    
-    Push-Location $FrontendDir
-    $frontendProcess = Start-Process -FilePath "powershell.exe" `
-        -ArgumentList "-NoExit", "-Command", "npm run dev" `
-        -PassThru
-    Pop-Location
-    
-    Start-Sleep -Seconds 3
-    Print-Info "Opening browser..."
-    Start-Process "http://localhost:5173"
-    
-    Write-Host ""
-    Write-Host $CYAN"Services are running. Press Ctrl+C to stop."$RESET
-    Write-Host ""
-    
-    try {
-        while ($true) {
-            Start-Sleep -Seconds 1
-            if ($backendProcess -and $backendProcess.HasExited) {
-                Print-Warn "Backend process has stopped"
-                break
-            }
-        }
-    } catch [System.Management.Automation.HaltCommandException] {
-    }
-    
-    if ($backendProcess -and -not $backendProcess.HasExited) {
-        Stop-Process -Id $backendProcess.Id -Force -ErrorAction SilentlyContinue
-    }
-    if ($frontendProcess -and -not $frontendProcess.HasExited) {
-        Stop-Process -Id $frontendProcess.Id -Force -ErrorAction SilentlyContinue
-    }
+    Print-Info "Starting backend and frontend in this window..."
+    Start-DelayedBrowser -Url "http://localhost:5173"
+    npm run dev:stack
 }
 
 Pop-Location

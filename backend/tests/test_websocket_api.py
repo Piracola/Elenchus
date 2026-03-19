@@ -98,7 +98,7 @@ async def test_start_failure_sends_error_event_over_runtime_bus(monkeypatch):
     monkeypatch.setattr(
         websocket_api,
         "get_debate_runtime_service",
-        lambda: SimpleNamespace(start_session=_start_failed),
+        lambda: SimpleNamespace(start_session=_start_failed, is_running=lambda _session_id: False),
     )
 
     await websocket_api.debate_ws(websocket, "abcdef123456")
@@ -109,3 +109,27 @@ async def test_start_failure_sends_error_event_over_runtime_bus(monkeypatch):
     assert websocket.sent[1]["type"] == "error"
     assert websocket.sent[1]["payload"] == {"content": "Failed to start session cleanly."}
     assert bus.disconnected == [("abcdef123456", websocket)]
+
+
+@pytest.mark.asyncio
+async def test_running_session_sends_resume_status_on_connect(monkeypatch):
+    bus = _FakeRuntimeBus()
+    websocket = _FakeWebSocket([WebSocketDisconnect()])
+
+    monkeypatch.setattr(websocket_api, "get_runtime_bus", lambda: bus)
+    monkeypatch.setattr(
+        websocket_api,
+        "get_debate_runtime_service",
+        lambda: SimpleNamespace(
+            start_session=_start_failed,
+            is_running=lambda session_id: session_id == "abcdef123456",
+        ),
+    )
+
+    await websocket_api.debate_ws(websocket, "abcdef123456")
+
+    assert websocket.accepted is True
+    assert len(websocket.sent) == 2
+    assert websocket.sent[0]["type"] == "system"
+    assert websocket.sent[1]["type"] == "status"
+    assert websocket.sent[1]["phase"] == "processing"

@@ -13,7 +13,7 @@ import type {
     DebatePhase,
     RuntimeEvent,
 } from '../types';
-import { clampReplayCursor, getVisibleRuntimeEvents } from '../utils/replay';
+import { clampReplayCursor, deriveRuntimeViewState, getVisibleRuntimeEvents } from '../utils/replay';
 import { repairKnownMojibakeText, repairTextTree } from '../utils/textRepair';
 
 const MAX_SAFE_CONTENT_LENGTH = 50000;
@@ -295,7 +295,107 @@ function computeLastEventSeq(events: RuntimeEvent[]): number {
     }, -1);
 }
 
+function getSessionRuntimeFallback(session: Session | null): {
+    isDebating: boolean;
+    phase: DebatePhase;
+    status: string;
+    node: string;
+} {
+    if (!session) {
+        return {
+            isDebating: false,
+            phase: 'idle',
+            status: '',
+            node: '',
+        };
+    }
+
+    if (session.status === 'in_progress') {
+        return {
+            isDebating: true,
+            phase: 'processing',
+            status: '辩论进行中...',
+            node: '',
+        };
+    }
+
+    if (session.status === 'completed') {
+        return {
+            isDebating: false,
+            phase: 'complete',
+            status: '辩论已完成',
+            node: '',
+        };
+    }
+
+    if (session.status === 'error') {
+        return {
+            isDebating: false,
+            phase: 'error',
+            status: '会话发生错误',
+            node: '',
+        };
+    }
+
+    return {
+        isDebating: false,
+        phase: 'idle',
+        status: '',
+        node: '',
+    };
+}
+
 // ── Store ───────────────────────────────────────────────────────
+
+function toSessionListItem(session: Session | SessionListItem): SessionListItem {
+    return {
+        id: session.id,
+        topic: session.topic,
+        status: session.status,
+        current_turn: session.current_turn,
+        max_turns: session.max_turns,
+        created_at: session.created_at,
+    };
+}
+
+function getSessionCreatedAtValue(session: SessionListItem): number {
+    const value = Date.parse(session.created_at);
+    return Number.isFinite(value) ? value : 0;
+}
+
+function sortSessionListItems(a: SessionListItem, b: SessionListItem): number {
+    const createdAtDiff = getSessionCreatedAtValue(b) - getSessionCreatedAtValue(a);
+    if (createdAtDiff !== 0) {
+        return createdAtDiff;
+    }
+    return a.id.localeCompare(b.id);
+}
+
+function upsertSessionListItem(
+    sessions: SessionListItem[],
+    session: Session | SessionListItem,
+): SessionListItem[] {
+    const nextItem = toSessionListItem(session);
+    const existingIndex = sessions.findIndex((item) => item.id === nextItem.id);
+
+    if (existingIndex < 0) {
+        return [...sessions, nextItem].sort(sortSessionListItems);
+    }
+
+    const nextSessions = [...sessions];
+    nextSessions[existingIndex] = nextItem;
+    return nextSessions.sort(sortSessionListItems);
+}
+
+function withSyncedSessionList(
+    state: DebateState,
+    patch: Partial<DebateState>,
+): Partial<DebateState> {
+    if (patch.currentSession) {
+        patch.sessions = upsertSessionListItem(state.sessions, patch.currentSession);
+    }
+    return patch;
+}
 
 export const useDebateStore = create<DebateState>((set) => ({
     ...initialState,
@@ -305,11 +405,12 @@ export const useDebateStore = create<DebateState>((set) => ({
     setCurrentSession: (session) =>
         set((state) => {
             const safeSession = sanitizeSession(session);
+            const runtimeFallback = getSessionRuntimeFallback(safeSession);
             const changedSession = state.currentSession?.id !== session?.id;
             if (!changedSession) {
-                return { currentSession: safeSession };
+                return withSyncedSessionList(state, { currentSession: safeSession });
             }
-            return {
+            return withSyncedSessionList(state, {
                 currentSession: safeSession,
                 runtimeEvents: [],
                 visibleRuntimeEvents: [],
@@ -320,7 +421,11 @@ export const useDebateStore = create<DebateState>((set) => ({
                 hasOlderRuntimeEvents: false,
                 streamingRole: '',
                 streamingContent: '',
-            };
+                isDebating: runtimeFallback.isDebating,
+                phase: runtimeFallback.phase,
+                currentStatus: runtimeFallback.status,
+                currentNode: runtimeFallback.node,
+            });
         }),
 
     // Connection / debate flow
@@ -385,8 +490,18 @@ export const useDebateStore = create<DebateState>((set) => ({
 
                 case 'status':
                     patch.phase = (event.phase ?? getPayloadString(payload, 'phase') ?? 'processing') as DebatePhase;
+                    patch.isDebating =
+                        patch.phase !== 'idle' &&
+                        patch.phase !== 'complete' &&
+                        patch.phase !== 'error';
                     patch.currentStatus = sanitizeIncomingContent(getPayloadString(payload, 'content')) || '';
                     patch.currentNode = getPayloadString(payload, 'node') ?? '';
+                    if (state.currentSession && state.currentSession.status !== 'in_progress') {
+                        patch.currentSession = {
+                            ...state.currentSession,
+                            status: 'in_progress',
+                        };
+                    }
                     break;
 
                 case 'team_discussion':
@@ -453,6 +568,7 @@ export const useDebateStore = create<DebateState>((set) => ({
                 }
 
                 case 'speech_start':
+                    patch.isDebating = true;
                     patch.streamingRole = getPayloadString(payload, 'role') ?? '';
                     patch.streamingContent = '';
                     break;
@@ -484,6 +600,7 @@ export const useDebateStore = create<DebateState>((set) => ({
                 }
 
                 case 'fact_check_start':
+                    patch.isDebating = true;
                     patch.phase = 'fact_checking';
                     patch.currentStatus = '正在核查事实...';
                     patch.currentNode = 'tool_executor';
@@ -495,6 +612,7 @@ export const useDebateStore = create<DebateState>((set) => ({
                     break;
 
                 case 'judge_start':
+                    patch.isDebating = true;
                     patch.phase = 'judging';
                     patch.currentStatus = '裁判评估中...';
                     patch.currentNode = 'judge';
@@ -537,6 +655,7 @@ export const useDebateStore = create<DebateState>((set) => ({
 
                 case 'turn_complete': {
                     if (!state.currentSession) break;
+                    patch.isDebating = true;
                     const turn = getPayloadNumber(payload, 'turn');
                     const cumulativeRaw = payload.cumulative_scores;
                     patch.currentSession = {
@@ -589,6 +708,7 @@ export const useDebateStore = create<DebateState>((set) => ({
                     };
                     patch.currentSession = {
                         ...state.currentSession,
+                        status: 'error',
                         dialogue_history: appendDialogueWithDedupe(
                             state.currentSession.dialogue_history,
                             errorEntry,
@@ -622,7 +742,7 @@ export const useDebateStore = create<DebateState>((set) => ({
                     break;
             }
 
-            return patch;
+            return withSyncedSessionList(state, patch);
         }),
     setFocusedRuntimeEventId: (eventId) =>
         set((state) => {
@@ -724,10 +844,14 @@ export const useDebateStore = create<DebateState>((set) => ({
             };
         }),
     loadRuntimeEventSnapshot: (events) =>
-        set(() => {
+        set((state) => {
             const safeEvents = normalizeRuntimeEvents(events);
             const replayCursor = clampReplayCursor(safeEvents.length - 1, safeEvents.length);
             const lastEventSeq = computeLastEventSeq(safeEvents);
+            const runtimeView = deriveRuntimeViewState(
+                safeEvents,
+                getSessionRuntimeFallback(state.currentSession),
+            );
             return {
                 runtimeEvents: safeEvents,
                 visibleRuntimeEvents: getVisibleRuntimeEvents(safeEvents, true, replayCursor),
@@ -738,12 +862,20 @@ export const useDebateStore = create<DebateState>((set) => ({
                 hasOlderRuntimeEvents: false,
                 streamingRole: '',
                 streamingContent: '',
+                isDebating: runtimeView.isDebating,
+                phase: runtimeView.phase,
+                currentStatus: runtimeView.status,
+                currentNode: runtimeView.node,
             };
         }),
     hydrateRuntimeEvents: (events, hasOlderRuntimeEvents = false) =>
-        set(() => {
+        set((state) => {
             const safeEvents = normalizeRuntimeEvents(events);
             const replayCursor = clampReplayCursor(safeEvents.length - 1, safeEvents.length);
+            const runtimeView = deriveRuntimeViewState(
+                safeEvents,
+                getSessionRuntimeFallback(state.currentSession),
+            );
             return {
                 runtimeEvents: safeEvents,
                 visibleRuntimeEvents: safeEvents,
@@ -754,6 +886,10 @@ export const useDebateStore = create<DebateState>((set) => ({
                 hasOlderRuntimeEvents,
                 streamingRole: '',
                 streamingContent: '',
+                isDebating: runtimeView.isDebating,
+                phase: runtimeView.phase,
+                currentStatus: runtimeView.status,
+                currentNode: runtimeView.node,
             };
         }),
     prependRuntimeEvents: (events, hasOlderRuntimeEvents = false) =>
@@ -864,18 +1000,22 @@ export const useDebateStore = create<DebateState>((set) => ({
         })),
 
     updateCumulativeScores: (scores) =>
-        set((state) => ({
-            currentSession: state.currentSession
-                ? { ...state.currentSession, cumulative_scores: scores }
-                : null,
-        })),
+        set((state) =>
+            withSyncedSessionList(state, {
+                currentSession: state.currentSession
+                    ? { ...state.currentSession, cumulative_scores: scores }
+                    : null,
+            }),
+        ),
 
     advanceTurn: (turn) =>
-        set((state) => ({
-            currentSession: state.currentSession
-                ? { ...state.currentSession, current_turn: turn }
-                : null,
-        })),
+        set((state) =>
+            withSyncedSessionList(state, {
+                currentSession: state.currentSession
+                    ? { ...state.currentSession, current_turn: turn }
+                    : null,
+            }),
+        ),
 
     // Search
     setSearchResults: (results, count) =>
