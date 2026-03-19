@@ -14,10 +14,12 @@ _NODE_STATUS = {
     "manage_context": ("正在整理上下文...", "preparing"),
     "set_speaker": ("正在切换发言方...", "preparing"),
     "team_discussion": ("组内讨论正在展开...", "preparing"),
+    "jury_discussion": ("多视角陪审团正在讨论本轮表现...", "preparing"),
     "speaker": ("辩手正在思考并组织发言...", "speaking"),
     "tool_executor": ("正在调用工具核验事实...", "fact_checking"),
     "judge": ("裁判正在评估本轮表现...", "judging"),
     "advance_turn": ("准备进入下一回合...", "context"),
+    "consensus": ("正在生成最终共识收敛总结...", "complete"),
 }
 
 
@@ -116,6 +118,9 @@ class RuntimeEventEmitter:
         if node_name == "team_discussion":
             return "speaker"
 
+        if node_name == "jury_discussion":
+            return "judge"
+
         if node_name == "speaker":
             if _has_pending_tool_calls(final_state):
                 return "tool_executor"
@@ -123,6 +128,11 @@ class RuntimeEventEmitter:
             participants = final_state.get("participants", ["proposer", "opposer"])
             current_idx = final_state.get("current_speaker_index", 0)
             if isinstance(participants, list) and current_idx + 1 >= len(participants):
+                jury_config = final_state.get("jury_config", {})
+                agents_per_jury = int(jury_config.get("agents_per_jury", 0) or 0)
+                discussion_rounds = int(jury_config.get("discussion_rounds", 0) or 0)
+                if agents_per_jury > 0 and discussion_rounds > 0:
+                    return "jury_discussion"
                 return "judge"
             return None
 
@@ -132,12 +142,15 @@ class RuntimeEventEmitter:
         if node_name == "advance_turn":
             current_turn = final_state.get("current_turn", 0)
             max_turns = final_state.get("max_turns", 5)
+            reasoning_config = final_state.get("reasoning_config", {})
             if (
                 isinstance(current_turn, int)
                 and isinstance(max_turns, int)
                 and current_turn < max_turns
             ):
                 return "manage_context"
+            if bool(reasoning_config.get("consensus_enabled", True)):
+                return "consensus"
             return None
 
         return None
@@ -160,6 +173,7 @@ class RuntimeEventEmitter:
             payload={
                 "role": latest.get("role", ""),
                 "agent_name": latest.get("agent_name", ""),
+                "turn": latest.get("turn"),
             },
             source="runtime.node.speaker",
             phase="speaking",
@@ -172,6 +186,7 @@ class RuntimeEventEmitter:
                 "agent_name": latest.get("agent_name", ""),
                 "content": latest.get("content", ""),
                 "citations": latest.get("citations", []),
+                "turn": latest.get("turn"),
             },
             source="runtime.node.speaker",
             phase="speaking",
@@ -203,6 +218,8 @@ class RuntimeEventEmitter:
                     "agent_name": entry.get("agent_name", ""),
                     "content": entry.get("content", ""),
                     "citations": entry.get("citations", []),
+                    "turn": entry.get("turn"),
+                    "discussion_kind": entry.get("discussion_kind", "team"),
                     "team_side": entry.get("team_side", ""),
                     "team_round": entry.get("team_round"),
                     "team_member_index": entry.get("team_member_index"),
@@ -211,6 +228,52 @@ class RuntimeEventEmitter:
                 },
                 source="runtime.node.team_discussion",
                 phase="preparing",
+            )
+
+        return curr_history_len
+
+    async def emit_jury_discussion(
+        self,
+        session_id: str,
+        final_state: dict[str, Any],
+        prev_history_len: int,
+    ) -> int:
+        history = final_state.get("jury_dialogue_history", [])
+        curr_history_len = len(history)
+        if curr_history_len <= prev_history_len or not history:
+            return prev_history_len
+
+        new_entries = history[prev_history_len:curr_history_len]
+        for entry in new_entries:
+            if not isinstance(entry, dict):
+                continue
+
+            role = entry.get("role")
+            if role == "jury_summary":
+                event_type = "jury_summary"
+            elif role == "consensus_summary":
+                event_type = "consensus_summary"
+            else:
+                event_type = "jury_discussion"
+            source = "runtime.node.consensus" if role == "consensus_summary" else "runtime.node.jury_discussion"
+            phase = "complete" if role == "consensus_summary" else "preparing"
+
+            await self.emit_runtime_event(
+                session_id=session_id,
+                event_type=event_type,
+                payload={
+                    "role": role or "",
+                    "agent_name": entry.get("agent_name", ""),
+                    "content": entry.get("content", ""),
+                    "citations": entry.get("citations", []),
+                    "turn": entry.get("turn"),
+                    "discussion_kind": entry.get("discussion_kind", "jury"),
+                    "jury_round": entry.get("jury_round"),
+                    "jury_member_index": entry.get("jury_member_index"),
+                    "jury_perspective": entry.get("jury_perspective", ""),
+                },
+                source=source,
+                phase=phase,
             )
 
         return curr_history_len

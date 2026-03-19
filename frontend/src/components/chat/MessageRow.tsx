@@ -3,6 +3,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { SCORE_DIMENSIONS } from '../../types';
 import type { DialogueEntry } from '../../types';
+import RoundInsights from './RoundInsights';
+import type { InsightSection } from './RoundInsights';
 
 interface MessageRowProps {
     agentEntry?: (DialogueEntry & { isStreaming?: boolean; streamingContent?: string }) | null;
@@ -11,6 +13,7 @@ interface MessageRowProps {
     highlightAgent?: boolean;
     highlightJudge?: boolean;
     highlightSystem?: boolean;
+    insightSections?: InsightSection[];
 }
 
 type RoleVisual = {
@@ -215,6 +218,7 @@ export default function MessageRow({
     highlightAgent = false,
     highlightJudge = false,
     highlightSystem = false,
+    insightSections = [],
 }: MessageRowProps) {
     const neutralColor = 'var(--color-neutral, #6b7280)';
     const rowFocused = highlightAgent || highlightJudge || highlightSystem;
@@ -295,9 +299,9 @@ export default function MessageRow({
             data-row-focused={rowFocused ? 'true' : 'false'}
             style={{
                 display: 'flex',
-                flexDirection: 'row',
+                flexDirection: 'column',
                 width: '100%',
-                gap: '20px',
+                gap: '14px',
                 marginBottom: '32px',
                 opacity: !agentEntry && judgeEntry ? 0.8 : 1,
                 borderRadius: 'var(--radius-xl)',
@@ -305,23 +309,33 @@ export default function MessageRow({
                 transition: 'background var(--transition-fast)',
             }}
         >
-            <div style={{ flex: '6 1 0', display: 'flex', flexDirection: 'column' }}>
-                {agentEntry && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 16 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.4 }}
-                        style={{
-                            position: 'relative',
-                            background: 'var(--bg-card)',
-                            padding: '28px',
-                            borderRadius: 'var(--radius-xl)',
-                            boxShadow: highlightAgent
-                                ? `0 0 0 2px rgba(99, 102, 241, 0.55), var(--shadow-sm), 0 4px 20px ${agentVisual.cardTint}`
-                                : `var(--shadow-sm), 0 4px 20px ${agentVisual.cardTint}`,
-                            marginTop: '20px',
-                        }}
-                    >
+            <RoundInsights sections={insightSections} />
+
+            <div
+                style={{
+                    display: 'flex',
+                    flexDirection: 'row',
+                    width: '100%',
+                    gap: '20px',
+                }}
+            >
+                <div style={{ flex: '6 1 0', display: 'flex', flexDirection: 'column' }}>
+                    {agentEntry && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 16 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.4 }}
+                            style={{
+                                position: 'relative',
+                                background: 'var(--bg-card)',
+                                padding: '28px',
+                                borderRadius: 'var(--radius-xl)',
+                                boxShadow: highlightAgent
+                                    ? `0 0 0 2px rgba(99, 102, 241, 0.55), var(--shadow-sm), 0 4px 20px ${agentVisual.cardTint}`
+                                    : `var(--shadow-sm), 0 4px 20px ${agentVisual.cardTint}`,
+                                marginTop: '20px',
+                            }}
+                        >
                         <div
                             style={{
                                 position: 'absolute',
@@ -379,30 +393,30 @@ export default function MessageRow({
                             </ReactMarkdown>
                             {agentEntry.isStreaming && <Cursor color={agentVisual.color} />}
                         </div>
-                    </motion.div>
-                )}
-            </div>
+                        </motion.div>
+                    )}
+                </div>
 
-            <div style={{ flex: '4 1 0', display: 'flex', flexDirection: 'column' }}>
-                {judgeEntry && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 16 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.4, delay: 0.1 }}
-                        style={{
-                            position: 'relative',
-                            background: 'var(--bg-secondary)',
-                            padding: '24px',
-                            borderRadius: 'var(--radius-xl)',
-                            boxShadow: highlightJudge
-                                ? '0 0 0 2px rgba(99, 102, 241, 0.55), var(--shadow-sm), 0 4px 20px rgba(255, 149, 0, 0.08)'
-                                : 'var(--shadow-sm), 0 4px 20px rgba(255, 149, 0, 0.08)',
-                            marginTop: '20px',
-                            border: highlightJudge
-                                ? '1px solid rgba(99, 102, 241, 0.45)'
-                                : '1px solid rgba(255, 149, 0, 0.1)',
-                        }}
-                    >
+                <div style={{ flex: '4 1 0', display: 'flex', flexDirection: 'column' }}>
+                    {judgeEntry && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 16 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.4, delay: 0.1 }}
+                            style={{
+                                position: 'relative',
+                                background: 'var(--bg-secondary)',
+                                padding: '24px',
+                                borderRadius: 'var(--radius-xl)',
+                                boxShadow: highlightJudge
+                                    ? '0 0 0 2px rgba(99, 102, 241, 0.55), var(--shadow-sm), 0 4px 20px rgba(255, 149, 0, 0.08)'
+                                    : 'var(--shadow-sm), 0 4px 20px rgba(255, 149, 0, 0.08)',
+                                marginTop: '20px',
+                                border: highlightJudge
+                                    ? '1px solid rgba(99, 102, 241, 0.45)'
+                                    : '1px solid rgba(255, 149, 0, 0.1)',
+                            }}
+                        >
                         <div
                             style={{
                                 position: 'absolute',
@@ -462,8 +476,9 @@ export default function MessageRow({
                         </div>
 
                         <ScoreGrid judgeEntry={judgeEntry} />
-                    </motion.div>
-                )}
+                        </motion.div>
+                    )}
+                </div>
             </div>
         </div>
     );

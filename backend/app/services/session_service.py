@@ -16,6 +16,28 @@ from app.dependencies import get_agent_config_service
 from app.models.schemas import SessionCreate, SessionStatus
 
 
+def _default_team_config() -> dict[str, int]:
+    return {
+        "agents_per_team": 0,
+        "discussion_rounds": 0,
+    }
+
+
+def _default_jury_config() -> dict[str, int]:
+    return {
+        "agents_per_jury": 0,
+        "discussion_rounds": 0,
+    }
+
+
+def _default_reasoning_config() -> dict[str, bool]:
+    return {
+        "steelman_enabled": True,
+        "counterfactual_enabled": True,
+        "consensus_enabled": True,
+    }
+
+
 def _sanitize_dialogue_history(dialogue_history: Any) -> list[dict[str, Any]]:
     if not isinstance(dialogue_history, list):
         return []
@@ -39,6 +61,14 @@ def _sanitize_state_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     sanitized["dialogue_history"] = _sanitize_dialogue_history(
         sanitized.get("dialogue_history", [])
     )
+    if "team_dialogue_history" in sanitized:
+        sanitized["team_dialogue_history"] = _sanitize_dialogue_history(
+            sanitized.get("team_dialogue_history", [])
+        )
+    if "jury_dialogue_history" in sanitized:
+        sanitized["jury_dialogue_history"] = _sanitize_dialogue_history(
+            sanitized.get("jury_dialogue_history", [])
+        )
     if "judge_history" in sanitized:
         sanitized["judge_history"] = _sanitize_dialogue_history(
             sanitized.get("judge_history", [])
@@ -85,6 +115,8 @@ def _merge_dialogue_for_display(
 def _record_to_dict(record: SessionRecord) -> dict[str, Any]:
     snapshot = _sanitize_state_snapshot(record.state_snapshot or {})
     dialogue_history = snapshot.get("dialogue_history", [])
+    team_dialogue_history = snapshot.get("team_dialogue_history", [])
+    jury_dialogue_history = snapshot.get("jury_dialogue_history", [])
     judge_history = snapshot.get("judge_history", [])
     return {
         "id": record.id,
@@ -96,10 +128,15 @@ def _record_to_dict(record: SessionRecord) -> dict[str, Any]:
         "created_at": record.created_at,
         "updated_at": record.updated_at,
         "dialogue_history": _merge_dialogue_for_display(dialogue_history, judge_history),
+        "team_dialogue_history": team_dialogue_history,
+        "jury_dialogue_history": jury_dialogue_history,
         "shared_knowledge": snapshot.get("shared_knowledge", []),
         "current_scores": snapshot.get("current_scores", {}),
         "cumulative_scores": snapshot.get("cumulative_scores", {}),
         "agent_configs": snapshot.get("agent_configs", {}),
+        "team_config": snapshot.get("team_config", _default_team_config()),
+        "jury_config": snapshot.get("jury_config", _default_jury_config()),
+        "reasoning_config": snapshot.get("reasoning_config", _default_reasoning_config()),
     }
 
 
@@ -121,6 +158,8 @@ async def create_session(db: AsyncSession, body: SessionCreate) -> dict[str, Any
         status=SessionStatus.PENDING.value,
         state_snapshot={
             "dialogue_history": [],
+            "team_dialogue_history": [],
+            "jury_dialogue_history": [],
             "judge_history": [],
             "shared_knowledge": [],
             "current_scores": {},
@@ -128,6 +167,9 @@ async def create_session(db: AsyncSession, body: SessionCreate) -> dict[str, Any
             "search_context": [],
             "context_summary": "",
             "agent_configs": agent_configs_for_storage,
+            "team_config": body.team_config.model_dump(),
+            "jury_config": body.jury_config.model_dump(),
+            "reasoning_config": body.reasoning_config.model_dump(),
         },
         created_at=now,
         updated_at=now,

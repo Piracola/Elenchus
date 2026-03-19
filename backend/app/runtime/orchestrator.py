@@ -15,7 +15,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_PERSIST_NODES = frozenset({"advance_turn", "judge", "speaker", "team_discussion"})
+_PERSIST_NODES = frozenset(
+    {"advance_turn", "judge", "speaker", "team_discussion", "jury_discussion", "consensus"}
+)
 
 
 class DebateOrchestrator:
@@ -80,6 +82,7 @@ class DebateOrchestrator:
         final_state = dict(initial_state)
         prev_history_len = len(initial_state.get("dialogue_history", []))
         prev_team_history_len = len(initial_state.get("team_dialogue_history", []))
+        prev_jury_history_len = len(initial_state.get("jury_dialogue_history", []))
         initial_knowledge = initial_state.get("shared_knowledge", [])
         prev_knowledge_len = len(initial_knowledge) if isinstance(initial_knowledge, list) else 0
         emitted_judge_keys: set[tuple[int, str]] = set()
@@ -116,6 +119,12 @@ class DebateOrchestrator:
                             final_state,
                             prev_team_history_len,
                         )
+                    elif node_name == "jury_discussion":
+                        prev_jury_history_len = await self._events.emit_jury_discussion(
+                            session_id,
+                            final_state,
+                            prev_jury_history_len,
+                        )
                     elif node_name == "tool_executor":
                         await self._events.emit_fact_check(session_id, final_state)
                     elif node_name == "judge":
@@ -126,6 +135,12 @@ class DebateOrchestrator:
                         )
                     elif node_name == "advance_turn":
                         await self._events.emit_turn_complete(session_id, final_state)
+                    elif node_name == "consensus":
+                        prev_jury_history_len = await self._events.emit_jury_discussion(
+                            session_id,
+                            final_state,
+                            prev_jury_history_len,
+                        )
 
                     next_status_node = self._events.predict_next_status_node(
                         node_name,

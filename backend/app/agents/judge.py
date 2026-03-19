@@ -118,6 +118,7 @@ def _build_judge_instruction(
     dialogue_history: list[dict[str, Any]],
     shared_knowledge: list[dict[str, Any]],
     current_turn: int,
+    jury_summary: dict[str, Any] | None = None,
 ) -> str:
     """Build the user message for the judge."""
     parts = [
@@ -139,6 +140,15 @@ def _build_judge_instruction(
             parts.append(
                 f"- Query: {fact.get('query', '')}\n  Result: {fact.get('result', '')}"
             )
+
+    if isinstance(jury_summary, dict):
+        summary_content = jury_summary.get("content", "")
+        if isinstance(summary_content, str) and summary_content.strip():
+            parts.append("\n## Multi-Perspective Jury Briefing")
+            parts.append(
+                "Use this as an internal aid only. Consider it critically rather than copying it."
+            )
+            parts.append(summary_content.strip())
 
     parts.append(
         "\n## Instructions\n"
@@ -211,6 +221,7 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
     shared_knowledge = state.get("shared_knowledge", [])
     current_turn = state.get("current_turn", 0)
     cumulative_scores = dict(state.get("cumulative_scores", {}))
+    jury_summary = state.get("current_jury_summary")
 
     logger.info("Judge scoring turn %d for %d participants", current_turn + 1, len(participants))
 
@@ -243,6 +254,7 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
             dialogue_history=evaluation_history,
             shared_knowledge=shared_knowledge,
             current_turn=current_turn,
+            jury_summary=jury_summary if isinstance(jury_summary, dict) else None,
         )
 
         score: TurnScore | None = None

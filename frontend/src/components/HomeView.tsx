@@ -6,8 +6,12 @@ import { useAgentConfigs } from '../hooks/useAgentConfigs';
 import { useSessionCreate } from '../hooks/useSessionCreate';
 import {
     DEFAULT_MAX_TURNS,
+    DEFAULT_JURY_AGENTS_PER_JURY,
+    DEFAULT_JURY_DISCUSSION_ROUNDS,
     DEFAULT_TEAM_AGENTS_PER_TEAM,
     DEFAULT_TEAM_DISCUSSION_ROUNDS,
+    parseJuryAgentsInput,
+    parseJuryDiscussionRoundsInput,
     parseMaxTurnsInput,
     parseTeamAgentsInput,
     parseTeamDiscussionRoundsInput,
@@ -19,21 +23,28 @@ export default function HomeView() {
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
     const [teamAgentsInput, setTeamAgentsInput] = useState('');
     const [teamRoundsInput, setTeamRoundsInput] = useState('');
+    const [juryAgentsInput, setJuryAgentsInput] = useState('');
+    const [juryRoundsInput, setJuryRoundsInput] = useState('');
+    const [steelmanEnabled, setSteelmanEnabled] = useState(true);
     const { isCreating, error, createSession, clearError } = useSessionCreate();
     const {
         showAdvanced,
         setShowAdvanced,
         savedConfigs,
         selectedConfigIds,
+        temperatureInputs,
         showConfigManager,
         setShowConfigManager,
         handleConfigSelect,
+        handleTemperatureChange,
         buildAgentConfigs,
     } = useAgentConfigs();
 
     const maxTurns = parseMaxTurnsInput(maxTurnsInput);
     const teamAgents = parseTeamAgentsInput(teamAgentsInput);
     const teamDiscussionRounds = parseTeamDiscussionRoundsInput(teamRoundsInput);
+    const juryAgents = parseJuryAgentsInput(juryAgentsInput);
+    const juryDiscussionRounds = parseJuryDiscussionRoundsInput(juryRoundsInput);
 
     const handleCreateDebate = async () => {
         if (!topic.trim() || isCreating) {
@@ -42,6 +53,13 @@ export default function HomeView() {
         await createSession(topic, maxTurns, buildAgentConfigs(), {
             agents_per_team: teamAgents,
             discussion_rounds: teamDiscussionRounds,
+        }, {
+            agents_per_jury: juryAgents,
+            discussion_rounds: juryDiscussionRounds,
+        }, {
+            steelman_enabled: steelmanEnabled,
+            counterfactual_enabled: true,
+            consensus_enabled: true,
         });
     };
 
@@ -190,9 +208,11 @@ export default function HomeView() {
                             <AgentConfigPanel
                                 savedConfigs={savedConfigs}
                                 selectedConfigIds={selectedConfigIds}
+                                temperatureInputs={temperatureInputs}
                                 showConfigManager={showConfigManager}
                                 setShowConfigManager={setShowConfigManager}
                                 handleConfigSelect={handleConfigSelect}
+                                handleTemperatureChange={handleTemperatureChange}
                             />
                         </motion.div>
                     )}
@@ -320,6 +340,53 @@ export default function HomeView() {
                                     style={numberInputStyle}
                                 />
                             </div>
+
+                            <div style={controlStyle}>
+                                <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                    陪审 Agent
+                                </span>
+                                <input
+                                    type="number"
+                                    value={juryAgentsInput}
+                                    onChange={(event) => setJuryAgentsInput(event.target.value)}
+                                    placeholder={String(DEFAULT_JURY_AGENTS_PER_JURY)}
+                                    min={0}
+                                    max={10}
+                                    style={numberInputStyle}
+                                />
+                            </div>
+
+                            <div style={controlStyle}>
+                                <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                    陪审轮数
+                                </span>
+                                <input
+                                    type="number"
+                                    value={juryRoundsInput}
+                                    onChange={(event) => setJuryRoundsInput(event.target.value)}
+                                    placeholder={String(DEFAULT_JURY_DISCUSSION_ROUNDS)}
+                                    min={0}
+                                    max={10}
+                                    style={numberInputStyle}
+                                />
+                            </div>
+
+                            <motion.button
+                                whileHover={{ scale: 1.02, background: 'var(--bg-hover)' }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => setSteelmanEnabled((value) => !value)}
+                                style={{
+                                    ...controlStyle,
+                                    cursor: 'pointer',
+                                    borderColor: steelmanEnabled ? 'var(--accent-indigo)' : 'var(--border-subtle)',
+                                    color: steelmanEnabled ? 'var(--accent-indigo)' : 'var(--text-secondary)',
+                                }}
+                            >
+                                Steelman
+                                <span style={{ fontSize: '12px', fontWeight: 700 }}>
+                                    {steelmanEnabled ? 'ON' : 'OFF'}
+                                </span>
+                            </motion.button>
                         </div>
 
                         <motion.button

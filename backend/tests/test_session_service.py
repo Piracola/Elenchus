@@ -3,7 +3,6 @@ Smoke tests for session CRUD operations.
 """
 
 import pytest
-import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services import session_service
@@ -20,6 +19,15 @@ async def test_create_session(db_session: AsyncSession):
     assert result["status"] == "pending"
     assert result["current_turn"] == 0
     assert len(result["id"]) == 12
+    assert result["team_config"] == {"agents_per_team": 0, "discussion_rounds": 0}
+    assert result["jury_config"] == {"agents_per_jury": 0, "discussion_rounds": 0}
+    assert result["reasoning_config"] == {
+        "steelman_enabled": True,
+        "counterfactual_enabled": True,
+        "consensus_enabled": True,
+    }
+    assert result["team_dialogue_history"] == []
+    assert result["jury_dialogue_history"] == []
 
 
 @pytest.mark.asyncio
@@ -247,3 +255,39 @@ async def test_create_session_persists_provider_identity(db_session: AsyncSessio
 
     assert created["agent_configs"]["proposer"]["provider_id"] == "anthropic-team"
     assert created["agent_configs"]["proposer"]["provider_type"] == "anthropic"
+
+
+@pytest.mark.asyncio
+async def test_create_session_persists_team_config(db_session: AsyncSession):
+    created = await session_service.create_session(
+        db_session,
+        SessionCreate(
+            topic="Team config",
+            team_config={"agents_per_team": 4, "discussion_rounds": 3},
+        ),
+    )
+
+    assert created["team_config"] == {"agents_per_team": 4, "discussion_rounds": 3}
+
+
+@pytest.mark.asyncio
+async def test_create_session_persists_jury_and_reasoning_config(db_session: AsyncSession):
+    created = await session_service.create_session(
+        db_session,
+        SessionCreate(
+            topic="Jury config",
+            jury_config={"agents_per_jury": 5, "discussion_rounds": 2},
+            reasoning_config={
+                "steelman_enabled": False,
+                "counterfactual_enabled": True,
+                "consensus_enabled": False,
+            },
+        ),
+    )
+
+    assert created["jury_config"] == {"agents_per_jury": 5, "discussion_rounds": 2}
+    assert created["reasoning_config"] == {
+        "steelman_enabled": False,
+        "counterfactual_enabled": True,
+        "consensus_enabled": False,
+    }

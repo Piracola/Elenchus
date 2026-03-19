@@ -47,14 +47,31 @@ def test_predict_next_status_node_handles_tools_and_turn_progress():
         },
     ) == "team_discussion"
     assert emitter.predict_next_status_node("team_discussion", {}) == "speaker"
+    assert emitter.predict_next_status_node("jury_discussion", {}) == "judge"
     assert emitter.predict_next_status_node(
         "speaker",
         {"messages": [SimpleNamespace(tool_calls=[{"name": "web_search"}])]},
     ) == "tool_executor"
     assert emitter.predict_next_status_node(
+        "speaker",
+        {
+            "participants": ["proposer", "opposer"],
+            "current_speaker_index": 1,
+            "jury_config": {"agents_per_jury": 3, "discussion_rounds": 2},
+        },
+    ) == "jury_discussion"
+    assert emitter.predict_next_status_node(
         "advance_turn",
         {"current_turn": 1, "max_turns": 3},
     ) == "manage_context"
+    assert emitter.predict_next_status_node(
+        "advance_turn",
+        {
+            "current_turn": 3,
+            "max_turns": 3,
+            "reasoning_config": {"consensus_enabled": True},
+        },
+    ) == "consensus"
 
 
 @pytest.mark.asyncio
@@ -115,3 +132,47 @@ async def test_emit_team_discussion_uses_separate_event_types():
 
     assert count == 2
     assert [event["type"] for event in bus.events] == ["team_discussion", "team_summary"]
+
+
+@pytest.mark.asyncio
+async def test_emit_jury_discussion_uses_separate_event_types():
+    bus = _FakeRuntimeBus()
+    emitter = RuntimeEventEmitter(runtime_bus=bus)
+
+    count = await emitter.emit_jury_discussion(
+        "session-1",
+        {
+            "jury_dialogue_history": [
+                {
+                    "role": "jury_member",
+                    "agent_name": "陪审员1",
+                    "content": "请继续追问关键前提。",
+                    "turn": 0,
+                    "jury_round": 0,
+                    "jury_member_index": 0,
+                    "jury_perspective": "隐藏前提挖掘",
+                },
+                {
+                    "role": "jury_summary",
+                    "agent_name": "陪审团总结员",
+                    "content": "双方仍在因果链强度上对冲。",
+                    "turn": 0,
+                    "jury_round": 0,
+                },
+                {
+                    "role": "consensus_summary",
+                    "agent_name": "共识收敛员",
+                    "content": "可以先收敛到“条件依赖型结论”。",
+                    "turn": 3,
+                },
+            ]
+        },
+        0,
+    )
+
+    assert count == 3
+    assert [event["type"] for event in bus.events] == [
+        "jury_discussion",
+        "jury_summary",
+        "consensus_summary",
+    ]

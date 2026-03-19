@@ -9,6 +9,28 @@ from app.db.database import get_session_factory
 from app.services import runtime_event_service, session_service
 
 
+def _default_team_config() -> dict[str, int]:
+    return {
+        "agents_per_team": 0,
+        "discussion_rounds": 0,
+    }
+
+
+def _default_jury_config() -> dict[str, int]:
+    return {
+        "agents_per_jury": 0,
+        "discussion_rounds": 0,
+    }
+
+
+def _default_reasoning_config() -> dict[str, bool]:
+    return {
+        "steelman_enabled": True,
+        "counterfactual_enabled": True,
+        "consensus_enabled": True,
+    }
+
+
 def _sanitize_dialogue_history(dialogue_history: Any) -> list[dict[str, Any]]:
     if not isinstance(dialogue_history, list):
         return []
@@ -56,10 +78,28 @@ class SessionRuntimeRepository:
         dialogue_history = _sanitize_dialogue_history(
             session_snapshot.get("dialogue_history", session_data.get("dialogue_history", []))
         )
+        team_dialogue_history = _sanitize_dialogue_history(
+            session_snapshot.get("team_dialogue_history", session_data.get("team_dialogue_history", []))
+        )
+        jury_dialogue_history = _sanitize_dialogue_history(
+            session_snapshot.get("jury_dialogue_history", session_data.get("jury_dialogue_history", []))
+        )
         judge_history = _sanitize_dialogue_history(session_snapshot.get("judge_history", []))
         recent_dialogue_history = _sanitize_dialogue_history(
             session_snapshot.get("recent_dialogue_history", dialogue_history)
         )
+        team_config = session_snapshot.get("team_config", session_data.get("team_config", _default_team_config()))
+        if not isinstance(team_config, dict):
+            team_config = _default_team_config()
+        jury_config = session_snapshot.get("jury_config", session_data.get("jury_config", _default_jury_config()))
+        if not isinstance(jury_config, dict):
+            jury_config = _default_jury_config()
+        reasoning_config = session_snapshot.get(
+            "reasoning_config",
+            session_data.get("reasoning_config", _default_reasoning_config()),
+        )
+        if not isinstance(reasoning_config, dict):
+            reasoning_config = _default_reasoning_config()
 
         return {
             "session_id": session_id,
@@ -74,6 +114,8 @@ class SessionRuntimeRepository:
             "current_speaker": "",
             "current_speaker_index": -1,
             "dialogue_history": dialogue_history,
+            "team_dialogue_history": team_dialogue_history,
+            "jury_dialogue_history": jury_dialogue_history,
             "judge_history": judge_history,
             "recent_dialogue_history": recent_dialogue_history or dialogue_history,
             "compressed_history_count": int(session_snapshot.get("compressed_history_count", 0) or 0),
@@ -83,6 +125,13 @@ class SessionRuntimeRepository:
             "cumulative_scores": session_data.get("cumulative_scores", {}),
             "status": "in_progress",
             "error": None,
+            "team_config": team_config,
+            "jury_config": jury_config,
+            "reasoning_config": reasoning_config,
+            "current_team_discussion": [],
+            "current_team_summary": None,
+            "current_jury_discussion": [],
+            "current_jury_summary": None,
             "agent_configs": (
                 agent_configs
                 if agent_configs is not None
@@ -106,6 +155,8 @@ class SessionRuntimeRepository:
                 status=state.get("status", "in_progress"),
                 state_snapshot={
                     "dialogue_history": state.get("dialogue_history", []),
+                    "team_dialogue_history": state.get("team_dialogue_history", []),
+                    "jury_dialogue_history": state.get("jury_dialogue_history", []),
                     "judge_history": state.get("judge_history", []),
                     "recent_dialogue_history": state.get("recent_dialogue_history", []),
                     "compressed_history_count": state.get("compressed_history_count", 0),
@@ -113,6 +164,9 @@ class SessionRuntimeRepository:
                     "current_scores": state.get("current_scores", {}),
                     "cumulative_scores": state.get("cumulative_scores", {}),
                     "agent_configs": agent_configs_for_storage,
+                    "team_config": state.get("team_config", _default_team_config()),
+                    "jury_config": state.get("jury_config", _default_jury_config()),
+                    "reasoning_config": state.get("reasoning_config", _default_reasoning_config()),
                 },
             )
 

@@ -19,7 +19,20 @@ class DialogueEntry(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-DialogueRole = Literal['proposer', 'opposer', 'judge', 'system', 'error', 'audience', 'fact_checker']
+DialogueRole = Literal[
+    'proposer',
+    'opposer',
+    'judge',
+    'system',
+    'error',
+    'audience',
+    'fact_checker',
+    'team_member',
+    'team_summary',
+    'jury_member',
+    'jury_summary',
+    'consensus_summary',
+]
 
 
 class DialogueEntryDict(TypedDict, total=False):
@@ -29,8 +42,18 @@ class DialogueEntryDict(TypedDict, total=False):
     content: str
     citations: list[str]
     timestamp: str
+    turn: int | None
     target_role: str | None
     scores: dict | None
+    discussion_kind: str | None
+    team_side: str | None
+    team_round: int | None
+    team_member_index: int | None
+    team_specialty: str | None
+    jury_round: int | None
+    jury_member_index: int | None
+    jury_perspective: str | None
+    source_role: str | None
 
 
 class SharedKnowledgeEntry(TypedDict, total=False):

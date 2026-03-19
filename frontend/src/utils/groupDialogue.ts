@@ -9,6 +9,7 @@ export interface DialogueRow {
     agent: DialogueEntry | null;
     judge: DialogueEntry | null;
     system?: DialogueEntry;
+    turn?: number;
 }
 
 export function groupDialogue(entries: DialogueEntry[], participants?: string[]): DialogueRow[] {
@@ -17,25 +18,27 @@ export function groupDialogue(entries: DialogueEntry[], participants?: string[])
 
     for (const entry of entries) {
         if (speakerRoles.includes(entry.role)) {
-            rows.push({ agent: entry, judge: null });
+            rows.push({ agent: entry, judge: null, turn: entry.turn });
         } else if (entry.role === 'judge') {
             let matched = false;
             for (let i = rows.length - 1; i >= 0; i--) {
                 if (
                     rows[i].agent &&
                     rows[i].agent!.role === entry.target_role &&
+                    (entry.turn === undefined || rows[i].agent!.turn === undefined || rows[i].agent!.turn === entry.turn) &&
                     !rows[i].judge
                 ) {
                     rows[i].judge = entry;
+                    rows[i].turn = rows[i].turn ?? entry.turn;
                     matched = true;
                     break;
                 }
             }
             if (!matched) {
-                rows.push({ agent: null, judge: entry });
+                rows.push({ agent: null, judge: entry, turn: entry.turn });
             }
         } else {
-            rows.push({ agent: null, judge: null, system: entry });
+            rows.push({ agent: null, judge: null, system: entry, turn: entry.turn });
         }
     }
 

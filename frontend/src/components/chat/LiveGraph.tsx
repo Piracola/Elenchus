@@ -21,10 +21,13 @@ import {
 const NODE_COLOR: Record<string, string> = {
     manage_context: 'var(--accent-indigo)',
     set_speaker: 'var(--accent-indigo)',
+    team_discussion: 'var(--accent-cyan)',
     speaker: 'var(--color-proposer)',
     tool_executor: 'var(--accent-cyan)',
+    jury_discussion: 'var(--accent-indigo)',
     judge: 'var(--color-judge)',
     advance_turn: 'var(--accent-amber)',
+    consensus: 'var(--accent-cyan)',
     end: 'var(--accent-rose)',
 };
 
@@ -142,7 +145,7 @@ export default function LiveGraph({ compact = false, embedded = false }: LiveGra
                 }}
             >
                 <svg
-                    viewBox="0 0 960 260"
+                    viewBox="0 0 1220 260"
                     width="100%"
                     height={220}
                     role="img"

@@ -53,6 +53,19 @@ export function resolveRowFocus(row: DialogueRow, event: RuntimeEvent | null): R
         return EMPTY_FOCUS;
     }
 
+    if (event.type === 'team_discussion' || event.type === 'team_summary') {
+        const turn = payloadNumber(event, 'turn');
+        const side = payloadString(event, 'team_side') ?? payloadString(event, 'source_role');
+        if (
+            row.agent &&
+            (turn !== undefined ? row.agent.turn === turn : true) &&
+            (side ? row.agent.role === side : true)
+        ) {
+            return { agent: true, judge: false, system: false };
+        }
+        return EMPTY_FOCUS;
+    }
+
     if (event.type === 'audience_message') {
         const audienceTimestamp = payloadString(event, 'timestamp') ?? event.timestamp;
         if (

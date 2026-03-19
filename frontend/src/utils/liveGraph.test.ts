@@ -38,6 +38,21 @@ describe('liveGraph utils', () => {
 
         expect(eventToGraphNode(bySource)).toBe('judge');
         expect(eventToGraphNode(byType)).toBe('judge');
+        expect(eventToGraphNode(makeEvent({
+            source: 'runtime.node.team_discussion',
+            type: 'team_discussion',
+            payload: { team_side: 'proposer' },
+        }))).toBe('team_discussion');
+        expect(eventToGraphNode(makeEvent({
+            source: 'runtime.node.jury_discussion',
+            type: 'jury_summary',
+            payload: { turn: 0 },
+        }))).toBe('jury_discussion');
+        expect(eventToGraphNode(makeEvent({
+            source: 'runtime.node.consensus',
+            type: 'consensus_summary',
+            payload: { turn: 3 },
+        }))).toBe('consensus');
     });
 
     it('builds node heat and latest event lookup correctly', () => {
@@ -71,6 +86,10 @@ describe('liveGraph utils', () => {
 
     it('validates graph edges', () => {
         expect(hasEdge('speaker', 'judge')).toBe(true);
+        expect(hasEdge('team_discussion', 'speaker')).toBe(true);
+        expect(hasEdge('speaker', 'jury_discussion')).toBe(true);
+        expect(hasEdge('jury_discussion', 'judge')).toBe(true);
+        expect(hasEdge('advance_turn', 'consensus')).toBe(true);
         expect(hasEdge('judge', 'speaker')).toBe(false);
     });
 });

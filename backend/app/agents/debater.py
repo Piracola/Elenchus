@@ -47,6 +47,21 @@ def _build_team_summary_block(team_summary: Any) -> str:
     return f"## Internal Team Briefing\n[{agent_name}]\n{content.strip()}"
 
 
+def _build_reasoning_instruction(
+    *,
+    role: str,
+    current_turn: int,
+    reasoning_config: dict[str, Any],
+) -> str:
+    directives: list[str] = []
+    if bool(reasoning_config.get("steelman_enabled", True)):
+        if current_turn == 0 and role == "proposer":
+            directives.append("在推进己方主张前，主动预判并回应一个最强反对意见。")
+        else:
+            directives.append("先用最强版本概括对手当前最有力的论点，再进行回应与反驳。")
+    return "\n".join(directives)
+
+
 def _extract_citations(text: str) -> list[str]:
     """Extract URLs from text."""
     url_pattern = r"https?://[^\s\)\]\>\"']+"
@@ -110,6 +125,7 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
     shared_knowledge = state.get("shared_knowledge", [])
     messages = state.get("messages", [])
     agent_configs = state.get("agent_configs", {})
+    reasoning_config = state.get("reasoning_config", {})
 
     role_config = agent_configs.get(role, {})
     agent_name = role_config.get("custom_name", ROLE_NAMES.get(role, role))
@@ -158,6 +174,14 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
             f"你是 {agent_name}。\n"
             f"当前是第 {current_turn + 1} / {max_turns} 回合。请回应最新论点，巩固己方立场，并针对对手漏洞展开反驳。\n\n{context_block}"
         )
+
+    reasoning_instruction = _build_reasoning_instruction(
+        role=role,
+        current_turn=current_turn,
+        reasoning_config=reasoning_config,
+    )
+    if reasoning_instruction:
+        instruction = f"{instruction}\n\n{reasoning_instruction}"
 
     payload_messages: list[BaseMessage] = [
         SystemMessage(content=system_prompt),
@@ -212,6 +236,7 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
         "content": content,
         "citations": citations,
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "turn": current_turn,
     }
 
     logger.info(

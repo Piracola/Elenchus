@@ -1,12 +1,19 @@
 import { useState, useCallback } from 'react';
 import { useDebateStore } from '../stores/debateStore';
 import { api } from '../api/client';
-import type { AgentConfigResult } from '../types';
+import type { AgentConfigResult, JuryConfig, ReasoningConfig, TeamConfig } from '../types';
 
 interface UseSessionCreateResult {
     isCreating: boolean;
     error: string;
-    createSession: (topic: string, maxTurns: number, agentConfigs?: Record<string, AgentConfigResult>) => Promise<void>;
+    createSession: (
+        topic: string,
+        maxTurns: number,
+        agentConfigs?: Record<string, AgentConfigResult>,
+        teamConfig?: TeamConfig,
+        juryConfig?: JuryConfig,
+        reasoningConfig?: ReasoningConfig,
+    ) => Promise<void>;
     clearError: () => void;
 }
 
@@ -18,7 +25,10 @@ export function useSessionCreate(): UseSessionCreateResult {
     const createSession = useCallback(async (
         topic: string,
         maxTurns: number,
-        agentConfigs?: Record<string, AgentConfigResult>
+        agentConfigs?: Record<string, AgentConfigResult>,
+        teamConfig?: TeamConfig,
+        juryConfig?: JuryConfig,
+        reasoningConfig?: ReasoningConfig,
     ) => {
         if (!topic.trim() || isCreating) return;
 
@@ -29,6 +39,9 @@ export function useSessionCreate(): UseSessionCreateResult {
                 topic: topic.trim(),
                 max_turns: maxTurns,
                 agent_configs: agentConfigs,
+                team_config: teamConfig,
+                jury_config: juryConfig,
+                reasoning_config: reasoningConfig,
             });
             setCurrentSession(session);
         } catch (err) {

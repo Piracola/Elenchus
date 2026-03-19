@@ -14,8 +14,17 @@ function makeSession(): Session {
         created_at: '2026-03-17T00:00:00+00:00',
         updated_at: '2026-03-17T00:00:00+00:00',
         dialogue_history: [],
+        team_dialogue_history: [],
+        jury_dialogue_history: [],
         current_scores: {},
         cumulative_scores: {},
+        team_config: { agents_per_team: 0, discussion_rounds: 0 },
+        jury_config: { agents_per_jury: 0, discussion_rounds: 0 },
+        reasoning_config: {
+            steelman_enabled: true,
+            counterfactual_enabled: true,
+            consensus_enabled: true,
+        },
     };
 }
 
@@ -184,5 +193,21 @@ describe('debateStore replay state', () => {
         expect(state.visibleRuntimeEvents).toHaveLength(1500);
         expect(state.runtimeEvents[0].event_id).toBe('evt_1');
         expect(state.runtimeEvents[1499].event_id).toBe('evt_1500');
+    });
+
+    it('repairs known mojibake runtime status content on ingest', () => {
+        const store = useDebateStore.getState();
+        store.applyRuntimeEvent(
+            makeEvent({
+                event_id: 'evt_garbled',
+                seq: 1,
+                type: 'status',
+                payload: { content: '姝ｅ湪鏁寸悊涓婁笅鏂?.' },
+            }),
+        );
+
+        const state = useDebateStore.getState();
+        expect(state.currentStatus).toBe('正在整理上下文...');
+        expect(state.runtimeEvents[0]?.payload.content).toBe('正在整理上下文...');
     });
 });

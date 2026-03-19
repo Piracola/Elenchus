@@ -23,6 +23,28 @@ class SessionStatus(str, Enum):
     ERROR = "error"
 
 
+class TeamConfig(BaseModel):
+    """Configuration for per-side internal team discussion."""
+
+    agents_per_team: int = Field(default=0, ge=0, le=10)
+    discussion_rounds: int = Field(default=0, ge=0, le=10)
+
+
+class JuryConfig(BaseModel):
+    """Configuration for the multi-perspective jury discussion."""
+
+    agents_per_jury: int = Field(default=0, ge=0, le=10)
+    discussion_rounds: int = Field(default=0, ge=0, le=10)
+
+
+class ReasoningConfig(BaseModel):
+    """Optional reasoning enhancements layered onto each debate."""
+
+    steelman_enabled: bool = True
+    counterfactual_enabled: bool = True
+    consensus_enabled: bool = True
+
+
 class SessionCreate(BaseModel):
     """Payload to create a new debate session."""
 
@@ -39,6 +61,9 @@ class SessionCreate(BaseModel):
             "{model, provider_type, provider_id, api_base_url, custom_name, custom_prompt}."
         ),
     )
+    team_config: TeamConfig = Field(default_factory=TeamConfig)
+    jury_config: JuryConfig = Field(default_factory=JuryConfig)
+    reasoning_config: ReasoningConfig = Field(default_factory=ReasoningConfig)
 
 
 class ModelConfigCreate(BaseModel):
@@ -75,10 +100,15 @@ class SessionResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     dialogue_history: list[dict[str, Any]] = Field(default_factory=list)
+    team_dialogue_history: list[dict[str, Any]] = Field(default_factory=list)
+    jury_dialogue_history: list[dict[str, Any]] = Field(default_factory=list)
     shared_knowledge: list[dict[str, Any]] = Field(default_factory=list)
     current_scores: dict[str, Any] = Field(default_factory=dict)
     cumulative_scores: dict[str, Any] = Field(default_factory=dict)
     agent_configs: dict[str, dict[str, Any]] | None = Field(default=None)
+    team_config: TeamConfig = Field(default_factory=TeamConfig)
+    jury_config: JuryConfig = Field(default_factory=JuryConfig)
+    reasoning_config: ReasoningConfig = Field(default_factory=ReasoningConfig)
 
 
 class SessionListItem(BaseModel):

@@ -2,7 +2,6 @@
 Tests for the LangGraph debate graph — compilation and reducer behaviour.
 """
 
-import pytest
 from operator import add
 
 
@@ -31,6 +30,16 @@ def test_debate_graph_state_reducers():
     assert sk_hint is not None
     args = typing.get_args(sk_hint)
     assert len(args) == 2 and args[1] is add, "shared_knowledge must use `add` reducer"
+
+    team_hint = hints.get("team_dialogue_history")
+    assert team_hint is not None
+    args = typing.get_args(team_hint)
+    assert len(args) == 2 and args[1] is add, "team_dialogue_history must use `add` reducer"
+
+    jury_hint = hints.get("jury_dialogue_history")
+    assert jury_hint is not None
+    args = typing.get_args(jury_hint)
+    assert len(args) == 2 and args[1] is add, "jury_dialogue_history must use `add` reducer"
 
 
 def test_add_reducer_appends():

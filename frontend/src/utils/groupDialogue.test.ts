@@ -53,4 +53,17 @@ describe('groupDialogue', () => {
     expect(result[1].agent?.role).toBe('challenger')
     expect(result[1].judge?.target_role).toBe('challenger')
   })
+
+  it('should match judge rows by turn when available', () => {
+    const entries: DialogueEntry[] = [
+      { role: 'proposer', agent_name: 'Proposer', content: 'Turn 1', timestamp: '2024-01-01T00:00:00Z', citations: [], turn: 0 },
+      { role: 'proposer', agent_name: 'Proposer', content: 'Turn 2', timestamp: '2024-01-01T00:01:00Z', citations: [], turn: 1 },
+      { role: 'judge', agent_name: 'Judge', content: 'Scores turn 1', timestamp: '2024-01-01T00:02:00Z', citations: [], target_role: 'proposer', turn: 0 },
+    ]
+
+    const result = groupDialogue(entries)
+
+    expect(result[0].judge?.content).toBe('Scores turn 1')
+    expect(result[1].judge).toBeNull()
+  })
 })

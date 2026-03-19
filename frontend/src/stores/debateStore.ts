@@ -14,6 +14,7 @@ import type {
     RuntimeEvent,
 } from '../types';
 import { clampReplayCursor, getVisibleRuntimeEvents } from '../utils/replay';
+import { repairKnownMojibakeText, repairTextTree } from '../utils/textRepair';
 
 const MAX_SAFE_CONTENT_LENGTH = 50000;
 // Keep the in-memory retention aligned with the existing 10k replay/timeline baseline.
@@ -115,7 +116,7 @@ const initialState = {
 };
 
 function sanitizeIncomingContent(content: unknown): string {
-    const text = typeof content === 'string' ? content : '';
+    const text = repairKnownMojibakeText(typeof content === 'string' ? content : '');
     if (!text) return text;
 
     if (text.includes('Scoring failed, so a neutral fallback score was used.')) {
@@ -176,10 +177,14 @@ function sameDialogueContent(a: DialogueEntry, b: DialogueEntry): boolean {
         a.role === b.role &&
         (a.turn ?? -1) === (b.turn ?? -1) &&
         (a.target_role ?? '') === (b.target_role ?? '') &&
+        (a.discussion_kind ?? '') === (b.discussion_kind ?? '') &&
         (a.team_side ?? '') === (b.team_side ?? '') &&
         (a.team_round ?? -1) === (b.team_round ?? -1) &&
         (a.team_member_index ?? -1) === (b.team_member_index ?? -1) &&
         (a.team_specialty ?? '') === (b.team_specialty ?? '') &&
+        (a.jury_round ?? -1) === (b.jury_round ?? -1) &&
+        (a.jury_member_index ?? -1) === (b.jury_member_index ?? -1) &&
+        (a.jury_perspective ?? '') === (b.jury_perspective ?? '') &&
         a.agent_name === b.agent_name &&
         a.content === b.content &&
         sameCitations(a.citations, b.citations) &&
@@ -219,6 +224,14 @@ function sanitizeDialogueEntry(entry: DialogueEntry): DialogueEntry {
     return {
         ...entry,
         content: sanitizeIncomingContent(entry.content),
+        agent_name: repairKnownMojibakeText(entry.agent_name),
+    };
+}
+
+function sanitizeRuntimeEvent(event: RuntimeEvent): RuntimeEvent {
+    return {
+        ...event,
+        payload: repairTextTree(event.payload) as Record<string, unknown>,
     };
 }
 
@@ -228,7 +241,14 @@ function sanitizeSession(session: Session | null): Session | null {
         ...session,
         dialogue_history: (session.dialogue_history ?? []).map(sanitizeDialogueEntry),
         team_dialogue_history: (session.team_dialogue_history ?? []).map(sanitizeDialogueEntry),
+        jury_dialogue_history: (session.jury_dialogue_history ?? []).map(sanitizeDialogueEntry),
         team_config: session.team_config ?? { agents_per_team: 0, discussion_rounds: 0 },
+        jury_config: session.jury_config ?? { agents_per_jury: 0, discussion_rounds: 0 },
+        reasoning_config: session.reasoning_config ?? {
+            steelman_enabled: true,
+            counterfactual_enabled: true,
+            consensus_enabled: true,
+        },
     };
 }
 
@@ -251,7 +271,9 @@ function sortRuntimeEvents(a: RuntimeEvent, b: RuntimeEvent): number {
 }
 
 function normalizeRuntimeEvents(events: RuntimeEvent[]): RuntimeEvent[] {
-    const sorted = [...events].sort(sortRuntimeEvents);
+    const sorted = [...events]
+        .map((event) => sanitizeRuntimeEvent(event))
+        .sort(sortRuntimeEvents);
     const seenIds = new Set<string>();
     const unique: RuntimeEvent[] = [];
 
@@ -308,8 +330,9 @@ export const useDebateStore = create<DebateState>((set) => ({
         set({ phase, currentStatus: status, currentNode: node }),
 
     // Event reducer
-    applyRuntimeEvent: (event) =>
+    applyRuntimeEvent: (rawEvent) =>
         set((state) => {
+            const event = sanitizeRuntimeEvent(rawEvent);
             if (state.currentSession && event.session_id && event.session_id !== state.currentSession.id) {
                 return {};
             }
@@ -376,6 +399,8 @@ export const useDebateStore = create<DebateState>((set) => ({
                         citations: getPayloadCitations(payload),
                         timestamp: event.timestamp || new Date().toISOString(),
                         event_id: event.event_id,
+                        turn: getPayloadNumber(payload, 'turn'),
+                        discussion_kind: getPayloadString(payload, 'discussion_kind'),
                         team_side: getPayloadString(payload, 'team_side'),
                         team_round: getPayloadNumber(payload, 'team_round'),
                         team_member_index: getPayloadNumber(payload, 'team_member_index'),
@@ -387,6 +412,40 @@ export const useDebateStore = create<DebateState>((set) => ({
                         ...state.currentSession,
                         team_dialogue_history: appendDialogueWithDedupe(
                             state.currentSession.team_dialogue_history,
+                            entry,
+                        ),
+                    };
+                    break;
+                }
+
+                case 'jury_discussion':
+                case 'jury_summary':
+                case 'consensus_summary': {
+                    if (!state.currentSession) break;
+                    const fallbackRole =
+                        event.type === 'jury_summary'
+                            ? 'jury_summary'
+                            : event.type === 'consensus_summary'
+                                ? 'consensus_summary'
+                                : 'jury_member';
+                    const entry: DialogueEntry = {
+                        role: getPayloadString(payload, 'role') ?? fallbackRole,
+                        agent_name: getPayloadString(payload, 'agent_name') ?? '',
+                        content: sanitizeIncomingContent(getPayloadString(payload, 'content')),
+                        citations: getPayloadCitations(payload),
+                        timestamp: event.timestamp || new Date().toISOString(),
+                        event_id: event.event_id,
+                        turn: getPayloadNumber(payload, 'turn'),
+                        discussion_kind: getPayloadString(payload, 'discussion_kind'),
+                        jury_round: getPayloadNumber(payload, 'jury_round'),
+                        jury_member_index: getPayloadNumber(payload, 'jury_member_index'),
+                        jury_perspective: getPayloadString(payload, 'jury_perspective'),
+                    };
+
+                    patch.currentSession = {
+                        ...state.currentSession,
+                        jury_dialogue_history: appendDialogueWithDedupe(
+                            state.currentSession.jury_dialogue_history,
                             entry,
                         ),
                     };
@@ -414,6 +473,7 @@ export const useDebateStore = create<DebateState>((set) => ({
                         citations: getPayloadCitations(payload),
                         timestamp: event.timestamp || new Date().toISOString(),
                         event_id: event.event_id,
+                        turn: getPayloadNumber(payload, 'turn'),
                     };
 
                     patch.currentSession = {

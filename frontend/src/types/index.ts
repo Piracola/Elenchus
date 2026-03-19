@@ -47,6 +47,15 @@ export interface DialogueEntry {
     turn?: number;
     target_role?: string;
     scores?: TurnScore;
+    discussion_kind?: string;
+    team_side?: string;
+    team_round?: number;
+    team_member_index?: number;
+    team_specialty?: string;
+    jury_round?: number;
+    jury_member_index?: number;
+    jury_perspective?: string;
+    source_role?: string;
 }
 
 export interface SearchResult {
@@ -60,6 +69,22 @@ export interface SearchResult {
 
 export type SessionStatus = 'pending' | 'in_progress' | 'completed' | 'error';
 
+export interface TeamConfig {
+    agents_per_team: number;
+    discussion_rounds: number;
+}
+
+export interface JuryConfig {
+    agents_per_jury: number;
+    discussion_rounds: number;
+}
+
+export interface ReasoningConfig {
+    steelman_enabled: boolean;
+    counterfactual_enabled: boolean;
+    consensus_enabled: boolean;
+}
+
 export interface Session {
     id: string;
     topic: string;
@@ -70,15 +95,22 @@ export interface Session {
     created_at: string;
     updated_at: string;
     dialogue_history: DialogueEntry[];
+    team_dialogue_history: DialogueEntry[];
+    jury_dialogue_history: DialogueEntry[];
     current_scores: Record<string, TurnScore>;
     cumulative_scores: Record<string, Record<string, number[]>>;
     agent_configs?: Record<string, AgentConfig>;
+    team_config: TeamConfig;
+    jury_config: JuryConfig;
+    reasoning_config: ReasoningConfig;
 }
 
 export interface AgentConfig {
     model?: string;
     provider_type?: string;
+    provider_id?: string;
     api_base_url?: string;
+    temperature?: number;
 }
 
 export interface SessionListItem {
@@ -95,6 +127,9 @@ export interface SessionCreatePayload {
     participants?: string[];
     max_turns?: number;
     agent_configs?: Record<string, AgentConfig>;
+    team_config?: TeamConfig;
+    jury_config?: JuryConfig;
+    reasoning_config?: ReasoningConfig;
 }
 
 // ── Model Configurations ──────────────────────────────────────────
@@ -140,6 +175,7 @@ export interface AgentConfigResult {
     provider_type: string;
     provider_id: string;
     api_base_url?: string;
+    temperature?: number;
 }
 
 // ── WebSocket messages ──────────────────────────────────────────
@@ -160,6 +196,11 @@ export type DebatePhase =
 export type WSMessageType =
     | 'system'
     | 'status'
+    | 'team_discussion'
+    | 'team_summary'
+    | 'jury_discussion'
+    | 'jury_summary'
+    | 'consensus_summary'
     | 'speech_start'
     | 'speech_token'
     | 'speech_end'

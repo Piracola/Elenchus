@@ -36,6 +36,7 @@ export default function RuntimeInspector({
     const { runtimeEvents, visibleRuntimeEvents, replayEnabled, currentNode } = useDebateStore();
     const [expanded, setExpanded] = useState(defaultExpanded);
     const [activeTab, setActiveTab] = useState<InspectorTab>('timeline');
+    const isCollapsed = !expanded && !fillHeight;
 
     const memoryCount = useMemo(
         () => visibleRuntimeEvents.filter((event) => event.type === 'memory_write').length,
@@ -56,30 +57,34 @@ export default function RuntimeInspector({
     return (
         <div
             style={{
-                width: '100%',
+                width: isCollapsed ? 'auto' : '100%',
                 height: fillHeight ? '100%' : 'auto',
                 display: 'flex',
                 flexDirection: 'column',
                 minHeight: 0,
+                flex: isCollapsed ? '0 0 auto' : undefined,
+                alignSelf: isCollapsed ? 'flex-start' : 'stretch',
             }}
         >
             <button
                 onClick={() => setExpanded((prev) => !prev)}
                 style={{
                     flex: '0 0 auto',
-                    width: '100%',
+                    width: isCollapsed ? 'auto' : '100%',
+                    minWidth: isCollapsed ? 'auto' : 0,
                     border: '1px solid var(--border-subtle)',
-                    borderRadius: 'var(--radius-lg)',
+                    borderRadius: isCollapsed ? '999px' : 'var(--radius-lg)',
                     background: 'var(--bg-card)',
                     color: 'var(--text-primary)',
-                    padding: '10px 12px',
+                    padding: isCollapsed ? '7px 11px' : '10px 12px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     gap: '10px',
                     cursor: 'pointer',
-                    boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)',
-                    backdropFilter: 'blur(14px)',
+                    boxShadow: isCollapsed ? 'var(--shadow-xs)' : '0 10px 30px rgba(15, 23, 42, 0.08)',
+                    backdropFilter: isCollapsed ? undefined : 'blur(14px)',
+                    overflow: 'hidden',
                 }}
             >
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
@@ -96,22 +101,26 @@ export default function RuntimeInspector({
                     <span style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '0.01em' }}>
                         运行观察器
                     </span>
-                    <span
-                        style={{
-                            fontSize: '11px',
-                            color: 'var(--text-muted)',
-                            whiteSpace: 'nowrap',
-                            padding: '2px 8px',
-                            borderRadius: '999px',
-                            background: 'var(--bg-tertiary)',
-                        }}
-                    >
-                        {TAB_LABELS[activeTab]}
+                    {!isCollapsed && (
+                        <span
+                            style={{
+                                fontSize: '11px',
+                                color: 'var(--text-muted)',
+                                whiteSpace: 'nowrap',
+                                padding: '2px 8px',
+                                borderRadius: '999px',
+                                background: 'var(--bg-tertiary)',
+                            }}
+                        >
+                            {TAB_LABELS[activeTab]}
+                        </span>
+                    )}
+                </span>
+                {!isCollapsed && (
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                        {summaryText}
                     </span>
-                </span>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                    {summaryText}
-                </span>
+                )}
             </button>
 
             <AnimatePresence initial={false}>

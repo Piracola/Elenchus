@@ -4,7 +4,7 @@
  * move beneath the gaps between cards instead of being blocked by a container.
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { motion } from 'framer-motion';
 import { FileJson, FileText } from 'lucide-react';
@@ -16,10 +16,11 @@ import MessageRow from './chat/MessageRow';
 import DebateControls from './chat/DebateControls';
 import RuntimeInspector from './chat/RuntimeInspector';
 import StatusBanner from './chat/StatusBanner';
-import TeamDiscussionPanel from './chat/TeamDiscussionPanel';
+import RoundInsights from './chat/RoundInsights';
 import { groupDialogue } from '../utils/groupDialogue';
 import { resolveRowFocus } from '../utils/eventFocus';
 import { toast } from '../utils/toast';
+import type { InsightSection } from './chat/RoundInsights';
 
 type FloatingInspectorBounds = {
     width: number;
@@ -230,6 +231,49 @@ function interactionCursor(interaction: FloatingInspectorInteraction | null): st
     }
 }
 
+function sideLabel(side: string | undefined): string {
+    if (side === 'proposer') return '正方';
+    if (side === 'opposer') return '反方';
+    return side || '队内';
+}
+
+function speakerInsightKey(turn: number | undefined, role: string | undefined): string | null {
+    if (turn === undefined || !role) return null;
+    return `${turn}:${role}`;
+}
+
+function buildSpeakerDiscussionMap(entries: DialogueEntry[]): Map<string, DialogueEntry[]> {
+    const groups = new Map<string, DialogueEntry[]>();
+    for (const entry of entries) {
+        const key = speakerInsightKey(entry.turn, entry.team_side || entry.source_role);
+        if (!key) continue;
+        const group = groups.get(key) ?? [];
+        group.push(entry);
+        groups.set(key, group);
+    }
+    return groups;
+}
+
+function buildTurnDiscussionMap(entries: DialogueEntry[]): Map<number, DialogueEntry[]> {
+    const groups = new Map<number, DialogueEntry[]>();
+    for (const entry of entries) {
+        if (entry.turn === undefined || entry.role === 'consensus_summary') continue;
+        const group = groups.get(entry.turn) ?? [];
+        group.push(entry);
+        groups.set(entry.turn, group);
+    }
+    return groups;
+}
+
+function eventMatchesTurn(
+    event: { type: string; payload?: Record<string, unknown> } | null,
+    turn: number,
+): boolean {
+    if (!event) return false;
+    const payloadTurn = event.payload?.turn;
+    return typeof payloadTurn === 'number' && payloadTurn === turn;
+}
+
 export default function ChatPanel() {
     const {
         currentSession,
@@ -273,6 +317,7 @@ export default function ChatPanel() {
     }, [
         currentSession?.dialogue_history,
         currentSession?.team_dialogue_history,
+        currentSession?.jury_dialogue_history,
         currentSession?.current_turn,
         replayEnabled,
         streamingContent,
@@ -498,6 +543,33 @@ export default function ChatPanel() {
         visibleRuntimeEvents,
     ]);
 
+    const visibleJuryDiscussion = useMemo(() => {
+        const fullHistory = currentSession?.jury_dialogue_history || [];
+        if (!replayEnabled) {
+            return fullHistory;
+        }
+
+        const visibleEventIds = new Set(visibleRuntimeEvents.map((event) => event.event_id));
+        return fullHistory.filter((entry) => !entry.event_id || visibleEventIds.has(entry.event_id));
+    }, [
+        currentSession?.jury_dialogue_history,
+        replayEnabled,
+        visibleRuntimeEvents,
+    ]);
+
+    const teamDiscussionMap = useMemo(
+        () => buildSpeakerDiscussionMap(visibleTeamDiscussion),
+        [visibleTeamDiscussion],
+    );
+    const juryDiscussionMap = useMemo(
+        () => buildTurnDiscussionMap(visibleJuryDiscussion),
+        [visibleJuryDiscussion],
+    );
+    const consensusEntries = useMemo(
+        () => visibleJuryDiscussion.filter((entry) => entry.role === 'consensus_summary'),
+        [visibleJuryDiscussion],
+    );
+
     const focusedRuntimeEvent = useMemo(
         () =>
             focusedRuntimeEventId
@@ -505,6 +577,7 @@ export default function ChatPanel() {
                 : null,
         [focusedRuntimeEventId, visibleRuntimeEvents],
     );
+    const consensusFocused = focusedRuntimeEvent?.type === 'consensus_summary';
 
     useEffect(() => {
         if (!focusedRuntimeEventId) return;
@@ -818,25 +891,102 @@ export default function ChatPanel() {
                             gap: '10px',
                         }}
                     >
-                        <TeamDiscussionPanel entries={visibleTeamDiscussion} />
-
-                        {rows.map((row, idx) => {
-                            const agentKey = row.agent?.timestamp || `agent-${idx}`;
-                            const judgeKey = row.judge?.timestamp || `judge-${idx}`;
-                            const focusState = resolveRowFocus(row, focusedRuntimeEvent);
-
-                            return (
-                                <MessageRow
-                                    key={`${agentKey}-${judgeKey}`}
-                                    agentEntry={row.agent}
-                                    judgeEntry={row.judge}
-                                    systemEntry={row.system}
-                                    highlightAgent={focusState.agent}
-                                    highlightJudge={focusState.judge}
-                                    highlightSystem={focusState.system}
-                                />
+                        {(() => {
+                            const renderedTurns = new Set(
+                                rows
+                                    .map((row) => row.turn ?? row.agent?.turn ?? row.judge?.turn)
+                                    .filter((value): value is number => value !== undefined),
                             );
-                        })}
+                            return rows.map((row, idx) => {
+                                const turn = row.turn ?? row.agent?.turn ?? row.judge?.turn;
+                                const agentRole = row.agent?.role;
+                                const focusState = resolveRowFocus(row, focusedRuntimeEvent);
+                                const sections: InsightSection[] = [];
+                                const teamKey = speakerInsightKey(turn, agentRole);
+                                const teamEntries = teamKey ? teamDiscussionMap.get(teamKey) ?? [] : [];
+                                if (teamEntries.length) {
+                                    sections.push({
+                                        key: `team-${teamKey}`,
+                                        title: `${sideLabel(agentRole)}组内讨论`,
+                                        accent: agentRole === 'opposer' ? 'var(--color-opposer)' : 'var(--color-proposer)',
+                                        entries: teamEntries,
+                                    });
+                                }
+
+                                if (turn !== undefined && !renderedTurns.has(turn)) {
+                                    renderedTurns.add(turn);
+                                    const juryEntries = juryDiscussionMap.get(turn) ?? [];
+                                    if (juryEntries.length) {
+                                        sections.push({
+                                            key: `jury-${turn}`,
+                                            title: `第 ${turn + 1} 轮陪审团评议`,
+                                            accent: 'var(--accent-indigo)',
+                                            entries: juryEntries,
+                                        });
+                                    }
+                                }
+
+                                const agentKey = row.agent?.timestamp || `agent-${idx}`;
+                                const judgeKey = row.judge?.timestamp || `judge-${idx}`;
+                                const nextRow = rows[idx + 1];
+                                const nextTurn = nextRow?.turn ?? nextRow?.agent?.turn ?? nextRow?.judge?.turn;
+                                const isLastRowOfTurn = turn !== undefined && nextTurn !== turn;
+                                const juryEntries = isLastRowOfTurn && turn !== undefined
+                                    ? juryDiscussionMap.get(turn) ?? []
+                                    : [];
+                                const safeTurn = turn ?? 0;
+                                const juryFocused =
+                                    turn !== undefined
+                                    && (
+                                        focusedRuntimeEvent?.type === 'jury_discussion'
+                                        || focusedRuntimeEvent?.type === 'jury_summary'
+                                    )
+                                    && eventMatchesTurn(focusedRuntimeEvent, turn);
+
+                                return (
+                                    <Fragment key={`${agentKey}-${judgeKey}`}>
+                                        <MessageRow
+                                            agentEntry={row.agent}
+                                            judgeEntry={row.judge}
+                                            systemEntry={row.system}
+                                            highlightAgent={focusState.agent}
+                                            highlightJudge={focusState.judge}
+                                            highlightSystem={focusState.system}
+                                            insightSections={sections}
+                                        />
+                                        {!!juryEntries.length && (
+                                            <div data-row-focused={juryFocused ? 'true' : 'false'}>
+                                                <RoundInsights
+                                                    sections={[
+                                                        {
+                                                            key: `jury-${safeTurn}`,
+                                                            title: `第 ${safeTurn + 1} 轮陪审团评议`,
+                                                            accent: 'var(--accent-indigo)',
+                                                            entries: juryEntries,
+                                                        },
+                                                    ]}
+                                                />
+                                            </div>
+                                        )}
+                                    </Fragment>
+                                );
+                            });
+                        })()}
+
+                        {!!consensusEntries.length && (
+                            <div data-row-focused={consensusFocused ? 'true' : 'false'}>
+                                <RoundInsights
+                                    sections={[
+                                        {
+                                            key: 'consensus-summary',
+                                            title: '辩论结束后的共识收敛',
+                                            accent: 'var(--accent-cyan)',
+                                            entries: consensusEntries,
+                                        },
+                                    ]}
+                                />
+                            </div>
+                        )}
                     </div>
                 </div>
 
