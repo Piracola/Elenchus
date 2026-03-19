@@ -1,5 +1,6 @@
 import type { RuntimeEvent } from '../types';
 import { normalizeRuntimeEvent } from './runtimeEvents';
+import { isRecord } from './typeGuards';
 
 const SNAPSHOT_VERSION = 'runtime-events.v1';
 
@@ -9,10 +10,6 @@ interface RuntimeEventSnapshot {
     event_count: number;
     trajectory_checksum: string;
     events: RuntimeEvent[];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null;
 }
 
 function eventSort(a: RuntimeEvent, b: RuntimeEvent): number {
@@ -148,4 +145,3 @@ export function parseRuntimeEventsSnapshot(raw: string): RuntimeEvent[] {
 
     return events;
 }
-

@@ -5,6 +5,7 @@
  */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { motion } from 'framer-motion';
 import { FileJson, FileText } from 'lucide-react';
 import { api } from '../api/client';
@@ -15,9 +16,219 @@ import MessageRow from './chat/MessageRow';
 import DebateControls from './chat/DebateControls';
 import RuntimeInspector from './chat/RuntimeInspector';
 import StatusBanner from './chat/StatusBanner';
+import TeamDiscussionPanel from './chat/TeamDiscussionPanel';
 import { groupDialogue } from '../utils/groupDialogue';
 import { resolveRowFocus } from '../utils/eventFocus';
 import { toast } from '../utils/toast';
+
+type FloatingInspectorBounds = {
+    width: number;
+    height: number;
+};
+
+type FloatingInspectorRect = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+};
+
+type FloatingInspectorResizeHandle =
+    | 'top'
+    | 'right'
+    | 'bottom'
+    | 'left'
+    | 'top-left'
+    | 'top-right'
+    | 'bottom-left'
+    | 'bottom-right';
+
+type FloatingInspectorInteraction =
+    | {
+        mode: 'move';
+        startX: number;
+        startY: number;
+        startRect: FloatingInspectorRect;
+        bounds: FloatingInspectorBounds;
+    }
+    | {
+        mode: 'resize';
+        handle: FloatingInspectorResizeHandle;
+        startX: number;
+        startY: number;
+        startRect: FloatingInspectorRect;
+        bounds: FloatingInspectorBounds;
+    };
+
+const FLOATING_INSPECTOR_DEFAULT_SIZE = { width: 360, height: 520 };
+const FLOATING_INSPECTOR_MIN_SIZE = { width: 300, height: 260 };
+const FLOATING_INSPECTOR_MARGIN = 8;
+const FLOATING_INSPECTOR_DOCK_GAP = 16;
+const FLOATING_INSPECTOR_DOCK_THRESHOLD = 24;
+const FLOATING_INSPECTOR_RESIZE_HANDLES: ReadonlyArray<{
+    key: FloatingInspectorResizeHandle;
+    style: CSSProperties;
+}> = [
+    {
+        key: 'left',
+        style: { left: -6, top: 18, bottom: 18, width: 12, cursor: 'ew-resize' },
+    },
+    {
+        key: 'right',
+        style: { right: -6, top: 18, bottom: 18, width: 12, cursor: 'ew-resize' },
+    },
+    {
+        key: 'top',
+        style: { top: -6, left: 18, right: 18, height: 12, cursor: 'ns-resize' },
+    },
+    {
+        key: 'bottom',
+        style: { bottom: -6, left: 18, right: 18, height: 12, cursor: 'ns-resize' },
+    },
+    {
+        key: 'top-left',
+        style: { top: -6, left: -6, width: 16, height: 16, cursor: 'nwse-resize' },
+    },
+    {
+        key: 'top-right',
+        style: { top: -6, right: -6, width: 16, height: 16, cursor: 'nesw-resize' },
+    },
+    {
+        key: 'bottom-left',
+        style: { bottom: -6, left: -6, width: 16, height: 16, cursor: 'nesw-resize' },
+    },
+    {
+        key: 'bottom-right',
+        style: { bottom: -6, right: -6, width: 16, height: 16, cursor: 'nwse-resize' },
+    },
+];
+
+function clampNumber(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, value));
+}
+
+function getFloatingInspectorSizeRange(size: number, preferredMin: number): { min: number; max: number } {
+    const max = Math.max(160, size - FLOATING_INSPECTOR_MARGIN * 2);
+    return {
+        min: Math.min(preferredMin, max),
+        max,
+    };
+}
+
+function clampFloatingInspectorRect(
+    rect: FloatingInspectorRect,
+    bounds: FloatingInspectorBounds,
+): FloatingInspectorRect {
+    const widthRange = getFloatingInspectorSizeRange(bounds.width, FLOATING_INSPECTOR_MIN_SIZE.width);
+    const heightRange = getFloatingInspectorSizeRange(bounds.height, FLOATING_INSPECTOR_MIN_SIZE.height);
+    const width = clampNumber(rect.width, widthRange.min, widthRange.max);
+    const height = clampNumber(rect.height, heightRange.min, heightRange.max);
+    const maxX = Math.max(FLOATING_INSPECTOR_MARGIN, bounds.width - width - FLOATING_INSPECTOR_MARGIN);
+    const maxY = Math.max(FLOATING_INSPECTOR_MARGIN, bounds.height - height - FLOATING_INSPECTOR_MARGIN);
+
+    return {
+        x: clampNumber(rect.x, FLOATING_INSPECTOR_MARGIN, maxX),
+        y: clampNumber(rect.y, FLOATING_INSPECTOR_MARGIN, maxY),
+        width,
+        height,
+    };
+}
+
+function createDefaultFloatingInspectorRect(
+    bounds: FloatingInspectorBounds,
+    preferredTop: number,
+): FloatingInspectorRect {
+    const widthRange = getFloatingInspectorSizeRange(bounds.width, FLOATING_INSPECTOR_MIN_SIZE.width);
+    const heightRange = getFloatingInspectorSizeRange(bounds.height, FLOATING_INSPECTOR_MIN_SIZE.height);
+    const width = clampNumber(
+        FLOATING_INSPECTOR_DEFAULT_SIZE.width,
+        widthRange.min,
+        widthRange.max,
+    );
+    const height = clampNumber(
+        FLOATING_INSPECTOR_DEFAULT_SIZE.height,
+        heightRange.min,
+        heightRange.max,
+    );
+
+    return clampFloatingInspectorRect(
+        {
+            x: bounds.width - width - FLOATING_INSPECTOR_DOCK_GAP,
+            y: preferredTop,
+            width,
+            height,
+        },
+        bounds,
+    );
+}
+
+function resizeFloatingInspectorRect(
+    startRect: FloatingInspectorRect,
+    handle: FloatingInspectorResizeHandle,
+    deltaX: number,
+    deltaY: number,
+    bounds: FloatingInspectorBounds,
+): FloatingInspectorRect {
+    const widthRange = getFloatingInspectorSizeRange(bounds.width, FLOATING_INSPECTOR_MIN_SIZE.width);
+    const heightRange = getFloatingInspectorSizeRange(bounds.height, FLOATING_INSPECTOR_MIN_SIZE.height);
+    const right = startRect.x + startRect.width;
+    const bottom = startRect.y + startRect.height;
+
+    let x = startRect.x;
+    let y = startRect.y;
+    let width = startRect.width;
+    let height = startRect.height;
+
+    if (handle.includes('left')) {
+        x = clampNumber(startRect.x + deltaX, FLOATING_INSPECTOR_MARGIN, right - widthRange.min);
+        width = right - x;
+    }
+
+    if (handle.includes('right')) {
+        width = clampNumber(
+            startRect.width + deltaX,
+            widthRange.min,
+            bounds.width - startRect.x - FLOATING_INSPECTOR_MARGIN,
+        );
+    }
+
+    if (handle.includes('top')) {
+        y = clampNumber(startRect.y + deltaY, FLOATING_INSPECTOR_MARGIN, bottom - heightRange.min);
+        height = bottom - y;
+    }
+
+    if (handle.includes('bottom')) {
+        height = clampNumber(
+            startRect.height + deltaY,
+            heightRange.min,
+            bounds.height - startRect.y - FLOATING_INSPECTOR_MARGIN,
+        );
+    }
+
+    return clampFloatingInspectorRect({ x, y, width, height }, bounds);
+}
+
+function interactionCursor(interaction: FloatingInspectorInteraction | null): string {
+    if (!interaction) return '';
+    if (interaction.mode === 'move') return 'grabbing';
+
+    switch (interaction.handle) {
+        case 'left':
+        case 'right':
+            return 'ew-resize';
+        case 'top':
+        case 'bottom':
+            return 'ns-resize';
+        case 'top-left':
+        case 'bottom-right':
+            return 'nwse-resize';
+        case 'top-right':
+        case 'bottom-left':
+            return 'nesw-resize';
+        default:
+            return '';
+    }
+}
 
 export default function ChatPanel() {
     const {
@@ -30,27 +241,42 @@ export default function ChatPanel() {
     } = useDebateStore();
     const { displaySettings } = useSettingsStore();
 
+    const panelRef = useRef<HTMLDivElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const topOverlayRef = useRef<HTMLDivElement>(null);
     const bottomOverlayRef = useRef<HTMLDivElement>(null);
-    const rightOverlayRef = useRef<HTMLDivElement>(null);
     const overlayHeightsRef = useRef<{ top: number; bottom: number } | null>(null);
+    const floatingInspectorInteractionRef = useRef<FloatingInspectorInteraction | null>(null);
+    const floatingInspectorRectRef = useRef<FloatingInspectorRect | null>(null);
 
     const [topOverlayHeight, setTopOverlayHeight] = useState(0);
     const [bottomOverlayHeight, setBottomOverlayHeight] = useState(0);
-    const [floatingInspectorSize, setFloatingInspectorSize] = useState({ width: 360, height: 520 });
+    const [floatingInspectorBounds, setFloatingInspectorBounds] = useState<FloatingInspectorBounds>({
+        width: 0,
+        height: 0,
+    });
+    const [floatingInspectorRect, setFloatingInspectorRect] = useState<FloatingInspectorRect | null>(null);
+    const [floatingInspectorActive, setFloatingInspectorActive] = useState(false);
     const [exportingFormat, setExportingFormat] = useState<'markdown' | 'json' | null>(null);
     const [isWideLayout, setIsWideLayout] = useState(() => {
         if (typeof window === 'undefined') return true;
         return window.innerWidth >= 1280;
     });
+    const floatingInspectorWidth = floatingInspectorBounds.width;
+    const floatingInspectorHeight = floatingInspectorBounds.height;
 
     useEffect(() => {
         if (replayEnabled) return;
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
-    }, [currentSession?.dialogue_history, currentSession?.current_turn, replayEnabled, streamingContent]);
+    }, [
+        currentSession?.dialogue_history,
+        currentSession?.team_dialogue_history,
+        currentSession?.current_turn,
+        replayEnabled,
+        streamingContent,
+    ]);
 
     useEffect(() => {
         const topElement = topOverlayRef.current;
@@ -95,28 +321,110 @@ export default function ChatPanel() {
     }, []);
 
     useEffect(() => {
+        floatingInspectorRectRef.current = floatingInspectorRect;
+    }, [floatingInspectorRect]);
+
+    useEffect(() => {
+        const panelElement = panelRef.current;
+        if (!panelElement) return;
+
+        const updateBounds = () => {
+            setFloatingInspectorBounds({
+                width: panelElement.clientWidth,
+                height: panelElement.clientHeight,
+            });
+        };
+
+        updateBounds();
+        window.addEventListener('resize', updateBounds);
+
+        if (typeof ResizeObserver === 'undefined') {
+            return () => window.removeEventListener('resize', updateBounds);
+        }
+
+        const observer = new ResizeObserver(() => updateBounds());
+        observer.observe(panelElement);
+        return () => {
+            observer.disconnect();
+            window.removeEventListener('resize', updateBounds);
+        };
+    }, [displaySettings.messageWidth, isWideLayout]);
+
+    useEffect(() => {
         if (!isWideLayout) return;
-        const inspectorElement = rightOverlayRef.current;
-        if (!inspectorElement || typeof ResizeObserver === 'undefined') return;
+        if (floatingInspectorWidth <= 0 || floatingInspectorHeight <= 0) return;
 
-        const observer = new ResizeObserver((entries) => {
-            const entry = entries[0];
-            if (!entry) return;
+        const bounds = {
+            width: floatingInspectorWidth,
+            height: floatingInspectorHeight,
+        };
 
-            const nextWidth = Math.round(entry.contentRect.width);
-            const nextHeight = Math.round(entry.contentRect.height);
-            if (nextWidth <= 0 || nextHeight <= 0) return;
+        setFloatingInspectorRect((prev) => (
+            prev
+                ? clampFloatingInspectorRect(prev, bounds)
+                : createDefaultFloatingInspectorRect(bounds, topOverlayHeight + 12)
+        ));
+    }, [floatingInspectorHeight, floatingInspectorWidth, isWideLayout, topOverlayHeight]);
 
-            setFloatingInspectorSize((prev) => (
-                prev.width === nextWidth && prev.height === nextHeight
-                    ? prev
-                    : { width: nextWidth, height: nextHeight }
-            ));
-        });
+    useEffect(() => {
+        const handlePointerMove = (event: PointerEvent) => {
+            const interaction = floatingInspectorInteractionRef.current;
+            if (!interaction) return;
 
-        observer.observe(inspectorElement);
-        return () => observer.disconnect();
-    }, [isWideLayout]);
+            event.preventDefault();
+            const deltaX = event.clientX - interaction.startX;
+            const deltaY = event.clientY - interaction.startY;
+            const nextRect = interaction.mode === 'move'
+                ? clampFloatingInspectorRect(
+                    {
+                        ...interaction.startRect,
+                        x: interaction.startRect.x + deltaX,
+                        y: interaction.startRect.y + deltaY,
+                    },
+                    interaction.bounds,
+                )
+                : resizeFloatingInspectorRect(
+                    interaction.startRect,
+                    interaction.handle,
+                    deltaX,
+                    deltaY,
+                    interaction.bounds,
+                );
+
+            setFloatingInspectorRect((prev) => {
+                if (
+                    prev &&
+                    prev.x === nextRect.x &&
+                    prev.y === nextRect.y &&
+                    prev.width === nextRect.width &&
+                    prev.height === nextRect.height
+                ) {
+                    return prev;
+                }
+                return nextRect;
+            });
+        };
+
+        const stopInteraction = () => {
+            if (!floatingInspectorInteractionRef.current) return;
+
+            floatingInspectorInteractionRef.current = null;
+            setFloatingInspectorActive(false);
+            if (typeof document !== 'undefined') {
+                document.body.style.userSelect = '';
+                document.body.style.cursor = '';
+            }
+        };
+
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', stopInteraction);
+        window.addEventListener('pointercancel', stopInteraction);
+        return () => {
+            window.removeEventListener('pointermove', handlePointerMove);
+            window.removeEventListener('pointerup', stopInteraction);
+            window.removeEventListener('pointercancel', stopInteraction);
+        };
+    }, []);
 
     useLayoutEffect(() => {
         const container = scrollRef.current;
@@ -176,6 +484,20 @@ export default function ChatPanel() {
         visibleRuntimeEvents,
     ]);
 
+    const visibleTeamDiscussion = useMemo(() => {
+        const fullHistory = currentSession?.team_dialogue_history || [];
+        if (!replayEnabled) {
+            return fullHistory;
+        }
+
+        const visibleEventIds = new Set(visibleRuntimeEvents.map((event) => event.event_id));
+        return fullHistory.filter((entry) => !entry.event_id || visibleEventIds.has(entry.event_id));
+    }, [
+        currentSession?.team_dialogue_history,
+        replayEnabled,
+        visibleRuntimeEvents,
+    ]);
+
     const focusedRuntimeEvent = useMemo(
         () =>
             focusedRuntimeEventId
@@ -192,14 +514,64 @@ export default function ChatPanel() {
         target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }, [focusedRuntimeEventId, rows]);
 
+    const startFloatingInspectorInteraction = (
+        event: ReactPointerEvent<HTMLElement>,
+        interaction: FloatingInspectorInteraction,
+    ) => {
+        event.preventDefault();
+        event.stopPropagation();
+        floatingInspectorInteractionRef.current = interaction;
+        setFloatingInspectorActive(true);
+
+        if (typeof document !== 'undefined') {
+            document.body.style.userSelect = 'none';
+            document.body.style.cursor = interactionCursor(interaction);
+        }
+    };
+
+    const handleFloatingInspectorMoveStart = (event: ReactPointerEvent<HTMLElement>) => {
+        const currentRect = floatingInspectorRectRef.current;
+        if (!currentRect) return;
+
+        startFloatingInspectorInteraction(event, {
+            mode: 'move',
+            startX: event.clientX,
+            startY: event.clientY,
+            startRect: currentRect,
+            bounds: floatingInspectorBounds,
+        });
+    };
+
+    const handleFloatingInspectorResizeStart =
+        (handle: FloatingInspectorResizeHandle) =>
+            (event: ReactPointerEvent<HTMLElement>) => {
+                const currentRect = floatingInspectorRectRef.current;
+                if (!currentRect) return;
+
+                startFloatingInspectorInteraction(event, {
+                    mode: 'resize',
+                    handle,
+                    startX: event.clientX,
+                    startY: event.clientY,
+                    startRect: currentRect,
+                    bounds: floatingInspectorBounds,
+                });
+            };
+
     const maxWidthValue = MESSAGE_WIDTH_VALUES[displaySettings.messageWidth];
     const panelMaxWidth = isWideLayout
         ? (displaySettings.messageWidth === 'full' ? '100%' : `calc(${maxWidthValue} + 392px)`)
         : maxWidthValue;
-    const floatingInspectorTop = topOverlayHeight + 12;
-    const floatingInspectorBottom = bottomOverlayHeight + 28;
-    const floatingInspectorMaxHeight = `calc(100% - ${floatingInspectorTop + floatingInspectorBottom}px)`;
-    const scrollPaddingRight = isWideLayout ? `${Math.max(12, floatingInspectorSize.width + 20)}px` : '4px';
+    const isFloatingInspectorDockedRight = Boolean(
+        isWideLayout &&
+        floatingInspectorRect &&
+        floatingInspectorBounds.width > 0 &&
+        floatingInspectorRect.x + floatingInspectorRect.width >=
+            floatingInspectorBounds.width - FLOATING_INSPECTOR_DOCK_THRESHOLD,
+    );
+    const scrollPaddingRight = isFloatingInspectorDockedRight && floatingInspectorRect
+        ? `${Math.max(12, floatingInspectorRect.width + 20)}px`
+        : '4px';
 
     const handleExport = async (format: 'markdown' | 'json') => {
         if (!currentSession || exportingFormat) return;
@@ -236,6 +608,7 @@ export default function ChatPanel() {
             }}
         >
             <div
+                ref={panelRef}
                 style={{
                     flex: 1,
                     display: 'flex',
@@ -417,8 +790,6 @@ export default function ChatPanel() {
                     style={{
                         flex: '1 1 0',
                         minHeight: 0,
-                        paddingTop: topOverlayHeight + 12,
-                        paddingBottom: bottomOverlayHeight + 28,
                         display: 'flex',
                         flexDirection: 'column',
                         gap: '14px',
@@ -437,15 +808,18 @@ export default function ChatPanel() {
                             minWidth: 0,
                             minHeight: 0,
                             overflowY: 'auto',
+                            paddingTop: `${topOverlayHeight + 12}px`,
                             paddingRight: scrollPaddingRight,
                             paddingLeft: '4px',
-                            paddingBottom: '4px',
+                            paddingBottom: `${bottomOverlayHeight + 32}px`,
                             display: 'flex',
                             flexDirection: 'column',
                             scrollBehavior: 'smooth',
                             gap: '10px',
                         }}
                     >
+                        <TeamDiscussionPanel entries={visibleTeamDiscussion} />
+
                         {rows.map((row, idx) => {
                             const agentKey = row.agent?.timestamp || `agent-${idx}`;
                             const judgeKey = row.judge?.timestamp || `judge-${idx}`;
@@ -466,30 +840,95 @@ export default function ChatPanel() {
                     </div>
                 </div>
 
-                {isWideLayout && (
+                {isWideLayout && floatingInspectorRect && (
                     <div
                         style={{
                             position: 'absolute',
-                            top: floatingInspectorTop,
-                            right: 16,
+                            left: `${floatingInspectorRect.x}px`,
+                            top: `${floatingInspectorRect.y}px`,
                             zIndex: 26,
+                            width: `${floatingInspectorRect.width}px`,
+                            height: `${floatingInspectorRect.height}px`,
+                            pointerEvents: 'auto',
                         }}
                     >
                         <div
-                            ref={rightOverlayRef}
                             style={{
-                                width: `${floatingInspectorSize.width}px`,
-                                height: `${floatingInspectorSize.height}px`,
-                                minWidth: '300px',
-                                minHeight: '260px',
-                                maxWidth: 'calc(100% - 32px)',
-                                maxHeight: floatingInspectorMaxHeight,
-                                resize: 'both',
-                                overflow: 'hidden',
-                                boxSizing: 'border-box',
+                                position: 'relative',
+                                width: '100%',
+                                height: '100%',
+                                overflow: 'visible',
                             }}
                         >
-                            <RuntimeInspector key="floating-inspector" defaultExpanded fillHeight />
+                            <div
+                                onPointerDown={handleFloatingInspectorMoveStart}
+                                title="拖动运行观察器"
+                                style={{
+                                    position: 'absolute',
+                                    top: '8px',
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    zIndex: 3,
+                                    width: '52px',
+                                    height: '16px',
+                                    borderRadius: '999px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '4px',
+                                    cursor:
+                                        floatingInspectorActive &&
+                                        floatingInspectorInteractionRef.current?.mode === 'move'
+                                            ? 'grabbing'
+                                            : 'grab',
+                                    border: '1px solid var(--border-subtle)',
+                                    background: 'var(--glass-bg)',
+                                    backdropFilter: 'blur(10px)',
+                                    boxShadow: '0 6px 18px rgba(15, 23, 42, 0.12)',
+                                    userSelect: 'none',
+                                    touchAction: 'none',
+                                }}
+                            >
+                                {[0, 1, 2].map((dot) => (
+                                    <span
+                                        key={`floating-grip-${dot}`}
+                                        style={{
+                                            width: '4px',
+                                            height: '4px',
+                                            borderRadius: '999px',
+                                            background: 'var(--text-muted)',
+                                        }}
+                                    />
+                                ))}
+                            </div>
+
+                            {FLOATING_INSPECTOR_RESIZE_HANDLES.map((handle) => (
+                                <div
+                                    key={handle.key}
+                                    onPointerDown={handleFloatingInspectorResizeStart(handle.key)}
+                                    style={{
+                                        position: 'absolute',
+                                        zIndex: 2,
+                                        touchAction: 'none',
+                                        ...handle.style,
+                                    }}
+                                />
+                            ))}
+
+                            <div
+                                style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    borderRadius: 'var(--radius-lg)',
+                                    overflow: 'hidden',
+                                    boxSizing: 'border-box',
+                                    boxShadow: floatingInspectorActive
+                                        ? '0 20px 48px rgba(15, 23, 42, 0.18)'
+                                        : '0 14px 34px rgba(15, 23, 42, 0.12)',
+                                }}
+                            >
+                                <RuntimeInspector key="floating-inspector" defaultExpanded fillHeight />
+                            </div>
                         </div>
                     </div>
                 )}

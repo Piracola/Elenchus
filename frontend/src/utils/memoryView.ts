@@ -1,4 +1,5 @@
 import type { RuntimeEvent } from '../types';
+import { isRecord } from './typeGuards';
 
 export type MemoryType = 'fact' | 'memo' | 'context' | 'unknown';
 export type MemorySourceKey = 'tool' | 'context' | 'runtime';
@@ -37,10 +38,6 @@ export interface MemoryWriteView {
     sourceAgentName: string;
     sourceExcerpt: string;
     sourceSummary: string;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null;
 }
 
 function asString(value: unknown): string {

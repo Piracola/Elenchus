@@ -8,6 +8,7 @@ from app.services.connection_hub import ConnectionHub
 from app.dependencies import (
     get_agent_config_service,
     get_connection_hub,
+    get_runtime_bus,
     get_provider_service,
     get_llm_router,
     get_search_factory,
@@ -23,6 +24,7 @@ __all__ = [
     "ConnectionHub",
     "get_intervention_manager",
     "get_agent_config_service",
+    "get_runtime_bus",
     "get_connection_hub",
     # Dependency injection functions
     "get_provider_service",

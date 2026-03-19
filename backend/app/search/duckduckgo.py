@@ -21,9 +21,6 @@ class DuckDuckGoProvider(SearchProvider):
     This provider requires no API key and is always available.
     """
 
-    def __init__(self) -> None:
-        pass
-
     async def search(self, query: str, num_results: int = 5) -> list[SearchResult]:
         """
         Execute a DuckDuckGo search.

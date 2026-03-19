@@ -1,4 +1,5 @@
 import type { RuntimeEvent } from '../types';
+import { payloadNumber, payloadRecord, payloadString } from './runtimeEventPayload';
 
 export const TIMELINE_PAGE_SIZE = 200;
 
@@ -14,41 +15,24 @@ export interface VirtualTimelineWindow {
     paddingBottom: number;
 }
 
-function payloadString(event: RuntimeEvent, key: string): string {
-    const value = event.payload[key];
-    return typeof value === 'string' ? value : '';
-}
-
-function payloadNumber(event: RuntimeEvent, key: string): number | null {
-    const value = event.payload[key];
-    return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function payloadRecord(event: RuntimeEvent, key: string): Record<string, unknown> | null {
-    const value = event.payload[key];
-    return typeof value === 'object' && value !== null && !Array.isArray(value)
-        ? (value as Record<string, unknown>)
-        : null;
-}
-
 export function buildTimelineSearchText(event: RuntimeEvent): string {
     const memory = payloadRecord(event, 'memory');
     const terms = [
         event.type,
         event.source,
         String(event.seq),
-        payloadString(event, 'content'),
-        payloadString(event, 'role'),
-        payloadString(event, 'node'),
-        payloadString(event, 'target_role'),
-        payloadString(event, 'agent_name'),
-        payloadString(event, 'memory_type'),
+        payloadString(event, 'content') ?? '',
+        payloadString(event, 'role') ?? '',
+        payloadString(event, 'node') ?? '',
+        payloadString(event, 'target_role') ?? '',
+        payloadString(event, 'agent_name') ?? '',
+        payloadString(event, 'memory_type') ?? '',
         memory ? (typeof memory.query === 'string' ? memory.query : '') : '',
         memory ? (typeof memory.content === 'string' ? memory.content : '') : '',
         memory ? (typeof memory.result === 'string' ? memory.result : '') : '',
     ];
     const turn = payloadNumber(event, 'turn');
-    if (turn !== null) {
+    if (turn !== undefined) {
         terms.push(String(turn));
     }
 

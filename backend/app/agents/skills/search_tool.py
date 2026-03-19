@@ -18,6 +18,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
+from app.agents.skills.metadata import mark_tool_shared_knowledge
 from app.dependencies import get_search_factory
 from app.search.base import SearchResult
 
@@ -508,3 +509,6 @@ async def web_search(query: str, **kwargs: Any) -> str:
     except Exception as exc:
         logger.error("Error during web search tool execution: %s", exc)
         return f"Search failed due to an error: {exc}. Please rely on internal knowledge."
+
+
+mark_tool_shared_knowledge(web_search, "fact")

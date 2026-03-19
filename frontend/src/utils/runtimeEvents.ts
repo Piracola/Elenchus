@@ -1,10 +1,7 @@
 import type { DebatePhase, RuntimeEvent } from '../types';
+import { isRecord } from './typeGuards';
 
 const LEGACY_SCHEMA_VERSION = 'legacy';
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null;
-}
 
 function asString(value: unknown): string | undefined {
     return typeof value === 'string' ? value : undefined;

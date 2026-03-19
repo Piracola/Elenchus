@@ -14,20 +14,50 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from operator import add
-from typing import Annotated, Any, Literal, Sequence, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 
+from langchain_core.messages import BaseMessage, RemoveMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
-from langchain_core.messages import BaseMessage
 
 from app.agents.debater import debater_speak
 from app.agents.judge import judge_score
+from app.agents.team_discussion import team_discuss
 from app.agents.context_manager import compress_context
 from app.agents.skills import get_all_skills
-from app.agents.skills.search_tool import web_search
+from app.agents.skills.metadata import get_tool_shared_knowledge_type
 from app.models.state import DialogueEntryDict, SharedKnowledgeEntry
 
 logger = logging.getLogger(__name__)
+
+
+def _build_tool_knowledge_entry(
+    tool_fn: Any,
+    tool_call: dict[str, Any],
+    result_content: Any,
+    *,
+    current_role: str,
+    current_agent_name: str,
+    current_turn: int,
+) -> SharedKnowledgeEntry | None:
+    """Convert selected tool results into shared knowledge entries."""
+    if get_tool_shared_knowledge_type(tool_fn) != "fact":
+        return None
+
+    args = tool_call.get("args")
+    query = args.get("query", "") if isinstance(args, dict) else ""
+    result_text = str(result_content)
+    truncated_result = result_text[:500] + ("..." if len(result_text) > 500 else "")
+
+    return {
+        "type": "fact",
+        "query": query if isinstance(query, str) else "",
+        "result": truncated_result,
+        "source_kind": "tool_call",
+        "source_role": current_role,
+        "source_agent_name": current_agent_name,
+        "source_turn": current_turn,
+    }
 
 
 # ── LangGraph State Type ────────────────────────────────────────
@@ -44,10 +74,14 @@ class DebateGraphState(TypedDict, total=False):
     current_speaker_index: int
 
     dialogue_history: Annotated[list[DialogueEntryDict], add]
+    team_dialogue_history: Annotated[list[DialogueEntryDict], add]
     judge_history: Annotated[list[DialogueEntryDict], add]
     recent_dialogue_history: list[DialogueEntryDict]
     compressed_history_count: int
     shared_knowledge: Annotated[list[SharedKnowledgeEntry], add]
+    team_config: dict[str, int]
+    current_team_discussion: list[DialogueEntryDict]
+    current_team_summary: DialogueEntryDict | None
     
     messages: Annotated[list[BaseMessage], add_messages]
 
@@ -140,6 +174,13 @@ async def node_debater_speak(state: DebateGraphState) -> dict[str, Any]:
     return result
 
 
+async def node_team_discussion(state: DebateGraphState) -> dict[str, Any]:
+    """Run the current side's internal discussion before public speech."""
+    result = await team_discuss(state)
+    result["last_executed_node"] = "team_discussion"
+    return result
+
+
 async def node_tool_executor(state: DebateGraphState) -> dict[str, Any]:
     """Executes the tool called by the LLM and feeds it back into the messages list and shared_knowledge."""
     messages = state.get("messages", [])
@@ -172,19 +213,16 @@ async def node_tool_executor(state: DebateGraphState) -> dict[str, Any]:
                     name=tool_call["name"]
                 ))
                 
-                # Automatically save tool facts into shared memory
-                if tool_fn.name == web_search.name:
-                    result_str = str(result_content)
-                    truncated_result = result_str[:500] + ("..." if len(result_str) > 500 else "")
-                    knowledge_updates.append({
-                        "type": "fact",
-                        "query": tool_call["args"].get("query", ""),
-                        "result": truncated_result,
-                        "source_kind": "tool_call",
-                        "source_role": current_role,
-                        "source_agent_name": current_agent_name,
-                        "source_turn": current_turn,
-                    })
+                knowledge_update = _build_tool_knowledge_entry(
+                    tool_fn,
+                    tool_call,
+                    result_content,
+                    current_role=current_role,
+                    current_agent_name=current_agent_name,
+                    current_turn=current_turn,
+                )
+                if knowledge_update:
+                    knowledge_updates.append(knowledge_update)
             
     return {
         "messages": results,
@@ -200,8 +238,6 @@ async def node_judge_score(state: DebateGraphState) -> dict[str, Any]:
     return result
 
 
-from langchain_core.messages import RemoveMessage
-
 async def node_advance_turn(state: DebateGraphState) -> dict[str, Any]:
     """Increment the turn counter and reset speaker index."""
     current = state.get("current_turn", 0)
@@ -215,11 +251,23 @@ async def node_advance_turn(state: DebateGraphState) -> dict[str, Any]:
         "current_turn": current + 1,
         "current_speaker_index": -1, # Reset for the next round
         "messages": remove_msgs, # Clear internal tool messages
+        "current_team_discussion": [],
+        "current_team_summary": None,
         "last_executed_node": "advance_turn",
     }
 
 
 # ── Conditional edges ───────────────────────────────────────────
+
+def should_prepare_team_discussion(state: DebateGraphState) -> str:
+    """Route the current speaker through the optional internal team discussion."""
+    team_config = state.get("team_config", {})
+    agents_per_team = int(team_config.get("agents_per_team", 0) or 0)
+    discussion_rounds = int(team_config.get("discussion_rounds", 0) or 0)
+    if agents_per_team > 0 and discussion_rounds > 0:
+        return "team_discussion"
+    return "speaker"
+
 
 def should_execute_tools(state: DebateGraphState) -> str:
     """Check if the debater emitted a tool call."""
@@ -269,6 +317,7 @@ def build_debate_graph() -> StateGraph:
     # Add nodes
     graph.add_node("manage_context", node_manage_context)
     graph.add_node("set_speaker", node_set_speaker)
+    graph.add_node("team_discussion", node_team_discussion)
     graph.add_node("speaker", node_debater_speak)
     graph.add_node("tool_executor", node_tool_executor)
     graph.add_node("judge", node_judge_score)
@@ -277,7 +326,15 @@ def build_debate_graph() -> StateGraph:
     # Define edges
     graph.set_entry_point("manage_context")
     graph.add_edge("manage_context", "set_speaker")
-    graph.add_edge("set_speaker", "speaker")
+    graph.add_conditional_edges(
+        "set_speaker",
+        should_prepare_team_discussion,
+        {
+            "team_discussion": "team_discussion",
+            "speaker": "speaker",
+        },
+    )
+    graph.add_edge("team_discussion", "speaker")
     
     # From speaker, we check if they called a tool or are finished
     graph.add_conditional_edges(

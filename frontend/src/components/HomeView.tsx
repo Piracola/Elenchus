@@ -4,13 +4,21 @@ import { ArrowRight, ChevronDown, Settings2, Sparkles } from 'lucide-react';
 
 import { useAgentConfigs } from '../hooks/useAgentConfigs';
 import { useSessionCreate } from '../hooks/useSessionCreate';
+import {
+    DEFAULT_MAX_TURNS,
+    DEFAULT_TEAM_AGENTS_PER_TEAM,
+    DEFAULT_TEAM_DISCUSSION_ROUNDS,
+    parseMaxTurnsInput,
+    parseTeamAgentsInput,
+    parseTeamDiscussionRoundsInput,
+} from '../utils/debateSession';
 import AgentConfigPanel from './shared/AgentConfigPanel';
-
-const DEFAULT_MAX_TURNS = 5;
 
 export default function HomeView() {
     const [topic, setTopic] = useState('');
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
+    const [teamAgentsInput, setTeamAgentsInput] = useState('');
+    const [teamRoundsInput, setTeamRoundsInput] = useState('');
     const { isCreating, error, createSession, clearError } = useSessionCreate();
     const {
         showAdvanced,
@@ -23,15 +31,18 @@ export default function HomeView() {
         buildAgentConfigs,
     } = useAgentConfigs();
 
-    const maxTurns = maxTurnsInput.trim()
-        ? parseInt(maxTurnsInput, 10) || DEFAULT_MAX_TURNS
-        : DEFAULT_MAX_TURNS;
+    const maxTurns = parseMaxTurnsInput(maxTurnsInput);
+    const teamAgents = parseTeamAgentsInput(teamAgentsInput);
+    const teamDiscussionRounds = parseTeamDiscussionRoundsInput(teamRoundsInput);
 
     const handleCreateDebate = async () => {
         if (!topic.trim() || isCreating) {
             return;
         }
-        await createSession(topic, maxTurns, buildAgentConfigs());
+        await createSession(topic, maxTurns, buildAgentConfigs(), {
+            agents_per_team: teamAgents,
+            discussion_rounds: teamDiscussionRounds,
+        });
     };
 
     const controlStyle = {
@@ -46,6 +57,19 @@ export default function HomeView() {
         fontSize: '13px',
         fontWeight: 500,
         boxShadow: 'var(--shadow-xs)',
+    } as const;
+
+    const numberInputStyle = {
+        width: '36px',
+        background: 'transparent',
+        border: 'none',
+        outline: 'none',
+        color: 'var(--text-primary)',
+        fontSize: '13px',
+        fontWeight: 500,
+        textAlign: 'center',
+        MozAppearance: 'textfield',
+        WebkitAppearance: 'none',
     } as const;
 
     return (
@@ -94,7 +118,7 @@ export default function HomeView() {
                 transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
                 style={{
                     width: '100%',
-                    maxWidth: '640px',
+                    maxWidth: '700px',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -228,6 +252,7 @@ export default function HomeView() {
                                 flex: 1,
                                 alignItems: 'center',
                                 gap: '10px',
+                                flexWrap: 'wrap',
                             }}
                         >
                             <motion.button
@@ -259,21 +284,40 @@ export default function HomeView() {
                                     type="number"
                                     value={maxTurnsInput}
                                     onChange={(event) => setMaxTurnsInput(event.target.value)}
-                                    placeholder="5"
+                                    placeholder={String(DEFAULT_MAX_TURNS)}
                                     min={1}
                                     max={100}
-                                    style={{
-                                        width: '36px',
-                                        background: 'transparent',
-                                        border: 'none',
-                                        outline: 'none',
-                                        color: 'var(--text-primary)',
-                                        fontSize: '13px',
-                                        fontWeight: 500,
-                                        textAlign: 'center',
-                                        MozAppearance: 'textfield',
-                                        WebkitAppearance: 'none',
-                                    }}
+                                    style={numberInputStyle}
+                                />
+                            </div>
+
+                            <div style={controlStyle}>
+                                <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                    组内 Agent
+                                </span>
+                                <input
+                                    type="number"
+                                    value={teamAgentsInput}
+                                    onChange={(event) => setTeamAgentsInput(event.target.value)}
+                                    placeholder={String(DEFAULT_TEAM_AGENTS_PER_TEAM)}
+                                    min={0}
+                                    max={10}
+                                    style={numberInputStyle}
+                                />
+                            </div>
+
+                            <div style={controlStyle}>
+                                <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                    讨论轮数
+                                </span>
+                                <input
+                                    type="number"
+                                    value={teamRoundsInput}
+                                    onChange={(event) => setTeamRoundsInput(event.target.value)}
+                                    placeholder={String(DEFAULT_TEAM_DISCUSSION_ROUNDS)}
+                                    min={0}
+                                    max={10}
+                                    style={numberInputStyle}
                                 />
                             </div>
                         </div>

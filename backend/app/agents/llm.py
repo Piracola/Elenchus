@@ -122,9 +122,3 @@ async def get_llm(
 ) -> BaseChatModel:
     """Generic LLM getter for any agent role."""
     return await create_llm(streaming=streaming, override=override)
-
-
-# Aliases for backward compatibility
-get_debater_llm = get_llm
-get_judge_llm = get_llm
-get_fact_checker_llm = get_llm

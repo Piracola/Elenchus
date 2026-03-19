@@ -1,5 +1,6 @@
 import type { RuntimeEvent } from '../types';
 import type { DialogueRow } from './groupDialogue';
+import { payloadNumber, payloadString } from './runtimeEventPayload';
 
 export interface RowFocusState {
     agent: boolean;
@@ -8,16 +9,6 @@ export interface RowFocusState {
 }
 
 const EMPTY_FOCUS: RowFocusState = { agent: false, judge: false, system: false };
-
-function payloadString(event: RuntimeEvent, key: string): string | undefined {
-    const value = event.payload[key];
-    return typeof value === 'string' ? value : undefined;
-}
-
-function payloadNumber(event: RuntimeEvent, key: string): number | undefined {
-    const value = event.payload[key];
-    return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
 
 export function getEventNode(event: RuntimeEvent | null): string | null {
     if (!event) return null;

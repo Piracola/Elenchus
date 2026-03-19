@@ -8,9 +8,8 @@ import { useAgentConfigs } from '../../hooks/useAgentConfigs';
 import { useDebateWebSocket } from '../../hooks/useDebateWebSocket';
 import { useSessionCreate } from '../../hooks/useSessionCreate';
 import { useDebateStore } from '../../stores/debateStore';
+import { DEFAULT_MAX_TURNS, parseMaxTurnsInput } from '../../utils/debateSession';
 import AgentConfigPanel from '../shared/AgentConfigPanel';
-
-const DEFAULT_MAX_TURNS = 5;
 
 function ActiveSessionControls() {
     const { isDebating, isConnected, currentSession } = useDebateStore();
@@ -19,9 +18,7 @@ function ActiveSessionControls() {
     const [interventionText, setInterventionText] = useState('');
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
 
-    const maxTurns = maxTurnsInput.trim()
-        ? parseInt(maxTurnsInput, 10) || DEFAULT_MAX_TURNS
-        : DEFAULT_MAX_TURNS;
+    const maxTurns = parseMaxTurnsInput(maxTurnsInput);
 
     const handleSendIntervention = () => {
         if (!interventionText.trim() || !isConnected) return;
@@ -87,7 +84,7 @@ function ActiveSessionControls() {
                         type="number"
                         value={maxTurnsInput}
                         onChange={(event) => setMaxTurnsInput(event.target.value)}
-                        placeholder="5"
+                        placeholder={String(DEFAULT_MAX_TURNS)}
                         min={1}
                         max={100}
                         style={{
@@ -218,9 +215,7 @@ function SessionCreator() {
         buildAgentConfigs,
     } = useAgentConfigs();
 
-    const maxTurns = maxTurnsInput.trim()
-        ? parseInt(maxTurnsInput, 10) || DEFAULT_MAX_TURNS
-        : DEFAULT_MAX_TURNS;
+    const maxTurns = parseMaxTurnsInput(maxTurnsInput);
 
     const handleStart = async () => {
         if (!topic.trim()) return;
@@ -336,7 +331,7 @@ function SessionCreator() {
                         type="number"
                         value={maxTurnsInput}
                         onChange={(event) => setMaxTurnsInput(event.target.value)}
-                        placeholder="5"
+                        placeholder={String(DEFAULT_MAX_TURNS)}
                         min={1}
                         max={100}
                         style={{

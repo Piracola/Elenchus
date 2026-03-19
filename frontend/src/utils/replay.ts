@@ -1,15 +1,11 @@
 import type { DebatePhase, RuntimeEvent } from '../types';
+import { payloadString } from './runtimeEventPayload';
 
 export interface RuntimeViewState {
     phase: DebatePhase;
     status: string;
     node: string;
     isDebating: boolean;
-}
-
-function payloadString(event: RuntimeEvent, key: string): string | undefined {
-    const value = event.payload[key];
-    return typeof value === 'string' ? value : undefined;
 }
 
 export function clampReplayCursor(cursor: number, eventCount: number): number {

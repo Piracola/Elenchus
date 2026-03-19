@@ -88,10 +88,8 @@ def get_runtime_bus() -> "RuntimeBus":
     repository = SessionRuntimeRepository()
     return RuntimeBus(repository=repository)
 
-
-def get_connection_hub() -> "RuntimeBus":
-    """Compatibility accessor for code that still asks for the connection hub."""
-    return get_runtime_bus()
+# Deprecated compatibility aliases. Prefer `get_runtime_bus()`.
+get_connection_hub = get_runtime_bus
 
 
 @lru_cache()
@@ -101,10 +99,7 @@ def get_agent_config_service() -> "AgentConfigService":
 
     return AgentConfigService()
 
-
-def get_event_stream_gateway() -> "RuntimeBus":
-    """Compatibility accessor for code that still asks for the event gateway."""
-    return get_runtime_bus()
+get_event_stream_gateway = get_runtime_bus
 
 
 @lru_cache()

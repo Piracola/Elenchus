@@ -12,7 +12,7 @@ from typing import Any
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph.message import RemoveMessage
 
-from app.agents.context_manager import build_context_for_agent
+from app.agents.context_builder import build_context_for_agent
 from app.agents.prompt_loader import get_debater_system_prompt
 from app.agents.safe_invoke import (
     extract_text_content,
@@ -33,6 +33,18 @@ _TOOL_RULES = """
 - Search queries must be concise factual keywords or just the debate topic; the tool will plan sub-queries on its own.
 - After using a tool, write the debate speech itself. Do not output "I'll search for", raw search results, URL lists, or long source dumps.
 """.strip()
+
+
+def _build_team_summary_block(team_summary: Any) -> str:
+    if not isinstance(team_summary, dict):
+        return ""
+
+    content = team_summary.get("content")
+    if not isinstance(content, str) or not content.strip():
+        return ""
+
+    agent_name = str(team_summary.get("agent_name", "内部总结员") or "内部总结员")
+    return f"## Internal Team Briefing\n[{agent_name}]\n{content.strip()}"
 
 
 def _extract_citations(text: str) -> list[str]:
@@ -124,6 +136,9 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
         current_turn=current_turn,
         max_turns=max_turns,
     )
+    team_summary_block = _build_team_summary_block(state.get("current_team_summary"))
+    if team_summary_block:
+        context_block = f"{context_block}\n\n{team_summary_block}" if context_block else team_summary_block
 
     is_first_turn = current_turn == 0
     is_proposer = role == "proposer"

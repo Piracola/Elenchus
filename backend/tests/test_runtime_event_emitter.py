@@ -1,0 +1,117 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+from typing import Any
+
+import pytest
+
+from app.runtime.event_emitter import RuntimeEventEmitter
+
+
+class _FakeRuntimeBus:
+    def __init__(self) -> None:
+        self.events: list[dict[str, Any]] = []
+
+    async def emit(
+        self,
+        *,
+        session_id: str,
+        event_type: str,
+        payload: dict[str, Any] | None = None,
+        source: str = "runtime",
+        phase: str | None = None,
+    ) -> None:
+        self.events.append(
+            {
+                "session_id": session_id,
+                "type": event_type,
+                "payload": payload or {},
+                "source": source,
+                "phase": phase,
+            }
+        )
+
+
+def test_predict_next_status_node_handles_tools_and_turn_progress():
+    emitter = RuntimeEventEmitter()
+
+    assert emitter.predict_next_status_node(
+        "set_speaker",
+        {"current_speaker": "proposer"},
+    ) == "speaker"
+    assert emitter.predict_next_status_node(
+        "set_speaker",
+        {
+            "current_speaker": "proposer",
+            "team_config": {"agents_per_team": 2, "discussion_rounds": 1},
+        },
+    ) == "team_discussion"
+    assert emitter.predict_next_status_node("team_discussion", {}) == "speaker"
+    assert emitter.predict_next_status_node(
+        "speaker",
+        {"messages": [SimpleNamespace(tool_calls=[{"name": "web_search"}])]},
+    ) == "tool_executor"
+    assert emitter.predict_next_status_node(
+        "advance_turn",
+        {"current_turn": 1, "max_turns": 3},
+    ) == "manage_context"
+
+
+@pytest.mark.asyncio
+async def test_emit_memory_updates_routes_fact_and_memo_sources():
+    bus = _FakeRuntimeBus()
+    emitter = RuntimeEventEmitter(runtime_bus=bus)
+
+    count = await emitter.emit_memory_updates(
+        "session-1",
+        {
+            "shared_knowledge": [
+                {"type": "fact", "query": "AI", "result": "fact-result"},
+                {"type": "memo", "agent_name": "Proposer", "content": "memo-result"},
+            ]
+        },
+        0,
+    )
+
+    assert count == 2
+    assert [event["source"] for event in bus.events] == [
+        "runtime.node.tool_executor",
+        "runtime.node.manage_context",
+    ]
+    assert [event["payload"]["memory_type"] for event in bus.events] == ["fact", "memo"]
+
+
+@pytest.mark.asyncio
+async def test_emit_team_discussion_uses_separate_event_types():
+    bus = _FakeRuntimeBus()
+    emitter = RuntimeEventEmitter(runtime_bus=bus)
+
+    count = await emitter.emit_team_discussion(
+        "session-1",
+        {
+            "team_dialogue_history": [
+                {
+                    "role": "team_member",
+                    "agent_name": "正方组员1",
+                    "content": "补强证据链",
+                    "team_side": "proposer",
+                    "team_round": 0,
+                    "team_member_index": 0,
+                    "team_specialty": "证据审查",
+                    "source_role": "proposer",
+                },
+                {
+                    "role": "team_summary",
+                    "agent_name": "正方总结员",
+                    "content": "优先打价值框架和证据可信度。",
+                    "team_side": "proposer",
+                    "team_round": 0,
+                    "source_role": "proposer",
+                },
+            ]
+        },
+        0,
+    )
+
+    assert count == 2
+    assert [event["type"] for event in bus.events] == ["team_discussion", "team_summary"]
