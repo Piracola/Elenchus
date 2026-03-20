@@ -23,6 +23,21 @@ class SessionStatus(str, Enum):
     ERROR = "error"
 
 
+class DocumentStatus(str, Enum):
+    UPLOADED = "uploaded"
+    PROCESSING = "processing"
+    PROCESSED = "processed"
+    FAILED = "failed"
+
+
+class ReferenceEntryType(str, Enum):
+    SUMMARY = "reference_summary"
+    TERM = "reference_term"
+    CLAIM = "reference_claim"
+    EXCERPT = "reference_excerpt"
+    VALIDATION = "reference_validation"
+
+
 class TeamConfig(BaseModel):
     """Configuration for per-side internal team discussion."""
 
@@ -129,6 +144,58 @@ class SessionListResponse(BaseModel):
 
     sessions: list[SessionListItem]
     total: int
+
+
+class SessionDocumentListItem(BaseModel):
+    """Lightweight document info for per-session reference files."""
+
+    id: str
+    session_id: str
+    filename: str
+    mime_type: str
+    size_bytes: int
+    status: DocumentStatus
+    summary_short: str | None = None
+    error_message: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SessionDocumentResponse(SessionDocumentListItem):
+    """Full document detail including extracted text."""
+
+    raw_text: str | None = None
+    normalized_text: str | None = None
+
+
+class SessionDocumentListResponse(BaseModel):
+    """Paginated-like response for session documents."""
+
+    documents: list[SessionDocumentListItem]
+
+
+class ReferenceLibraryEntryResponse(BaseModel):
+    """Structured reference entry derived from an uploaded document."""
+
+    id: str
+    session_id: str
+    document_id: str
+    entry_type: ReferenceEntryType
+    title: str | None = None
+    content: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    importance: int
+    source_section: str | None = None
+    source_order: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReferenceLibraryResponse(BaseModel):
+    """Reference-library payload for one session."""
+
+    documents: list[SessionDocumentListItem]
+    entries: list[ReferenceLibraryEntryResponse]
 
 
 class RuntimeEventResponse(BaseModel):
