@@ -4,117 +4,80 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.db.models import RuntimeEventRecord
+from app.storage.session_files import (
+    append_runtime_event,
+    delete_runtime_events as delete_runtime_events_file,
+    get_latest_runtime_event_seq as get_latest_runtime_event_seq_file,
+    read_all_runtime_events,
+    read_runtime_event_page,
+)
 from app.text_repair import repair_text_tree
 
 
-def _record_to_dict(record: RuntimeEventRecord) -> dict[str, Any]:
+def _record_to_dict(record: dict[str, Any]) -> dict[str, Any]:
     return {
-        "schema_version": record.schema_version,
-        "event_id": record.event_id,
-        "session_id": record.session_id,
-        "seq": record.seq,
-        "timestamp": record.timestamp,
-        "source": record.source,
-        "type": record.event_type,
-        "phase": record.phase,
-        "payload": repair_text_tree(record.payload or {}),
+        "schema_version": str(record.get("schema_version", "legacy")),
+        "event_id": str(record.get("event_id", "")),
+        "session_id": str(record.get("session_id", "")),
+        "seq": int(record.get("seq", -1) or -1),
+        "timestamp": str(record.get("timestamp", "")),
+        "source": str(record.get("source", "runtime")),
+        "type": str(record.get("type", "system")),
+        "phase": str(record.get("phase")) if record.get("phase") is not None else None,
+        "payload": repair_text_tree(record.get("payload") or {}),
     }
 
 
 async def create_runtime_event(
-    db: AsyncSession,
+    _db: Any,
     event: dict[str, Any],
 ) -> dict[str, Any]:
-    """Persist a single runtime event envelope."""
-    payload = repair_text_tree(event.get("payload"))
-    record = RuntimeEventRecord(
-        event_id=str(event.get("event_id", "")),
-        session_id=str(event.get("session_id", "")),
-        schema_version=str(event.get("schema_version", "legacy")),
-        seq=int(event.get("seq", -1) or -1),
-        timestamp=str(event.get("timestamp", "")),
-        source=str(event.get("source", "runtime")),
-        event_type=str(event.get("type", "system")),
-        phase=str(event.get("phase")) if event.get("phase") is not None else None,
-        payload=payload if isinstance(payload, dict) else {},
-    )
-    db.add(record)
-    await db.commit()
-    await db.refresh(record)
-    return _record_to_dict(record)
+    """Persist a single runtime event envelope to events.jsonl."""
+    record = _record_to_dict(event)
+    append_runtime_event(record["session_id"], record)
+    return record
 
 
-async def get_latest_runtime_event_seq(db: AsyncSession, session_id: str) -> int:
+async def get_latest_runtime_event_seq(_db: Any, session_id: str) -> int:
     """Return the max persisted sequence for a session, or 0 when empty."""
-    stmt = select(func.max(RuntimeEventRecord.seq)).where(
-        RuntimeEventRecord.session_id == session_id
-    )
-    result = await db.execute(stmt)
-    value = result.scalar_one_or_none()
-    return int(value or 0)
+    return get_latest_runtime_event_seq_file(session_id)
 
 
-async def count_runtime_events(db: AsyncSession, session_id: str) -> int:
+async def count_runtime_events(_db: Any, session_id: str) -> int:
     """Return total persisted runtime event count for a session."""
-    stmt = select(func.count()).select_from(RuntimeEventRecord).where(
-        RuntimeEventRecord.session_id == session_id
-    )
-    result = await db.execute(stmt)
-    return int(result.scalar_one() or 0)
+    return len(read_all_runtime_events(session_id))
 
 
 async def list_runtime_events(
-    db: AsyncSession,
+    _db: Any,
     session_id: str,
     *,
     before_seq: int | None = None,
     limit: int = 200,
 ) -> dict[str, Any]:
-    """Return one history page, ordered ascending by sequence."""
-    stmt = select(RuntimeEventRecord).where(RuntimeEventRecord.session_id == session_id)
-    if before_seq is not None:
-        stmt = stmt.where(RuntimeEventRecord.seq < before_seq)
-
-    stmt = stmt.order_by(RuntimeEventRecord.seq.desc()).limit(limit + 1)
-    result = await db.execute(stmt)
-    records = result.scalars().all()
-    has_more = len(records) > limit
-    selected = records[:limit]
-    selected.reverse()
-
-    total = await count_runtime_events(db, session_id)
-    next_before_seq = selected[0].seq if has_more and selected else None
+    """Return one history page from events.jsonl, ordered ascending by sequence."""
+    page = read_runtime_event_page(
+        session_id,
+        before_seq=before_seq,
+        limit=limit,
+    )
     return {
-        "events": [_record_to_dict(record) for record in selected],
-        "total": total,
-        "limit": limit,
-        "has_more": has_more,
-        "next_before_seq": next_before_seq,
+        "events": [_record_to_dict(record) for record in page["events"]],
+        "total": int(page["total"]),
+        "limit": int(page["limit"]),
+        "has_more": bool(page["has_more"]),
+        "next_before_seq": page["next_before_seq"],
     }
 
 
 async def list_all_runtime_events(
-    db: AsyncSession,
+    _db: Any,
     session_id: str,
 ) -> list[dict[str, Any]]:
     """Return the full persisted runtime history ordered by sequence ascending."""
-    stmt = (
-        select(RuntimeEventRecord)
-        .where(RuntimeEventRecord.session_id == session_id)
-        .order_by(RuntimeEventRecord.seq.asc())
-    )
-    result = await db.execute(stmt)
-    records = result.scalars().all()
-    return [_record_to_dict(record) for record in records]
+    return [_record_to_dict(record) for record in read_all_runtime_events(session_id)]
 
 
-async def delete_runtime_events(db: AsyncSession, session_id: str) -> None:
+async def delete_runtime_events(_db: Any, session_id: str) -> None:
     """Delete all persisted runtime events for a session."""
-    await db.execute(
-        delete(RuntimeEventRecord).where(RuntimeEventRecord.session_id == session_id)
-    )
-    await db.commit()
+    delete_runtime_events_file(session_id)

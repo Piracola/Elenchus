@@ -2,9 +2,12 @@
 Smoke tests for session CRUD operations.
 """
 
+import json
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.runtime_paths import get_runtime_paths
 from app.services import session_service
 from app.models.schemas import SessionCreate
 
@@ -73,6 +76,7 @@ async def test_delete_session(db_session: AsyncSession):
 
     fetched = await session_service.get_session(db_session, created["id"])
     assert fetched is None
+    assert not (get_runtime_paths().sessions_dir / created["id"]).exists()
 
 
 @pytest.mark.asyncio
@@ -291,3 +295,93 @@ async def test_create_session_persists_jury_and_reasoning_config(db_session: Asy
         "counterfactual_enabled": True,
         "consensus_enabled": False,
     }
+
+
+@pytest.mark.asyncio
+async def test_update_session_state_writes_round_json_file(db_session: AsyncSession):
+    created = await session_service.create_session(
+        db_session,
+        SessionCreate(topic="Round file export"),
+    )
+
+    await session_service.update_session_state(
+        db_session,
+        created["id"],
+        current_turn=1,
+        status="in_progress",
+        state_snapshot={
+            "dialogue_history": [
+                {
+                    "role": "proposer",
+                    "agent_name": "Proposer",
+                    "content": "Round one proposer",
+                    "citations": [],
+                    "timestamp": "2026-03-20T10:00:00Z",
+                    "turn": 0,
+                },
+                {
+                    "role": "opposer",
+                    "agent_name": "Opposer",
+                    "content": "Round one opposer",
+                    "citations": [],
+                    "timestamp": "2026-03-20T10:00:10Z",
+                    "turn": 0,
+                },
+            ],
+            "team_dialogue_history": [
+                {
+                    "role": "team_summary",
+                    "agent_name": "Team Summary",
+                    "content": "Internal summary",
+                    "citations": [],
+                    "timestamp": "2026-03-20T09:59:50Z",
+                    "turn": 0,
+                    "discussion_kind": "team",
+                }
+            ],
+            "jury_dialogue_history": [
+                {
+                    "role": "jury_summary",
+                    "agent_name": "Jury Summary",
+                    "content": "Jury summary",
+                    "citations": [],
+                    "timestamp": "2026-03-20T10:00:20Z",
+                    "turn": 0,
+                    "discussion_kind": "jury",
+                }
+            ],
+            "judge_history": [
+                {
+                    "role": "judge",
+                    "target_role": "proposer",
+                    "agent_name": "Judge",
+                    "content": "Strong opening",
+                    "scores": {"logical_rigor": {"score": 8, "rationale": "Clear"}},
+                    "timestamp": "2026-03-20T10:00:30Z",
+                    "citations": [],
+                    "turn": 0,
+                }
+            ],
+            "shared_knowledge": [
+                {
+                    "type": "fact",
+                    "query": "example",
+                    "result": "result",
+                    "source_turn": 0,
+                }
+            ],
+            "current_scores": {},
+            "cumulative_scores": {},
+            "agent_configs": {},
+        },
+    )
+
+    round_path = get_runtime_paths().sessions_dir / created["id"] / "rounds" / "round-001.json"
+    assert round_path.exists()
+
+    round_payload = json.loads(round_path.read_text(encoding="utf-8"))
+    assert round_payload["turn"] == 0
+    assert round_payload["turn_number"] == 1
+    assert [entry["role"] for entry in round_payload["debate"]] == ["proposer", "opposer"]
+    assert round_payload["judge"][0]["target_role"] == "proposer"
+    assert round_payload["shared_knowledge"][0]["query"] == "example"

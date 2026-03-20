@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
+from app.runtime_paths import get_runtime_paths
 from app.models.schemas import SessionCreate
 from app.services import runtime_event_service, session_service
 
@@ -89,3 +92,26 @@ async def test_runtime_event_history_can_return_full_persisted_list(db_session):
     assert [event["seq"] for event in events] == [1, 2, 3]
     assert events[0]["event_id"] == "evt_1"
     assert events[-1]["event_id"] == "evt_3"
+
+
+@pytest.mark.asyncio
+async def test_runtime_event_history_writes_jsonl_file(db_session):
+    session = await session_service.create_session(
+        db_session,
+        SessionCreate(topic="Runtime jsonl"),
+    )
+    session_id = session["id"]
+
+    await runtime_event_service.create_runtime_event(db_session, make_event(1, session_id))
+    await runtime_event_service.create_runtime_event(db_session, make_event(2, session_id))
+
+    events_path = get_runtime_paths().sessions_dir / session_id / "events.jsonl"
+    assert events_path.exists()
+
+    lines = [line for line in events_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(lines) == 2
+
+    first_event = json.loads(lines[0])
+    second_event = json.loads(lines[1])
+    assert first_event["seq"] == 1
+    assert second_event["seq"] == 2

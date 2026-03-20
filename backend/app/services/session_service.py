@@ -1,5 +1,5 @@
 """
-Session CRUD service backed by the async database layer.
+Session CRUD service backed by file-based session storage.
 """
 
 from __future__ import annotations
@@ -7,13 +7,19 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.agents.safe_invoke import normalize_model_text
-from app.db.models import RuntimeEventRecord, SessionRecord, _gen_id, _utcnow
+from app.db.models import _gen_id, _utcnow
 from app.dependencies import get_agent_config_service
 from app.models.schemas import SessionCreate, SessionStatus
+from app.storage.session_files import (
+    StoredSessionRecord,
+    delete_round_results_after,
+    delete_session_storage,
+    list_session_records,
+    read_session_record,
+    write_round_result,
+    write_session_record,
+)
 from app.text_repair import repair_text_tree
 
 
@@ -85,10 +91,7 @@ def _parse_timestamp(value: Any) -> datetime:
     if not isinstance(value, str) or not value:
         return datetime.min.replace(tzinfo=timezone.utc)
 
-    normalized = value
-    if normalized.endswith("Z"):
-        normalized = normalized[:-1]
-
+    normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
     try:
         parsed = datetime.fromisoformat(normalized)
     except ValueError:
@@ -113,7 +116,7 @@ def _merge_dialogue_for_display(
     return merged
 
 
-def _record_to_dict(record: SessionRecord) -> dict[str, Any]:
+def _record_to_dict(record: StoredSessionRecord) -> dict[str, Any]:
     snapshot = _sanitize_state_snapshot(record.state_snapshot or {})
     dialogue_history = snapshot.get("dialogue_history", [])
     team_dialogue_history = snapshot.get("team_dialogue_history", [])
@@ -141,8 +144,119 @@ def _record_to_dict(record: SessionRecord) -> dict[str, Any]:
     }
 
 
-async def create_session(db: AsyncSession, body: SessionCreate) -> dict[str, Any]:
-    """Create a new debate session in the database."""
+def _coerce_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _entry_turn(entry: Any) -> int | None:
+    if not isinstance(entry, dict):
+        return None
+    return _coerce_int(entry.get("turn"))
+
+
+def _entries_for_turn(entries: Any, turn_index: int) -> list[dict[str, Any]]:
+    if not isinstance(entries, list):
+        return []
+    return [
+        entry
+        for entry in entries
+        if isinstance(entry, dict) and _entry_turn(entry) == turn_index
+    ]
+
+
+def _knowledge_for_turn(entries: Any, turn_index: int) -> list[dict[str, Any]]:
+    if not isinstance(entries, list):
+        return []
+
+    selected: list[dict[str, Any]] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        source_turn = _coerce_int(entry.get("source_turn"))
+        if source_turn is None:
+            source_turn = _coerce_int(entry.get("turn"))
+        if source_turn == turn_index:
+            selected.append(entry)
+    return selected
+
+
+def _collect_round_timestamps(*collections: list[dict[str, Any]]) -> list[datetime]:
+    parsed: list[datetime] = []
+    floor = datetime.min.replace(tzinfo=timezone.utc)
+    for collection in collections:
+        for entry in collection:
+            timestamp = entry.get("timestamp") if isinstance(entry, dict) else None
+            moment = _parse_timestamp(timestamp)
+            if moment != floor:
+                parsed.append(moment)
+    return parsed
+
+
+def _completed_turn_count(record: StoredSessionRecord) -> int:
+    snapshot = record.state_snapshot or {}
+    last_node = str(snapshot.get("last_executed_node", "") or "")
+    current_turn = max(0, int(record.current_turn or 0))
+    max_turns = max(0, int(record.max_turns or 0))
+
+    completed = min(current_turn, max_turns)
+    if last_node == "judge":
+        completed = min(current_turn + 1, max_turns)
+    return completed
+
+
+def _build_round_result(record: StoredSessionRecord, turn_index: int) -> dict[str, Any]:
+    snapshot = _sanitize_state_snapshot(record.state_snapshot or {})
+    debate_entries = _entries_for_turn(snapshot.get("dialogue_history", []), turn_index)
+    judge_entries = _entries_for_turn(snapshot.get("judge_history", []), turn_index)
+    team_entries = _entries_for_turn(snapshot.get("team_dialogue_history", []), turn_index)
+    jury_entries = _entries_for_turn(snapshot.get("jury_dialogue_history", []), turn_index)
+    shared_knowledge = _knowledge_for_turn(snapshot.get("shared_knowledge", []), turn_index)
+    timestamps = _collect_round_timestamps(
+        debate_entries,
+        judge_entries,
+        team_entries,
+        jury_entries,
+    )
+
+    scores_by_role: dict[str, Any] = {}
+    for entry in judge_entries:
+        target_role = str(entry.get("target_role", "") or "")
+        scores = entry.get("scores")
+        if target_role and isinstance(scores, dict):
+            scores_by_role[target_role] = scores
+
+    started_at = min(timestamps).isoformat() if timestamps else None
+    completed_at = max(timestamps).isoformat() if timestamps else None
+    return {
+        "session_id": record.id,
+        "topic": record.topic,
+        "participants": record.participants or ["proposer", "opposer"],
+        "turn": turn_index,
+        "turn_number": turn_index + 1,
+        "status": "completed",
+        "started_at": started_at,
+        "completed_at": completed_at,
+        "debate": debate_entries,
+        "judge": judge_entries,
+        "team_discussion": team_entries,
+        "jury_discussion": jury_entries,
+        "shared_knowledge": shared_knowledge,
+        "scores_by_role": scores_by_role,
+    }
+
+
+def _sync_round_results(record: StoredSessionRecord) -> None:
+    completed_turn_count = _completed_turn_count(record)
+    delete_round_results_after(record.id, completed_turn_count)
+    for turn_index in range(completed_turn_count):
+        write_round_result(record.id, turn_index, _build_round_result(record, turn_index))
+
+
+async def create_session(_db: Any, body: SessionCreate) -> dict[str, Any]:
+    """Create a new debate session in session.json storage."""
     now = _utcnow()
     agent_config_service = get_agent_config_service()
     agent_configs_for_storage = await agent_config_service.build_session_agent_configs(
@@ -150,7 +264,7 @@ async def create_session(db: AsyncSession, body: SessionCreate) -> dict[str, Any
         body.participants,
     )
 
-    record = SessionRecord(
+    record = StoredSessionRecord(
         id=_gen_id(),
         topic=body.topic,
         participants=body.participants,
@@ -175,26 +289,17 @@ async def create_session(db: AsyncSession, body: SessionCreate) -> dict[str, Any
         created_at=now,
         updated_at=now,
     )
-    db.add(record)
-    await db.commit()
-    await db.refresh(record)
+    write_session_record(record)
     return _record_to_dict(record)
 
 
 async def list_sessions(
-    db: AsyncSession,
+    _db: Any,
     offset: int = 0,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
     """List sessions with pagination."""
-    stmt = (
-        select(SessionRecord)
-        .order_by(SessionRecord.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-    )
-    result = await db.execute(stmt)
-    records = result.scalars().all()
+    records = list_session_records()[offset : offset + limit]
     return [
         {
             "id": record.id,
@@ -208,27 +313,26 @@ async def list_sessions(
     ]
 
 
-async def count_sessions(db: AsyncSession) -> int:
+async def count_sessions(_db: Any) -> int:
     """Return total session count for pagination."""
-    result = await db.execute(select(func.count()).select_from(SessionRecord))
-    return result.scalar_one()
+    return len(list_session_records())
 
 
-async def get_session(db: AsyncSession, session_id: str) -> dict[str, Any] | None:
+async def get_session(_db: Any, session_id: str) -> dict[str, Any] | None:
     """Get a single session's full data."""
-    record = await db.get(SessionRecord, session_id)
+    record = read_session_record(session_id)
     if record is None:
         return None
     return _record_to_dict(record)
 
 
-async def get_session_record(db: AsyncSession, session_id: str) -> SessionRecord | None:
-    """Get the raw ORM record for internal use."""
-    return await db.get(SessionRecord, session_id)
+async def get_session_record(_db: Any, session_id: str) -> StoredSessionRecord | None:
+    """Get the raw stored record for internal use."""
+    return read_session_record(session_id)
 
 
 async def update_session_state(
-    db: AsyncSession,
+    _db: Any,
     session_id: str,
     *,
     current_turn: int | None = None,
@@ -236,7 +340,7 @@ async def update_session_state(
     state_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Partially update a session's mutable fields."""
-    record = await db.get(SessionRecord, session_id)
+    record = read_session_record(session_id)
     if record is None:
         return None
 
@@ -248,20 +352,16 @@ async def update_session_state(
         record.state_snapshot = _sanitize_state_snapshot(state_snapshot)
 
     record.updated_at = _utcnow()
-    await db.commit()
-    await db.refresh(record)
+    write_session_record(record)
+    _sync_round_results(record)
     return _record_to_dict(record)
 
 
-async def delete_session(db: AsyncSession, session_id: str) -> bool:
+async def delete_session(_db: Any, session_id: str) -> bool:
     """Delete a session."""
-    record = await db.get(SessionRecord, session_id)
+    record = read_session_record(session_id)
     if record is None:
         return False
 
-    await db.execute(
-        delete(RuntimeEventRecord).where(RuntimeEventRecord.session_id == session_id)
-    )
-    await db.delete(record)
-    await db.commit()
+    delete_session_storage(session_id)
     return True

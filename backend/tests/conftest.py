@@ -9,14 +9,19 @@ still stay isolated.
 from __future__ import annotations
 
 import asyncio
+import shutil
+import uuid
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.config import get_settings
 from app.db import database as db_module
 from app.db.database import Base
 from app.dependencies import clear_dependency_cache
+from app.runtime_paths import get_runtime_paths
 
 # Import models so Base.metadata includes every table before create_all.
 from app.db import models as _models  # noqa: F401
@@ -29,6 +34,25 @@ def event_loop():
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
+
+
+@pytest.fixture(autouse=True)
+def runtime_dir(monkeypatch):
+    base_dir = Path(__file__).resolve().parents[1] / "test_runtime"
+    base_dir.mkdir(parents=True, exist_ok=True)
+    runtime_root = base_dir / f"runtime-{uuid.uuid4().hex}"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("ELENCHUS_RUNTIME_DIR", str(runtime_root))
+    get_runtime_paths.cache_clear()
+    get_settings.cache_clear()
+    clear_dependency_cache()
+    try:
+        yield runtime_root
+    finally:
+        clear_dependency_cache()
+        get_settings.cache_clear()
+        get_runtime_paths.cache_clear()
+        shutil.rmtree(runtime_root, ignore_errors=True)
 
 
 @pytest_asyncio.fixture(scope="function")

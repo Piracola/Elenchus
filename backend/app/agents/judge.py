@@ -14,6 +14,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import ValidationError
 
 from app.agents.prompt_loader import get_judge_prompt
+from app.agents.runtime_progress import (
+    MODEL_HEARTBEAT_INTERVAL_SECONDS,
+    MODEL_INVOCATION_TIMEOUT_SECONDS,
+    build_status_heartbeat_callback,
+)
 from app.agents.safe_invoke import invoke_text_model
 from app.models.scoring import TurnScore
 
@@ -230,6 +235,11 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
     override = agent_configs.get("judge")
     current_scores: dict[str, Any] = {}
     judge_history_entries: list[dict[str, Any]] = []
+    progress_callback = build_status_heartbeat_callback(
+        state,
+        node_name="judge",
+        template="裁判仍在评估本轮表现，已等待 {seconds} 秒...",
+    )
 
     participant_set = set(participants)
     preferred_history = (
@@ -266,6 +276,9 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
                         HumanMessage(content=instruction),
                     ],
                     override=override,
+                    on_progress=progress_callback,
+                    timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
+                    heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
                 )
                 score = _parse_score_response(response_text)
                 if isinstance(score, TurnScore):
@@ -307,6 +320,7 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
                 "scores": score_dict,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "citations": [],
+                "turn": current_turn,
             }
         )
 

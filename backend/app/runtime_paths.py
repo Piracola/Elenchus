@@ -46,6 +46,7 @@ class RuntimePaths:
     runtime_root: Path
     runtime_data_dir: Path
     runtime_backend_dir: Path
+    sessions_dir: Path
     env_file: Path
     env_example_source: Path
     env_example_runtime_file: Path
@@ -74,6 +75,7 @@ def get_runtime_paths() -> RuntimePaths:
     runtime_root = _runtime_root(default_runtime_root)
     runtime_data_dir = runtime_root / "data"
     runtime_backend_dir = runtime_root / "backend"
+    sessions_dir = runtime_root / "sessions"
     log_config_file = runtime_data_dir / "log_config.json"
 
     return RuntimePaths(
@@ -85,6 +87,7 @@ def get_runtime_paths() -> RuntimePaths:
         runtime_root=runtime_root,
         runtime_data_dir=runtime_data_dir,
         runtime_backend_dir=runtime_backend_dir,
+        sessions_dir=sessions_dir,
         env_file=runtime_backend_dir / ".env",
         env_example_source=backend_bundle_dir / ".env.example",
         env_example_runtime_file=runtime_backend_dir / ".env.example",
@@ -132,6 +135,7 @@ def prepare_runtime_environment() -> RuntimePaths:
     paths.runtime_root.mkdir(parents=True, exist_ok=True)
     paths.runtime_data_dir.mkdir(parents=True, exist_ok=True)
     paths.runtime_backend_dir.mkdir(parents=True, exist_ok=True)
+    paths.sessions_dir.mkdir(parents=True, exist_ok=True)
     paths.logs_dir.mkdir(parents=True, exist_ok=True)
 
     _copy_if_missing(paths.env_example_source, paths.env_example_runtime_file)
