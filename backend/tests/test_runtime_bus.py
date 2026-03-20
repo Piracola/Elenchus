@@ -71,3 +71,27 @@ async def test_runtime_bus_sequences_and_persists_events():
     assert event["seq"] == 5
     assert repository.persisted[0]["event_id"] == event["event_id"]
     assert captured == [("resume123456", event)]
+
+
+@pytest.mark.asyncio
+async def test_runtime_bus_repairs_mojibake_payloads_before_delivery():
+    captured: list[tuple[str, dict[str, object]]] = []
+
+    async def sink(session_id: str, message: dict[str, object]) -> None:
+        captured.append((session_id, message))
+
+    repository = _Repository()
+    bus = RuntimeBus(sink, repository=repository)
+
+    event = await bus.emit(
+        session_id="session-1",
+        event_type="error",
+        payload={"content": "杈╄鍑洪敊: Your request was blocked."},
+        source="test",
+        phase="error",
+    )
+
+    expected = "辩论出错：请求被上游模型服务拦截，请检查供应商风控或内容审核策略，或切换模型后重试。"
+    assert event["payload"]["content"] == expected
+    assert repository.persisted[0]["payload"]["content"] == expected
+    assert captured == [("session-1", event)]

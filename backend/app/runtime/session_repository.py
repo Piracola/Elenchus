@@ -7,6 +7,7 @@ from typing import Any
 from app.agents.safe_invoke import normalize_model_text
 from app.db.database import get_session_factory
 from app.services import runtime_event_service, session_service
+from app.text_repair import repair_text_tree
 
 
 def _default_team_config() -> dict[str, int]:
@@ -40,7 +41,7 @@ def _sanitize_dialogue_history(dialogue_history: Any) -> list[dict[str, Any]]:
         if not isinstance(entry, dict):
             continue
 
-        normalized_entry = dict(entry)
+        normalized_entry = repair_text_tree(dict(entry))
         content = normalized_entry.get("content")
         if isinstance(content, str) and content:
             normalized_entry["content"] = normalize_model_text(content)
@@ -101,7 +102,7 @@ class SessionRuntimeRepository:
         if not isinstance(reasoning_config, dict):
             reasoning_config = _default_reasoning_config()
 
-        return {
+        return repair_text_tree({
             "session_id": session_id,
             "topic": topic,
             "participants": (
@@ -137,7 +138,7 @@ class SessionRuntimeRepository:
                 if agent_configs is not None
                 else session_data.get("agent_configs", {})
             ),
-        }
+        })
 
     async def persist_state(self, session_id: str, state: dict[str, Any]) -> None:
         agent_configs = state.get("agent_configs", {})

@@ -14,6 +14,7 @@ from app.agents.safe_invoke import normalize_model_text
 from app.db.models import RuntimeEventRecord, SessionRecord, _gen_id, _utcnow
 from app.dependencies import get_agent_config_service
 from app.models.schemas import SessionCreate, SessionStatus
+from app.text_repair import repair_text_tree
 
 
 def _default_team_config() -> dict[str, int]:
@@ -47,7 +48,7 @@ def _sanitize_dialogue_history(dialogue_history: Any) -> list[dict[str, Any]]:
         if not isinstance(entry, dict):
             continue
 
-        normalized_entry = dict(entry)
+        normalized_entry = repair_text_tree(dict(entry))
         content = normalized_entry.get("content")
         if isinstance(content, str) and content:
             normalized_entry["content"] = normalize_model_text(content)
@@ -57,7 +58,7 @@ def _sanitize_dialogue_history(dialogue_history: Any) -> list[dict[str, Any]]:
 
 
 def _sanitize_state_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
-    sanitized = dict(snapshot)
+    sanitized = repair_text_tree(dict(snapshot))
     sanitized["dialogue_history"] = _sanitize_dialogue_history(
         sanitized.get("dialogue_history", [])
     )

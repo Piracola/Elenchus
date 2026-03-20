@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from typing import Any, NotRequired, TypedDict
 from uuid import uuid4
 
+from app.text_repair import repair_text_tree
+
 RUNTIME_EVENT_SCHEMA_VERSION = "2026-03-17"
 
 
@@ -37,7 +39,7 @@ def build_runtime_event(
     phase: str | None = None,
 ) -> RuntimeEvent:
     """Create a runtime event envelope with backward-compatible flat fields."""
-    payload_dict = dict(payload or {})
+    payload_dict = repair_text_tree(dict(payload or {}))
     event: RuntimeEvent = {
         "schema_version": RUNTIME_EVENT_SCHEMA_VERSION,
         "event_id": f"evt_{uuid4().hex[:12]}",

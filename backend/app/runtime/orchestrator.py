@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from app.runtime.engines import DebateEngine, LangGraphDebateEngine
 from app.runtime.event_emitter import EventEmitter, RuntimeEventEmitter, noop_emit_event
 from app.runtime.session_repository import SessionRuntimeRepository
+from app.text_repair import format_runtime_error_message
 
 if TYPE_CHECKING:
     from app.runtime.bus import RuntimeBus
@@ -68,13 +69,13 @@ class DebateOrchestrator:
         await self._events.emit_runtime_event(
             session_id=session_id,
             event_type="system",
-            payload={"content": f"杈╄寮€濮? {topic}"},
+            payload={"content": f"辩论开始：{topic}"},
             source="runtime.orchestrator",
         )
         await self._events.emit_runtime_event(
             session_id=session_id,
             event_type="status",
-            payload={"content": "姝ｅ湪鏁寸悊涓婁笅鏂?..", "node": "manage_context"},
+            payload={"content": "正在整理上下文...", "node": "manage_context"},
             source="runtime.orchestrator",
             phase="context",
         )
@@ -174,6 +175,7 @@ class DebateOrchestrator:
                 final_state.get("current_turn", 0),
             )
         except Exception as exc:
+            user_facing_error = format_runtime_error_message(exc)
             logger.error(
                 "Debate failed: session=%s error=%s",
                 session_id,
@@ -181,7 +183,7 @@ class DebateOrchestrator:
                 exc_info=True,
             )
             final_state["status"] = "error"
-            final_state["error"] = str(exc)
+            final_state["error"] = user_facing_error
 
             dialogue_history = final_state.get("dialogue_history")
             if not isinstance(dialogue_history, list):
@@ -191,9 +193,9 @@ class DebateOrchestrator:
             dialogue_history.append(
                 {
                     "role": "error",
-                    "content": f"绯荤粺杩愯鍑洪敊: {str(exc)}",
+                    "content": f"系统运行出错：{user_facing_error}",
                     "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-                    "agent_name": "绯荤粺",
+                    "agent_name": "系统",
                     "citations": [],
                 }
             )
@@ -203,7 +205,7 @@ class DebateOrchestrator:
             await self._events.emit_runtime_event(
                 session_id=session_id,
                 event_type="error",
-                payload={"content": f"杈╄鍑洪敊: {exc}"},
+                payload={"content": f"辩论出错：{user_facing_error}"},
                 source="runtime.orchestrator",
                 phase="error",
             )

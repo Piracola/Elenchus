@@ -8,6 +8,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import RuntimeEventRecord
+from app.text_repair import repair_text_tree
 
 
 def _record_to_dict(record: RuntimeEventRecord) -> dict[str, Any]:
@@ -20,7 +21,7 @@ def _record_to_dict(record: RuntimeEventRecord) -> dict[str, Any]:
         "source": record.source,
         "type": record.event_type,
         "phase": record.phase,
-        "payload": record.payload or {},
+        "payload": repair_text_tree(record.payload or {}),
     }
 
 
@@ -29,7 +30,7 @@ async def create_runtime_event(
     event: dict[str, Any],
 ) -> dict[str, Any]:
     """Persist a single runtime event envelope."""
-    payload = event.get("payload")
+    payload = repair_text_tree(event.get("payload"))
     record = RuntimeEventRecord(
         event_id=str(event.get("event_id", "")),
         session_id=str(event.get("session_id", "")),
