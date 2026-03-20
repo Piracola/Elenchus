@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -59,12 +60,33 @@ class DebateOrchestrator:
         if initial_state is None:
             raise ValueError(f"Session {session_id} was not found.")
 
+        last_checkpoint_node = str(initial_state.get("last_executed_node", "") or "")
+        prior_resume_count = int(initial_state.get("resume_count", 0) or 0)
+        initial_state["resume_count"] = prior_resume_count + 1
+        initial_state["runtime_event_emitter"] = self._events
+        initial_state["interrupted_at"] = None
+        initial_state["last_progress_at"] = datetime.now(timezone.utc).isoformat()
+
         logger.info(
             "Starting/Resuming debate: session=%s topic='%s' turns=%d",
             session_id,
             topic,
             max_turns,
         )
+
+        if prior_resume_count > 0 or last_checkpoint_node:
+            checkpoint_label = last_checkpoint_node or "manage_context"
+            await self._events.emit_runtime_event(
+                session_id=session_id,
+                event_type="system",
+                payload={
+                    "content": (
+                        f"从上次检查点恢复：第 {int(initial_state.get('current_turn', 0)) + 1} 轮，"
+                        f"最近稳定节点 {checkpoint_label}。"
+                    )
+                },
+                source="runtime.orchestrator.resume",
+            )
 
         await self._events.emit_runtime_event(
             session_id=session_id,
@@ -94,6 +116,7 @@ class DebateOrchestrator:
             async for state_snapshot in self._engine.stream(initial_state):
                 node_name = state_snapshot.get("last_executed_node", "")
                 final_state = dict(state_snapshot)
+                final_state["last_progress_at"] = datetime.now(timezone.utc).isoformat()
                 prev_knowledge_len = await self._events.emit_memory_updates(
                     session_id,
                     final_state,
@@ -102,6 +125,8 @@ class DebateOrchestrator:
 
                 if node_name and node_name != last_node:
                     last_node = node_name
+                    status_message, _status_phase = self._events.describe_status(node_name)
+                    final_state["last_status_message"] = status_message
                     last_status_node = await self._events.emit_status_if_changed(
                         session_id,
                         node_name,
@@ -158,6 +183,9 @@ class DebateOrchestrator:
                     await self._repository.persist_state(session_id, final_state)
 
             final_state["status"] = "completed"
+            final_state["interrupted_at"] = None
+            final_state["last_status_message"] = "辩论已完成"
+            final_state["last_progress_at"] = datetime.now(timezone.utc).isoformat()
             await self._repository.persist_state(session_id, final_state)
             await self._events.emit_runtime_event(
                 session_id=session_id,
@@ -174,6 +202,16 @@ class DebateOrchestrator:
                 session_id,
                 final_state.get("current_turn", 0),
             )
+        except asyncio.CancelledError:
+            interrupted_at = datetime.now(timezone.utc).isoformat()
+            final_state["status"] = "in_progress"
+            final_state["interrupted_at"] = interrupted_at
+            final_state["last_progress_at"] = interrupted_at
+            if last_node:
+                final_state["last_executed_node"] = last_node
+            final_state["last_status_message"] = "辩论已中断，可稍后继续恢复"
+            await self._repository.persist_state(session_id, final_state)
+            raise
         except Exception as exc:
             user_facing_error = format_runtime_error_message(exc)
             logger.error(
@@ -184,6 +222,11 @@ class DebateOrchestrator:
             )
             final_state["status"] = "error"
             final_state["error"] = user_facing_error
+            final_state["interrupted_at"] = datetime.now(timezone.utc).isoformat()
+            final_state["last_progress_at"] = final_state["interrupted_at"]
+            if last_node:
+                final_state["last_executed_node"] = last_node
+            final_state["last_status_message"] = user_facing_error
 
             dialogue_history = final_state.get("dialogue_history")
             if not isinstance(dialogue_history, list):

@@ -247,6 +247,7 @@ export type WSMessageType =
     | 'consensus_summary'
     | 'speech_start'
     | 'speech_token'
+    | 'speech_cancel'
     | 'speech_end'
     | 'fact_check_start'
     | 'fact_check_result'

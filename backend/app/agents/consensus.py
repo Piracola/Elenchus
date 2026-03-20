@@ -11,6 +11,11 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.agents.prompt_loader import get_judge_prompt
+from app.agents.runtime_progress import (
+    MODEL_HEARTBEAT_INTERVAL_SECONDS,
+    MODEL_INVOCATION_TIMEOUT_SECONDS,
+    build_status_heartbeat_callback,
+)
 from app.agents.safe_invoke import invoke_text_model, normalize_model_text
 
 logger = logging.getLogger(__name__)
@@ -92,6 +97,11 @@ async def converge_consensus(state: dict[str, Any]) -> dict[str, Any]:
         system_prompt += f"\n\n## Custom Persona Instructions\n{custom_prompt}"
 
     instruction = _build_consensus_instruction(state)
+    progress_callback = build_status_heartbeat_callback(
+        state,
+        node_name="consensus",
+        template="正在生成最终共识总结，已等待 {seconds} 秒...",
+    )
 
     try:
         content = await invoke_text_model(
@@ -100,6 +110,9 @@ async def converge_consensus(state: dict[str, Any]) -> dict[str, Any]:
                 HumanMessage(content=instruction),
             ],
             override=override if isinstance(override, dict) else None,
+            on_progress=progress_callback,
+            timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
+            heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
         )
         content = normalize_model_text(content)
     except Exception as exc:

@@ -118,6 +118,8 @@ export function useDebateWebSocket(sessionId: string | null) {
         (topic: string, participants: string[], maxTurns: number) => {
             if (ws.current?.readyState !== WebSocket.OPEN) return;
             const store = getStore();
+            store.exitReplay();
+            store.setFocusedRuntimeEventId(null);
             if (store.currentSession) {
                 store.setCurrentSession({
                     ...store.currentSession,

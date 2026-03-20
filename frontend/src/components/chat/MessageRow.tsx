@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -14,6 +15,7 @@ interface MessageRowProps {
     highlightJudge?: boolean;
     highlightSystem?: boolean;
     insightSections?: InsightSection[];
+    animateAgentContent?: boolean;
 }
 
 type RoleVisual = {
@@ -119,6 +121,61 @@ function Cursor({ color }: { color: string }) {
     );
 }
 
+function useTypewriterReveal(text: string, enabled: boolean) {
+    const [visibleLength, setVisibleLength] = useState(enabled ? 0 : text.length);
+    const frameRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        if (frameRef.current !== null) {
+            cancelAnimationFrame(frameRef.current);
+            frameRef.current = null;
+        }
+
+        if (!enabled || !text) {
+            setVisibleLength(text.length);
+            return;
+        }
+
+        setVisibleLength(0);
+        let currentLength = 0;
+        let lastTimestamp = 0;
+        const step = Math.max(1, Math.ceil(text.length / 120));
+
+        const animate = (timestamp: number) => {
+            if (lastTimestamp === 0 || timestamp - lastTimestamp >= 16) {
+                currentLength = Math.min(text.length, currentLength + step);
+                setVisibleLength(currentLength);
+                lastTimestamp = timestamp;
+            }
+
+            if (currentLength < text.length) {
+                frameRef.current = requestAnimationFrame(animate);
+            } else {
+                frameRef.current = null;
+            }
+        };
+
+        frameRef.current = requestAnimationFrame(animate);
+
+        return () => {
+            if (frameRef.current !== null) {
+                cancelAnimationFrame(frameRef.current);
+                frameRef.current = null;
+            }
+        };
+    }, [enabled, text]);
+
+    const displayText = useMemo(
+        () => (enabled ? text.slice(0, visibleLength) : text),
+        [enabled, text, visibleLength],
+    );
+
+    return {
+        displayText,
+        isAnimating: enabled && visibleLength < text.length,
+    };
+}
+
 function ScoreGrid({ judgeEntry }: { judgeEntry: NonNullable<MessageRowProps['judgeEntry']> }) {
     if (!judgeEntry.scores || Object.keys(judgeEntry.scores).length === 0) {
         return null;
@@ -219,9 +276,17 @@ export default function MessageRow({
     highlightJudge = false,
     highlightSystem = false,
     insightSections = [],
+    animateAgentContent = false,
 }: MessageRowProps) {
     const neutralColor = 'var(--color-neutral, #6b7280)';
     const rowFocused = highlightAgent || highlightJudge || highlightSystem;
+    const agentText = agentEntry?.isStreaming
+        ? agentEntry.streamingContent || ''
+        : agentEntry?.content || '';
+    const agentReveal = useTypewriterReveal(
+        agentText,
+        Boolean(agentEntry && animateAgentContent && !agentEntry.isStreaming),
+    );
 
     if (systemEntry) {
         if (systemEntry.role === 'audience') {
@@ -293,6 +358,12 @@ export default function MessageRow({
     if (!agentEntry && !judgeEntry) return null;
 
     const agentVisual = getAgentVisual(agentEntry);
+    const agentTextStyle = {
+        color: 'var(--text-primary)',
+        fontSize: '15px',
+        lineHeight: 1.7,
+        marginTop: '16px',
+    } as const;
 
     return (
         <div
@@ -379,19 +450,39 @@ export default function MessageRow({
                             </span>
                         </div>
 
-                        <div
-                            className="markdown-body"
-                            style={{
-                                color: 'var(--text-primary)',
-                                fontSize: '15px',
-                                lineHeight: 1.7,
-                                marginTop: '16px',
-                            }}
-                        >
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                {agentEntry.isStreaming ? agentEntry.streamingContent || '' : agentEntry.content || ''}
-                            </ReactMarkdown>
-                            {agentEntry.isStreaming && <Cursor color={agentVisual.color} />}
+                        <div style={{ position: 'relative' }}>
+                            {agentReveal.isAnimating && (
+                                <div
+                                    aria-hidden="true"
+                                    className="markdown-body"
+                                    data-agent-content="reserve"
+                                    style={{
+                                        ...agentTextStyle,
+                                        visibility: 'hidden',
+                                        pointerEvents: 'none',
+                                    }}
+                                >
+                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                        {agentText}
+                                    </ReactMarkdown>
+                                </div>
+                            )}
+                            <div
+                                className="markdown-body"
+                                data-agent-content="visible"
+                                style={{
+                                    ...agentTextStyle,
+                                    position: agentReveal.isAnimating ? 'absolute' : 'relative',
+                                    inset: agentReveal.isAnimating ? 0 : undefined,
+                                }}
+                            >
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                    {agentReveal.displayText}
+                                </ReactMarkdown>
+                                {(agentEntry.isStreaming || agentReveal.isAnimating) && (
+                                    <Cursor color={agentVisual.color} />
+                                )}
+                            </div>
                         </div>
                         </motion.div>
                     )}

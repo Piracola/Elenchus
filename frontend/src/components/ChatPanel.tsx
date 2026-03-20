@@ -23,6 +23,7 @@ import {
     FLOATING_INSPECTOR_RESET_EVENT,
     FLOATING_INSPECTOR_STORAGE_KEY,
 } from '../utils/floatingInspector';
+import { isElementNearBottom } from '../utils/chatScroll';
 import { toast } from '../utils/toast';
 import type { InsightSection } from './chat/RoundInsights';
 
@@ -296,6 +297,32 @@ function eventMatchesTurn(
     return typeof payloadTurn === 'number' && payloadTurn === turn;
 }
 
+function isAgentSpeechEntry(entry: DialogueEntry, participants: string[] | undefined): boolean {
+    if (participants?.includes(entry.role)) {
+        return true;
+    }
+
+    return !['judge', 'error', 'audience'].includes(entry.role);
+}
+
+function getDialogueAnimationKey(entry: DialogueEntry | null | undefined): string | null {
+    if (!entry) return null;
+    return entry.event_id || `${entry.role}:${entry.timestamp}:${entry.content.length}`;
+}
+
+function getLatestAgentSpeechKey(
+    entries: DialogueEntry[],
+    participants: string[] | undefined,
+): string | null {
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+        const entry = entries[index];
+        if (!entry || !isAgentSpeechEntry(entry, participants)) continue;
+        return getDialogueAnimationKey(entry);
+    }
+
+    return null;
+}
+
 export default function ChatPanel() {
     const {
         currentSession,
@@ -314,6 +341,8 @@ export default function ChatPanel() {
     const overlayHeightsRef = useRef<{ top: number; bottom: number } | null>(null);
     const floatingInspectorInteractionRef = useRef<FloatingInspectorInteraction | null>(null);
     const floatingInspectorRectRef = useRef<FloatingInspectorRect | null>(null);
+    const autoScrollEnabledRef = useRef(true);
+    const lastSeenAgentEntryKeyRef = useRef<string | null>(null);
 
     const [topOverlayHeight, setTopOverlayHeight] = useState(0);
     const [bottomOverlayHeight, setBottomOverlayHeight] = useState(0);
@@ -325,15 +354,46 @@ export default function ChatPanel() {
     const [floatingInspectorActive, setFloatingInspectorActive] = useState(false);
     const [floatingInspectorExpanded, setFloatingInspectorExpanded] = useState(false);
     const [exportingFormat, setExportingFormat] = useState<'markdown' | 'json' | null>(null);
+    const [animatedAgentEntryKey, setAnimatedAgentEntryKey] = useState<string | null>(null);
     const [isWideLayout, setIsWideLayout] = useState(() => {
         if (typeof window === 'undefined') return true;
         return window.innerWidth >= 1280;
     });
     const floatingInspectorWidth = floatingInspectorBounds.width;
     const floatingInspectorHeight = floatingInspectorBounds.height;
+    const latestAgentSpeechKey = useMemo(
+        () => getLatestAgentSpeechKey(
+            currentSession?.dialogue_history || [],
+            currentSession?.participants,
+        ),
+        [currentSession?.dialogue_history, currentSession?.participants],
+    );
 
     useEffect(() => {
+        autoScrollEnabledRef.current = true;
+        lastSeenAgentEntryKeyRef.current = latestAgentSpeechKey;
+        setAnimatedAgentEntryKey(null);
+    }, [currentSession?.id, latestAgentSpeechKey]);
+
+    useEffect(() => {
+        if (!currentSession?.id || !latestAgentSpeechKey) {
+            return;
+        }
+
+        const previousKey = lastSeenAgentEntryKeyRef.current;
+        if (previousKey === latestAgentSpeechKey) {
+            return;
+        }
+
+        lastSeenAgentEntryKeyRef.current = latestAgentSpeechKey;
+        if (!replayEnabled) {
+            setAnimatedAgentEntryKey(latestAgentSpeechKey);
+        }
+    }, [currentSession?.id, latestAgentSpeechKey, replayEnabled]);
+
+    useLayoutEffect(() => {
         if (replayEnabled) return;
+        if (!autoScrollEnabledRef.current) return;
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
@@ -724,6 +784,12 @@ export default function ChatPanel() {
         }
     };
 
+    const handleScroll = () => {
+        const container = scrollRef.current;
+        if (!container || replayEnabled) return;
+        autoScrollEnabledRef.current = isElementNearBottom(container);
+    };
+
     return (
         <motion.section
             initial={{ opacity: 0 }}
@@ -934,6 +1000,7 @@ export default function ChatPanel() {
 
                     <div
                         ref={scrollRef}
+                        onScroll={handleScroll}
                         style={{
                             flex: '1 1 0',
                             minWidth: 0,
@@ -1011,6 +1078,10 @@ export default function ChatPanel() {
                                             highlightJudge={focusState.judge}
                                             highlightSystem={focusState.system}
                                             insightSections={sections}
+                                            animateAgentContent={
+                                                !replayEnabled
+                                                && getDialogueAnimationKey(row.agent) === animatedAgentEntryKey
+                                            }
                                         />
                                         {!!juryEntries.length && (
                                             <div data-row-focused={juryFocused ? 'true' : 'false'}>

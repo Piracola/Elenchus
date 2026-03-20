@@ -12,6 +12,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.agents.context_builder import build_context_for_agent
 from app.agents.prompt_loader import get_debater_system_prompt
+from app.agents.runtime_progress import (
+    MODEL_HEARTBEAT_INTERVAL_SECONDS,
+    MODEL_INVOCATION_TIMEOUT_SECONDS,
+    build_status_heartbeat_callback,
+)
 from app.agents.safe_invoke import invoke_text_model, normalize_model_text
 from app.constants import ROLE_LABELS, ROLE_NAMES
 
@@ -174,6 +179,11 @@ async def team_discuss(state: dict[str, Any]) -> dict[str, Any]:
     custom_prompt = str(side_config.get("custom_prompt", "") or "")
     override = side_config if isinstance(side_config, dict) else None
     reasoning_config = state.get("reasoning_config", {})
+    progress_callback = build_status_heartbeat_callback(
+        state,
+        node_name="team_discussion",
+        template="组内讨论仍在生成，已等待 {seconds} 秒...",
+    )
 
     system_prompt = _build_system_prompt(side, custom_prompt)
     context_block = build_context_for_agent(
@@ -217,6 +227,9 @@ async def team_discuss(state: dict[str, Any]) -> dict[str, Any]:
                         HumanMessage(content=instruction),
                     ],
                     override=override,
+                    on_progress=progress_callback,
+                    timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
+                    heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
                 )
                 content = normalize_model_text(content)
             except Exception as exc:
@@ -263,6 +276,9 @@ async def team_discuss(state: dict[str, Any]) -> dict[str, Any]:
                 HumanMessage(content=summary_instruction),
             ],
             override=override,
+            on_progress=progress_callback,
+            timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
+            heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
         )
         summary_content = normalize_model_text(summary_content)
     except Exception as exc:

@@ -89,7 +89,7 @@ describe('debateStore replay state', () => {
         ]);
     });
 
-    it('restores running session state when re-opening an in-progress session', () => {
+    it('treats a persisted in-progress session as resumable instead of live-running', () => {
         useDebateStore.getState().reset();
 
         useDebateStore.getState().setCurrentSession({
@@ -100,9 +100,9 @@ describe('debateStore replay state', () => {
         useDebateStore.getState().hydrateRuntimeEvents([], false);
 
         const state = useDebateStore.getState();
-        expect(state.isDebating).toBe(true);
-        expect(state.phase).toBe('processing');
-        expect(state.currentStatus).toBe('辩论进行中...');
+        expect(state.isDebating).toBe(false);
+        expect(state.phase).toBe('idle');
+        expect(state.currentStatus).toBe('');
     });
 
     it('keeps the sidebar summary in sync with runtime progress', () => {
@@ -289,6 +289,39 @@ describe('debateStore replay state', () => {
         expect(state.runtimeEvents).toHaveLength(0);
         expect(state.visibleRuntimeEvents).toHaveLength(0);
         expect(state.lastEventSeq).toBe(-1);
+    });
+
+    it('clears transient streaming content when speech is cancelled', () => {
+        const store = useDebateStore.getState();
+
+        store.applyRuntimeEvent(
+            makeEvent({
+                event_id: 'evt_stream_start',
+                seq: 1,
+                type: 'speech_start',
+                payload: { role: 'proposer' },
+            }),
+        );
+        store.applyRuntimeEvent(
+            makeEvent({
+                event_id: 'evt_stream_token',
+                seq: 2,
+                type: 'speech_token',
+                payload: { token: '半句' },
+            }),
+        );
+        store.applyRuntimeEvent(
+            makeEvent({
+                event_id: 'evt_stream_cancel',
+                seq: 3,
+                type: 'speech_cancel',
+                payload: { role: 'proposer' },
+            }),
+        );
+
+        const state = useDebateStore.getState();
+        expect(state.streamingRole).toBe('');
+        expect(state.streamingContent).toBe('');
     });
 
     it('repairs known mojibake runtime status content on ingest', () => {

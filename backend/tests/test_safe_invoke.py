@@ -7,10 +7,14 @@ from __future__ import annotations
 import json
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 
 from app.agents import safe_invoke
 from app.agents.llm import ResolvedLLMConfig
+from app.agents.runtime_progress import (
+    MODEL_HEARTBEAT_INTERVAL_SECONDS,
+    MODEL_INVOCATION_TIMEOUT_SECONDS,
+)
 
 
 class BrokenOpenAILikeModel:
@@ -18,6 +22,18 @@ class BrokenOpenAILikeModel:
 
     async def ainvoke(self, messages):
         raise AttributeError("'str' object has no attribute 'model_dump'")
+
+    def bind_tools(self, tools):
+        return self
+
+
+class StreamingModel:
+    def __init__(self, chunks: list[AIMessageChunk]) -> None:
+        self._chunks = chunks
+
+    async def astream(self, messages):
+        for chunk in self._chunks:
+            yield chunk
 
     def bind_tools(self, tools):
         return self
@@ -36,10 +52,23 @@ async def test_invoke_chat_model_falls_back_for_openai_shape_errors(monkeypatch)
             max_tokens=1500,
         )
 
-    async def fake_invoke_openai_raw(*, messages, config, tools):
+    async def fake_invoke_openai_raw(
+        *,
+        messages,
+        config,
+        tools,
+        on_token=None,
+        on_progress=None,
+        timeout_seconds=None,
+        heartbeat_interval_seconds=None,
+    ):
         assert isinstance(messages[0], HumanMessage)
         assert config.provider_type == "openai"
         assert tools == []
+        assert on_token is None
+        assert on_progress is None
+        assert timeout_seconds == MODEL_INVOCATION_TIMEOUT_SECONDS
+        assert heartbeat_interval_seconds == MODEL_HEARTBEAT_INTERVAL_SECONDS
         return AIMessage(content="Recovered fallback response")
 
     monkeypatch.setattr(safe_invoke, "resolve_llm_config", fake_resolve_llm_config)
@@ -54,6 +83,46 @@ async def test_invoke_chat_model_falls_back_for_openai_shape_errors(monkeypatch)
 
     assert isinstance(response, AIMessage)
     assert response.content == "Recovered fallback response"
+
+
+@pytest.mark.asyncio
+async def test_invoke_chat_model_streams_tokens_and_rebuilds_message(monkeypatch):
+    tokens: list[str] = []
+
+    async def capture_token(token: str) -> None:
+        tokens.append(token)
+
+    async def fake_resolve_llm_config(_override):
+        return ResolvedLLMConfig(
+            model="gpt-4o",
+            provider_type="openai",
+            api_key="test-key",
+            api_base_url="https://example.invalid/v1",
+            custom_parameters={},
+            temperature=0.7,
+            max_tokens=1500,
+        )
+
+    monkeypatch.setattr(safe_invoke, "resolve_llm_config", fake_resolve_llm_config)
+    monkeypatch.setattr(
+        safe_invoke,
+        "create_llm_from_config",
+        lambda config, streaming=False: StreamingModel(
+            [
+                AIMessageChunk(content="Hello "),
+                AIMessageChunk(content="world"),
+            ]
+        ),
+    )
+
+    response = await safe_invoke.invoke_chat_model(
+        [HumanMessage(content="hello")],
+        on_token=capture_token,
+    )
+
+    assert isinstance(response, AIMessage)
+    assert response.content == "Hello world"
+    assert tokens == ["Hello ", "world"]
 
 
 def test_coerce_openai_response_to_ai_message_parses_tool_calls():

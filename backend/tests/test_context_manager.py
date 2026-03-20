@@ -24,7 +24,7 @@ class _DummySettings:
 async def test_compress_context_only_summarizes_new_history(monkeypatch):
     calls: list[str] = []
 
-    async def fake_invoke_text_model(messages, *, override=None, tools=None):
+    async def fake_invoke_text_model(messages, *, override=None, tools=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
         calls.append(messages[-1].content)
         return f"memo-{len(calls)}"
 

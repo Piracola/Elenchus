@@ -98,6 +98,12 @@ class DebateGraphState(TypedDict, total=False):
     status: Literal['in_progress', 'completed', 'error']
     error: str | None
     agent_configs: dict[str, dict[str, Any]]
+    runtime_event_emitter: Any
+    speech_was_streamed: bool
+    last_progress_at: str
+    last_status_message: str
+    resume_count: int
+    interrupted_at: str | None
     
     # Node execution tracking
     last_executed_node: str  # Name of the most recently executed node
@@ -119,6 +125,8 @@ async def node_manage_context(state: DebateGraphState) -> dict[str, Any]:
         knowledge,
         agent_configs,
         compressed_history_count=compressed_history_count,
+        session_id=str(state.get("session_id", "") or ""),
+        runtime_event_emitter=state.get("runtime_event_emitter"),
     )
 
     # Compute delta: only items added by compression (memos not already in knowledge)
@@ -276,6 +284,7 @@ async def node_advance_turn(state: DebateGraphState) -> dict[str, Any]:
         "current_team_summary": None,
         "current_jury_discussion": [],
         "current_jury_summary": None,
+        "speech_was_streamed": False,
         "last_executed_node": "advance_turn",
     }
 

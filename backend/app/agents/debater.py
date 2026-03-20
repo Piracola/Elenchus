@@ -14,6 +14,11 @@ from langgraph.graph.message import RemoveMessage
 
 from app.agents.context_builder import build_context_for_agent
 from app.agents.prompt_loader import get_debater_system_prompt
+from app.agents.runtime_progress import (
+    MODEL_HEARTBEAT_INTERVAL_SECONDS,
+    MODEL_INVOCATION_TIMEOUT_SECONDS,
+    build_status_heartbeat_callback,
+)
 from app.agents.safe_invoke import (
     extract_text_content,
     invoke_chat_model,
@@ -131,6 +136,7 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
     agent_name = role_config.get("custom_name", ROLE_NAMES.get(role, role))
     custom_prompt = role_config.get("custom_prompt", "")
     tool_rounds = _count_tool_rounds(messages)
+    runtime_event_emitter = state.get("runtime_event_emitter")
 
     logger.info(
         "Debater [%s] ('%s') speaking - turn %d/%d",
@@ -201,19 +207,60 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
 
     override = agent_configs.get(role, agent_configs.get("debater"))
     skills = list(get_all_skills()) if tool_rounds < 2 else []
+    speech_started = False
+    progress_callback = build_status_heartbeat_callback(
+        state,
+        node_name="speaker",
+        template="辩手仍在生成发言，已等待 {seconds} 秒...",
+    )
+
+    async def handle_token(token: str) -> None:
+        nonlocal speech_started
+        if not runtime_event_emitter or not token:
+            return
+        if not speech_started:
+            await runtime_event_emitter.emit_speech_start(
+                state.get("session_id", ""),
+                role=role,
+                agent_name=agent_name,
+                turn=current_turn,
+            )
+            speech_started = True
+        await runtime_event_emitter.emit_speech_token(
+            state.get("session_id", ""),
+            role=role,
+            agent_name=agent_name,
+            token=token,
+            turn=current_turn,
+        )
+
     response = await invoke_chat_model(
         payload_messages,
         override=override,
         tools=skills or None,
+        on_token=handle_token,
+        on_progress=progress_callback,
+        timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
+        heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
     )
 
     if hasattr(response, "tool_calls") and response.tool_calls:
+        if speech_started and runtime_event_emitter:
+            await runtime_event_emitter.emit_speech_cancel(
+                state.get("session_id", ""),
+                role=role,
+                agent_name=agent_name,
+                turn=current_turn,
+            )
         logger.info(
             "Debater [%s] requested tools: %s",
             role,
             [call["name"] for call in response.tool_calls],
         )
-        return {"messages": [response]}
+        return {
+            "messages": [response],
+            "speech_was_streamed": False,
+        }
 
     response_content = response.content if hasattr(response, "content") else response
     content = normalize_model_text(extract_text_content(response_content))
@@ -250,4 +297,5 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
         "dialogue_history": [entry],
         "recent_dialogue_history": [*recent_dialogue_history, entry],
         "messages": [RemoveMessage(id=message.id) for message in messages if message.id],
+        "speech_was_streamed": speech_started,
     }

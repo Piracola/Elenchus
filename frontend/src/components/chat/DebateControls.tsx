@@ -19,7 +19,8 @@ function ActiveSessionControls() {
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
 
     const maxTurns = parseMaxTurnsInput(maxTurnsInput);
-    const sessionIsRunning = isDebating || currentSession?.status === 'in_progress';
+    const sessionIsRunning = isDebating;
+    const canResumeSession = !sessionIsRunning && currentSession?.status === 'in_progress';
 
     const handleSendIntervention = () => {
         if (!interventionText.trim() || !isConnected) return;
@@ -171,7 +172,7 @@ function ActiveSessionControls() {
                             flexShrink: 0,
                         }}
                     >
-                        开始辩论
+                        {canResumeSession ? '继续辩论' : '开始辩论'}
                     </motion.button>
                     <motion.button
                         whileHover={isConnected && interventionText.trim() ? { scale: 1.02 } : {}}

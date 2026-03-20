@@ -24,7 +24,7 @@ def _score_payload(score: int = 8) -> dict[str, object]:
 
 @pytest.mark.asyncio
 async def test_judge_score_parses_json_wrapped_in_markdown(monkeypatch):
-    async def fake_invoke_text_model(messages, *, override=None, tools=None):
+    async def fake_invoke_text_model(messages, *, override=None, tools=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
         payload = json.dumps(_score_payload(), ensure_ascii=False, indent=2)
         return f"```json\n{payload}\n```"
 
@@ -92,7 +92,7 @@ def test_default_scores_use_localized_fallback_comment():
 async def test_judge_uses_dialogue_history_when_recent_is_stale(monkeypatch):
     captured_instructions: list[str] = []
 
-    async def fake_invoke_text_model(messages, *, override=None, tools=None):
+    async def fake_invoke_text_model(messages, *, override=None, tools=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
         captured_instructions.append(messages[-1].content)
         return json.dumps(_score_payload(), ensure_ascii=False)
 

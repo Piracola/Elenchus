@@ -9,6 +9,11 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from app.agents.runtime_progress import (
+    MODEL_HEARTBEAT_INTERVAL_SECONDS,
+    MODEL_INVOCATION_TIMEOUT_SECONDS,
+    build_status_heartbeat_callback,
+)
 from app.agents.safe_invoke import invoke_text_model
 from app.config import get_settings
 
@@ -31,6 +36,8 @@ async def compress_context(
     agent_configs: dict[str, Any] | None = None,
     *,
     compressed_history_count: int = 0,
+    session_id: str = "",
+    runtime_event_emitter: Any | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
     """
     Compress older dialogue entries into shared knowledge memo entries.
@@ -56,6 +63,14 @@ async def compress_context(
     recent_entries = dialogue_history[compress_upto:]
     new_knowledge = list(shared_knowledge)
     override = (agent_configs or {}).get("fact_checker")
+    progress_callback = build_status_heartbeat_callback(
+        {
+            "runtime_event_emitter": runtime_event_emitter,
+            "session_id": session_id,
+        },
+        node_name="manage_context",
+        template="正在整理上下文，已等待 {seconds} 秒...",
+    )
 
     for entry in old_entries:
         if entry.get("role") == "system" or entry.get("type") == "memo":
@@ -75,6 +90,9 @@ async def compress_context(
                     HumanMessage(content=prompt),
                 ],
                 override=override,
+                on_progress=progress_callback,
+                timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
+                heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
             )
             new_knowledge.append(
                 {

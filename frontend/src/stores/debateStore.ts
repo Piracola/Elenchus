@@ -312,9 +312,11 @@ function getSessionRuntimeFallback(session: Session | null): {
 
     if (session.status === 'in_progress') {
         return {
-            isDebating: true,
-            phase: 'processing',
-            status: '辩论进行中...',
+            // Persisted "in_progress" means the session can be resumed,
+            // not that a live runtime task still exists after a restart.
+            isDebating: false,
+            phase: 'idle',
+            status: '',
             node: '',
         };
     }
@@ -579,6 +581,11 @@ export const useDebateStore = create<DebateState>((set) => ({
 
                 case 'speech_token':
                     patch.streamingContent = `${state.streamingContent}${getPayloadString(payload, 'token') ?? ''}`;
+                    break;
+
+                case 'speech_cancel':
+                    patch.streamingRole = '';
+                    patch.streamingContent = '';
                     break;
 
                 case 'speech_end': {

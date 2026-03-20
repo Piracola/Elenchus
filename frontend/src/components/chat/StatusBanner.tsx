@@ -42,6 +42,7 @@ export default function StatusBanner() {
     const focusedEvent = focusedRuntimeEventId
         ? visibleRuntimeEvents.find((event) => event.event_id === focusedRuntimeEventId) ?? null
         : null;
+    const liveFocusedEvent = replayEnabled ? focusedEvent : null;
     const latestVisibleEvent = visibleRuntimeEvents.length
         ? visibleRuntimeEvents[visibleRuntimeEvents.length - 1]
         : null;
@@ -55,17 +56,24 @@ export default function StatusBanner() {
         })
         : null;
     const replayCursorDisplay = Math.max(0, replayCursor + 1);
-    const sessionIsRunning = isDebating || currentSession?.status === 'in_progress';
-    const displayStatus = focusedEvent
-        ? `定位事件 #${focusedEvent.seq} · ${focusedEvent.type}`
+    const sessionIsRunning = isDebating;
+    const resumableSession = !sessionIsRunning && currentSession?.status === 'in_progress';
+    const displayStatus = liveFocusedEvent
+        ? `定位事件 #${liveFocusedEvent.seq} · ${liveFocusedEvent.type}`
         : replayEnabled
             ? `回放 ${replayCursorDisplay}/${runtimeEvents.length}${replayEvent ? ` · ${replayEvent.type}` : ''}`
-            : (currentStatus || (sessionIsRunning ? '辩论进行中...' : ''));
-    const focusedNodeLabel = getLiveGraphNodeLabel(getEventNode(focusedEvent ?? replayEvent));
+            : (
+                currentStatus
+                || (sessionIsRunning
+                    ? '辩论进行中...'
+                    : (resumableSession ? '历史进度已恢复，可继续辩论' : ''))
+            );
+    const focusedNodeLabel = getLiveGraphNodeLabel(getEventNode(liveFocusedEvent ?? replayEvent));
 
     const hasStatus =
+        Boolean(displayStatus) ||
         sessionIsRunning ||
-        !((!isDebating || phase === 'idle' || phase === 'complete') && !focusedEvent && !replayEnabled);
+        !((!isDebating || phase === 'idle' || phase === 'complete') && !liveFocusedEvent && !replayEnabled);
 
     if (!hasStatus) {
         return null;
@@ -98,7 +106,7 @@ export default function StatusBanner() {
                         width: '6px',
                         height: '6px',
                         borderRadius: '50%',
-                        background: replayEnabled || focusedEvent
+                        background: replayEnabled || liveFocusedEvent
                             ? 'var(--accent-indigo)'
                             : 'var(--accent-cyan)',
                     }}
@@ -122,7 +130,7 @@ export default function StatusBanner() {
                 alignItems: 'center',
                 gap: '8px',
                 border: '1px solid var(--border-subtle)',
-                boxShadow: focusedEvent
+                boxShadow: liveFocusedEvent
                     ? '0 4px 20px rgba(99, 102, 241, 0.16)'
                     : '0 4px 20px rgba(0,0,0,0.08)',
                 backdropFilter: 'blur(12px)',
@@ -137,7 +145,7 @@ export default function StatusBanner() {
                     width: '7px',
                     height: '7px',
                     borderRadius: '50%',
-                    background: replayEnabled || focusedEvent
+                    background: replayEnabled || liveFocusedEvent
                         ? 'var(--accent-indigo)'
                         : 'var(--accent-cyan)',
                     flexShrink: 0,

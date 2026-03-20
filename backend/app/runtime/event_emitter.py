@@ -75,16 +75,19 @@ class RuntimeEventEmitter:
         await self._emit_event(session_id, fallback_message)
 
     async def emit_status(self, session_id: str, node_name: str) -> None:
-        status_msg, phase = _NODE_STATUS.get(
-            node_name,
-            (f"处理中: {node_name}", "processing"),
-        )
+        status_msg, phase = self.describe_status(node_name)
         await self.emit_runtime_event(
             session_id=session_id,
             event_type="status",
             payload={"content": status_msg, "node": node_name},
             phase=phase,
             source=f"runtime.node.{node_name}",
+        )
+
+    def describe_status(self, node_name: str) -> tuple[str, str]:
+        return _NODE_STATUS.get(
+            node_name,
+            (f"处理中: {node_name}", "processing"),
         )
 
     async def emit_status_if_changed(
@@ -98,6 +101,68 @@ class RuntimeEventEmitter:
 
         await self.emit_status(session_id, node_name)
         return node_name
+
+    async def emit_speech_start(
+        self,
+        session_id: str,
+        *,
+        role: str,
+        agent_name: str,
+        turn: int | None,
+    ) -> None:
+        await self.emit_runtime_event(
+            session_id=session_id,
+            event_type="speech_start",
+            payload={
+                "role": role,
+                "agent_name": agent_name,
+                "turn": turn,
+            },
+            source="runtime.node.speaker",
+            phase="speaking",
+        )
+
+    async def emit_speech_token(
+        self,
+        session_id: str,
+        *,
+        role: str,
+        agent_name: str,
+        token: str,
+        turn: int | None,
+    ) -> None:
+        await self.emit_runtime_event(
+            session_id=session_id,
+            event_type="speech_token",
+            payload={
+                "role": role,
+                "agent_name": agent_name,
+                "token": token,
+                "turn": turn,
+            },
+            source="runtime.node.speaker",
+            phase="speaking",
+        )
+
+    async def emit_speech_cancel(
+        self,
+        session_id: str,
+        *,
+        role: str,
+        agent_name: str,
+        turn: int | None,
+    ) -> None:
+        await self.emit_runtime_event(
+            session_id=session_id,
+            event_type="speech_cancel",
+            payload={
+                "role": role,
+                "agent_name": agent_name,
+                "turn": turn,
+            },
+            source="runtime.node.speaker",
+            phase="speaking",
+        )
 
     def predict_next_status_node(
         self,
@@ -167,17 +232,14 @@ class RuntimeEventEmitter:
             return prev_history_len
 
         latest = history[-1]
-        await self.emit_runtime_event(
-            session_id=session_id,
-            event_type="speech_start",
-            payload={
-                "role": latest.get("role", ""),
-                "agent_name": latest.get("agent_name", ""),
-                "turn": latest.get("turn"),
-            },
-            source="runtime.node.speaker",
-            phase="speaking",
-        )
+        already_streamed = bool(final_state.get("speech_was_streamed"))
+        if not already_streamed:
+            await self.emit_speech_start(
+                session_id,
+                role=latest.get("role", ""),
+                agent_name=latest.get("agent_name", ""),
+                turn=latest.get("turn"),
+            )
         await self.emit_runtime_event(
             session_id=session_id,
             event_type="speech_end",

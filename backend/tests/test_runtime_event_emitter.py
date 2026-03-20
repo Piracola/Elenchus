@@ -176,3 +176,29 @@ async def test_emit_jury_discussion_uses_separate_event_types():
         "jury_summary",
         "consensus_summary",
     ]
+
+
+@pytest.mark.asyncio
+async def test_emit_speech_skips_duplicate_start_when_tokens_already_streamed():
+    bus = _FakeRuntimeBus()
+    emitter = RuntimeEventEmitter(runtime_bus=bus)
+
+    count = await emitter.emit_speech(
+        "session-1",
+        {
+            "speech_was_streamed": True,
+            "dialogue_history": [
+                {
+                    "role": "proposer",
+                    "agent_name": "正方",
+                    "content": "实时输出完成",
+                    "turn": 0,
+                    "citations": [],
+                }
+            ],
+        },
+        0,
+    )
+
+    assert count == 1
+    assert [event["type"] for event in bus.events] == ["speech_end"]

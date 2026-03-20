@@ -1,5 +1,6 @@
+import { act, render, screen } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { DialogueEntry } from '../../types';
 import MessageRow from './MessageRow';
@@ -16,6 +17,10 @@ function makeEntry(overrides: Partial<DialogueEntry>): DialogueEntry {
 }
 
 describe('MessageRow', () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
     it('renders additional participants without falling back to opposer labels', () => {
         const markup = renderToStaticMarkup(
             <MessageRow
@@ -44,5 +49,27 @@ describe('MessageRow', () => {
 
         expect(markup).toContain('Proposer');
         expect(markup).not.toContain('&gt;proposer&lt;');
+    });
+
+    it('reveals live agent content progressively when typewriter animation is enabled', () => {
+        vi.useFakeTimers();
+        render(
+            <MessageRow
+                agentEntry={makeEntry({
+                    content: 'Typewriter example',
+                })}
+                animateAgentContent
+            />,
+        );
+
+        const visibleContent = document.querySelector('[data-agent-content="visible"]');
+        expect(visibleContent?.textContent).not.toContain('Typewriter example');
+
+        act(() => {
+            vi.advanceTimersByTime(1000);
+        });
+
+        expect(screen.getByText('Typewriter example')).toBeInTheDocument();
+        expect(visibleContent?.textContent).toContain('Typewriter example');
     });
 });
