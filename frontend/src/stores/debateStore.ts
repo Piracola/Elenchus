@@ -438,6 +438,10 @@ export const useDebateStore = create<DebateState>((set) => ({
     applyRuntimeEvent: (rawEvent) =>
         set((state) => {
             const event = sanitizeRuntimeEvent(rawEvent);
+            if (event.type === 'pong') {
+                return {};
+            }
+
             if (state.currentSession && event.session_id && event.session_id !== state.currentSession.id) {
                 return {};
             }

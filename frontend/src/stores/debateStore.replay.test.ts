@@ -273,6 +273,24 @@ describe('debateStore replay state', () => {
         expect(state.runtimeEvents[1499].event_id).toBe('evt_1500');
     });
 
+    it('ignores websocket pong events in runtime history', () => {
+        const store = useDebateStore.getState();
+
+        store.applyRuntimeEvent(
+            makeEvent({
+                event_id: 'evt_pong',
+                seq: 1,
+                type: 'pong',
+                payload: {},
+            }),
+        );
+
+        const state = useDebateStore.getState();
+        expect(state.runtimeEvents).toHaveLength(0);
+        expect(state.visibleRuntimeEvents).toHaveLength(0);
+        expect(state.lastEventSeq).toBe(-1);
+    });
+
     it('repairs known mojibake runtime status content on ingest', () => {
         const store = useDebateStore.getState();
         store.applyRuntimeEvent(
