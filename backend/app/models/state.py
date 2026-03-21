@@ -23,6 +23,7 @@ DialogueRole = Literal[
     'proposer',
     'opposer',
     'judge',
+    'observer',
     'system',
     'error',
     'audience',
@@ -32,6 +33,8 @@ DialogueRole = Literal[
     'jury_member',
     'jury_summary',
     'consensus_summary',
+    'sophistry_round_report',
+    'sophistry_final_report',
 ]
 
 

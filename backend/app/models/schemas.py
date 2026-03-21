@@ -23,6 +23,11 @@ class SessionStatus(str, Enum):
     ERROR = "error"
 
 
+class DebateMode(str, Enum):
+    STANDARD = "standard"
+    SOPHISTRY_EXPERIMENT = "sophistry_experiment"
+
+
 class DocumentStatus(str, Enum):
     UPLOADED = "uploaded"
     PROCESSING = "processing"
@@ -60,6 +65,14 @@ class ReasoningConfig(BaseModel):
     consensus_enabled: bool = True
 
 
+class SophistryModeConfig(BaseModel):
+    """Optional knobs for the standalone sophistry experiment mode."""
+
+    seed_reference_enabled: bool = True
+    observer_enabled: bool = True
+    artifact_detail_level: str = Field(default="full")
+
+
 class SessionCreate(BaseModel):
     """Payload to create a new debate session."""
 
@@ -79,6 +92,8 @@ class SessionCreate(BaseModel):
     team_config: TeamConfig = Field(default_factory=TeamConfig)
     jury_config: JuryConfig = Field(default_factory=JuryConfig)
     reasoning_config: ReasoningConfig = Field(default_factory=ReasoningConfig)
+    debate_mode: DebateMode = Field(default=DebateMode.STANDARD)
+    mode_config: dict[str, Any] = Field(default_factory=dict)
 
 
 class ModelConfigCreate(BaseModel):
@@ -110,6 +125,8 @@ class SessionResponse(BaseModel):
 
     id: str
     topic: str
+    debate_mode: DebateMode = DebateMode.STANDARD
+    mode_config: dict[str, Any] = Field(default_factory=dict)
     participants: list[str]
     max_turns: int
     current_turn: int
@@ -126,6 +143,9 @@ class SessionResponse(BaseModel):
     team_config: TeamConfig = Field(default_factory=TeamConfig)
     jury_config: JuryConfig = Field(default_factory=JuryConfig)
     reasoning_config: ReasoningConfig = Field(default_factory=ReasoningConfig)
+    mode_artifacts: list[dict[str, Any]] = Field(default_factory=list)
+    current_mode_report: dict[str, Any] | None = None
+    final_mode_report: dict[str, Any] | None = None
 
 
 class SessionListItem(BaseModel):
@@ -133,6 +153,7 @@ class SessionListItem(BaseModel):
 
     id: str
     topic: str
+    debate_mode: DebateMode = DebateMode.STANDARD
     status: SessionStatus
     current_turn: int
     max_turns: int

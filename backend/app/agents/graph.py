@@ -69,6 +69,8 @@ class DebateGraphState(TypedDict, total=False):
 
     session_id: str
     topic: str
+    debate_mode: str
+    mode_config: dict[str, Any]
     participants: list[str]
     current_turn: int
     max_turns: int
@@ -94,6 +96,10 @@ class DebateGraphState(TypedDict, total=False):
 
     current_scores: dict[str, Any]
     cumulative_scores: dict[str, Any]
+    mode_artifacts: Annotated[list[dict[str, Any]], add]
+    current_mode_report: dict[str, Any] | None
+    final_mode_report: dict[str, Any] | None
+    builtin_reference_docs: list[dict[str, Any]]
 
     status: Literal['in_progress', 'completed', 'error']
     error: str | None

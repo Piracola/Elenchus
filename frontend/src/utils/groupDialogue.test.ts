@@ -66,4 +66,18 @@ describe('groupDialogue', () => {
     expect(result[0].judge?.content).toBe('Scores turn 1')
     expect(result[1].judge).toBeNull()
   })
+
+  it('should attach sophistry observer reports to the latest speaker row of the turn', () => {
+    const entries: DialogueEntry[] = [
+      { role: 'proposer', agent_name: 'Proposer', content: 'Opening', timestamp: '2024-01-01T00:00:00Z', citations: [], turn: 0 },
+      { role: 'opposer', agent_name: 'Opposer', content: 'Response', timestamp: '2024-01-01T00:00:30Z', citations: [], turn: 0 },
+      { role: 'sophistry_round_report', agent_name: 'Observer', content: 'Detected a false dichotomy.', timestamp: '2024-01-01T00:01:00Z', citations: [], turn: 0 },
+    ]
+
+    const result = groupDialogue(entries)
+
+    expect(result).toHaveLength(2)
+    expect(result[1].agent?.role).toBe('opposer')
+    expect(result[1].judge?.role).toBe('sophistry_round_report')
+  })
 })

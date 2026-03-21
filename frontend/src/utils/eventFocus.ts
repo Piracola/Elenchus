@@ -53,6 +53,18 @@ export function resolveRowFocus(row: DialogueRow, event: RuntimeEvent | null): R
         return EMPTY_FOCUS;
     }
 
+    if (event.type === 'sophistry_round_report' || event.type === 'sophistry_final_report') {
+        const turn = payloadNumber(event, 'turn');
+        if (
+            row.judge &&
+            row.judge.role === event.type &&
+            (turn !== undefined ? row.judge.turn === turn : true)
+        ) {
+            return { agent: false, judge: true, system: false };
+        }
+        return EMPTY_FOCUS;
+    }
+
     if (event.type === 'team_discussion' || event.type === 'team_summary') {
         const turn = payloadNumber(event, 'turn');
         const side = payloadString(event, 'team_side') ?? payloadString(event, 'source_role');

@@ -1,48 +1,114 @@
 # Elenchus
 
-Elenchus 是一个基于 `LangGraph + FastAPI + React 19` 的多智能体辩论实验平台，支持实时辩论、运行时回放、陪审团评议、搜索增强和本地运行时持久化。
+Elenchus 是一个基于 `LangGraph + FastAPI + React 19` 的多智能体辩论实验平台，用来观察不同辩论流程、提示词和运行时编排如何影响一场辩论。
 
-> 本 README 按仓库当前主线状态整理（截至 2026-03-20）。
-> 说明：仓库当前可见 Git tag 为 `v1.0.0`，下文优先反映最近提交与工作区最新改动，而不是旧版发布文案。
+当前主线包含两套明确分离的模式：
 
-## 近期演进
+- `标准辩论模式`：保留裁判评分、陪审团评议、搜索增强和常规推理增强。
+- `诡辩实验模式`：使用独立 prompt、独立 graph、独立视觉提示和独立产物，不提供裁判评分，也不允许搜索。
 
-### 最近提交（2026-03-18 ~ 2026-03-20）
+## 诡辩实验模式
 
-- `ffb63ec` / `086c8a2` / `ea73651`：修复运行观察器 UI、模型 HTML 响应误判和 `safe_invoke` 依赖问题，补齐基础稳定性。
-- `17cef39` / `5415038` / `80c9569` / `c0e9187` / `4fbf261`：重构运行时与模型调用链，加入陪审团评议、模型温度与搜索配置增强，完善会话恢复和启动流程。
-- `46e6f61` / `dc034d9` / `b8ffa09`：运行事件持久化改为 `events.jsonl`，每轮结果单独落盘为 JSON，增强辩论中断恢复与实时流式交互，并过滤 `pong` 心跳噪声。
+`诡辩实验模式` 是这次功能扩展的核心。它不是在标准模式上追加几个开关，而是一条单独的实验链路，目标是把“诡辩如何发生、如何被识别、如何改变叙事重心”变成可观察对象。
 
-### 工作区最新改动（未提交）
+这个模式当前已经具备以下能力：
 
-- 新增会话级参考资料接口：`POST/GET/DELETE /api/sessions/{session_id}/documents...`
-- 支持 `.txt` / `.md` 上传、文本解码、规范化和短摘要生成，后端新增 `python-multipart` 依赖。
-- 上传资料按 session 落盘到 `runtime/sessions/<session_id>/documents/`，删除会话时会同步清理资料文件。
-- 结构化资料池与预处理骨架已经存在，但当前工作区仍以“资料接入层”落地为主。
+- 主界面提供独立模式入口，并在启用时显示风险提示。
+- 会话界面顶部持续显示模式提醒，明确说明这里的输出不代表事实结论。
+- 消息界面使用淡黄色主题，核心背景色为 `#fcfaf8`。
+- 搜索在 UI、Prompt 和 Runtime 三层同时禁用，避免和常规模式混淆。
+- 不启用陪审团、不启用裁判评分、不输出胜负结论。
+- 每轮结束后由 `诡辩观察员` 生成观察报告，替代评分型产物。
+- 整场结束后生成最终总览报告，帮助用户回看整场修辞操控轨迹。
+- 每次启动该模式时，都会自动把内置谬误库加载到公共文档池与 `shared_knowledge`。
 
-## 当前能力边界
+### 模式规则
 
-- REST + WebSocket 双通道协作：REST 管理会话与历史，WebSocket 负责实时事件、启动、停止和介入。
-- LangGraph 负责辩手、裁判、组内讨论、陪审团评议、搜索工具与共享知识的编排。
-- 会话运行历史支持分页回放与按轮次结果查看。
-- Provider、模型参数、搜索配置、日志配置与运行时目录已经收口到统一启动链路。
-- 会话资料池当前已完成后端 Phase 1：上传、列表、详情、删除；前端入口与结构化资料 API 仍待接入。
+诡辩模式下的辩手 prompt 被单独设计，重点不是“胡搅蛮缠”，而是“看起来像有道理的操控性论证”。当前系统要求模型：
 
-## 系统结构
+- 优先使用看起来像合理论证的诡辩。
+- 避免纯辱骂、胡搅蛮缠、无意义重复。
+- 尽量让观察员有可分析空间。
+- 主动指出对手的诡辩，并尽量引用短句进行点名。
+- 不搜索、不伪造来源、不假装做过外部核验。
 
-- 前端：`React 19 + Vite 7 + Zustand`，负责会话列表、主对话区、运行观察器、配置面板与实时事件渲染。
-- 后端：`FastAPI` 提供 `sessions`、`websocket`、`models`、`log`、`search` 等 API。
-- Agent Runtime：`LangGraph + LangChain` 驱动辩手、裁判、组内讨论、陪审团评议、上下文压缩与搜索调用。
-- 持久化：`runtime/elenchus.db` 保存数据库型配置，`runtime/sessions/<session_id>/` 保存会话快照、事件流、轮次结果和资料文件。
+### 模式运行流
 
-## 快速启动（开发模式）
+诡辩实验模式使用独立 LangGraph：
+
+```text
+manage_context
+  -> set_speaker
+  -> sophistry_speaker
+  -> set_speaker (next speaker)
+  -> sophistry_observer
+  -> advance_turn
+  -> manage_context (next turn)
+  -> sophistry_postmortem
+  -> end
+```
+
+它和标准模式最重要的区别是：
+
+- 双方辩手都先完成本轮公开发言，再由观察员生成回合报告。
+- 不走 `judge`、`jury_discussion`、`tool_executor`、`consensus` 等标准链路。
+- 最终产物是观察报告，不是分数。
+
+### 非评分产物
+
+诡辩模式下，用户看到的是“可读的实验结果”，而不是“谁赢了几分”：
+
+- `sophistry_round_report`：每轮观察报告，概括叙事漂移、主要谬误、指控是否站得住脚、下一轮脆弱点。
+- `sophistry_final_report`：整场总览，汇总高频套路、关键转折、争议标签和观看提醒。
+
+这些产物会进入：
+
+- 会话 `dialogue_history`
+- `mode_artifacts`
+- 右侧原裁判评分区域对应的位置
+
+## 会话资料池与内置文档
+
+项目当前同时支持两类会话资料来源：
+
+- 用户上传的 `.txt` / `.md` 文档
+- 运行时自动注入的内置参考文档
+
+诡辩实验模式会自动注入：
+
+- [`docs/sophistry-fallacy-catalog.md`](./docs/sophistry-fallacy-catalog.md)
+
+运行时会把它写入当前 session 的：
+
+- `documents/<document_id>.json`
+- `reference_entries/<document_id>.json`
+- `shared_knowledge`
+
+内置文档固定使用 `document_id = builtin-sophistry-fallacy-catalog`，并在 `builtin_reference_docs` 中登记，避免重复加载。
+
+## 当前能力概览
+
+- REST + WebSocket 双通道：REST 管理会话与历史，WebSocket 负责实时事件、启动、停止和介入。
+- LangGraph 运行时：支持标准辩论链路和独立的诡辩实验链路。
+- 会话级持久化：`session.json`、`events.jsonl`、`rounds/*.json`、`documents/*.json`。
+- 实时观察与回放：聊天流、时间线、运行图和节点状态都能按事件恢复。
+- 会话资料池：支持上传、列表、详情、删除，以及模式内置参考文档注入。
+
+## 项目结构
+
+- `frontend/`：React 19 + Vite 7 + Zustand，负责会话创建、聊天界面、运行观察器和回放 UI。
+- `backend/`：FastAPI API、LangGraph Runtime、Session 持久化和文档服务。
+- `docs/`：架构说明、模式设计、谬误目录和其他实现文档。
+- `runtime/`：本地运行时目录，保存数据库、日志、session 快照、事件流和资料文件。
+
+## 快速启动
 
 ### 前提
 
 - Python 3.10+
 - Node.js 18+
 
-### 推荐方式
+### 开发模式
 
 Windows：
 
@@ -63,16 +129,12 @@ chmod +x ./start.sh
 ./start.sh
 ```
 
-根目录也提供 `npm run dev`，用于同时拉起前后端开发服务。
-
 默认地址：
 
 - 前端：`http://localhost:5173`
 - 后端：`http://localhost:8001`
 
-## 运行时数据目录
-
-无论开发模式还是打包版，运行时数据都统一在根目录 `runtime/` 下：
+## 运行时目录
 
 ```text
 runtime/
@@ -97,50 +159,17 @@ runtime/
 
 说明：
 
-- `session.json` 保存会话快照与轻量运行态。
-- `events.jsonl` 保存实时事件历史，便于恢复与回放。
-- `rounds/` 保存已完成轮次的独立 JSON 结果。
-- `documents/` 保存会话级参考资料原文、规范化文本与摘要。
-- `reference_entries/` 预留给结构化资料池，当前代码中已有服务骨架，但公开链路尚未完全接通。
-
-升级版本时，只要保留 `runtime/` 目录即可迁移大部分本地配置与数据。
-
-## 打包发布（Windows EXE）
-
-> 以下步骤给维护者使用，用于产出发行包。
-
-### 1. 构建前端
-
-```powershell
-npm --prefix frontend run build
-```
-
-### 2. 构建便携版 EXE 发行包
-
-```powershell
-python scripts/build_pyinstaller_release.py --version <version>
-```
-
-产物默认输出到 `dist/releases/`：
-
-- `elenchus-portable-<version>-windows/`
-- `elenchus-portable-<version>-windows.zip`
-- `elenchus-portable-<version>-windows.zip.sha256`
-
-## GitHub Actions 发布
-
-CI 已切换为 EXE 发布流程：
-
-- [build-portable-release.yml](./.github/workflows/build-portable-release.yml)
-
-触发方式：
-
-- 推送 `v*` tag 自动构建并发布
-- `workflow_dispatch` 手动发布（支持填写版本号、标题、发布说明）
+- `session.json` 保存会话快照、模式配置、共享知识和模式产物。
+- `events.jsonl` 保存实时事件历史，用于回放和恢复。
+- `rounds/*.json` 保存按轮次固化的结果。
+- `documents/*.json` 保存上传文档和内置参考文档。
+- `reference_entries/*.json` 保存结构化资料条目。
 
 ## 文档入口
 
-- 当前架构说明：[docs/architecture.md](./docs/architecture.md)
-- 后端文档：[backend/README.md](./backend/README.md)
-- 前端文档：[frontend/README.md](./frontend/README.md)
-- 文档导航：[docs/README.md](./docs/README.md)
+- [当前架构说明](./docs/architecture.md)
+- [诡辩实验模式设计文档](./docs/sophistry-experiment-mode-design.md)
+- [诡辩实验模式谬误目录](./docs/sophistry-fallacy-catalog.md)
+- [文档导航](./docs/README.md)
+- [后端说明](./backend/README.md)
+- [前端说明](./frontend/README.md)

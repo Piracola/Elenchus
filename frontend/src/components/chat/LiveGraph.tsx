@@ -7,13 +7,12 @@ import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useDebateStore } from '../../stores/debateStore';
 import {
-    LIVE_GRAPH_EDGES,
-    LIVE_GRAPH_NODES,
     buildNodeHeat,
     edgeId,
     eventToGraphNode,
     findLatestEventIdByNode,
     findPreviousNode,
+    getLiveGraphDefinition,
     getLiveGraphNodeLabel,
     hasEdge,
 } from '../../utils/liveGraph';
@@ -23,11 +22,14 @@ const NODE_COLOR: Record<string, string> = {
     set_speaker: 'var(--accent-indigo)',
     team_discussion: 'var(--accent-cyan)',
     speaker: 'var(--color-proposer)',
+    sophistry_speaker: 'var(--mode-sophistry-accent)',
     tool_executor: 'var(--accent-cyan)',
     jury_discussion: 'var(--accent-indigo)',
     judge: 'var(--color-judge)',
+    sophistry_observer: 'var(--mode-sophistry-accent)',
     advance_turn: 'var(--accent-amber)',
     consensus: 'var(--accent-cyan)',
+    sophistry_postmortem: 'var(--accent-amber)',
     end: 'var(--accent-rose)',
 };
 
@@ -55,6 +57,7 @@ function edgePath(from: { x: number; y: number }, to: { x: number; y: number }, 
 
 export default function LiveGraph({ compact = false, embedded = false }: LiveGraphProps) {
     const {
+        currentSession,
         visibleRuntimeEvents,
         currentNode,
         focusedRuntimeEventId,
@@ -62,7 +65,12 @@ export default function LiveGraph({ compact = false, embedded = false }: LiveGra
         replayEnabled,
         exitReplay,
     } = useDebateStore();
+    const debateMode = currentSession?.debate_mode ?? 'standard';
     const [collapsed, setCollapsed] = useState(embedded ? false : compact);
+    const graphDefinition = useMemo(
+        () => getLiveGraphDefinition(debateMode),
+        [debateMode],
+    );
 
     const focusedEvent = focusedRuntimeEventId
         ? visibleRuntimeEvents.find((event) => event.event_id === focusedRuntimeEventId) ?? null
@@ -71,44 +79,47 @@ export default function LiveGraph({ compact = false, embedded = false }: LiveGra
     const nodeMap = useMemo(
         () =>
             Object.fromEntries(
-                LIVE_GRAPH_NODES.map((node) => [node.id, node]),
+                graphDefinition.nodes.map((node) => [node.id, node]),
             ) as Record<string, { id: string; label: string; x: number; y: number }>,
-        [],
+        [graphDefinition.nodes],
     );
 
     const nodeEvents = useMemo(
         () =>
             visibleRuntimeEvents
-                .map((event) => ({ event, node: eventToGraphNode(event) }))
+                .map((event) => ({ event, node: eventToGraphNode(event, debateMode) }))
                 .filter((item): item is { event: typeof visibleRuntimeEvents[number]; node: string } => Boolean(item.node)),
-        [visibleRuntimeEvents],
+        [debateMode, visibleRuntimeEvents],
     );
 
     const latestNode = nodeEvents.length ? nodeEvents[nodeEvents.length - 1].node : null;
     const activeNode = useMemo(() => {
-        const focusedNode = eventToGraphNode(focusedEvent);
+        const focusedNode = eventToGraphNode(focusedEvent, debateMode);
         if (focusedNode) return focusedNode;
 
         if (!replayEnabled && currentNode && nodeMap[currentNode]) {
             return currentNode;
         }
         return latestNode;
-    }, [focusedEvent, replayEnabled, currentNode, latestNode, nodeMap]);
-    const activeNodeLabel = getLiveGraphNodeLabel(activeNode);
+    }, [focusedEvent, replayEnabled, currentNode, latestNode, nodeMap, debateMode]);
+    const activeNodeLabel = getLiveGraphNodeLabel(activeNode, debateMode);
 
     const previousNode = useMemo(() => {
         if (focusedRuntimeEventId) {
-            return findPreviousNode(visibleRuntimeEvents, focusedRuntimeEventId);
+            return findPreviousNode(visibleRuntimeEvents, focusedRuntimeEventId, debateMode);
         }
         return nodeEvents.length > 1 ? nodeEvents[nodeEvents.length - 2].node : null;
-    }, [focusedRuntimeEventId, nodeEvents, visibleRuntimeEvents]);
+    }, [debateMode, focusedRuntimeEventId, nodeEvents, visibleRuntimeEvents]);
 
     const activeEdge = useMemo(() => {
         if (!activeNode || !previousNode) return null;
-        return hasEdge(previousNode, activeNode) ? edgeId(previousNode, activeNode) : null;
-    }, [activeNode, previousNode]);
+        return hasEdge(previousNode, activeNode, debateMode) ? edgeId(previousNode, activeNode) : null;
+    }, [activeNode, debateMode, previousNode]);
 
-    const heatMap = useMemo(() => buildNodeHeat(visibleRuntimeEvents), [visibleRuntimeEvents]);
+    const heatMap = useMemo(
+        () => buildNodeHeat(visibleRuntimeEvents, debateMode),
+        [debateMode, visibleRuntimeEvents],
+    );
     const maxHeat = useMemo(() => {
         const values = Object.values(heatMap);
         return values.length ? Math.max(...values) : 1;
@@ -116,11 +127,20 @@ export default function LiveGraph({ compact = false, embedded = false }: LiveGra
 
     const latestEventByNode = useMemo(() => {
         const map: Record<string, string | null> = {};
-        for (const node of LIVE_GRAPH_NODES) {
-            map[node.id] = findLatestEventIdByNode(visibleRuntimeEvents, node.id);
+        for (const node of graphDefinition.nodes) {
+            map[node.id] = findLatestEventIdByNode(visibleRuntimeEvents, node.id, debateMode);
         }
         return map;
-    }, [visibleRuntimeEvents]);
+    }, [debateMode, graphDefinition.nodes, visibleRuntimeEvents]);
+
+    const viewBoxWidth = useMemo(
+        () => Math.max(...graphDefinition.nodes.map((node) => node.x)) + 80,
+        [graphDefinition.nodes],
+    );
+    const viewBoxHeight = useMemo(
+        () => Math.max(...graphDefinition.nodes.map((node) => node.y)) + 80,
+        [graphDefinition.nodes],
+    );
 
     const graphContent = (
         <motion.div
@@ -145,7 +165,7 @@ export default function LiveGraph({ compact = false, embedded = false }: LiveGra
                 }}
             >
                 <svg
-                    viewBox="0 0 1220 260"
+                    viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
                     width="100%"
                     height={220}
                     role="img"
@@ -164,7 +184,7 @@ export default function LiveGraph({ compact = false, embedded = false }: LiveGra
                         </marker>
                     </defs>
 
-                    {LIVE_GRAPH_EDGES.map((edge) => {
+                    {graphDefinition.edges.map((edge) => {
                         const from = nodeMap[edge.from];
                         const to = nodeMap[edge.to];
                         if (!from || !to) return null;
@@ -195,7 +215,7 @@ export default function LiveGraph({ compact = false, embedded = false }: LiveGra
                         );
                     })}
 
-                    {LIVE_GRAPH_NODES.map((node) => {
+                    {graphDefinition.nodes.map((node) => {
                         const heat = heatMap[node.id] ?? 0;
                         const heatRatio = Math.min(1, heat / Math.max(4, maxHeat));
                         const isActive = activeNode === node.id;
@@ -339,7 +359,7 @@ export default function LiveGraph({ compact = false, embedded = false }: LiveGra
                         </span>
                     </span>
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                        {activeNodeLabel ? `活跃：${activeNodeLabel}` : '空闲'}
+                        {activeNodeLabel ? `活跃: ${activeNodeLabel}` : '空闲'}
                         {replayEnabled ? ' · 回放' : ''}
                     </span>
                 </button>

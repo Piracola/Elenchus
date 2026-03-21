@@ -302,7 +302,13 @@ function isAgentSpeechEntry(entry: DialogueEntry, participants: string[] | undef
         return true;
     }
 
-    return !['judge', 'error', 'audience'].includes(entry.role);
+    return ![
+        'judge',
+        'error',
+        'audience',
+        'sophistry_round_report',
+        'sophistry_final_report',
+    ].includes(entry.role);
 }
 
 function getDialogueAnimationKey(entry: DialogueEntry | null | undefined): string | null {
@@ -333,6 +339,9 @@ export default function ChatPanel() {
         streamingContent,
     } = useDebateStore();
     const { displaySettings } = useSettingsStore();
+    const isSophistryMode = currentSession?.debate_mode === 'sophistry_experiment';
+    const modeWarning =
+        '诡辩实验模式会主动鼓励修辞操控、偷换定义和压力转移，也会积极抓对手的谬误。这里的输出不代表事实结论，搜索与评分都已关闭，请把它当成一场修辞实验。';
 
     const panelRef = useRef<HTMLDivElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -800,7 +809,9 @@ export default function ChatPanel() {
                 display: 'flex',
                 flexDirection: 'column',
                 minHeight: 0,
-                background: 'var(--bg-primary)',
+                background: isSophistryMode
+                    ? 'linear-gradient(180deg, var(--mode-sophistry-bg) 0%, rgba(252, 250, 248, 0.92) 100%)'
+                    : 'var(--bg-primary)',
                 position: 'relative',
             }}
         >
@@ -849,10 +860,12 @@ export default function ChatPanel() {
                             <motion.div
                                 style={{
                                     padding: '12px 16px',
-                                    background: 'var(--bg-card)',
+                                    background: isSophistryMode ? 'var(--mode-sophistry-card)' : 'var(--bg-card)',
                                     borderRadius: 'var(--radius-xl)',
                                     boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-                                    border: '1px solid var(--border-subtle)',
+                                    border: isSophistryMode
+                                        ? '1px solid var(--mode-sophistry-border)'
+                                        : '1px solid var(--border-subtle)',
                                     display: 'flex',
                                     justifyContent: 'space-between',
                                     alignItems: 'center',
@@ -890,6 +903,25 @@ export default function ChatPanel() {
                                             flexShrink: 0,
                                         }}
                                     >
+                                        <span
+                                            style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '8px',
+                                                padding: '5px 12px',
+                                                borderRadius: 'var(--radius-full)',
+                                                background: isSophistryMode
+                                                    ? 'rgba(184, 137, 70, 0.14)'
+                                                    : 'var(--bg-tertiary)',
+                                                color: isSophistryMode
+                                                    ? 'var(--mode-sophistry-accent)'
+                                                    : 'var(--text-secondary)',
+                                                fontSize: '12px',
+                                                fontWeight: 600,
+                                            }}
+                                        >
+                                            {isSophistryMode ? '诡辩实验模式' : '标准辩论'}
+                                        </span>
                                         <motion.button
                                             whileHover={{ y: -1 }}
                                             whileTap={{ scale: 0.98 }}
@@ -975,6 +1007,89 @@ export default function ChatPanel() {
                                     </div>
                                 )}
                             </motion.div>
+
+                            {currentSession && isSophistryMode && (
+                                <div
+                                    style={{
+                                        pointerEvents: 'auto',
+                                        padding: '12px 14px',
+                                        borderRadius: 'var(--radius-xl)',
+                                        background: 'var(--mode-sophistry-card)',
+                                        border: '1px solid var(--mode-sophistry-border)',
+                                        boxShadow: '0 6px 18px rgba(184, 137, 70, 0.08)',
+                                    }}
+                                >
+                                    <div
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            gap: '12px',
+                                            flexWrap: 'wrap',
+                                            marginBottom: '8px',
+                                        }}
+                                    >
+                                        <span
+                                            style={{
+                                                fontSize: '13px',
+                                                fontWeight: 700,
+                                                color: 'var(--mode-sophistry-accent)',
+                                            }}
+                                        >
+                                            模式提示
+                                        </span>
+                                        <span
+                                            style={{
+                                                fontSize: '12px',
+                                                color: 'var(--text-secondary)',
+                                                padding: '4px 10px',
+                                                borderRadius: 'var(--radius-full)',
+                                                background: 'rgba(184, 137, 70, 0.10)',
+                                                whiteSpace: 'nowrap',
+                                            }}
+                                        >
+                                            观察报告 {currentSession.mode_artifacts?.length ?? 0} 条
+                                        </span>
+                                    </div>
+                                    <div
+                                        style={{
+                                            fontSize: '12px',
+                                            lineHeight: 1.6,
+                                            color: 'var(--text-secondary)',
+                                            overflow: 'hidden',
+                                            display: '-webkit-box',
+                                            WebkitLineClamp: 2,
+                                            WebkitBoxOrient: 'vertical',
+                                        }}
+                                    >
+                                        {modeWarning}
+                                    </div>
+                                    <div
+                                        style={{
+                                            display: 'flex',
+                                            gap: '8px',
+                                            flexWrap: 'wrap',
+                                            marginTop: '8px',
+                                        }}
+                                    >
+                                        {['搜索已禁用', '无裁判评分', '输出观察报告'].map((label) => (
+                                            <span
+                                                key={label}
+                                                style={{
+                                                    padding: '4px 10px',
+                                                    borderRadius: 'var(--radius-full)',
+                                                    background: 'rgba(184, 137, 70, 0.10)',
+                                                    color: 'var(--mode-sophistry-accent)',
+                                                    fontSize: '12px',
+                                                    fontWeight: 600,
+                                                }}
+                                            >
+                                                {label}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             <div style={{ pointerEvents: 'auto' }}>
                                 <StatusBanner />

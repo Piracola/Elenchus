@@ -324,6 +324,38 @@ async def test_create_session_persists_jury_and_reasoning_config(db_session: Asy
 
 
 @pytest.mark.asyncio
+async def test_create_sophistry_session_enforces_mode_specific_defaults(db_session: AsyncSession):
+    created = await session_service.create_session(
+        db_session,
+        SessionCreate(
+            topic="Sophistry mode",
+            debate_mode="sophistry_experiment",
+            team_config={"agents_per_team": 4, "discussion_rounds": 2},
+            jury_config={"agents_per_jury": 3, "discussion_rounds": 2},
+            reasoning_config={
+                "steelman_enabled": True,
+                "counterfactual_enabled": True,
+                "consensus_enabled": True,
+            },
+        ),
+    )
+
+    assert created["debate_mode"] == "sophistry_experiment"
+    assert created["mode_config"] == {
+        "seed_reference_enabled": True,
+        "observer_enabled": True,
+        "artifact_detail_level": "full",
+    }
+    assert created["team_config"] == {"agents_per_team": 0, "discussion_rounds": 0}
+    assert created["jury_config"] == {"agents_per_jury": 0, "discussion_rounds": 0}
+    assert created["reasoning_config"] == {
+        "steelman_enabled": False,
+        "counterfactual_enabled": False,
+        "consensus_enabled": False,
+    }
+
+
+@pytest.mark.asyncio
 async def test_update_session_state_writes_round_json_file(db_session: AsyncSession):
     created = await session_service.create_session(
         db_session,

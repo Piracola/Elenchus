@@ -35,7 +35,7 @@ export default function RuntimeInspector({
     fillHeight?: boolean;
     onExpandedChange?: (expanded: boolean) => void;
 }) {
-    const { runtimeEvents, visibleRuntimeEvents, replayEnabled, currentNode } = useDebateStore();
+    const { runtimeEvents, visibleRuntimeEvents, replayEnabled, currentNode, currentSession } = useDebateStore();
     const [expanded, setExpanded] = useState(defaultExpanded);
     const [activeTab, setActiveTab] = useState<InspectorTab>('timeline');
     const isCollapsed = !expanded && !fillHeight;
@@ -58,11 +58,14 @@ export default function RuntimeInspector({
             return `${runtimeEvents.length} 条事件${replayEnabled ? ' · 回放' : ''}`;
         }
         if (activeTab === 'graph') {
-            const currentLabel = getLiveGraphNodeLabel(currentNode);
-            return currentLabel ? `当前节点：${currentLabel}` : '查看运行节点与路径';
+            const currentLabel = getLiveGraphNodeLabel(
+                currentNode,
+                currentSession?.debate_mode ?? 'standard',
+            );
+            return currentLabel ? `当前节点: ${currentLabel}` : '查看运行节点与路径';
         }
         return `${memoryCount} 条记忆写入`;
-    }, [activeTab, currentNode, memoryCount, replayEnabled, runtimeEvents.length]);
+    }, [activeTab, currentNode, currentSession?.debate_mode, memoryCount, replayEnabled, runtimeEvents.length]);
 
     return (
         <div

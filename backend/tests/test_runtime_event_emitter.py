@@ -72,6 +72,28 @@ def test_predict_next_status_node_handles_tools_and_turn_progress():
             "reasoning_config": {"consensus_enabled": True},
         },
     ) == "consensus"
+    assert emitter.predict_next_status_node(
+        "set_speaker",
+        {
+            "debate_mode": "sophistry_experiment",
+            "current_speaker": "proposer",
+        },
+    ) == "sophistry_speaker"
+    assert emitter.predict_next_status_node(
+        "sophistry_speaker",
+        {
+            "participants": ["proposer", "opposer"],
+            "current_speaker_index": 1,
+        },
+    ) == "sophistry_observer"
+    assert emitter.predict_next_status_node(
+        "advance_turn",
+        {
+            "debate_mode": "sophistry_experiment",
+            "current_turn": 3,
+            "max_turns": 3,
+        },
+    ) == "sophistry_postmortem"
 
 
 @pytest.mark.asyncio
@@ -202,3 +224,29 @@ async def test_emit_speech_skips_duplicate_start_when_tokens_already_streamed():
 
     assert count == 1
     assert [event["type"] for event in bus.events] == ["speech_end"]
+
+
+@pytest.mark.asyncio
+async def test_emit_speech_uses_sophistry_speaker_source_for_experiment_mode():
+    bus = _FakeRuntimeBus()
+    emitter = RuntimeEventEmitter(runtime_bus=bus)
+
+    await emitter.emit_speech(
+        "session-1",
+        {
+            "debate_mode": "sophistry_experiment",
+            "dialogue_history": [
+                {
+                    "role": "proposer",
+                    "agent_name": "姝ｆ柟",
+                    "content": "鏂囨湰",
+                    "turn": 0,
+                    "citations": [],
+                }
+            ],
+        },
+        0,
+    )
+
+    assert [event["type"] for event in bus.events] == ["speech_start", "speech_end"]
+    assert {event["source"] for event in bus.events} == {"runtime.node.sophistry_speaker"}

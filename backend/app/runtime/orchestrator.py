@@ -18,7 +18,17 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _PERSIST_NODES = frozenset(
-    {"advance_turn", "judge", "speaker", "team_discussion", "jury_discussion", "consensus"}
+    {
+        "advance_turn",
+        "judge",
+        "speaker",
+        "team_discussion",
+        "jury_discussion",
+        "consensus",
+        "sophistry_speaker",
+        "sophistry_observer",
+        "sophistry_postmortem",
+    }
 )
 
 
@@ -60,6 +70,7 @@ class DebateOrchestrator:
         if initial_state is None:
             raise ValueError(f"Session {session_id} was not found.")
 
+        debate_mode = str(initial_state.get("debate_mode", "standard") or "standard")
         last_checkpoint_node = str(initial_state.get("last_executed_node", "") or "")
         prior_resume_count = int(initial_state.get("resume_count", 0) or 0)
         initial_state["resume_count"] = prior_resume_count + 1
@@ -68,10 +79,11 @@ class DebateOrchestrator:
         initial_state["last_progress_at"] = datetime.now(timezone.utc).isoformat()
 
         logger.info(
-            "Starting/Resuming debate: session=%s topic='%s' turns=%d",
+            "Starting/Resuming debate: session=%s topic='%s' turns=%d mode=%s",
             session_id,
             topic,
             max_turns,
+            debate_mode,
         )
 
         if prior_resume_count > 0 or last_checkpoint_node:
@@ -82,7 +94,7 @@ class DebateOrchestrator:
                 payload={
                     "content": (
                         f"从上次检查点恢复：第 {int(initial_state.get('current_turn', 0)) + 1} 轮，"
-                        f"最近稳定节点 {checkpoint_label}。"
+                        f"最近稳定节点是 {checkpoint_label}。"
                     )
                 },
                 source="runtime.orchestrator.resume",
@@ -94,6 +106,19 @@ class DebateOrchestrator:
             payload={"content": f"辩论开始：{topic}"},
             source="runtime.orchestrator",
         )
+        if debate_mode == "sophistry_experiment":
+            await self._events.emit_runtime_event(
+                session_id=session_id,
+                event_type="mode_notice",
+                payload={
+                    "content": (
+                        "诡辩实验模式已启用：本场不会使用搜索、陪审团或裁判评分，"
+                        "输出仅用于观察修辞操控与谬误对抗。"
+                    )
+                },
+                source="runtime.orchestrator.mode",
+                phase="processing",
+            )
         await self._events.emit_runtime_event(
             session_id=session_id,
             event_type="status",
@@ -133,8 +158,14 @@ class DebateOrchestrator:
                         last_status_node,
                     )
 
-                    if node_name == "speaker":
+                    if node_name in {"speaker", "sophistry_speaker"}:
                         prev_history_len = await self._events.emit_speech(
+                            session_id,
+                            final_state,
+                            prev_history_len,
+                        )
+                    elif node_name in {"sophistry_observer", "sophistry_postmortem"}:
+                        prev_history_len = await self._events.emit_sophistry_reports(
                             session_id,
                             final_state,
                             prev_history_len,
@@ -193,6 +224,7 @@ class DebateOrchestrator:
                 payload={
                     "final_scores": final_state.get("cumulative_scores", {}),
                     "total_turns": final_state.get("current_turn", 0),
+                    "final_report": final_state.get("final_mode_report"),
                 },
                 source="runtime.orchestrator",
             )
@@ -209,7 +241,7 @@ class DebateOrchestrator:
             final_state["last_progress_at"] = interrupted_at
             if last_node:
                 final_state["last_executed_node"] = last_node
-            final_state["last_status_message"] = "辩论已中断，可稍后继续恢复"
+            final_state["last_status_message"] = "辩论已中断，可稍后继续恢复。"
             await self._repository.persist_state(session_id, final_state)
             raise
         except Exception as exc:

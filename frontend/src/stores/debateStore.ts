@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import type {
     DialogueEntry,
+    ModeArtifact,
     Session,
     SessionListItem,
     TurnScore,
@@ -220,6 +221,18 @@ function coerceSearchResults(payload: Record<string, unknown>): SearchResult[] {
     return value.filter((item): item is SearchResult => typeof item === 'object' && item !== null) as SearchResult[];
 }
 
+function appendModeArtifact(artifacts: ModeArtifact[], artifact: ModeArtifact): ModeArtifact[] {
+    const duplicate = artifacts.some((item) =>
+        item.type === artifact.type
+        && (item.turn ?? -1) === (artifact.turn ?? -1)
+        && item.content === artifact.content,
+    );
+    if (duplicate) {
+        return artifacts;
+    }
+    return [...artifacts, artifact];
+}
+
 function sanitizeDialogueEntry(entry: DialogueEntry): DialogueEntry {
     return {
         ...entry,
@@ -235,10 +248,18 @@ function sanitizeRuntimeEvent(event: RuntimeEvent): RuntimeEvent {
     };
 }
 
+function shouldRecordRuntimeEvent(event: RuntimeEvent): boolean {
+    // The speech bubble already renders token streaming live; keeping every token in the
+    // observer history only creates noise and bloats replay state.
+    return event.type !== 'speech_token';
+}
+
 function sanitizeSession(session: Session | null): Session | null {
     if (!session) return null;
     return {
         ...session,
+        debate_mode: session.debate_mode ?? 'standard',
+        mode_config: session.mode_config ?? {},
         dialogue_history: (session.dialogue_history ?? []).map(sanitizeDialogueEntry),
         team_dialogue_history: (session.team_dialogue_history ?? []).map(sanitizeDialogueEntry),
         jury_dialogue_history: (session.jury_dialogue_history ?? []).map(sanitizeDialogueEntry),
@@ -249,6 +270,9 @@ function sanitizeSession(session: Session | null): Session | null {
             counterfactual_enabled: true,
             consensus_enabled: true,
         },
+        mode_artifacts: Array.isArray(session.mode_artifacts) ? session.mode_artifacts : [],
+        current_mode_report: session.current_mode_report ?? null,
+        final_mode_report: session.final_mode_report ?? null,
     };
 }
 
@@ -278,6 +302,7 @@ function normalizeRuntimeEvents(events: RuntimeEvent[]): RuntimeEvent[] {
     const unique: RuntimeEvent[] = [];
 
     for (const event of sorted) {
+        if (!shouldRecordRuntimeEvent(event)) continue;
         if (seenIds.has(event.event_id)) continue;
         seenIds.add(event.event_id);
         unique.push(event);
@@ -353,6 +378,7 @@ function toSessionListItem(session: Session | SessionListItem): SessionListItem 
     return {
         id: session.id,
         topic: session.topic,
+        debate_mode: session.debate_mode ?? 'standard',
         status: session.status,
         current_turn: session.current_turn,
         max_turns: session.max_turns,
@@ -457,41 +483,47 @@ export const useDebateStore = create<DebateState>((set) => ({
             }
 
             const payload = event.payload ?? {};
-            const runtimeEvents = [...state.runtimeEvents, event];
-            const didTrim = runtimeEvents.length > MAX_RUNTIME_EVENTS;
-            const trimmedEvents = didTrim
-                ? runtimeEvents.slice(-MAX_RUNTIME_EVENTS)
-                : runtimeEvents;
-            const nextReplayCursor = state.replayEnabled
-                ? clampReplayCursor(state.replayCursor, trimmedEvents.length)
-                : clampReplayCursor(trimmedEvents.length - 1, trimmedEvents.length);
-            const visibleRuntimeEvents = getVisibleRuntimeEvents(
-                trimmedEvents,
-                state.replayEnabled,
-                nextReplayCursor,
-            );
-
+            const shouldRecordEvent = shouldRecordRuntimeEvent(event);
             const patch: Partial<DebateState> = {
-                runtimeEvents: trimmedEvents,
-                visibleRuntimeEvents,
-                lastEventSeq: event.seq >= 0 ? event.seq : state.lastEventSeq,
-                replayCursor: nextReplayCursor,
-                hasOlderRuntimeEvents: state.hasOlderRuntimeEvents || didTrim,
+                lastEventSeq: event.seq >= 0 ? Math.max(state.lastEventSeq, event.seq) : state.lastEventSeq,
             };
-            if (
-                state.focusedRuntimeEventId &&
-                !trimmedEvents.some((item) => item.event_id === state.focusedRuntimeEventId)
-            ) {
-                patch.focusedRuntimeEventId =
-                    state.replayEnabled && nextReplayCursor >= 0
-                        ? trimmedEvents[nextReplayCursor].event_id
-                        : null;
-            } else if (state.replayEnabled && !state.focusedRuntimeEventId && nextReplayCursor >= 0) {
-                patch.focusedRuntimeEventId = trimmedEvents[nextReplayCursor].event_id;
+
+            if (shouldRecordEvent) {
+                const runtimeEvents = [...state.runtimeEvents, event];
+                const didTrim = runtimeEvents.length > MAX_RUNTIME_EVENTS;
+                const trimmedEvents = didTrim
+                    ? runtimeEvents.slice(-MAX_RUNTIME_EVENTS)
+                    : runtimeEvents;
+                const nextReplayCursor = state.replayEnabled
+                    ? clampReplayCursor(state.replayCursor, trimmedEvents.length)
+                    : clampReplayCursor(trimmedEvents.length - 1, trimmedEvents.length);
+                const visibleRuntimeEvents = getVisibleRuntimeEvents(
+                    trimmedEvents,
+                    state.replayEnabled,
+                    nextReplayCursor,
+                );
+
+                patch.runtimeEvents = trimmedEvents;
+                patch.visibleRuntimeEvents = visibleRuntimeEvents;
+                patch.replayCursor = nextReplayCursor;
+                patch.hasOlderRuntimeEvents = state.hasOlderRuntimeEvents || didTrim;
+
+                if (
+                    state.focusedRuntimeEventId &&
+                    !trimmedEvents.some((item) => item.event_id === state.focusedRuntimeEventId)
+                ) {
+                    patch.focusedRuntimeEventId =
+                        state.replayEnabled && nextReplayCursor >= 0
+                            ? trimmedEvents[nextReplayCursor].event_id
+                            : null;
+                } else if (state.replayEnabled && !state.focusedRuntimeEventId && nextReplayCursor >= 0) {
+                    patch.focusedRuntimeEventId = trimmedEvents[nextReplayCursor].event_id;
+                }
             }
 
             switch (event.type) {
                 case 'system':
+                case 'mode_notice':
                     break;
 
                 case 'status':
@@ -610,6 +642,45 @@ export const useDebateStore = create<DebateState>((set) => ({
                     break;
                 }
 
+                case 'sophistry_round_report':
+                case 'sophistry_final_report': {
+                    patch.streamingRole = '';
+                    patch.streamingContent = '';
+                    if (!state.currentSession) break;
+
+                    const reportRaw = payload.report;
+                    const artifact = typeof reportRaw === 'object' && reportRaw !== null
+                        ? (reportRaw as ModeArtifact)
+                        : null;
+                    const entry: DialogueEntry = {
+                        role: getPayloadString(payload, 'role') ?? event.type,
+                        agent_name: getPayloadString(payload, 'agent_name') ?? '观察报告',
+                        content: sanitizeIncomingContent(getPayloadString(payload, 'content')),
+                        citations: getPayloadCitations(payload),
+                        timestamp: event.timestamp || new Date().toISOString(),
+                        event_id: event.event_id,
+                        turn: getPayloadNumber(payload, 'turn'),
+                    };
+
+                    patch.currentSession = {
+                        ...state.currentSession,
+                        dialogue_history: appendDialogueWithDedupe(
+                            state.currentSession.dialogue_history,
+                            entry,
+                        ),
+                        mode_artifacts: artifact
+                            ? appendModeArtifact(state.currentSession.mode_artifacts ?? [], artifact)
+                            : (state.currentSession.mode_artifacts ?? []),
+                        current_mode_report: event.type === 'sophistry_round_report'
+                            ? (artifact ?? state.currentSession.current_mode_report ?? null)
+                            : (state.currentSession.current_mode_report ?? null),
+                        final_mode_report: event.type === 'sophistry_final_report'
+                            ? (artifact ?? state.currentSession.final_mode_report ?? null)
+                            : (state.currentSession.final_mode_report ?? null),
+                    };
+                    break;
+                }
+
                 case 'fact_check_start':
                     patch.isDebating = true;
                     patch.phase = 'fact_checking';
@@ -689,6 +760,7 @@ export const useDebateStore = create<DebateState>((set) => ({
                     }
                     const totalTurns = getPayloadNumber(payload, 'total_turns') ?? state.currentSession.current_turn;
                     const finalScoresRaw = payload.final_scores;
+                    const finalReportRaw = payload.final_report;
                     patch.isDebating = false;
                     patch.phase = 'complete';
                     patch.currentStatus = '辩论已完成';
@@ -700,6 +772,10 @@ export const useDebateStore = create<DebateState>((set) => ({
                             typeof finalScoresRaw === 'object' && finalScoresRaw !== null
                                 ? (finalScoresRaw as Record<string, Record<string, number[]>>)
                                 : state.currentSession.cumulative_scores,
+                        final_mode_report:
+                            typeof finalReportRaw === 'object' && finalReportRaw !== null
+                                ? (finalReportRaw as Record<string, unknown>)
+                                : (state.currentSession.final_mode_report ?? null),
                     };
                     break;
                 }
@@ -858,7 +934,7 @@ export const useDebateStore = create<DebateState>((set) => ({
         set((state) => {
             const safeEvents = normalizeRuntimeEvents(events);
             const replayCursor = clampReplayCursor(safeEvents.length - 1, safeEvents.length);
-            const lastEventSeq = computeLastEventSeq(safeEvents);
+            const lastEventSeq = computeLastEventSeq(events);
             const runtimeView = deriveRuntimeViewState(
                 safeEvents,
                 getSessionRuntimeFallback(state.currentSession),
@@ -890,7 +966,7 @@ export const useDebateStore = create<DebateState>((set) => ({
             return {
                 runtimeEvents: safeEvents,
                 visibleRuntimeEvents: safeEvents,
-                lastEventSeq: computeLastEventSeq(safeEvents),
+                lastEventSeq: computeLastEventSeq(events),
                 replayEnabled: false,
                 replayCursor,
                 focusedRuntimeEventId: null,
@@ -947,7 +1023,7 @@ export const useDebateStore = create<DebateState>((set) => ({
                     state.replayEnabled,
                     replayCursor,
                 ),
-                lastEventSeq: computeLastEventSeq(mergedEvents),
+                lastEventSeq: Math.max(state.lastEventSeq, computeLastEventSeq(events)),
                 replayCursor,
                 focusedRuntimeEventId,
                 hasOlderRuntimeEvents,

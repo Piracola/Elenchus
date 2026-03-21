@@ -114,4 +114,28 @@ describe('eventFocus', () => {
             system: false,
         });
     });
+
+    it('matches sophistry report events to observer report rows', () => {
+        const event = makeEvent({
+            type: 'sophistry_round_report',
+            source: 'runtime.node.sophistry_observer',
+            payload: { turn: 1 },
+        });
+        const row = makeRow({
+            judge: {
+                role: 'sophistry_round_report',
+                agent_name: 'Observer',
+                content: 'Detected a false dichotomy.',
+                citations: [],
+                turn: 1,
+                timestamp: '2026-03-17T01:00:05+00:00',
+            },
+        });
+
+        expect(resolveRowFocus(row, event)).toEqual({
+            agent: false,
+            judge: true,
+            system: false,
+        });
+    });
 });

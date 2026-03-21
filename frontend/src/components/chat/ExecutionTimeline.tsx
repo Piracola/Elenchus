@@ -70,7 +70,7 @@ function formatJson(value: unknown): string {
     }
 }
 
-function summarizeEvent(event: RuntimeEvent): string {
+function summarizeEvent(event: RuntimeEvent, debateMode: 'standard' | 'sophistry_experiment' = 'standard'): string {
     const content = event.payload.content;
     if (typeof content === 'string' && content.trim()) {
         return content.length > 72 ? `${content.slice(0, 72)}...` : content;
@@ -80,7 +80,7 @@ function summarizeEvent(event: RuntimeEvent): string {
     if (typeof role === 'string' && role) return role;
 
     const node = event.payload.node;
-    if (typeof node === 'string' && node) return getLiveGraphNodeLabel(node);
+    if (typeof node === 'string' && node) return getLiveGraphNodeLabel(node, debateMode);
 
     return event.type;
 }
@@ -326,7 +326,10 @@ export default function ExecutionTimeline({
     const canReplayStep = replayEnabled && runtimeEvents.length > 0;
     const replayAtStart = replayCursor <= 0;
     const replayAtEnd = replayCursor >= runtimeEvents.length - 1;
-    const selectedNodeLabel = getLiveGraphNodeLabel(getEventNode(selectedEvent));
+    const selectedNodeLabel = getLiveGraphNodeLabel(
+        getEventNode(selectedEvent),
+        currentSession?.debate_mode ?? 'standard',
+    );
 
     const timelineContent = (
         <motion.div
@@ -478,7 +481,7 @@ export default function ExecutionTimeline({
                                             whiteSpace: 'nowrap',
                                         }}
                                     >
-                                        {summarizeEvent(event)}
+                                        {summarizeEvent(event, currentSession?.debate_mode ?? 'standard')}
                                     </div>
                                 </span>
                             </button>

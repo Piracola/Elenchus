@@ -20,6 +20,10 @@
   --accent-emerald: #10B981;
   --accent-rose: #EF4444;
   --accent-amber: #F59E0B;
+  --mode-sophistry-bg: #fcfaf8;
+  --mode-sophistry-card: #fffdf9;
+  --mode-sophistry-border: #eadfcd;
+  --mode-sophistry-accent: #b88946;
 
   /* Proposer / Opposer colors */
   --color-proposer: #34C759;
@@ -90,6 +94,10 @@
   --accent-emerald: #34d399;
   --accent-rose: #fb7185;
   --accent-amber: #fbbf24;
+  --mode-sophistry-bg: #26211a;
+  --mode-sophistry-card: #312a20;
+  --mode-sophistry-border: rgba(234, 223, 205, 0.22);
+  --mode-sophistry-accent: #d6a363;
 
   /* Proposer / Opposer colors */
   --color-proposer: #30D158;
