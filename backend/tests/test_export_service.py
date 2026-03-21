@@ -41,6 +41,7 @@ def test_export_markdown_uses_readable_chinese_labels():
                 "proposer": {
                     "logical_rigor": {"score": 8, "rationale": "论证清楚"},
                     "evidence_quality": {"score": 7, "rationale": "证据尚可"},
+                    "topic_focus": {"score": 8, "rationale": "始终切题"},
                     "rebuttal_strength": {"score": 6, "rationale": "反驳较弱"},
                     "consistency": {"score": 8, "rationale": "立场稳定"},
                     "persuasiveness": {"score": 8, "rationale": "表达有感染力"},
@@ -51,6 +52,7 @@ def test_export_markdown_uses_readable_chinese_labels():
                 "proposer": {
                     "logical_rigor": [8, 9],
                     "evidence_quality": [7, 8],
+                    "topic_focus": [8, 8],
                     "rebuttal_strength": [6, 7],
                     "consistency": [8, 8],
                     "persuasiveness": [8, 9],
@@ -65,6 +67,10 @@ def test_export_markdown_uses_readable_chinese_labels():
     assert "### [裁判 -> 正方 (Proposer)] 第 1 轮" in markdown
     assert "**引用来源：**" in markdown
     assert "## 当前评分" in markdown
+    assert "**综合评分：** 7.5/10" in markdown
+    assert "| 基础建设 | 30% | 7.5/10 |" in markdown
+    assert "| 对抗推演 | 40% | 7/10 |" in markdown
+    assert "切题度与定义稳定" in markdown
     assert "逻辑严密度" in markdown
     assert "## 累计得分趋势" in markdown
     assert "8 -> 9" in markdown

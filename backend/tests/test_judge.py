@@ -15,6 +15,7 @@ def _score_payload(score: int = 8) -> dict[str, object]:
     return {
         "logical_rigor": {"score": score, "rationale": "Clear reasoning."},
         "evidence_quality": {"score": score - 1, "rationale": "Good evidence."},
+        "topic_focus": {"score": score, "rationale": "Stays on topic."},
         "rebuttal_strength": {"score": score, "rationale": "Strong rebuttals."},
         "consistency": {"score": score, "rationale": "Consistent position."},
         "persuasiveness": {"score": score - 1, "rationale": "Mostly persuasive."},
@@ -45,6 +46,9 @@ async def test_judge_score_parses_json_wrapped_in_markdown(monkeypatch):
 
     proposer_scores = result["current_scores"]["proposer"]
     assert proposer_scores["logical_rigor"]["score"] == 8
+    assert proposer_scores["topic_focus"]["score"] == 8
+    assert proposer_scores["module_scores"]["foundation"] == 7.5
+    assert proposer_scores["comprehensive_score"] == 7.7
     assert proposer_scores["overall_comment"] == "Solid performance overall."
     assert result["cumulative_scores"]["proposer"]["logical_rigor"] == [8]
     assert result["judge_history"][0]["target_role"] == "proposer"
@@ -65,6 +69,7 @@ def test_parse_score_response_repairs_unescaped_quotes_in_rationales():
     malformed = """{
       "logical_rigor": {"score": 8, "rationale": "成功拆解正方两个隐含前提，逻辑链条清晰，但"照料经济"论点的因果归因略显跳跃"},
       "evidence_quality": {"score": 7, "rationale": "引用了具体研究，但对"GDP=福祉"这一前提的证据仍不充分"},
+      "topic_focus": {"score": 8, "rationale": "始终围绕"幸福标准"这一核心问题展开"},
       "rebuttal_strength": {"score": 9, "rationale": "精准攻击对手"权利=幸福"这个核心前提"},
       "consistency": {"score": 8, "rationale": "与前文论证保持一致"},
       "persuasiveness": {"score": 8, "rationale": "表达凝练，重点突出"},
@@ -78,6 +83,7 @@ def test_parse_score_response_repairs_unescaped_quotes_in_rationales():
         '成功拆解正方两个隐含前提，逻辑链条清晰，但"照料经济"论点的因果归因略显跳跃'
     )
     assert parsed.evidence_quality.rationale == '引用了具体研究，但对"GDP=福祉"这一前提的证据仍不充分'
+    assert parsed.topic_focus.rationale == '始终围绕"幸福标准"这一核心问题展开'
     assert parsed.overall_comment == '本轮成功拆解了"照料经济"和"GDP=福祉"两个关键前提。'
 
 
@@ -114,6 +120,7 @@ async def test_judge_uses_dialogue_history_when_recent_is_stale(monkeypatch):
 
     assert captured_instructions
     assert "这是本轮实质发言" in captured_instructions[0]
+    assert "all 6 atomic dimensions" in captured_instructions[0]
     assert result["judge_history"][0]["target_role"] == "proposer"
 
 
@@ -127,3 +134,4 @@ def test_build_judge_instruction_warns_against_ascii_double_quotes():
     )
 
     assert 'use Chinese quotes like 「」 instead of ASCII double quotes' in instruction
+    assert "all 6 atomic dimensions" in instruction

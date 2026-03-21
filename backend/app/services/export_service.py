@@ -13,9 +13,40 @@ from urllib.parse import quote
 _DIM_LABELS = {
     "logical_rigor": "逻辑严密度",
     "evidence_quality": "证据质量",
+    "topic_focus": "切题度与定义稳定",
     "rebuttal_strength": "反驳力度",
     "consistency": "前后一致性",
-    "persuasiveness": "说服力",
+    "persuasiveness": "价值立意与说服力",
+}
+
+_DIM_WEIGHTS = {
+    "evidence_quality": 15,
+    "topic_focus": 15,
+    "logical_rigor": 20,
+    "rebuttal_strength": 20,
+    "consistency": 15,
+    "persuasiveness": 15,
+}
+
+_MODULE_LABELS = {
+    "foundation": "基础建设",
+    "confrontation": "对抗推演",
+    "stability": "系统稳健",
+    "vision": "终极视野",
+}
+
+_MODULE_WEIGHTS = {
+    "foundation": 30,
+    "confrontation": 40,
+    "stability": 15,
+    "vision": 15,
+}
+
+_MODULE_DIMENSIONS = {
+    "foundation": ("evidence_quality", "topic_focus"),
+    "confrontation": ("logical_rigor", "rebuttal_strength"),
+    "stability": ("consistency",),
+    "vision": ("persuasiveness",),
 }
 
 _ROLE_LABELS = {
@@ -80,7 +111,9 @@ def _format_role_heading(entry: dict[str, Any]) -> str:
 
 def _format_score(score_value: Any) -> str:
     if isinstance(score_value, (int, float)):
-        return f"{score_value}/10"
+        rounded = round(float(score_value), 1)
+        display = str(int(rounded)) if rounded.is_integer() else f"{rounded:.1f}"
+        return f"{display}/10"
     return "-"
 
 
@@ -190,6 +223,59 @@ def export_runtime_events_snapshot(events: list[dict[str, Any]]) -> str:
     return json.dumps(snapshot, ensure_ascii=False, indent=2, default=str)
 
 
+def _extract_dimension_score_map(scores: dict[str, Any]) -> dict[str, float]:
+    dimension_scores: dict[str, float] = {}
+    for dim_key in _DIM_LABELS:
+        dim_data = scores.get(dim_key, {})
+        if not isinstance(dim_data, dict):
+            continue
+        raw_score = dim_data.get("score")
+        if isinstance(raw_score, (int, float)):
+            dimension_scores[dim_key] = float(raw_score)
+    return dimension_scores
+
+
+def _weighted_average(
+    score_map: dict[str, float],
+    dimensions: tuple[str, ...],
+) -> float | None:
+    available_dimensions = [dim for dim in dimensions if dim in score_map]
+    if not available_dimensions:
+        return None
+
+    total_weight = sum(_DIM_WEIGHTS[dim] for dim in available_dimensions)
+    weighted_sum = sum(score_map[dim] * _DIM_WEIGHTS[dim] for dim in available_dimensions)
+    return round(weighted_sum / total_weight + 1e-9, 1)
+
+
+def _resolve_module_scores(scores: dict[str, Any]) -> dict[str, float]:
+    resolved: dict[str, float] = {}
+    precomputed = scores.get("module_scores")
+    if isinstance(precomputed, dict):
+        for module_key in _MODULE_LABELS:
+            value = precomputed.get(module_key)
+            if isinstance(value, (int, float)):
+                resolved[module_key] = round(float(value), 1)
+
+    dimension_scores = _extract_dimension_score_map(scores)
+    for module_key, dimensions in _MODULE_DIMENSIONS.items():
+        if module_key in resolved:
+            continue
+        value = _weighted_average(dimension_scores, dimensions)
+        if value is not None:
+            resolved[module_key] = value
+
+    return resolved
+
+
+def _resolve_comprehensive_score(scores: dict[str, Any]) -> float | None:
+    precomputed = scores.get("comprehensive_score")
+    if isinstance(precomputed, (int, float)):
+        return round(float(precomputed), 1)
+
+    return _weighted_average(scores_map := _extract_dimension_score_map(scores), tuple(scores_map.keys()))
+
+
 def export_markdown(session_data: dict[str, Any]) -> str:
     """
     Generate a structured Markdown document from session data.
@@ -259,9 +345,23 @@ def export_markdown(session_data: dict[str, Any]) -> str:
 
             lines.append(f"### {_role_label(str(role))}")
             lines.append("")
-            lines.append("| 维度 | 得分 | 评语 |")
-            lines.append("|------|------|------|")
+            comprehensive_score = _resolve_comprehensive_score(scores)
+            if comprehensive_score is not None:
+                lines.append(f"**综合评分：** {_format_score(comprehensive_score)}")
+                lines.append("")
 
+            module_scores = _resolve_module_scores(scores)
+            if module_scores:
+                lines.append("| 模块 | 占比 | 得分 |")
+                lines.append("|------|------|------|")
+                for module_key, module_label in _MODULE_LABELS.items():
+                    lines.append(
+                        f"| {module_label} | {_MODULE_WEIGHTS[module_key]}% | {_format_score(module_scores.get(module_key))} |"
+                    )
+                lines.append("")
+
+            lines.append("| 底层维度 | 权重 | 得分 | 评语 |")
+            lines.append("|------|------|------|------|")
             for dim_key, dim_label in _DIM_LABELS.items():
                 dim_data = scores.get(dim_key, {})
                 if isinstance(dim_data, dict):
@@ -270,7 +370,7 @@ def export_markdown(session_data: dict[str, Any]) -> str:
                 else:
                     score = "-"
                     rationale = "-"
-                lines.append(f"| {dim_label} | {score} | {rationale} |")
+                lines.append(f"| {dim_label} | {_DIM_WEIGHTS[dim_key]}% | {score} | {rationale} |")
 
             overall = scores.get("overall_comment")
             if overall:

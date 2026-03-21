@@ -20,21 +20,16 @@ from app.agents.runtime_progress import (
     build_status_heartbeat_callback,
 )
 from app.agents.safe_invoke import invoke_text_model
-from app.models.scoring import TurnScore
+from app.models.scoring import SCORE_DIMENSION_WEIGHTS, TurnScore
 
 logger = logging.getLogger(__name__)
 
-_SCORE_DIMS = [
-    "logical_rigor",
-    "evidence_quality",
-    "rebuttal_strength",
-    "consistency",
-    "persuasiveness",
-]
+_SCORE_DIMS = list(SCORE_DIMENSION_WEIGHTS.keys())
 
 _OUTPUT_SCHEMA = {
     "logical_rigor": {"score": 1, "rationale": "Explain the score."},
     "evidence_quality": {"score": 1, "rationale": "Explain the score."},
+    "topic_focus": {"score": 1, "rationale": "Explain the score."},
     "rebuttal_strength": {"score": 1, "rationale": "Explain the score."},
     "consistency": {"score": 1, "rationale": "Explain the score."},
     "persuasiveness": {"score": 1, "rationale": "Explain the score."},
@@ -157,7 +152,11 @@ def _build_judge_instruction(
 
     parts.append(
         "\n## Instructions\n"
-        "Score this debater on all 5 dimensions from 1 to 10 and explain each score. "
+        "Score this debater on all 6 atomic dimensions from 1 to 10 and explain each score. "
+        "The system will then aggregate them into 4 display modules: foundation "
+        "(evidence_quality + topic_focus), confrontation (logical_rigor + rebuttal_strength), "
+        "stability (consistency), and vision (persuasiveness), plus one weighted comprehensive score. "
+        "Do not output module scores or any extra fields. "
         "Return ONLY valid JSON. Do not include markdown fences, headings, or prose. "
         "If you need to quote a term inside a JSON string, use Chinese quotes like 「」 instead of ASCII double quotes.\n"
         f"## Required JSON Shape\n{json.dumps(_OUTPUT_SCHEMA, ensure_ascii=False, indent=2)}"
@@ -204,12 +203,12 @@ def _parse_score_response(text: str) -> TurnScore | None:
 
 
 def _default_scores() -> dict[str, Any]:
-    fallback_scores: dict[str, Any] = {
+    fallback_dimensions: dict[str, Any] = {
         dim: {"score": 5, "rationale": "评分解析失败，已采用中性分"}
         for dim in _SCORE_DIMS
     }
-    fallback_scores["overall_comment"] = "评分解析失败，本轮暂按中性分处理。"
-    return fallback_scores
+    fallback_dimensions["overall_comment"] = "评分解析失败，本轮暂按中性分处理。"
+    return TurnScore(**fallback_dimensions).model_dump()
 
 
 async def judge_score(state: dict[str, Any]) -> dict[str, Any]:

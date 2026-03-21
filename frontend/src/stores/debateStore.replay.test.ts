@@ -38,9 +38,17 @@ function makeScores(comment: string): TurnScore {
     return {
         logical_rigor: { score: 8, rationale: 'ok' },
         evidence_quality: { score: 8, rationale: 'ok' },
+        topic_focus: { score: 8, rationale: 'ok' },
         rebuttal_strength: { score: 8, rationale: 'ok' },
         consistency: { score: 8, rationale: 'ok' },
         persuasiveness: { score: 8, rationale: 'ok' },
+        module_scores: {
+            foundation: 8,
+            confrontation: 8,
+            stability: 8,
+            vision: 8,
+        },
+        comprehensive_score: 8,
         overall_comment: comment,
     };
 }
