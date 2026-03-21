@@ -30,6 +30,7 @@ def test_create_model_config_without_trailing_slash(
     data = response.json()
     assert data["name"] == "test-provider"
     assert data["provider_type"] == "openai"
+    assert data["api_key"] == "sk-test"
     assert data["custom_parameters"] == {"reasoning_effort": "medium"}
 
 
@@ -60,4 +61,36 @@ def test_list_model_configs_without_trailing_slash(
     providers = list_response.json()
     assert len(providers) == 1
     assert providers[0]["name"] == "list-provider"
+    assert providers[0]["api_key"] == "sk-test"
     assert providers[0]["custom_parameters"] == {"reasoning_effort": "high"}
+
+
+def test_update_model_config_returns_full_api_key(
+    db_session,
+    monkeypatch,
+):
+    monkeypatch.setenv("ELENCHUS_ENCRYPTION_KEY", Fernet.generate_key().decode())
+
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/models",
+        json={
+            "name": "update-provider",
+            "provider_type": "openai",
+            "api_key": "sk-old",
+            "api_base_url": "https://example.com/v1",
+            "custom_parameters": {},
+            "models": ["gpt-4o"],
+            "is_default": False,
+        },
+    )
+    assert create_response.status_code == 200
+    provider_id = create_response.json()["id"]
+
+    update_response = client.put(
+        f"/api/models/{provider_id}",
+        json={"api_key": "sk-new-secret"},
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json()["api_key"] == "sk-new-secret"

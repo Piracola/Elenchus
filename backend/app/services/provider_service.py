@@ -126,18 +126,13 @@ class ProviderService:
             logger.error("Failed to decrypt API key: %s", exc)
             return None
 
-    def _record_to_response(
-        self, record: ProviderRecord, mask_key: bool = True
-    ) -> ModelConfigResponse:
+    def _record_to_response(self, record: ProviderRecord) -> ModelConfigResponse:
         """Convert database record to response model."""
-        api_key = self._decrypt_api_key(record.api_key_encrypted)
-        if mask_key:
-            api_key = self._mask_api_key(api_key)
         return ModelConfigResponse(
             id=record.id,
             name=record.name,
             provider_type=record.provider_type,
-            api_key=api_key,
+            api_key=self._decrypt_api_key(record.api_key_encrypted),
             api_base_url=record.api_base_url,
             custom_parameters=record.custom_parameters or {},
             models=record.models or [],
@@ -160,15 +155,6 @@ class ProviderService:
             "created_at": record.created_at,
             "updated_at": record.updated_at,
         }
-
-    @staticmethod
-    def _mask_api_key(api_key: str | None) -> str | None:
-        """Mask API key for display."""
-        if not api_key:
-            return api_key
-        if len(api_key) <= 8:
-            return "****"
-        return api_key[:3] + "..." + api_key[-4:]
 
     async def _get_session(self) -> AsyncSession:
         """Get async database session."""
