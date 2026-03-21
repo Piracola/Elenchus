@@ -24,7 +24,7 @@ describe('MessageRow', () => {
                     role: 'challenger',
                     agent_name: 'Challenger',
                 })}
-            />
+            />,
         );
 
         expect(markup).toContain('Challenger');
@@ -40,7 +40,7 @@ describe('MessageRow', () => {
                     role: 'proposer',
                     agent_name: 'proposer',
                 })}
-            />
+            />,
         );
 
         expect(markup).toContain('Proposer');
@@ -75,6 +75,6 @@ describe('MessageRow', () => {
 
         expect(markup).toContain('观察报告');
         expect(markup).toContain('Detected a false dichotomy.');
-        expect(markup).not.toContain('Multi-dimensional score');
+        expect(markup).not.toContain('裁判评分表');
     });
 });

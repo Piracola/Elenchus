@@ -54,6 +54,7 @@ export function groupDialogue(entries: DialogueEntry[], participants?: string[])
             rows.push({ agent: entry, judge: null, turn: entry.turn });
             appendPendingIndex(pendingByRole, entry.role, nextIndex);
             appendPendingIndex(pendingSpeakers, 'all', nextIndex);
+
             if (entry.turn === undefined) {
                 appendPendingIndex(pendingByRoleWithoutTurn, entry.role, nextIndex);
                 appendPendingIndex(pendingSpeakerWithoutTurn, 'all', nextIndex);

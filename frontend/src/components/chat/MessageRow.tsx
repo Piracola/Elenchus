@@ -1,8 +1,8 @@
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { SCORE_DIMENSIONS } from '../../types';
-import type { DialogueEntry } from '../../types';
+import { SCORE_DIMENSIONS, SCORE_MODULES } from '../../types';
+import type { DialogueEntry, ScoreDimensionKey, ScoreModuleKey, TurnScore } from '../../types';
 import RoundInsights from './RoundInsights';
 import type { InsightSection } from './RoundInsights';
 
@@ -67,6 +67,17 @@ const EXTRA_ROLE_VISUALS: Omit<RoleVisual, 'badge' | 'label'>[] = [
         glowTint: 'rgba(245, 158, 11, 0.35)',
     },
 ];
+
+const DIMENSION_WEIGHT_MAP = Object.fromEntries(
+    SCORE_DIMENSIONS.map((dimension) => [dimension.key, dimension.weight]),
+) as Record<ScoreDimensionKey, number>;
+
+const MODULE_DIMENSIONS: Record<ScoreModuleKey, ScoreDimensionKey[]> = {
+    foundation: ['evidence_quality', 'topic_focus'],
+    confrontation: ['logical_rigor', 'rebuttal_strength'],
+    stability: ['consistency'],
+    vision: ['persuasiveness'],
+};
 
 function formatRoleLabel(role: string | undefined): string {
     if (!role) return '辩手';
@@ -149,8 +160,64 @@ function getJudgeVisual(judgeEntry?: DialogueEntry | null): JudgeVisual {
     };
 }
 
+function formatScoreValue(score: number): string {
+    const rounded = Math.round(score * 10) / 10;
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function getDimensionScore(scores: TurnScore, key: ScoreDimensionKey): number | null {
+    const scoreValue = scores[key]?.score;
+    return typeof scoreValue === 'number' ? scoreValue : null;
+}
+
+function getWeightedAverage(scores: TurnScore, dimensions: ScoreDimensionKey[]): number | null {
+    const availableDimensions = dimensions.filter((dimension) => getDimensionScore(scores, dimension) !== null);
+    if (availableDimensions.length === 0) {
+        return null;
+    }
+
+    const totalWeight = availableDimensions.reduce(
+        (sum, dimension) => sum + DIMENSION_WEIGHT_MAP[dimension],
+        0,
+    );
+    const weightedSum = availableDimensions.reduce((sum, dimension) => {
+        const scoreValue = getDimensionScore(scores, dimension);
+        return sum + (scoreValue ?? 0) * DIMENSION_WEIGHT_MAP[dimension];
+    }, 0);
+
+    return Math.round(((weightedSum / totalWeight) + Number.EPSILON) * 10) / 10;
+}
+
+function getComprehensiveScore(scores: TurnScore): number | null {
+    if (typeof scores.comprehensive_score === 'number') {
+        return Math.round((scores.comprehensive_score + Number.EPSILON) * 10) / 10;
+    }
+    return getWeightedAverage(
+        scores,
+        SCORE_DIMENSIONS.map((dimension) => dimension.key),
+    );
+}
+
+function getModuleScore(scores: TurnScore, moduleKey: ScoreModuleKey): number | null {
+    const precomputedScore = scores.module_scores?.[moduleKey];
+    if (typeof precomputedScore === 'number') {
+        return Math.round((precomputedScore + Number.EPSILON) * 10) / 10;
+    }
+    return getWeightedAverage(scores, MODULE_DIMENSIONS[moduleKey]);
+}
+
 function ScoreGrid({ judgeEntry }: { judgeEntry: NonNullable<MessageRowProps['judgeEntry']> }) {
     if (judgeEntry.role !== 'judge' || !judgeEntry.scores || Object.keys(judgeEntry.scores).length === 0) {
+        return null;
+    }
+
+    const comprehensiveScore = getComprehensiveScore(judgeEntry.scores);
+    const moduleCards = SCORE_MODULES.map((module) => ({
+        ...module,
+        score: getModuleScore(judgeEntry.scores as TurnScore, module.key),
+    })).filter((module): module is (typeof SCORE_MODULES)[number] & { score: number } => module.score !== null);
+
+    if (comprehensiveScore === null && moduleCards.length === 0) {
         return null;
     }
 
@@ -177,29 +244,96 @@ function ScoreGrid({ judgeEntry }: { judgeEntry: NonNullable<MessageRowProps['ju
                     letterSpacing: '0.05em',
                 }}
             >
-                Multi-dimensional score
+                裁判评分表
             </div>
+            {comprehensiveScore !== null && (
+                <motion.div
+                    whileHover={{ scale: 1.01 }}
+                    style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                        background: 'linear-gradient(135deg, rgba(255, 149, 0, 0.14) 0%, rgba(255, 149, 0, 0.04) 100%)',
+                        border: '1px solid rgba(255, 149, 0, 0.18)',
+                        padding: '16px',
+                        borderRadius: 'var(--radius-lg)',
+                        boxShadow: 'var(--shadow-xs)',
+                        marginBottom: '12px',
+                    }}
+                >
+                    <div
+                        style={{
+                            fontSize: '12px',
+                            color: 'var(--text-secondary)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '8px',
+                        }}
+                    >
+                        <span>综合评分</span>
+                        <span
+                            style={{
+                                padding: '4px 8px',
+                                borderRadius: 'var(--radius-full)',
+                                background: 'rgba(255, 149, 0, 0.12)',
+                                color: 'var(--color-judge)',
+                                fontWeight: 600,
+                            }}
+                        >
+                            加权汇总
+                        </span>
+                    </div>
+                    <div
+                        style={{
+                            fontSize: '30px',
+                            fontWeight: 800,
+                            color: 'var(--color-judge)',
+                            lineHeight: 1,
+                        }}
+                    >
+                        {formatScoreValue(comprehensiveScore)}
+                        <span
+                            style={{
+                                fontSize: '13px',
+                                color: 'var(--text-muted)',
+                                fontWeight: 500,
+                                marginLeft: '4px',
+                            }}
+                        >
+                            /10
+                        </span>
+                    </div>
+                </motion.div>
+            )}
+
             <div
                 style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
                     gap: '10px',
                 }}
             >
-                {SCORE_DIMENSIONS.map((dim) => {
-                    const dimData = judgeEntry.scores?.[dim.key];
-                    if (!dimData) return null;
-                    return (
-                        <motion.div
-                            key={dim.key}
-                            whileHover={{ scale: 1.02 }}
+                {moduleCards.map((module) => (
+                    <motion.div
+                        key={module.key}
+                        whileHover={{ scale: 1.02 }}
+                        style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                            background: 'var(--bg-card)',
+                            padding: '14px',
+                            borderRadius: 'var(--radius-md)',
+                            boxShadow: 'var(--shadow-xs)',
+                        }}
+                    >
+                        <div
                             style={{
                                 display: 'flex',
-                                flexDirection: 'column',
-                                background: 'var(--bg-card)',
-                                padding: '12px',
-                                borderRadius: 'var(--radius-md)',
-                                boxShadow: 'var(--shadow-xs)',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '8px',
                             }}
                         >
                             <div
@@ -211,31 +345,42 @@ function ScoreGrid({ judgeEntry }: { judgeEntry: NonNullable<MessageRowProps['ju
                                     gap: '6px',
                                 }}
                             >
-                                <span>{dim.icon}</span>
-                                {dim.label}
+                                <span>{module.icon}</span>
+                                {module.label}
                             </div>
-                            <div
+                            <span
                                 style={{
-                                    fontSize: '20px',
-                                    fontWeight: 700,
-                                    color: 'var(--color-judge)',
-                                    marginTop: '6px',
+                                    fontSize: '11px',
+                                    color: 'var(--text-muted)',
+                                    padding: '3px 7px',
+                                    borderRadius: 'var(--radius-full)',
+                                    background: 'var(--bg-tertiary)',
                                 }}
                             >
-                                {dimData.score}
-                                <span
-                                    style={{
-                                        fontSize: '12px',
-                                        color: 'var(--text-muted)',
-                                        fontWeight: 400,
-                                    }}
-                                >
-                                    /10
-                                </span>
-                            </div>
-                        </motion.div>
-                    );
-                })}
+                                {module.weight}%
+                            </span>
+                        </div>
+                        <div
+                            style={{
+                                fontSize: '22px',
+                                fontWeight: 700,
+                                color: 'var(--color-judge)',
+                            }}
+                        >
+                            {formatScoreValue(module.score)}
+                            <span
+                                style={{
+                                    fontSize: '12px',
+                                    color: 'var(--text-muted)',
+                                    fontWeight: 400,
+                                    marginLeft: '2px',
+                                }}
+                            >
+                                /10
+                            </span>
+                        </div>
+                    </motion.div>
+                ))}
             </div>
         </motion.div>
     );
@@ -498,7 +643,6 @@ export default function MessageRow({
                 width: '100%',
                 gap: '14px',
                 marginBottom: '32px',
-                opacity: judgeOnly ? 1 : 1,
                 borderRadius: 'var(--radius-xl)',
                 background: rowFocused ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
                 transition: 'background var(--transition-fast)',
