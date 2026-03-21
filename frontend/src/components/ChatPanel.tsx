@@ -70,6 +70,9 @@ const FLOATING_INSPECTOR_DEFAULT_SIZE = { width: 360, height: 520 };
 const FLOATING_INSPECTOR_MIN_SIZE = { width: 300, height: 260 };
 const FLOATING_INSPECTOR_MARGIN = 8;
 const FLOATING_INSPECTOR_DOCK_GAP = 16;
+const INITIAL_HISTORY_ROW_WINDOW = 120;
+const HISTORY_ROW_BATCH_SIZE = 80;
+const HISTORY_ROW_PRELOAD_THRESHOLD = 240;
 const FLOATING_INSPECTOR_RESIZE_HANDLES: ReadonlyArray<{
     key: FloatingInspectorResizeHandle;
     style: CSSProperties;
@@ -297,38 +300,6 @@ function eventMatchesTurn(
     return typeof payloadTurn === 'number' && payloadTurn === turn;
 }
 
-function isAgentSpeechEntry(entry: DialogueEntry, participants: string[] | undefined): boolean {
-    if (participants?.includes(entry.role)) {
-        return true;
-    }
-
-    return ![
-        'judge',
-        'error',
-        'audience',
-        'sophistry_round_report',
-        'sophistry_final_report',
-    ].includes(entry.role);
-}
-
-function getDialogueAnimationKey(entry: DialogueEntry | null | undefined): string | null {
-    if (!entry) return null;
-    return entry.event_id || `${entry.role}:${entry.timestamp}:${entry.content.length}`;
-}
-
-function getLatestAgentSpeechKey(
-    entries: DialogueEntry[],
-    participants: string[] | undefined,
-): string | null {
-    for (let index = entries.length - 1; index >= 0; index -= 1) {
-        const entry = entries[index];
-        if (!entry || !isAgentSpeechEntry(entry, participants)) continue;
-        return getDialogueAnimationKey(entry);
-    }
-
-    return null;
-}
-
 export default function ChatPanel() {
     const {
         currentSession,
@@ -351,7 +322,7 @@ export default function ChatPanel() {
     const floatingInspectorInteractionRef = useRef<FloatingInspectorInteraction | null>(null);
     const floatingInspectorRectRef = useRef<FloatingInspectorRect | null>(null);
     const autoScrollEnabledRef = useRef(true);
-    const lastSeenAgentEntryKeyRef = useRef<string | null>(null);
+    const pendingHistoryPrependScrollHeightRef = useRef<number | null>(null);
 
     const [topOverlayHeight, setTopOverlayHeight] = useState(0);
     const [bottomOverlayHeight, setBottomOverlayHeight] = useState(0);
@@ -363,42 +334,18 @@ export default function ChatPanel() {
     const [floatingInspectorActive, setFloatingInspectorActive] = useState(false);
     const [floatingInspectorExpanded, setFloatingInspectorExpanded] = useState(false);
     const [exportingFormat, setExportingFormat] = useState<'markdown' | 'json' | null>(null);
-    const [animatedAgentEntryKey, setAnimatedAgentEntryKey] = useState<string | null>(null);
+    const [historyRowStart, setHistoryRowStart] = useState(0);
     const [isWideLayout, setIsWideLayout] = useState(() => {
         if (typeof window === 'undefined') return true;
         return window.innerWidth >= 1280;
     });
     const floatingInspectorWidth = floatingInspectorBounds.width;
     const floatingInspectorHeight = floatingInspectorBounds.height;
-    const latestAgentSpeechKey = useMemo(
-        () => getLatestAgentSpeechKey(
-            currentSession?.dialogue_history || [],
-            currentSession?.participants,
-        ),
-        [currentSession?.dialogue_history, currentSession?.participants],
-    );
 
     useEffect(() => {
         autoScrollEnabledRef.current = true;
-        lastSeenAgentEntryKeyRef.current = latestAgentSpeechKey;
-        setAnimatedAgentEntryKey(null);
-    }, [currentSession?.id, latestAgentSpeechKey]);
-
-    useEffect(() => {
-        if (!currentSession?.id || !latestAgentSpeechKey) {
-            return;
-        }
-
-        const previousKey = lastSeenAgentEntryKeyRef.current;
-        if (previousKey === latestAgentSpeechKey) {
-            return;
-        }
-
-        lastSeenAgentEntryKeyRef.current = latestAgentSpeechKey;
-        if (!replayEnabled) {
-            setAnimatedAgentEntryKey(latestAgentSpeechKey);
-        }
-    }, [currentSession?.id, latestAgentSpeechKey, replayEnabled]);
+        pendingHistoryPrependScrollHeightRef.current = null;
+    }, [currentSession?.id]);
 
     useLayoutEffect(() => {
         if (replayEnabled) return;
@@ -631,10 +578,14 @@ export default function ChatPanel() {
         overlayHeightsRef.current = nextHeights;
     }, [bottomOverlayHeight, topOverlayHeight]);
 
+    const visibleEventIds = useMemo(
+        () => (replayEnabled ? new Set(visibleRuntimeEvents.map((event) => event.event_id)) : null),
+        [replayEnabled, visibleRuntimeEvents],
+    );
+
     const rows = useMemo(() => {
-        const visibleEventIds = new Set(visibleRuntimeEvents.map((event) => event.event_id));
         const fullHistory = currentSession?.dialogue_history || [];
-        const history = replayEnabled
+        const history = replayEnabled && visibleEventIds
             ? fullHistory.filter((entry) => !entry.event_id || visibleEventIds.has(entry.event_id))
             : fullHistory;
         const allEntries: DialogueEntry[] = [...history];
@@ -664,35 +615,48 @@ export default function ChatPanel() {
         replayEnabled,
         streamingContent,
         streamingRole,
-        visibleRuntimeEvents,
+        visibleEventIds,
     ]);
+
+    useEffect(() => {
+        if (replayEnabled) {
+            setHistoryRowStart(0);
+            return;
+        }
+
+        setHistoryRowStart(Math.max(0, rows.length - INITIAL_HISTORY_ROW_WINDOW));
+    }, [currentSession?.id, replayEnabled, rows.length]);
+
+    const renderedRows = useMemo(
+        () => (replayEnabled || historyRowStart <= 0 ? rows : rows.slice(historyRowStart)),
+        [historyRowStart, replayEnabled, rows],
+    );
+    const hiddenHistoryRowCount = replayEnabled ? 0 : historyRowStart;
 
     const visibleTeamDiscussion = useMemo(() => {
         const fullHistory = currentSession?.team_dialogue_history || [];
-        if (!replayEnabled) {
+        if (!replayEnabled || !visibleEventIds) {
             return fullHistory;
         }
 
-        const visibleEventIds = new Set(visibleRuntimeEvents.map((event) => event.event_id));
         return fullHistory.filter((entry) => !entry.event_id || visibleEventIds.has(entry.event_id));
     }, [
         currentSession?.team_dialogue_history,
         replayEnabled,
-        visibleRuntimeEvents,
+        visibleEventIds,
     ]);
 
     const visibleJuryDiscussion = useMemo(() => {
         const fullHistory = currentSession?.jury_dialogue_history || [];
-        if (!replayEnabled) {
+        if (!replayEnabled || !visibleEventIds) {
             return fullHistory;
         }
 
-        const visibleEventIds = new Set(visibleRuntimeEvents.map((event) => event.event_id));
         return fullHistory.filter((entry) => !entry.event_id || visibleEventIds.has(entry.event_id));
     }, [
         currentSession?.jury_dialogue_history,
         replayEnabled,
-        visibleRuntimeEvents,
+        visibleEventIds,
     ]);
 
     const teamDiscussionMap = useMemo(
@@ -717,13 +681,25 @@ export default function ChatPanel() {
     );
     const consensusFocused = focusedRuntimeEvent?.type === 'consensus_summary';
 
+    useLayoutEffect(() => {
+        const previousScrollHeight = pendingHistoryPrependScrollHeightRef.current;
+        const container = scrollRef.current;
+        if (previousScrollHeight === null || !container) return;
+
+        const scrollDelta = container.scrollHeight - previousScrollHeight;
+        if (scrollDelta > 0) {
+            container.scrollTop += scrollDelta;
+        }
+        pendingHistoryPrependScrollHeightRef.current = null;
+    }, [renderedRows.length]);
+
     useEffect(() => {
         if (!focusedRuntimeEventId) return;
         const container = scrollRef.current;
         if (!container) return;
         const target = container.querySelector('[data-row-focused="true"]') as HTMLElement | null;
         target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }, [focusedRuntimeEventId, rows]);
+    }, [focusedRuntimeEventId, renderedRows]);
 
     const startFloatingInspectorInteraction = (
         event: ReactPointerEvent<HTMLElement>,
@@ -793,10 +769,23 @@ export default function ChatPanel() {
         }
     };
 
+    const loadOlderHistoryRows = () => {
+        const container = scrollRef.current;
+        if (!container || replayEnabled || hiddenHistoryRowCount <= 0) return;
+        if (pendingHistoryPrependScrollHeightRef.current !== null) return;
+
+        pendingHistoryPrependScrollHeightRef.current = container.scrollHeight;
+        setHistoryRowStart((currentStart) => Math.max(0, currentStart - HISTORY_ROW_BATCH_SIZE));
+    };
+
     const handleScroll = () => {
         const container = scrollRef.current;
         if (!container || replayEnabled) return;
         autoScrollEnabledRef.current = isElementNearBottom(container);
+
+        if (hiddenHistoryRowCount > 0 && container.scrollTop <= HISTORY_ROW_PRELOAD_THRESHOLD) {
+            loadOlderHistoryRows();
+        }
     };
 
     return (
@@ -1131,13 +1120,33 @@ export default function ChatPanel() {
                             gap: '10px',
                         }}
                     >
+                        {hiddenHistoryRowCount > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: '8px' }}>
+                                <button
+                                    type="button"
+                                    onClick={loadOlderHistoryRows}
+                                    style={{
+                                        border: '1px solid var(--border-subtle)',
+                                        background: 'var(--bg-card)',
+                                        color: 'var(--text-secondary)',
+                                        borderRadius: 'var(--radius-full)',
+                                        padding: '10px 14px',
+                                        fontSize: '12px',
+                                        cursor: 'pointer',
+                                        boxShadow: 'var(--shadow-xs)',
+                                    }}
+                                >
+                                    {`已折叠更早的 ${hiddenHistoryRowCount} 条消息，向上滚动或点击继续加载`}
+                                </button>
+                            </div>
+                        )}
                         {(() => {
                             const renderedTurns = new Set(
-                                rows
+                                renderedRows
                                     .map((row) => row.turn ?? row.agent?.turn ?? row.judge?.turn)
                                     .filter((value): value is number => value !== undefined),
                             );
-                            return rows.map((row, idx) => {
+                            return renderedRows.map((row, idx) => {
                                 const turn = row.turn ?? row.agent?.turn ?? row.judge?.turn;
                                 const agentRole = row.agent?.role;
                                 const focusState = resolveRowFocus(row, focusedRuntimeEvent);
@@ -1168,7 +1177,7 @@ export default function ChatPanel() {
 
                                 const agentKey = row.agent?.timestamp || `agent-${idx}`;
                                 const judgeKey = row.judge?.timestamp || `judge-${idx}`;
-                                const nextRow = rows[idx + 1];
+                                const nextRow = renderedRows[idx + 1];
                                 const nextTurn = nextRow?.turn ?? nextRow?.agent?.turn ?? nextRow?.judge?.turn;
                                 const isLastRowOfTurn = turn !== undefined && nextTurn !== turn;
                                 const juryEntries = isLastRowOfTurn && turn !== undefined
@@ -1193,10 +1202,6 @@ export default function ChatPanel() {
                                             highlightJudge={focusState.judge}
                                             highlightSystem={focusState.system}
                                             insightSections={sections}
-                                            animateAgentContent={
-                                                !replayEnabled
-                                                && getDialogueAnimationKey(row.agent) === animatedAgentEntryKey
-                                            }
                                         />
                                         {!!juryEntries.length && (
                                             <div data-row-focused={juryFocused ? 'true' : 'false'}>

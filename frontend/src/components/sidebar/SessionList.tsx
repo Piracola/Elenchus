@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Search, Settings, Sun, Moon, Trash2, MessageSquare } from 'lucide-react';
 import { useDebateStore } from '../../stores/debateStore';
@@ -17,6 +17,7 @@ export default function SessionList() {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [total, setTotal] = useState(0);
     const [hoveredId, setHoveredId] = useState<string | null>(null);
+    const sessionSelectionRequestRef = useRef(0);
     const PAGE_SIZE = 50;
     const currentSessionId = currentSession?.id;
 
@@ -42,16 +43,21 @@ export default function SessionList() {
 
     const handleSelectSession = async (item: SessionListItem) => {
         if (item.id === currentSessionId) return;
+        const requestId = sessionSelectionRequestRef.current + 1;
+        sessionSelectionRequestRef.current = requestId;
         try {
-            const [fullSession, runtimePage] = await Promise.all([
-                api.sessions.get(item.id),
-                api.sessions.listRuntimeEvents(item.id).catch((error) => {
-                    console.error('Failed to load runtime events', error);
+            const runtimePagePromise = api.sessions.listRuntimeEvents(item.id).catch((error) => {
+                console.error('Failed to load runtime events', error);
                     toast('加载执行时间轴失败，已仅打开辩论内容', 'error');
-                    return null;
-                }),
-            ]);
+                return null;
+            });
+            const fullSession = await api.sessions.get(item.id);
+            if (sessionSelectionRequestRef.current !== requestId) return;
+
             setCurrentSession(fullSession);
+            const runtimePage = await runtimePagePromise;
+            if (sessionSelectionRequestRef.current !== requestId) return;
+
             hydrateRuntimeEvents(
                 runtimePage?.events ?? [],
                 runtimePage?.has_more ?? false,

@@ -67,6 +67,19 @@ describe('groupDialogue', () => {
     expect(result[1].judge).toBeNull()
   })
 
+  it('should fall back to the latest unmatched no-turn speaker row for judge entries', () => {
+    const entries: DialogueEntry[] = [
+      { role: 'proposer', agent_name: 'Proposer', content: 'Opening', timestamp: '2024-01-01T00:00:00Z', citations: [] },
+      { role: 'proposer', agent_name: 'Proposer', content: 'Turn 2', timestamp: '2024-01-01T00:01:00Z', citations: [], turn: 1 },
+      { role: 'judge', agent_name: 'Judge', content: 'Scores unknown turn', timestamp: '2024-01-01T00:02:00Z', citations: [], target_role: 'proposer', turn: 9 },
+    ]
+
+    const result = groupDialogue(entries)
+
+    expect(result[0].judge?.content).toBe('Scores unknown turn')
+    expect(result[1].judge).toBeNull()
+  })
+
   it('should attach sophistry observer reports to the latest speaker row of the turn', () => {
     const entries: DialogueEntry[] = [
       { role: 'proposer', agent_name: 'Proposer', content: 'Opening', timestamp: '2024-01-01T00:00:00Z', citations: [], turn: 0 },
