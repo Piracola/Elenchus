@@ -41,7 +41,8 @@ async def debate_ws(websocket: WebSocket, session_id: str):
             payload={"content": f"Connected to session {session_id}"},
             source="ws.gateway",
         )
-        await runtime_bus.send(session_id, websocket, connected_event)
+        if not await runtime_bus.send(session_id, websocket, connected_event):
+            return
 
         if runtime_service.is_running(session_id):
             resumed_event = await runtime_bus.create_event(
@@ -51,13 +52,14 @@ async def debate_ws(websocket: WebSocket, session_id: str):
                 source="ws.gateway",
                 phase="processing",
             )
-            await runtime_bus.send(session_id, websocket, resumed_event)
+            if not await runtime_bus.send(session_id, websocket, resumed_event):
+                return
 
         while True:
             try:
                 data = await websocket.receive_json()
             except WebSocketDisconnect:
-                raise
+                break
             except Exception:
                 invalid_json_event = await runtime_bus.create_event(
                     session_id=session_id,
@@ -66,7 +68,8 @@ async def debate_ws(websocket: WebSocket, session_id: str):
                     source="ws.gateway",
                     phase="error",
                 )
-                await runtime_bus.send(session_id, websocket, invalid_json_event)
+                if not await runtime_bus.send(session_id, websocket, invalid_json_event):
+                    return
                 continue
 
             action = data.get("action") if isinstance(data, dict) else None
@@ -78,7 +81,8 @@ async def debate_ws(websocket: WebSocket, session_id: str):
                     source="ws.gateway",
                     phase="error",
                 )
-                await runtime_bus.send(session_id, websocket, invalid_action_event)
+                if not await runtime_bus.send(session_id, websocket, invalid_action_event):
+                    return
                 continue
 
             if action == "start":
@@ -91,7 +95,8 @@ async def debate_ws(websocket: WebSocket, session_id: str):
                         source="ws.gateway",
                         phase="error",
                     )
-                    await runtime_bus.send(session_id, websocket, start_failed_event)
+                    if not await runtime_bus.send(session_id, websocket, start_failed_event):
+                        return
                     continue
 
                 session_db = result.session or {}
@@ -119,7 +124,8 @@ async def debate_ws(websocket: WebSocket, session_id: str):
                     payload={},
                     source="ws.gateway",
                 )
-                await runtime_bus.send(session_id, websocket, pong_event)
+                if not await runtime_bus.send(session_id, websocket, pong_event):
+                    return
 
             elif action == "intervene":
                 content = data.get("content", "").strip()
@@ -144,10 +150,9 @@ async def debate_ws(websocket: WebSocket, session_id: str):
                         payload={"content": "Intervention queued for the next round."},
                         source="ws.gateway",
                     )
-                    await runtime_bus.send(session_id, websocket, queued_event)
-
-    except WebSocketDisconnect:
-        runtime_bus.disconnect(session_id, websocket)
+                    if not await runtime_bus.send(session_id, websocket, queued_event):
+                        return
     except Exception as exc:
         logger.error("WebSocket error for session %s: %s", session_id, exc)
+    finally:
         runtime_bus.disconnect(session_id, websocket)

@@ -2,21 +2,31 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from app.runtime.bus import RuntimeBus
 
 
 class _FakeWebSocket:
-    def __init__(self, *, fail_send: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        fail_send: bool = False,
+        send_error: Exception | None = None,
+    ) -> None:
         self.accepted = False
         self.fail_send = fail_send
+        self.send_error = send_error
         self.messages: list[dict[str, object]] = []
 
     async def accept(self) -> None:
         self.accepted = True
 
     async def send_json(self, message: dict[str, object]) -> None:
+        if self.send_error is not None:
+            raise self.send_error
         if self.fail_send:
             raise RuntimeError("socket closed")
         self.messages.append(message)
@@ -95,3 +105,20 @@ async def test_runtime_bus_repairs_mojibake_payloads_before_delivery():
     assert event["payload"]["content"] == expected
     assert repository.persisted[0]["payload"]["content"] == expected
     assert captured == [("session-1", event)]
+
+
+@pytest.mark.asyncio
+async def test_runtime_bus_send_drops_closed_socket_without_warning(caplog):
+    bus = RuntimeBus()
+    closed = _FakeWebSocket(
+        send_error=RuntimeError('Cannot call "send" once a close message has been sent.')
+    )
+
+    await bus.connect("session-1", closed)
+
+    with caplog.at_level(logging.DEBUG, logger="app.runtime.bus"):
+        delivered = await bus.send("session-1", closed, {"type": "pong"})
+
+    assert delivered is False
+    assert bus.get_connections("session-1") == []
+    assert not [record for record in caplog.records if record.levelno >= logging.WARNING]

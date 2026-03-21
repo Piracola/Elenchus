@@ -38,8 +38,10 @@ class _FakeWebSocket:
 
 
 class _FakeRuntimeBus:
-    def __init__(self) -> None:
+    def __init__(self, *, send_results: list[bool] | None = None) -> None:
         self.disconnected: list[tuple[str, _FakeWebSocket]] = []
+        self.sent_messages: list[dict[str, object]] = []
+        self._send_results = list(send_results or [])
         self._seq = 0
 
     async def connect(self, session_id: str, websocket: _FakeWebSocket) -> None:
@@ -72,8 +74,12 @@ class _FakeRuntimeBus:
         session_id: str,
         websocket: _FakeWebSocket,
         message: dict[str, object],
-    ) -> None:
-        await websocket.send_json(message)
+    ) -> bool:
+        self.sent_messages.append(message)
+        should_deliver = self._send_results.pop(0) if self._send_results else True
+        if should_deliver:
+            await websocket.send_json(message)
+        return should_deliver
 
 
 async def _start_failed(_session_id: str) -> SimpleNamespace:
@@ -133,3 +139,28 @@ async def test_running_session_sends_resume_status_on_connect(monkeypatch):
     assert websocket.sent[0]["type"] == "system"
     assert websocket.sent[1]["type"] == "status"
     assert websocket.sent[1]["phase"] == "processing"
+
+
+@pytest.mark.asyncio
+async def test_ping_send_failure_stops_processing_after_disconnect(monkeypatch):
+    bus = _FakeRuntimeBus(send_results=[True, False])
+    websocket = _FakeWebSocket(
+        [
+            {"action": "ping"},
+            {"action": "ping"},
+        ]
+    )
+
+    monkeypatch.setattr(websocket_api, "get_runtime_bus", lambda: bus)
+    monkeypatch.setattr(
+        websocket_api,
+        "get_debate_runtime_service",
+        lambda: SimpleNamespace(is_running=lambda _session_id: False),
+    )
+
+    await websocket_api.debate_ws(websocket, "abcdef123456")
+
+    assert websocket.accepted is True
+    assert [message["type"] for message in bus.sent_messages] == ["system", "pong"]
+    assert websocket.sent == [bus.sent_messages[0]]
+    assert bus.disconnected == [("abcdef123456", websocket)]

@@ -7,7 +7,8 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketState
 
 from app.runtime.event_schema import RuntimeEvent, build_runtime_event
 
@@ -41,34 +42,47 @@ class RuntimeBus:
         )
 
     def disconnect(self, session_id: str, websocket: WebSocket) -> None:
-        connections = self._active.get(session_id, [])
+        connections = self._active.get(session_id)
+        if not connections:
+            return
+
+        removed = False
         if websocket in connections:
             connections.remove(websocket)
+            removed = True
         if not connections:
             self._active.pop(session_id, None)
-        logger.info("WS disconnected: session=%s", session_id)
+        if removed:
+            logger.info("WS disconnected: session=%s", session_id)
 
     async def send(
         self,
         session_id: str,
         websocket: WebSocket,
         message: dict[str, Any],
-    ) -> None:
+    ) -> bool:
+        if self._is_closed(websocket):
+            self.disconnect(session_id, websocket)
+            return False
+
         try:
             await websocket.send_json(message)
+            return True
         except Exception as exc:
-            logger.warning("Failed to send WS message for %s: %s", session_id, exc)
+            self.disconnect(session_id, websocket)
+            if self._is_expected_disconnect_error(exc):
+                logger.debug(
+                    "Skipping WS message for disconnected session %s: %s",
+                    session_id,
+                    exc,
+                )
+            else:
+                logger.warning("Failed to send WS message for %s: %s", session_id, exc)
+            return False
 
     async def broadcast(self, session_id: str, message: dict[str, Any]) -> None:
-        dead: list[WebSocket] = []
-        for websocket in self._active.get(session_id, []):
-            try:
-                await websocket.send_json(message)
-            except Exception:
-                dead.append(websocket)
-
-        for websocket in dead:
-            self.disconnect(session_id, websocket)
+        for websocket in list(self._active.get(session_id, [])):
+            await self.send(session_id, websocket, message)
 
     def get_connections(self, session_id: str) -> list[WebSocket]:
         return self._active.get(session_id, [])
@@ -131,3 +145,18 @@ class RuntimeBus:
             current = self._seq_by_session.get(session_id, 0) + 1
             self._seq_by_session[session_id] = current
             return current
+
+    @staticmethod
+    def _is_closed(websocket: WebSocket) -> bool:
+        return (
+            getattr(websocket, "application_state", None) == WebSocketState.DISCONNECTED
+            or getattr(websocket, "client_state", None) == WebSocketState.DISCONNECTED
+        )
+
+    @staticmethod
+    def _is_expected_disconnect_error(exc: Exception) -> bool:
+        if isinstance(exc, WebSocketDisconnect):
+            return True
+        if not isinstance(exc, RuntimeError):
+            return False
+        return str(exc) == 'Cannot call "send" once a close message has been sent.'
