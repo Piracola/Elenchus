@@ -12,14 +12,17 @@ EventEmitter = Callable[[str, dict[str, Any]], Awaitable[None]]
 
 _NODE_STATUS = {
     "manage_context": ("正在整理上下文...", "preparing"),
-    "set_speaker": ("正在切换发言方...", "preparing"),
+    "set_speaker": ("正在切换发言者...", "preparing"),
     "team_discussion": ("组内讨论正在展开...", "preparing"),
-    "jury_discussion": ("多视角陪审团正在讨论本轮表现...", "preparing"),
-    "speaker": ("辩手正在思考并组织发言...", "speaking"),
+    "jury_discussion": ("陪审团讨论正在展开...", "preparing"),
+    "speaker": ("辩手正在组织发言...", "speaking"),
+    "sophistry_speaker": ("诡辩实验发言正在生成...", "speaking"),
     "tool_executor": ("正在调用工具核验事实...", "fact_checking"),
     "judge": ("裁判正在评估本轮表现...", "judging"),
+    "sophistry_observer": ("诡辩观察员正在整理本轮报告...", "processing"),
     "advance_turn": ("准备进入下一回合...", "context"),
-    "consensus": ("正在生成最终共识收敛总结...", "complete"),
+    "consensus": ("正在生成最终共识总结...", "complete"),
+    "sophistry_postmortem": ("诡辩实验总览正在生成...", "complete"),
 }
 
 
@@ -85,10 +88,7 @@ class RuntimeEventEmitter:
         )
 
     def describe_status(self, node_name: str) -> tuple[str, str]:
-        return _NODE_STATUS.get(
-            node_name,
-            (f"处理中: {node_name}", "processing"),
-        )
+        return _NODE_STATUS.get(node_name, (f"处理中: {node_name}", "processing"))
 
     async def emit_status_if_changed(
         self,
@@ -109,16 +109,13 @@ class RuntimeEventEmitter:
         role: str,
         agent_name: str,
         turn: int | None,
+        node_name: str = "speaker",
     ) -> None:
         await self.emit_runtime_event(
             session_id=session_id,
             event_type="speech_start",
-            payload={
-                "role": role,
-                "agent_name": agent_name,
-                "turn": turn,
-            },
-            source="runtime.node.speaker",
+            payload={"role": role, "agent_name": agent_name, "turn": turn},
+            source=f"runtime.node.{node_name}",
             phase="speaking",
         )
 
@@ -130,17 +127,13 @@ class RuntimeEventEmitter:
         agent_name: str,
         token: str,
         turn: int | None,
+        node_name: str = "speaker",
     ) -> None:
         await self.emit_runtime_event(
             session_id=session_id,
             event_type="speech_token",
-            payload={
-                "role": role,
-                "agent_name": agent_name,
-                "token": token,
-                "turn": turn,
-            },
-            source="runtime.node.speaker",
+            payload={"role": role, "agent_name": agent_name, "token": token, "turn": turn},
+            source=f"runtime.node.{node_name}",
             phase="speaking",
         )
 
@@ -151,16 +144,13 @@ class RuntimeEventEmitter:
         role: str,
         agent_name: str,
         turn: int | None,
+        node_name: str = "speaker",
     ) -> None:
         await self.emit_runtime_event(
             session_id=session_id,
             event_type="speech_cancel",
-            payload={
-                "role": role,
-                "agent_name": agent_name,
-                "turn": turn,
-            },
-            source="runtime.node.speaker",
+            payload={"role": role, "agent_name": agent_name, "turn": turn},
+            source=f"runtime.node.{node_name}",
             phase="speaking",
         )
 
@@ -169,15 +159,21 @@ class RuntimeEventEmitter:
         node_name: str,
         final_state: dict[str, Any],
     ) -> str | None:
+        debate_mode = str(final_state.get("debate_mode", "") or "")
+
         if node_name == "set_speaker":
             current_speaker = final_state.get("current_speaker")
             if isinstance(current_speaker, str) and current_speaker:
+                if debate_mode == "sophistry_experiment":
+                    return "sophistry_speaker"
                 team_config = final_state.get("team_config", {})
                 agents_per_team = int(team_config.get("agents_per_team", 0) or 0)
                 discussion_rounds = int(team_config.get("discussion_rounds", 0) or 0)
                 if agents_per_team > 0 and discussion_rounds > 0:
                     return "team_discussion"
                 return "speaker"
+            if debate_mode == "sophistry_experiment":
+                return "sophistry_observer"
             return None
 
         if node_name == "team_discussion":
@@ -201,6 +197,16 @@ class RuntimeEventEmitter:
                 return "judge"
             return None
 
+        if node_name == "sophistry_speaker":
+            participants = final_state.get("participants", ["proposer", "opposer"])
+            current_idx = final_state.get("current_speaker_index", 0)
+            if isinstance(participants, list) and current_idx + 1 >= len(participants):
+                return "sophistry_observer"
+            return "set_speaker"
+
+        if node_name == "sophistry_observer":
+            return "advance_turn"
+
         if node_name == "tool_executor":
             return "speaker"
 
@@ -208,11 +214,11 @@ class RuntimeEventEmitter:
             current_turn = final_state.get("current_turn", 0)
             max_turns = final_state.get("max_turns", 5)
             reasoning_config = final_state.get("reasoning_config", {})
-            if (
-                isinstance(current_turn, int)
-                and isinstance(max_turns, int)
-                and current_turn < max_turns
-            ):
+            if debate_mode == "sophistry_experiment":
+                if isinstance(current_turn, int) and isinstance(max_turns, int) and current_turn < max_turns:
+                    return "manage_context"
+                return "sophistry_postmortem"
+            if isinstance(current_turn, int) and isinstance(max_turns, int) and current_turn < max_turns:
                 return "manage_context"
             if bool(reasoning_config.get("consensus_enabled", True)):
                 return "consensus"
@@ -233,12 +239,18 @@ class RuntimeEventEmitter:
 
         latest = history[-1]
         already_streamed = bool(final_state.get("speech_was_streamed"))
+        speech_node = (
+            "sophistry_speaker"
+            if str(final_state.get("debate_mode", "") or "") == "sophistry_experiment"
+            else "speaker"
+        )
         if not already_streamed:
             await self.emit_speech_start(
                 session_id,
                 role=latest.get("role", ""),
                 agent_name=latest.get("agent_name", ""),
                 turn=latest.get("turn"),
+                node_name=speech_node,
             )
         await self.emit_runtime_event(
             session_id=session_id,
@@ -250,9 +262,55 @@ class RuntimeEventEmitter:
                 "citations": latest.get("citations", []),
                 "turn": latest.get("turn"),
             },
-            source="runtime.node.speaker",
+            source=f"runtime.node.{speech_node}",
             phase="speaking",
         )
+        return curr_history_len
+
+    async def emit_sophistry_reports(
+        self,
+        session_id: str,
+        final_state: dict[str, Any],
+        prev_history_len: int,
+    ) -> int:
+        history = final_state.get("dialogue_history", [])
+        curr_history_len = len(history)
+        if curr_history_len <= prev_history_len or not history:
+            return prev_history_len
+
+        new_entries = history[prev_history_len:curr_history_len]
+        for entry in new_entries:
+            if not isinstance(entry, dict):
+                continue
+
+            role = str(entry.get("role", "") or "")
+            if role not in {"sophistry_round_report", "sophistry_final_report"}:
+                continue
+
+            report_payload = (
+                final_state.get("final_mode_report")
+                if role == "sophistry_final_report"
+                else final_state.get("current_mode_report")
+            )
+            await self.emit_runtime_event(
+                session_id=session_id,
+                event_type=role,
+                payload={
+                    "role": role,
+                    "agent_name": entry.get("agent_name", ""),
+                    "content": entry.get("content", ""),
+                    "citations": entry.get("citations", []),
+                    "turn": entry.get("turn"),
+                    "report": report_payload if isinstance(report_payload, dict) else {},
+                },
+                source=(
+                    "runtime.node.sophistry_postmortem"
+                    if role == "sophistry_final_report"
+                    else "runtime.node.sophistry_observer"
+                ),
+                phase="complete" if role == "sophistry_final_report" else "processing",
+            )
+
         return curr_history_len
 
     async def emit_team_discussion(
@@ -347,10 +405,7 @@ class RuntimeEventEmitter:
             await self.emit_runtime_event(
                 session_id=session_id,
                 event_type="fact_check_result",
-                payload={
-                    "results": [recent_facts[-1]],
-                    "count": len(knowledge),
-                },
+                payload={"results": [recent_facts[-1]], "count": len(knowledge)},
                 source="runtime.node.tool_executor",
                 phase="fact_checking",
             )
@@ -371,11 +426,7 @@ class RuntimeEventEmitter:
             await self.emit_runtime_event(
                 session_id=session_id,
                 event_type="judge_score",
-                payload={
-                    "role": role,
-                    "scores": score_data,
-                    "turn": turn,
-                },
+                payload={"role": role, "scores": score_data, "turn": turn},
                 source="runtime.node.judge",
                 phase="judging",
             )

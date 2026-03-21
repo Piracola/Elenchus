@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from app.agents.safe_invoke import normalize_model_text
+from app.models.schemas import DebateMode
 from app.services import runtime_event_service, session_service
+from app.services.builtin_reference_service import ensure_builtin_mode_references
 from app.text_repair import repair_text_tree
 
 
@@ -29,6 +31,16 @@ def _default_reasoning_config() -> dict[str, bool]:
         "counterfactual_enabled": True,
         "consensus_enabled": True,
     }
+
+
+def _default_mode_config(debate_mode: str) -> dict[str, Any]:
+    if debate_mode == DebateMode.SOPHISTRY_EXPERIMENT.value:
+        return {
+            "seed_reference_enabled": True,
+            "observer_enabled": True,
+            "artifact_detail_level": "full",
+        }
+    return {}
 
 
 def _sanitize_dialogue_history(dialogue_history: Any) -> list[dict[str, Any]]:
@@ -64,8 +76,16 @@ class SessionRuntimeRepository:
         max_turns: int = 5,
         agent_configs: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
-        session_data = await session_service.get_session(None, session_id)
         record = await session_service.get_session_record(None, session_id)
+        if record is not None:
+            await ensure_builtin_mode_references(
+                session_id,
+                debate_mode=str(record.debate_mode or DebateMode.STANDARD.value),
+                mode_config=record.mode_config or {},
+            )
+            record = await session_service.get_session_record(None, session_id)
+
+        session_data = await session_service.get_session(None, session_id)
 
         if session_data is None:
             return None
@@ -108,11 +128,24 @@ class SessionRuntimeRepository:
         )
         if not isinstance(reasoning_config, dict):
             reasoning_config = _default_reasoning_config()
+        debate_mode = str(
+            session_data.get("debate_mode")
+            or (record.debate_mode if record is not None else DebateMode.STANDARD.value)
+            or DebateMode.STANDARD.value
+        )
+        mode_config = session_snapshot.get(
+            "mode_config",
+            session_data.get("mode_config", record.mode_config if record is not None else {}),
+        )
+        if not isinstance(mode_config, dict):
+            mode_config = _default_mode_config(debate_mode)
 
         return repair_text_tree(
             {
                 "session_id": session_id,
                 "topic": topic,
+                "debate_mode": debate_mode,
+                "mode_config": mode_config,
                 "participants": (
                     participants
                     if participants is not None
@@ -139,6 +172,10 @@ class SessionRuntimeRepository:
                 "team_config": team_config,
                 "jury_config": jury_config,
                 "reasoning_config": reasoning_config,
+                "mode_artifacts": session_snapshot.get("mode_artifacts", []),
+                "current_mode_report": session_snapshot.get("current_mode_report"),
+                "final_mode_report": session_snapshot.get("final_mode_report"),
+                "builtin_reference_docs": session_snapshot.get("builtin_reference_docs", []),
                 "current_team_discussion": [],
                 "current_team_summary": None,
                 "current_jury_discussion": [],
@@ -171,6 +208,11 @@ class SessionRuntimeRepository:
             current_turn=state.get("current_turn", 0),
             status=state.get("status", "in_progress"),
             state_snapshot={
+                "debate_mode": state.get("debate_mode", DebateMode.STANDARD.value),
+                "mode_config": state.get(
+                    "mode_config",
+                    _default_mode_config(str(state.get("debate_mode", DebateMode.STANDARD.value))),
+                ),
                 "dialogue_history": state.get("dialogue_history", []),
                 "team_dialogue_history": state.get("team_dialogue_history", []),
                 "jury_dialogue_history": state.get("jury_dialogue_history", []),
@@ -184,6 +226,10 @@ class SessionRuntimeRepository:
                 "team_config": state.get("team_config", _default_team_config()),
                 "jury_config": state.get("jury_config", _default_jury_config()),
                 "reasoning_config": state.get("reasoning_config", _default_reasoning_config()),
+                "mode_artifacts": state.get("mode_artifacts", []),
+                "current_mode_report": state.get("current_mode_report"),
+                "final_mode_report": state.get("final_mode_report"),
+                "builtin_reference_docs": state.get("builtin_reference_docs", []),
                 "last_executed_node": state.get("last_executed_node", ""),
                 "last_progress_at": state.get("last_progress_at", ""),
                 "last_status_message": state.get("last_status_message", ""),

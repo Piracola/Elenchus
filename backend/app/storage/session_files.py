@@ -95,6 +95,8 @@ def _read_json(path: Path) -> dict[str, Any] | None:
 class StoredSessionRecord:
     id: str
     topic: str
+    debate_mode: str
+    mode_config: dict[str, Any] | None
     participants: list[str]
     max_turns: int
     current_turn: int
@@ -108,6 +110,8 @@ def _record_to_payload(record: StoredSessionRecord) -> dict[str, Any]:
     return {
         "id": record.id,
         "topic": record.topic,
+        "debate_mode": record.debate_mode,
+        "mode_config": record.mode_config or {},
         "participants": record.participants,
         "max_turns": record.max_turns,
         "current_turn": record.current_turn,
@@ -126,9 +130,12 @@ def _payload_to_record(payload: dict[str, Any]) -> StoredSessionRecord | None:
 
     participants = payload.get("participants")
     state_snapshot = payload.get("state_snapshot")
+    mode_config = payload.get("mode_config")
     return StoredSessionRecord(
         id=session_id,
         topic=topic,
+        debate_mode=str(payload.get("debate_mode", "standard") or "standard"),
+        mode_config=mode_config if isinstance(mode_config, dict) else {},
         participants=participants if isinstance(participants, list) else ["proposer", "opposer"],
         max_turns=int(payload.get("max_turns", 5) or 5),
         current_turn=int(payload.get("current_turn", 0) or 0),

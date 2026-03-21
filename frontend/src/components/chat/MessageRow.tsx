@@ -26,6 +26,15 @@ type RoleVisual = {
     glowTint: string;
 };
 
+type JudgeVisual = {
+    badge: string;
+    label: string;
+    color: string;
+    background: string;
+    border: string;
+    glowTint: string;
+};
+
 const KNOWN_ROLE_VISUALS: Record<string, RoleVisual> = {
     proposer: {
         badge: '正',
@@ -109,6 +118,39 @@ function getAgentVisual(agentEntry?: DialogueEntry | null): RoleVisual {
     };
 }
 
+function getJudgeVisual(judgeEntry?: DialogueEntry | null): JudgeVisual {
+    if (judgeEntry?.role === 'sophistry_round_report') {
+        return {
+            badge: '观',
+            label: judgeEntry.agent_name || '观察报告',
+            color: 'var(--mode-sophistry-accent)',
+            background: 'var(--mode-sophistry-card)',
+            border: 'var(--mode-sophistry-border)',
+            glowTint: 'rgba(184, 137, 70, 0.28)',
+        };
+    }
+
+    if (judgeEntry?.role === 'sophistry_final_report') {
+        return {
+            badge: '总',
+            label: judgeEntry.agent_name || '实验总览',
+            color: 'var(--mode-sophistry-accent)',
+            background: 'linear-gradient(180deg, var(--mode-sophistry-card), rgba(255, 248, 238, 0.95))',
+            border: 'var(--mode-sophistry-border)',
+            glowTint: 'rgba(184, 137, 70, 0.34)',
+        };
+    }
+
+    return {
+        badge: '裁',
+        label: judgeEntry?.agent_name || '裁判评分',
+        color: 'var(--color-judge)',
+        background: 'var(--bg-secondary)',
+        border: 'rgba(255, 149, 0, 0.14)',
+        glowTint: 'rgba(255, 149, 0, 0.35)',
+    };
+}
+
 function Cursor({ color }: { color: string }) {
     return (
         <motion.span
@@ -116,7 +158,7 @@ function Cursor({ color }: { color: string }) {
             transition={{ repeat: Infinity, duration: 0.8 }}
             style={{ display: 'inline-block', marginLeft: '4px', color }}
         >
-            ▍
+            |
         </motion.span>
     );
 }
@@ -177,7 +219,7 @@ function useTypewriterReveal(text: string, enabled: boolean) {
 }
 
 function ScoreGrid({ judgeEntry }: { judgeEntry: NonNullable<MessageRowProps['judgeEntry']> }) {
-    if (!judgeEntry.scores || Object.keys(judgeEntry.scores).length === 0) {
+    if (judgeEntry.role !== 'judge' || !judgeEntry.scores || Object.keys(judgeEntry.scores).length === 0) {
         return null;
     }
 
@@ -204,7 +246,7 @@ function ScoreGrid({ judgeEntry }: { judgeEntry: NonNullable<MessageRowProps['ju
                     letterSpacing: '0.05em',
                 }}
             >
-                多维度量化评分
+                Multi-dimensional score
             </div>
             <div
                 style={{
@@ -265,6 +307,14 @@ function ScoreGrid({ judgeEntry }: { judgeEntry: NonNullable<MessageRowProps['ju
                 })}
             </div>
         </motion.div>
+    );
+}
+
+function renderMarkdown(text: string) {
+    return (
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {text}
+        </ReactMarkdown>
     );
 }
 
@@ -358,12 +408,184 @@ export default function MessageRow({
     if (!agentEntry && !judgeEntry) return null;
 
     const agentVisual = getAgentVisual(agentEntry);
+    const judgeVisual = getJudgeVisual(judgeEntry);
+    const judgeOnly = Boolean(judgeEntry && !agentEntry);
+    const agentOnly = Boolean(agentEntry && !judgeEntry);
     const agentTextStyle = {
         color: 'var(--text-primary)',
         fontSize: '15px',
         lineHeight: 1.7,
         marginTop: '16px',
     } as const;
+
+    const agentCard = agentEntry ? (
+        <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            style={{
+                position: 'relative',
+                background: 'var(--bg-card)',
+                padding: '28px',
+                borderRadius: 'var(--radius-xl)',
+                boxShadow: highlightAgent
+                    ? `0 0 0 2px rgba(99, 102, 241, 0.55), var(--shadow-sm), 0 4px 20px ${agentVisual.cardTint}`
+                    : `var(--shadow-sm), 0 4px 20px ${agentVisual.cardTint}`,
+                marginTop: '20px',
+            }}
+        >
+            <div
+                style={{
+                    position: 'absolute',
+                    top: '-16px',
+                    left: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                }}
+            >
+                <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    style={{
+                        width: '40px',
+                        height: '40px',
+                        background: agentVisual.color,
+                        borderRadius: 'var(--radius-md)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#fff',
+                        fontWeight: 700,
+                        fontSize: '16px',
+                        boxShadow: `0 6px 16px ${agentVisual.glowTint}`,
+                    }}
+                >
+                    {agentVisual.badge}
+                </motion.div>
+                <span
+                    style={{
+                        fontSize: '13px',
+                        color: 'var(--text-secondary)',
+                        background: 'var(--bg-card)',
+                        padding: '6px 14px',
+                        borderRadius: 'var(--radius-full)',
+                        boxShadow: 'var(--shadow-xs)',
+                        fontWeight: 500,
+                    }}
+                >
+                    {agentVisual.label}
+                </span>
+            </div>
+
+            <div style={{ position: 'relative' }}>
+                {agentReveal.isAnimating && (
+                    <div
+                        aria-hidden="true"
+                        className="markdown-body"
+                        data-agent-content="reserve"
+                        style={{
+                            ...agentTextStyle,
+                            visibility: 'hidden',
+                            pointerEvents: 'none',
+                        }}
+                    >
+                        {renderMarkdown(agentText)}
+                    </div>
+                )}
+                <div
+                    className="markdown-body"
+                    data-agent-content="visible"
+                    style={{
+                        ...agentTextStyle,
+                        position: agentReveal.isAnimating ? 'absolute' : 'relative',
+                        inset: agentReveal.isAnimating ? 0 : undefined,
+                    }}
+                >
+                    {renderMarkdown(agentReveal.displayText)}
+                    {(agentEntry.isStreaming || agentReveal.isAnimating) && (
+                        <Cursor color={agentVisual.color} />
+                    )}
+                </div>
+            </div>
+        </motion.div>
+    ) : null;
+
+    const judgeCard = judgeEntry ? (
+        <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: agentEntry ? 0.1 : 0 }}
+            style={{
+                position: 'relative',
+                background: judgeVisual.background,
+                padding: judgeOnly ? '28px' : '24px',
+                borderRadius: 'var(--radius-xl)',
+                boxShadow: highlightJudge
+                    ? `0 0 0 2px rgba(99, 102, 241, 0.55), var(--shadow-sm), 0 4px 20px ${judgeVisual.glowTint}`
+                    : `var(--shadow-sm), 0 4px 20px ${judgeVisual.glowTint}`,
+                marginTop: '20px',
+                border: `1px solid ${highlightJudge ? 'rgba(99, 102, 241, 0.45)' : judgeVisual.border}`,
+            }}
+        >
+            <div
+                style={{
+                    position: 'absolute',
+                    top: '-16px',
+                    left: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                }}
+            >
+                <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    style={{
+                        width: '36px',
+                        height: '36px',
+                        background: judgeVisual.color,
+                        borderRadius: 'var(--radius-md)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#fff',
+                        fontWeight: 700,
+                        fontSize: '14px',
+                        boxShadow: `0 6px 16px ${judgeVisual.glowTint}`,
+                    }}
+                >
+                    {judgeVisual.badge}
+                </motion.div>
+                <span
+                    style={{
+                        fontSize: '12px',
+                        color: 'var(--text-secondary)',
+                        background: 'var(--bg-card)',
+                        padding: '5px 12px',
+                        borderRadius: 'var(--radius-full)',
+                        boxShadow: 'var(--shadow-xs)',
+                        fontWeight: 500,
+                    }}
+                >
+                    {judgeVisual.label}
+                </span>
+            </div>
+
+            <div
+                className="markdown-body"
+                style={{
+                    color: 'var(--text-secondary)',
+                    fontSize: judgeOnly ? '15px' : '14px',
+                    lineHeight: 1.7,
+                    marginTop: '12px',
+                }}
+            >
+                {renderMarkdown(judgeEntry.isStreaming ? judgeEntry.streamingContent || '' : judgeEntry.content || '')}
+                {judgeEntry.isStreaming && <Cursor color={judgeVisual.color} />}
+            </div>
+
+            <ScoreGrid judgeEntry={judgeEntry} />
+        </motion.div>
+    ) : null;
 
     return (
         <div
@@ -374,7 +596,7 @@ export default function MessageRow({
                 width: '100%',
                 gap: '14px',
                 marginBottom: '32px',
-                opacity: !agentEntry && judgeEntry ? 0.8 : 1,
+                opacity: judgeOnly ? 1 : 1,
                 borderRadius: 'var(--radius-xl)',
                 background: rowFocused ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
                 transition: 'background var(--transition-fast)',
@@ -382,195 +604,55 @@ export default function MessageRow({
         >
             <RoundInsights sections={insightSections} />
 
-            <div
-                style={{
-                    display: 'flex',
-                    flexDirection: 'row',
-                    width: '100%',
-                    gap: '20px',
-                }}
-            >
-                <div style={{ flex: '6 1 0', display: 'flex', flexDirection: 'column' }}>
-                    {agentEntry && (
-                        <motion.div
-                            initial={{ opacity: 0, y: 16 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.4 }}
-                            style={{
-                                position: 'relative',
-                                background: 'var(--bg-card)',
-                                padding: '28px',
-                                borderRadius: 'var(--radius-xl)',
-                                boxShadow: highlightAgent
-                                    ? `0 0 0 2px rgba(99, 102, 241, 0.55), var(--shadow-sm), 0 4px 20px ${agentVisual.cardTint}`
-                                    : `var(--shadow-sm), 0 4px 20px ${agentVisual.cardTint}`,
-                                marginTop: '20px',
-                            }}
-                        >
-                        <div
-                            style={{
-                                position: 'absolute',
-                                top: '-16px',
-                                left: '24px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '10px',
-                            }}
-                        >
-                            <motion.div
-                                whileHover={{ scale: 1.05 }}
-                                style={{
-                                    width: '40px',
-                                    height: '40px',
-                                    background: agentVisual.color,
-                                    borderRadius: 'var(--radius-md)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: '#fff',
-                                    fontWeight: 700,
-                                    fontSize: '16px',
-                                    boxShadow: `0 6px 16px ${agentVisual.glowTint}`,
-                                }}
-                            >
-                                {agentVisual.badge}
-                            </motion.div>
-                            <span
-                                style={{
-                                    fontSize: '13px',
-                                    color: 'var(--text-secondary)',
-                                    background: 'var(--bg-card)',
-                                    padding: '6px 14px',
-                                    borderRadius: 'var(--radius-full)',
-                                    boxShadow: 'var(--shadow-xs)',
-                                    fontWeight: 500,
-                                }}
-                            >
-                                {agentVisual.label}
-                            </span>
-                        </div>
-
-                        <div style={{ position: 'relative' }}>
-                            {agentReveal.isAnimating && (
-                                <div
-                                    aria-hidden="true"
-                                    className="markdown-body"
-                                    data-agent-content="reserve"
-                                    style={{
-                                        ...agentTextStyle,
-                                        visibility: 'hidden',
-                                        pointerEvents: 'none',
-                                    }}
-                                >
-                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                        {agentText}
-                                    </ReactMarkdown>
-                                </div>
-                            )}
-                            <div
-                                className="markdown-body"
-                                data-agent-content="visible"
-                                style={{
-                                    ...agentTextStyle,
-                                    position: agentReveal.isAnimating ? 'absolute' : 'relative',
-                                    inset: agentReveal.isAnimating ? 0 : undefined,
-                                }}
-                            >
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                    {agentReveal.displayText}
-                                </ReactMarkdown>
-                                {(agentEntry.isStreaming || agentReveal.isAnimating) && (
-                                    <Cursor color={agentVisual.color} />
-                                )}
-                            </div>
-                        </div>
-                        </motion.div>
-                    )}
+            {agentEntry && judgeEntry && (
+                <div
+                    style={{
+                        display: 'flex',
+                        flexDirection: 'row',
+                        width: '100%',
+                        gap: '20px',
+                    }}
+                >
+                    <div style={{ flex: '6 1 0', display: 'flex', flexDirection: 'column' }}>
+                        {agentCard}
+                    </div>
+                    <div style={{ flex: '4 1 0', display: 'flex', flexDirection: 'column' }}>
+                        {judgeCard}
+                    </div>
                 </div>
+            )}
 
-                <div style={{ flex: '4 1 0', display: 'flex', flexDirection: 'column' }}>
-                    {judgeEntry && (
-                        <motion.div
-                            initial={{ opacity: 0, y: 16 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.4, delay: 0.1 }}
-                            style={{
-                                position: 'relative',
-                                background: 'var(--bg-secondary)',
-                                padding: '24px',
-                                borderRadius: 'var(--radius-xl)',
-                                boxShadow: highlightJudge
-                                    ? '0 0 0 2px rgba(99, 102, 241, 0.55), var(--shadow-sm), 0 4px 20px rgba(255, 149, 0, 0.08)'
-                                    : 'var(--shadow-sm), 0 4px 20px rgba(255, 149, 0, 0.08)',
-                                marginTop: '20px',
-                                border: highlightJudge
-                                    ? '1px solid rgba(99, 102, 241, 0.45)'
-                                    : '1px solid rgba(255, 149, 0, 0.1)',
-                            }}
-                        >
-                        <div
-                            style={{
-                                position: 'absolute',
-                                top: '-16px',
-                                left: '20px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '10px',
-                            }}
-                        >
-                            <motion.div
-                                whileHover={{ scale: 1.05 }}
-                                style={{
-                                    width: '36px',
-                                    height: '36px',
-                                    background: 'var(--color-judge)',
-                                    borderRadius: 'var(--radius-md)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: '#fff',
-                                    fontWeight: 700,
-                                    fontSize: '14px',
-                                    boxShadow: '0 6px 16px rgba(255, 149, 0, 0.35)',
-                                }}
-                            >
-                                裁
-                            </motion.div>
-                            <span
-                                style={{
-                                    fontSize: '12px',
-                                    color: 'var(--text-secondary)',
-                                    background: 'var(--bg-card)',
-                                    padding: '5px 12px',
-                                    borderRadius: 'var(--radius-full)',
-                                    boxShadow: 'var(--shadow-xs)',
-                                    fontWeight: 500,
-                                }}
-                            >
-                                裁判组视角
-                            </span>
-                        </div>
-
-                        <div
-                            className="markdown-body"
-                            style={{
-                                color: 'var(--text-secondary)',
-                                fontSize: '14px',
-                                lineHeight: 1.7,
-                                marginTop: '12px',
-                            }}
-                        >
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                {judgeEntry.isStreaming ? judgeEntry.streamingContent || '' : judgeEntry.content || ''}
-                            </ReactMarkdown>
-                            {judgeEntry.isStreaming && <Cursor color="var(--color-judge)" />}
-                        </div>
-
-                        <ScoreGrid judgeEntry={judgeEntry} />
-                        </motion.div>
-                    )}
+            {agentOnly && (
+                <div
+                    style={{
+                        display: 'flex',
+                        flexDirection: 'row',
+                        width: '100%',
+                        gap: '20px',
+                    }}
+                >
+                    <div style={{ flex: '6 1 0', display: 'flex', flexDirection: 'column' }}>
+                        {agentCard}
+                    </div>
+                    <div style={{ flex: '4 1 0' }} />
                 </div>
-            </div>
+            )}
+
+            {judgeOnly && (
+                <div
+                    style={{
+                        display: 'flex',
+                        flexDirection: 'row',
+                        width: '100%',
+                        gap: '20px',
+                    }}
+                >
+                    <div style={{ flex: '6 1 0' }} />
+                    <div style={{ flex: '4 1 0', display: 'flex', flexDirection: 'column' }}>
+                        {judgeCard}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

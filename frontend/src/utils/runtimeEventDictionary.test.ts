@@ -12,6 +12,8 @@ describe('runtimeEventDictionary', () => {
         expect(getRuntimeEventGroup('jury_summary')).toBe('speech');
         expect(getRuntimeEventGroup('consensus_summary')).toBe('speech');
         expect(getRuntimeEventGroup('judge_score')).toBe('judge');
+        expect(getRuntimeEventGroup('sophistry_round_report')).toBe('judge');
+        expect(getRuntimeEventGroup('sophistry_final_report')).toBe('judge');
         expect(getRuntimeEventGroup('fact_check_result')).toBe('tool');
         expect(getRuntimeEventGroup('memory_write')).toBe('memory');
         expect(getRuntimeEventGroup('error')).toBe('error');
@@ -20,10 +22,13 @@ describe('runtimeEventDictionary', () => {
 
     it('maps event types to graph node hints', () => {
         expect(getRuntimeEventNodeHint('speech_start')).toBe('speaker');
+        expect(getRuntimeEventNodeHint('speech_start', 'sophistry_experiment')).toBe('sophistry_speaker');
         expect(getRuntimeEventNodeHint('team_summary')).toBe('team_discussion');
         expect(getRuntimeEventNodeHint('jury_discussion')).toBe('jury_discussion');
         expect(getRuntimeEventNodeHint('consensus_summary')).toBe('consensus');
         expect(getRuntimeEventNodeHint('judge_start')).toBe('judge');
+        expect(getRuntimeEventNodeHint('sophistry_round_report')).toBe('sophistry_observer');
+        expect(getRuntimeEventNodeHint('sophistry_final_report')).toBe('sophistry_postmortem');
         expect(getRuntimeEventNodeHint('memory_write')).toBe('manage_context');
         expect(getRuntimeEventNodeHint('turn_complete')).toBe('advance_turn');
         expect(getRuntimeEventNodeHint('debate_complete')).toBe('end');

@@ -536,7 +536,7 @@ export default function SettingsPanel({
                                 overflow: 'hidden',
                                 padding: '24px',
                             }}>
-                                <motion.button
+                                {activeTab !== 'providers' && <motion.button
                                     whileHover={{ scale: 1.1, color: 'var(--text-primary)' }}
                                     onClick={onClose}
                                     style={{
@@ -559,7 +559,7 @@ export default function SettingsPanel({
                                     }}
                                 >
                                     ×
-                                </motion.button>
+                                </motion.button>}
 
                                 {activeTab === 'providers' && renderProvidersTab()}
                                 {activeTab === 'display' && renderDisplayTab()}

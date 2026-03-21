@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Callable
 from typing import Any
 
+from app.models.schemas import DebateMode
+
 
 class LangGraphDebateEngine:
     """Wrap the existing LangGraph workflow behind the DebateEngine contract."""
@@ -14,10 +16,19 @@ class LangGraphDebateEngine:
 
     def stream(self, initial_state: dict[str, Any]) -> AsyncIterator[dict[str, Any]]:
         graph_factory = self._graph_factory
+        debate_mode = str(
+            initial_state.get("debate_mode", DebateMode.STANDARD.value)
+            or DebateMode.STANDARD.value
+        )
         if graph_factory is None:
-            from app.agents.graph import compile_debate_graph
+            if debate_mode == DebateMode.SOPHISTRY_EXPERIMENT.value:
+                from app.agents.sophistry_graph import compile_sophistry_graph
 
-            graph_factory = compile_debate_graph
+                graph_factory = compile_sophistry_graph
+            else:
+                from app.agents.graph import compile_debate_graph
+
+                graph_factory = compile_debate_graph
 
         graph = graph_factory()
         participants = initial_state.get("participants", ["proposer", "opposer"])
@@ -38,11 +49,14 @@ class LangGraphDebateEngine:
         jury_multiplier = max(0, agents_per_jury * jury_rounds)
         consensus_cost = 2 if bool((initial_state.get("reasoning_config", {}) or {}).get("consensus_enabled", True)) else 0
 
-        # Worst-case estimate:
-        # per turn ~= manage_context + each speaker with optional team discussion + up to 2 tool loops
-        # + optional jury discussion + judge + advance_turn, plus an optional final consensus node.
-        estimated_steps = max_turns * ((7 + team_multiplier) * len(participants) + 3 + jury_multiplier)
-        estimated_steps += consensus_cost
+        if debate_mode == DebateMode.SOPHISTRY_EXPERIMENT.value:
+            estimated_steps = max_turns * (len(participants) + 4) + 4
+        else:
+            # Worst-case estimate:
+            # per turn ~= manage_context + each speaker with optional team discussion + up to 2 tool loops
+            # + optional jury discussion + judge + advance_turn, plus an optional final consensus node.
+            estimated_steps = max_turns * ((7 + team_multiplier) * len(participants) + 3 + jury_multiplier)
+            estimated_steps += consensus_cost
         recursion_limit = max(100, estimated_steps + 20)
 
         return graph.astream(

@@ -109,6 +109,7 @@ export interface SearchConfigUpdatePayload {
 // ── Session ─────────────────────────────────────────────────────
 
 export type SessionStatus = 'pending' | 'in_progress' | 'completed' | 'error';
+export type DebateMode = 'standard' | 'sophistry_experiment';
 
 export interface TeamConfig {
     agents_per_team: number;
@@ -126,9 +127,19 @@ export interface ReasoningConfig {
     consensus_enabled: boolean;
 }
 
+export interface ModeArtifact {
+    type: string;
+    title?: string;
+    turn?: number;
+    content: string;
+    created_at?: string;
+}
+
 export interface Session {
     id: string;
     topic: string;
+    debate_mode: DebateMode;
+    mode_config: Record<string, unknown>;
     participants: string[];
     max_turns: number;
     current_turn: number;
@@ -144,6 +155,9 @@ export interface Session {
     team_config: TeamConfig;
     jury_config: JuryConfig;
     reasoning_config: ReasoningConfig;
+    mode_artifacts: ModeArtifact[];
+    current_mode_report?: ModeArtifact | Record<string, unknown> | null;
+    final_mode_report?: ModeArtifact | Record<string, unknown> | null;
 }
 
 export interface AgentConfig {
@@ -157,6 +171,7 @@ export interface AgentConfig {
 export interface SessionListItem {
     id: string;
     topic: string;
+    debate_mode: DebateMode;
     status: SessionStatus;
     current_turn: number;
     max_turns: number;
@@ -165,6 +180,8 @@ export interface SessionListItem {
 
 export interface SessionCreatePayload {
     topic: string;
+    debate_mode?: DebateMode;
+    mode_config?: Record<string, unknown>;
     participants?: string[];
     max_turns?: number;
     agent_configs?: Record<string, AgentConfig>;
@@ -239,12 +256,15 @@ export type DebatePhase =
 
 export type WSMessageType =
     | 'system'
+    | 'mode_notice'
     | 'status'
     | 'team_discussion'
     | 'team_summary'
     | 'jury_discussion'
     | 'jury_summary'
     | 'consensus_summary'
+    | 'sophistry_round_report'
+    | 'sophistry_final_report'
     | 'speech_start'
     | 'speech_token'
     | 'speech_cancel'

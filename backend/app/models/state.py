@@ -23,6 +23,7 @@ DialogueRole = Literal[
     'proposer',
     'opposer',
     'judge',
+    'observer',
     'system',
     'error',
     'audience',
@@ -32,6 +33,8 @@ DialogueRole = Literal[
     'jury_member',
     'jury_summary',
     'consensus_summary',
+    'sophistry_round_report',
+    'sophistry_final_report',
 ]
 
 
@@ -58,13 +61,26 @@ class DialogueEntryDict(TypedDict, total=False):
 
 class SharedKnowledgeEntry(TypedDict, total=False):
     """TypedDict for shared knowledge entries."""
-    type: Literal['fact', 'memo', 'context']
+    type: Literal[
+        'fact',
+        'memo',
+        'context',
+        'reference_summary',
+        'reference_term',
+        'reference_claim',
+        'reference_excerpt',
+        'reference_validation',
+    ]
     query: str
     result: str
     timestamp: str | None
     role: str
     agent_name: str
     content: str
+    title: str
+    document_id: str
+    document_name: str
+    validation_status: str
     source_timestamp: str
     source_role: str
     source_agent_name: str

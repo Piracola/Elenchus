@@ -2,11 +2,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { RuntimeEvent, Session, TurnScore } from '../types';
 import { useDebateStore } from './debateStore';
+import { repairKnownMojibakeText } from '../utils/textRepair';
 
 function makeSession(): Session {
     return {
         id: 'session_1',
         topic: 'Replay test',
+        debate_mode: 'standard',
+        mode_config: {},
         participants: ['proposer', 'opposer'],
         max_turns: 3,
         current_turn: 0,
@@ -25,6 +28,9 @@ function makeSession(): Session {
             counterfactual_enabled: true,
             consensus_enabled: true,
         },
+        mode_artifacts: [],
+        current_mode_report: null,
+        final_mode_report: null,
     };
 }
 
@@ -81,6 +87,7 @@ describe('debateStore replay state', () => {
             {
                 id: 'session_2',
                 topic: 'Fresh debate',
+                debate_mode: 'standard',
                 status: 'pending',
                 current_turn: 0,
                 max_turns: 3,
@@ -324,19 +331,103 @@ describe('debateStore replay state', () => {
         expect(state.streamingContent).toBe('');
     });
 
+    it('keeps speech tokens out of runtime history while preserving the live stream buffer', () => {
+        const store = useDebateStore.getState();
+
+        store.applyRuntimeEvent(
+            makeEvent({
+                event_id: 'evt_stream_start',
+                seq: 1,
+                type: 'speech_start',
+                payload: { role: 'proposer' },
+            }),
+        );
+        store.applyRuntimeEvent(
+            makeEvent({
+                event_id: 'evt_stream_token',
+                seq: 2,
+                type: 'speech_token',
+                payload: { token: 'partial' },
+            }),
+        );
+
+        const state = useDebateStore.getState();
+        expect(state.streamingRole).toBe('proposer');
+        expect(state.streamingContent).toBe('partial');
+        expect(state.runtimeEvents.map((event) => event.type)).toEqual(['speech_start']);
+        expect(state.visibleRuntimeEvents.map((event) => event.type)).toEqual(['speech_start']);
+        expect(state.lastEventSeq).toBe(2);
+    });
+
+    it('filters speech tokens out when hydrating runtime history', () => {
+        useDebateStore.getState().hydrateRuntimeEvents([
+            makeEvent({ event_id: 'evt_1', seq: 1, type: 'speech_start', payload: { role: 'proposer' } }),
+            makeEvent({ event_id: 'evt_2', seq: 2, type: 'speech_token', payload: { token: 'partial' } }),
+            makeEvent({
+                event_id: 'evt_3',
+                seq: 3,
+                type: 'speech_end',
+                payload: { role: 'proposer', content: 'complete speech' },
+            }),
+        ]);
+
+        const state = useDebateStore.getState();
+        expect(state.runtimeEvents.map((event) => event.event_id)).toEqual(['evt_1', 'evt_3']);
+        expect(state.visibleRuntimeEvents.map((event) => event.event_id)).toEqual(['evt_1', 'evt_3']);
+        expect(state.lastEventSeq).toBe(3);
+    });
+
     it('repairs known mojibake runtime status content on ingest', () => {
         const store = useDebateStore.getState();
+        const raw = '濮濓絽婀弫瀵告倞娑撳﹣绗呴弬?.';
         store.applyRuntimeEvent(
             makeEvent({
                 event_id: 'evt_garbled',
                 seq: 1,
                 type: 'status',
-                payload: { content: '姝ｅ湪鏁寸悊涓婁笅鏂?.' },
+                payload: { content: raw },
             }),
         );
 
         const state = useDebateStore.getState();
-        expect(state.currentStatus).toBe('正在整理上下文...');
-        expect(state.runtimeEvents[0]?.payload.content).toBe('正在整理上下文...');
+        const repaired = repairKnownMojibakeText(raw);
+        expect(state.currentStatus).toBe(repaired);
+        expect(state.runtimeEvents[0]?.payload.content).toBe(repaired);
+    });
+
+    it('stores sophistry reports as dialogue entries and mode artifacts', () => {
+        const store = useDebateStore.getState();
+        store.setCurrentSession({
+            ...makeSession(),
+            debate_mode: 'sophistry_experiment',
+        });
+
+        store.applyRuntimeEvent(
+            makeEvent({
+                event_id: 'evt_report',
+                seq: 1,
+                type: 'sophistry_round_report',
+                payload: {
+                    role: 'sophistry_round_report',
+                    turn: 0,
+                    content: 'Detected a false dichotomy.',
+                    report: {
+                        type: 'sophistry_round_report',
+                        title: '本轮观察',
+                        turn: 0,
+                        content: 'Detected a false dichotomy.',
+                        created_at: '2026-03-17T00:00:01+00:00',
+                    },
+                },
+            }),
+        );
+
+        const state = useDebateStore.getState();
+        expect(state.currentSession?.dialogue_history.at(-1)?.role).toBe('sophistry_round_report');
+        expect(state.currentSession?.mode_artifacts).toHaveLength(1);
+        expect(state.currentSession?.current_mode_report).toMatchObject({
+            type: 'sophistry_round_report',
+            title: '本轮观察',
+        });
     });
 });

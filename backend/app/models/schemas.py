@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class ExportFormat(str, Enum):
@@ -21,6 +21,26 @@ class SessionStatus(str, Enum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     ERROR = "error"
+
+
+class DebateMode(str, Enum):
+    STANDARD = "standard"
+    SOPHISTRY_EXPERIMENT = "sophistry_experiment"
+
+
+class DocumentStatus(str, Enum):
+    UPLOADED = "uploaded"
+    PROCESSING = "processing"
+    PROCESSED = "processed"
+    FAILED = "failed"
+
+
+class ReferenceEntryType(str, Enum):
+    SUMMARY = "reference_summary"
+    TERM = "reference_term"
+    CLAIM = "reference_claim"
+    EXCERPT = "reference_excerpt"
+    VALIDATION = "reference_validation"
 
 
 class TeamConfig(BaseModel):
@@ -45,6 +65,14 @@ class ReasoningConfig(BaseModel):
     consensus_enabled: bool = True
 
 
+class SophistryModeConfig(BaseModel):
+    """Optional knobs for the standalone sophistry experiment mode."""
+
+    seed_reference_enabled: bool = True
+    observer_enabled: bool = True
+    artifact_detail_level: str = Field(default="full")
+
+
 class SessionCreate(BaseModel):
     """Payload to create a new debate session."""
 
@@ -64,6 +92,8 @@ class SessionCreate(BaseModel):
     team_config: TeamConfig = Field(default_factory=TeamConfig)
     jury_config: JuryConfig = Field(default_factory=JuryConfig)
     reasoning_config: ReasoningConfig = Field(default_factory=ReasoningConfig)
+    debate_mode: DebateMode = Field(default=DebateMode.STANDARD)
+    mode_config: dict[str, Any] = Field(default_factory=dict)
 
 
 class ModelConfigCreate(BaseModel):
@@ -95,6 +125,8 @@ class SessionResponse(BaseModel):
 
     id: str
     topic: str
+    debate_mode: DebateMode = DebateMode.STANDARD
+    mode_config: dict[str, Any] = Field(default_factory=dict)
     participants: list[str]
     max_turns: int
     current_turn: int
@@ -111,6 +143,9 @@ class SessionResponse(BaseModel):
     team_config: TeamConfig = Field(default_factory=TeamConfig)
     jury_config: JuryConfig = Field(default_factory=JuryConfig)
     reasoning_config: ReasoningConfig = Field(default_factory=ReasoningConfig)
+    mode_artifacts: list[dict[str, Any]] = Field(default_factory=list)
+    current_mode_report: dict[str, Any] | None = None
+    final_mode_report: dict[str, Any] | None = None
 
 
 class SessionListItem(BaseModel):
@@ -118,6 +153,7 @@ class SessionListItem(BaseModel):
 
     id: str
     topic: str
+    debate_mode: DebateMode = DebateMode.STANDARD
     status: SessionStatus
     current_turn: int
     max_turns: int
@@ -129,6 +165,58 @@ class SessionListResponse(BaseModel):
 
     sessions: list[SessionListItem]
     total: int
+
+
+class SessionDocumentListItem(BaseModel):
+    """Lightweight document info for per-session reference files."""
+
+    id: str
+    session_id: str
+    filename: str
+    mime_type: str
+    size_bytes: int
+    status: DocumentStatus
+    summary_short: str | None = None
+    error_message: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SessionDocumentResponse(SessionDocumentListItem):
+    """Full document detail including extracted text."""
+
+    raw_text: str | None = None
+    normalized_text: str | None = None
+
+
+class SessionDocumentListResponse(BaseModel):
+    """Paginated-like response for session documents."""
+
+    documents: list[SessionDocumentListItem]
+
+
+class ReferenceLibraryEntryResponse(BaseModel):
+    """Structured reference entry derived from an uploaded document."""
+
+    id: str
+    session_id: str
+    document_id: str
+    entry_type: ReferenceEntryType
+    title: str | None = None
+    content: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    importance: int
+    source_section: str | None = None
+    source_order: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReferenceLibraryResponse(BaseModel):
+    """Reference-library payload for one session."""
+
+    documents: list[SessionDocumentListItem]
+    entries: list[ReferenceLibraryEntryResponse]
 
 
 class RuntimeEventResponse(BaseModel):
@@ -168,12 +256,3 @@ class ModelConfigResponse(BaseModel):
     is_default: bool
     created_at: datetime
     updated_at: datetime
-
-    @field_validator("api_key", mode="before")
-    @classmethod
-    def mask_api_key(cls, value: str | None) -> str | None:
-        if not value:
-            return value
-        if len(value) <= 8:
-            return "****"
-        return value[:3] + "..." + value[-4:]

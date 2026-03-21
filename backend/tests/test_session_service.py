@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.runtime_paths import get_runtime_paths
 from app.services import session_service
+from app.services import document_service
+from app.storage.session_documents import document_file
 from app.models.schemas import SessionCreate
 
 
@@ -76,6 +78,30 @@ async def test_delete_session(db_session: AsyncSession):
 
     fetched = await session_service.get_session(db_session, created["id"])
     assert fetched is None
+    assert not (get_runtime_paths().sessions_dir / created["id"]).exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_session_removes_uploaded_documents(db_session: AsyncSession):
+    created = await session_service.create_session(
+        db_session,
+        SessionCreate(topic="Delete documents"),
+    )
+    document = await document_service.create_session_document(
+        db_session,
+        created["id"],
+        filename="notes.txt",
+        mime_type="text/plain",
+        content=b"Session-scoped reference notes",
+    )
+    path = document_file(created["id"], document["id"])
+
+    assert path.exists()
+
+    deleted = await session_service.delete_session(db_session, created["id"])
+
+    assert deleted is True
+    assert not path.exists()
     assert not (get_runtime_paths().sessions_dir / created["id"]).exists()
 
 
@@ -293,6 +319,38 @@ async def test_create_session_persists_jury_and_reasoning_config(db_session: Asy
     assert created["reasoning_config"] == {
         "steelman_enabled": False,
         "counterfactual_enabled": True,
+        "consensus_enabled": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_create_sophistry_session_enforces_mode_specific_defaults(db_session: AsyncSession):
+    created = await session_service.create_session(
+        db_session,
+        SessionCreate(
+            topic="Sophistry mode",
+            debate_mode="sophistry_experiment",
+            team_config={"agents_per_team": 4, "discussion_rounds": 2},
+            jury_config={"agents_per_jury": 3, "discussion_rounds": 2},
+            reasoning_config={
+                "steelman_enabled": True,
+                "counterfactual_enabled": True,
+                "consensus_enabled": True,
+            },
+        ),
+    )
+
+    assert created["debate_mode"] == "sophistry_experiment"
+    assert created["mode_config"] == {
+        "seed_reference_enabled": True,
+        "observer_enabled": True,
+        "artifact_detail_level": "full",
+    }
+    assert created["team_config"] == {"agents_per_team": 0, "discussion_rounds": 0}
+    assert created["jury_config"] == {"agents_per_jury": 0, "discussion_rounds": 0}
+    assert created["reasoning_config"] == {
+        "steelman_enabled": False,
+        "counterfactual_enabled": False,
         "consensus_enabled": False,
     }
 

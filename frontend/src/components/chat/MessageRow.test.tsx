@@ -72,4 +72,20 @@ describe('MessageRow', () => {
         expect(screen.getByText('Typewriter example')).toBeInTheDocument();
         expect(visibleContent?.textContent).toContain('Typewriter example');
     });
+
+    it('renders sophistry observer reports without the score grid', () => {
+        const markup = renderToStaticMarkup(
+            <MessageRow
+                judgeEntry={makeEntry({
+                    role: 'sophistry_round_report',
+                    agent_name: '观察报告',
+                    content: 'Detected a false dichotomy.',
+                })}
+            />,
+        );
+
+        expect(markup).toContain('观察报告');
+        expect(markup).toContain('Detected a false dichotomy.');
+        expect(markup).not.toContain('Multi-dimensional score');
+    });
 });

@@ -22,10 +22,30 @@ def _build_shared_knowledge_section(shared_knowledge: list[dict[str, Any]]) -> s
             query = item.get("query", "")
             result = item.get("result", "")
             knowledge_lines.append(f"- [Verified Fact for '{query}']: {result}")
+        elif item_type == "reference_summary":
+            document_name = item.get("document_name", "reference")
+            content = item.get("content", "")
+            knowledge_lines.append(f"- [Reference Summary - {document_name}]: {content}")
+        elif item_type == "reference_term":
+            title = item.get("title", "关键术语")
+            content = item.get("content", "")
+            document_name = item.get("document_name", "reference")
+            knowledge_lines.append(f"- [Reference Term - {title} | {document_name}]: {content}")
+        elif item_type == "reference_claim":
+            title = item.get("title", "关键声明")
+            content = item.get("content", "")
+            status = item.get("validation_status", "unverified")
+            knowledge_lines.append(
+                f"- [Reference Claim - {title} | status={status}]: {content}"
+            )
+        elif item_type == "reference_validation":
+            title = item.get("title", "核查结果")
+            content = item.get("content", "")
+            knowledge_lines.append(f"- [Reference Validation - {title}]: {content}")
 
     if not knowledge_lines:
         return None
-    return "## Shared Knowledge Base (Memos and Facts)\n" + "\n".join(knowledge_lines)
+    return "## Shared Knowledge Base\n" + "\n".join(knowledge_lines)
 
 
 def _build_recent_history_section(recent_history: list[dict[str, Any]]) -> str | None:

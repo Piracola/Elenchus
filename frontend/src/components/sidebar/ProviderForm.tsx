@@ -113,10 +113,14 @@ export function ProviderForm({
                             API 密钥
                         </label>
                         <input
-                            type="password"
+                            type="text"
                             value={formData.apiKey}
                             onChange={e => onFieldChange('apiKey', e.target.value)}
                             placeholder="sk-..."
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="off"
+                            spellCheck={false}
                             style={{
                                 width: '100%',
                                 padding: '9px 12px',
@@ -128,7 +132,12 @@ export function ProviderForm({
                                 outline: 'none',
                                 transition: 'border-color 0.15s ease',
                             }}
-                            onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent-indigo)'}
+                            onFocus={(e) => {
+                                e.currentTarget.style.borderColor = 'var(--accent-indigo)';
+                                if (e.currentTarget.value) {
+                                    e.currentTarget.select();
+                                }
+                            }}
                             onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border-subtle)'}
                         />
                     </div>
