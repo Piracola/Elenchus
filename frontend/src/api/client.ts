@@ -23,7 +23,14 @@ async function readErrorMessage(res: Response): Promise<string> {
     let message = `API ${res.status}`;
     try {
         const json = JSON.parse(text);
-        message = json.detail ?? json.message ?? text;
+        const detail = json.detail ?? json.message;
+        if (typeof detail === 'string' && detail.trim()) {
+            message = detail;
+        } else if (Array.isArray(detail) || (detail && typeof detail === 'object')) {
+            message = JSON.stringify(detail);
+        } else {
+            message = text || message;
+        }
     } catch {
         message = text || message;
     }

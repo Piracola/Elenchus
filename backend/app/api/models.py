@@ -35,7 +35,13 @@ async def update_model_config(
     service: ProviderService = Depends(get_provider_service)
 ):
     """Update a model configuration."""
-    updated = await service.update_config(config_id, config_in)
+    try:
+        updated = await service.update_config(config_id, config_in)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     if not updated:
         raise HTTPException(status_code=404, detail="Model configuration not found")
     return updated

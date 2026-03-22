@@ -4,8 +4,8 @@
  * move beneath the gaps between cards instead of being blocked by a container.
  */
 
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import { motion } from 'framer-motion';
 import { FileJson, FileText } from 'lucide-react';
 import { api } from '../api/client';
@@ -20,294 +20,44 @@ import RoundInsights from './chat/RoundInsights';
 import { groupDialogue } from '../utils/groupDialogue';
 import { resolveRowFocus } from '../utils/eventFocus';
 import {
+    eventMatchesTurn,
+    buildSpeakerDiscussionMap,
+    buildTurnDiscussionMap,
+    sideLabel,
+    speakerInsightKey,
+} from '../utils/roundInsights';
+import {
+    clampFloatingInspectorRect,
+    createDefaultFloatingInspectorRect,
+    FLOATING_INSPECTOR_RESIZE_HANDLES,
+    interactionCursor,
+    parseStoredFloatingInspectorRect,
+    resizeFloatingInspectorRect,
+} from '../utils/floatingInspectorLayout';
+import {
     FLOATING_INSPECTOR_RESET_EVENT,
     FLOATING_INSPECTOR_STORAGE_KEY,
 } from '../utils/floatingInspector';
 import { isElementNearBottom } from '../utils/chatScroll';
+import { resolveHistoryRowStart, revealFocusedHistoryRow } from '../utils/chatHistoryWindow';
 import { toast } from '../utils/toast';
 import type { InsightSection } from './chat/RoundInsights';
+import type {
+    FloatingInspectorBounds,
+    FloatingInspectorInteraction,
+    FloatingInspectorRect,
+    FloatingInspectorResizeHandle,
+} from '../utils/floatingInspectorLayout';
 
-type FloatingInspectorBounds = {
-    width: number;
-    height: number;
-};
-
-type FloatingInspectorRect = {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-};
-
-type FloatingInspectorResizeHandle =
-    | 'top'
-    | 'right'
-    | 'bottom'
-    | 'left'
-    | 'top-left'
-    | 'top-right'
-    | 'bottom-left'
-    | 'bottom-right';
-
-type FloatingInspectorInteraction =
-    | {
-        mode: 'move';
-        startX: number;
-        startY: number;
-        startRect: FloatingInspectorRect;
-        bounds: FloatingInspectorBounds;
-    }
-    | {
-        mode: 'resize';
-        handle: FloatingInspectorResizeHandle;
-        startX: number;
-        startY: number;
-        startRect: FloatingInspectorRect;
-        bounds: FloatingInspectorBounds;
-    };
-
-const FLOATING_INSPECTOR_DEFAULT_SIZE = { width: 360, height: 520 };
-const FLOATING_INSPECTOR_MIN_SIZE = { width: 300, height: 260 };
-const FLOATING_INSPECTOR_MARGIN = 8;
-const FLOATING_INSPECTOR_DOCK_GAP = 16;
 const INITIAL_HISTORY_ROW_WINDOW = 120;
 const HISTORY_ROW_BATCH_SIZE = 80;
 const HISTORY_ROW_PRELOAD_THRESHOLD = 240;
-const FLOATING_INSPECTOR_RESIZE_HANDLES: ReadonlyArray<{
-    key: FloatingInspectorResizeHandle;
-    style: CSSProperties;
-}> = [
-    {
-        key: 'left',
-        style: { left: -6, top: 18, bottom: 18, width: 12, cursor: 'ew-resize' },
-    },
-    {
-        key: 'right',
-        style: { right: -6, top: 18, bottom: 18, width: 12, cursor: 'ew-resize' },
-    },
-    {
-        key: 'top',
-        style: { top: -6, left: 18, right: 18, height: 12, cursor: 'ns-resize' },
-    },
-    {
-        key: 'bottom',
-        style: { bottom: -6, left: 18, right: 18, height: 12, cursor: 'ns-resize' },
-    },
-    {
-        key: 'top-left',
-        style: { top: -6, left: -6, width: 16, height: 16, cursor: 'nwse-resize' },
-    },
-    {
-        key: 'top-right',
-        style: { top: -6, right: -6, width: 16, height: 16, cursor: 'nesw-resize' },
-    },
-    {
-        key: 'bottom-left',
-        style: { bottom: -6, left: -6, width: 16, height: 16, cursor: 'nesw-resize' },
-    },
-    {
-        key: 'bottom-right',
-        style: { bottom: -6, right: -6, width: 16, height: 16, cursor: 'nwse-resize' },
-    },
-];
-
-function clampNumber(value: number, min: number, max: number): number {
-    return Math.min(max, Math.max(min, value));
-}
-
-function parseStoredFloatingInspectorRect(raw: string | null): FloatingInspectorRect | null {
-    if (!raw) return null;
-
-    try {
-        const parsed = JSON.parse(raw) as Partial<FloatingInspectorRect>;
-        if (
-            typeof parsed.x !== 'number' ||
-            typeof parsed.y !== 'number' ||
-            typeof parsed.width !== 'number' ||
-            typeof parsed.height !== 'number'
-        ) {
-            return null;
-        }
-        return parsed as FloatingInspectorRect;
-    } catch {
-        return null;
-    }
-}
-
-function getFloatingInspectorSizeRange(size: number, preferredMin: number): { min: number; max: number } {
-    const max = Math.max(160, size - FLOATING_INSPECTOR_MARGIN * 2);
-    return {
-        min: Math.min(preferredMin, max),
-        max,
-    };
-}
-
-function clampFloatingInspectorRect(
-    rect: FloatingInspectorRect,
-    bounds: FloatingInspectorBounds,
-): FloatingInspectorRect {
-    const widthRange = getFloatingInspectorSizeRange(bounds.width, FLOATING_INSPECTOR_MIN_SIZE.width);
-    const heightRange = getFloatingInspectorSizeRange(bounds.height, FLOATING_INSPECTOR_MIN_SIZE.height);
-    const width = clampNumber(rect.width, widthRange.min, widthRange.max);
-    const height = clampNumber(rect.height, heightRange.min, heightRange.max);
-    const maxX = Math.max(FLOATING_INSPECTOR_MARGIN, bounds.width - width - FLOATING_INSPECTOR_MARGIN);
-    const maxY = Math.max(FLOATING_INSPECTOR_MARGIN, bounds.height - height - FLOATING_INSPECTOR_MARGIN);
-
-    return {
-        x: clampNumber(rect.x, FLOATING_INSPECTOR_MARGIN, maxX),
-        y: clampNumber(rect.y, FLOATING_INSPECTOR_MARGIN, maxY),
-        width,
-        height,
-    };
-}
-
-function createDefaultFloatingInspectorRect(
-    bounds: FloatingInspectorBounds,
-    preferredTop: number,
-): FloatingInspectorRect {
-    const widthRange = getFloatingInspectorSizeRange(bounds.width, FLOATING_INSPECTOR_MIN_SIZE.width);
-    const heightRange = getFloatingInspectorSizeRange(bounds.height, FLOATING_INSPECTOR_MIN_SIZE.height);
-    const width = clampNumber(
-        FLOATING_INSPECTOR_DEFAULT_SIZE.width,
-        widthRange.min,
-        widthRange.max,
-    );
-    const height = clampNumber(
-        FLOATING_INSPECTOR_DEFAULT_SIZE.height,
-        heightRange.min,
-        heightRange.max,
-    );
-
-    return clampFloatingInspectorRect(
-        {
-            x: bounds.width - width - FLOATING_INSPECTOR_DOCK_GAP,
-            y: preferredTop,
-            width,
-            height,
-        },
-        bounds,
-    );
-}
-
-function resizeFloatingInspectorRect(
-    startRect: FloatingInspectorRect,
-    handle: FloatingInspectorResizeHandle,
-    deltaX: number,
-    deltaY: number,
-    bounds: FloatingInspectorBounds,
-): FloatingInspectorRect {
-    const widthRange = getFloatingInspectorSizeRange(bounds.width, FLOATING_INSPECTOR_MIN_SIZE.width);
-    const heightRange = getFloatingInspectorSizeRange(bounds.height, FLOATING_INSPECTOR_MIN_SIZE.height);
-    const right = startRect.x + startRect.width;
-    const bottom = startRect.y + startRect.height;
-
-    let x = startRect.x;
-    let y = startRect.y;
-    let width = startRect.width;
-    let height = startRect.height;
-
-    if (handle.includes('left')) {
-        x = clampNumber(startRect.x + deltaX, FLOATING_INSPECTOR_MARGIN, right - widthRange.min);
-        width = right - x;
-    }
-
-    if (handle.includes('right')) {
-        width = clampNumber(
-            startRect.width + deltaX,
-            widthRange.min,
-            bounds.width - startRect.x - FLOATING_INSPECTOR_MARGIN,
-        );
-    }
-
-    if (handle.includes('top')) {
-        y = clampNumber(startRect.y + deltaY, FLOATING_INSPECTOR_MARGIN, bottom - heightRange.min);
-        height = bottom - y;
-    }
-
-    if (handle.includes('bottom')) {
-        height = clampNumber(
-            startRect.height + deltaY,
-            heightRange.min,
-            bounds.height - startRect.y - FLOATING_INSPECTOR_MARGIN,
-        );
-    }
-
-    return clampFloatingInspectorRect({ x, y, width, height }, bounds);
-}
-
-function interactionCursor(interaction: FloatingInspectorInteraction | null): string {
-    if (!interaction) return '';
-    if (interaction.mode === 'move') return 'grabbing';
-
-    switch (interaction.handle) {
-        case 'left':
-        case 'right':
-            return 'ew-resize';
-        case 'top':
-        case 'bottom':
-            return 'ns-resize';
-        case 'top-left':
-        case 'bottom-right':
-            return 'nwse-resize';
-        case 'top-right':
-        case 'bottom-left':
-            return 'nesw-resize';
-        default:
-            return '';
-    }
-}
-
-function sideLabel(side: string | undefined): string {
-    if (side === 'proposer') return '正方';
-    if (side === 'opposer') return '反方';
-    return side || '队内';
-}
-
-function speakerInsightKey(turn: number | undefined, role: string | undefined): string | null {
-    if (turn === undefined || !role) return null;
-    return `${turn}:${role}`;
-}
-
-function buildSpeakerDiscussionMap(entries: DialogueEntry[]): Map<string, DialogueEntry[]> {
-    const groups = new Map<string, DialogueEntry[]>();
-    for (const entry of entries) {
-        const key = speakerInsightKey(entry.turn, entry.team_side || entry.source_role);
-        if (!key) continue;
-        const group = groups.get(key) ?? [];
-        group.push(entry);
-        groups.set(key, group);
-    }
-    return groups;
-}
-
-function buildTurnDiscussionMap(entries: DialogueEntry[]): Map<number, DialogueEntry[]> {
-    const groups = new Map<number, DialogueEntry[]>();
-    for (const entry of entries) {
-        if (entry.turn === undefined || entry.role === 'consensus_summary') continue;
-        const group = groups.get(entry.turn) ?? [];
-        group.push(entry);
-        groups.set(entry.turn, group);
-    }
-    return groups;
-}
-
-function eventMatchesTurn(
-    event: { type: string; payload?: Record<string, unknown> } | null,
-    turn: number,
-): boolean {
-    if (!event) return false;
-    const payloadTurn = event.payload?.turn;
-    return typeof payloadTurn === 'number' && payloadTurn === turn;
-}
-
 export default function ChatPanel() {
     const {
         currentSession,
         visibleRuntimeEvents,
         replayEnabled,
         focusedRuntimeEventId,
-        streamingRole,
-        streamingContent,
     } = useDebateStore();
     const { displaySettings } = useSettingsStore();
     const isSophistryMode = currentSession?.debate_mode === 'sophistry_experiment';
@@ -323,6 +73,9 @@ export default function ChatPanel() {
     const floatingInspectorRectRef = useRef<FloatingInspectorRect | null>(null);
     const autoScrollEnabledRef = useRef(true);
     const pendingHistoryPrependScrollHeightRef = useRef<number | null>(null);
+    const previousRowsLengthRef = useRef(0);
+    const previousSessionIdRef = useRef<string | null | undefined>(undefined);
+    const previousReplayEnabledRef = useRef<boolean | undefined>(undefined);
 
     const [topOverlayHeight, setTopOverlayHeight] = useState(0);
     const [bottomOverlayHeight, setBottomOverlayHeight] = useState(0);
@@ -359,7 +112,6 @@ export default function ChatPanel() {
         currentSession?.jury_dialogue_history,
         currentSession?.current_turn,
         replayEnabled,
-        streamingContent,
     ]);
 
     useEffect(() => {
@@ -391,6 +143,17 @@ export default function ChatPanel() {
     useEffect(() => {
         overlayHeightsRef.current = null;
     }, [currentSession?.id]);
+
+    const stopFloatingInspectorInteraction = useCallback(() => {
+        if (!floatingInspectorInteractionRef.current) return;
+
+        floatingInspectorInteractionRef.current = null;
+        setFloatingInspectorActive(false);
+        if (typeof document !== 'undefined') {
+            document.body.style.userSelect = '';
+            document.body.style.cursor = '';
+        }
+    }, []);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -446,7 +209,11 @@ export default function ChatPanel() {
     }, [displaySettings.messageWidth, isWideLayout]);
 
     useEffect(() => {
-        if (!isWideLayout) return;
+        if (!isWideLayout) {
+            setFloatingInspectorExpanded(false);
+            stopFloatingInspectorInteraction();
+            return;
+        }
         if (floatingInspectorWidth <= 0 || floatingInspectorHeight <= 0) return;
 
         const bounds = {
@@ -466,7 +233,13 @@ export default function ChatPanel() {
                     bounds,
                 )
         ));
-    }, [floatingInspectorHeight, floatingInspectorWidth, isWideLayout, topOverlayHeight]);
+    }, [
+        floatingInspectorHeight,
+        floatingInspectorWidth,
+        isWideLayout,
+        stopFloatingInspectorInteraction,
+        topOverlayHeight,
+    ]);
 
     useEffect(() => {
         if (typeof window === 'undefined') {
@@ -476,7 +249,8 @@ export default function ChatPanel() {
         const handleReset = () => {
             if (!isWideLayout || floatingInspectorWidth <= 0 || floatingInspectorHeight <= 0) {
                 setFloatingInspectorRect(null);
-                setFloatingInspectorActive(false);
+                setFloatingInspectorExpanded(false);
+                stopFloatingInspectorInteraction();
                 return;
             }
 
@@ -489,12 +263,19 @@ export default function ChatPanel() {
                     topOverlayHeight + 12,
                 ),
             );
-            setFloatingInspectorActive(false);
+            setFloatingInspectorExpanded(false);
+            stopFloatingInspectorInteraction();
         };
 
         window.addEventListener(FLOATING_INSPECTOR_RESET_EVENT, handleReset);
         return () => window.removeEventListener(FLOATING_INSPECTOR_RESET_EVENT, handleReset);
-    }, [floatingInspectorHeight, floatingInspectorWidth, isWideLayout, topOverlayHeight]);
+    }, [
+        floatingInspectorHeight,
+        floatingInspectorWidth,
+        isWideLayout,
+        stopFloatingInspectorInteraction,
+        topOverlayHeight,
+    ]);
 
     useEffect(() => {
         const handlePointerMove = (event: PointerEvent) => {
@@ -535,26 +316,16 @@ export default function ChatPanel() {
             });
         };
 
-        const stopInteraction = () => {
-            if (!floatingInspectorInteractionRef.current) return;
-
-            floatingInspectorInteractionRef.current = null;
-            setFloatingInspectorActive(false);
-            if (typeof document !== 'undefined') {
-                document.body.style.userSelect = '';
-                document.body.style.cursor = '';
-            }
-        };
-
         window.addEventListener('pointermove', handlePointerMove);
-        window.addEventListener('pointerup', stopInteraction);
-        window.addEventListener('pointercancel', stopInteraction);
+        window.addEventListener('pointerup', stopFloatingInspectorInteraction);
+        window.addEventListener('pointercancel', stopFloatingInspectorInteraction);
         return () => {
             window.removeEventListener('pointermove', handlePointerMove);
-            window.removeEventListener('pointerup', stopInteraction);
-            window.removeEventListener('pointercancel', stopInteraction);
+            window.removeEventListener('pointerup', stopFloatingInspectorInteraction);
+            window.removeEventListener('pointercancel', stopFloatingInspectorInteraction);
+            stopFloatingInspectorInteraction();
         };
-    }, []);
+    }, [stopFloatingInspectorInteraction]);
 
     useLayoutEffect(() => {
         const container = scrollRef.current;
@@ -588,43 +359,34 @@ export default function ChatPanel() {
         const history = replayEnabled && visibleEventIds
             ? fullHistory.filter((entry) => !entry.event_id || visibleEventIds.has(entry.event_id))
             : fullHistory;
-        const allEntries: DialogueEntry[] = [...history];
 
-        if (!replayEnabled && streamingRole && !['system', 'error'].includes(streamingRole)) {
-            const lastHistoryEntry = history[history.length - 1];
-            const isStreamingDuplicate =
-                lastHistoryEntry &&
-                lastHistoryEntry.role === streamingRole &&
-                lastHistoryEntry.content === streamingContent;
-
-            if (!isStreamingDuplicate) {
-                allEntries.push({
-                    role: streamingRole,
-                    content: streamingContent,
-                    citations: [],
-                    timestamp: '',
-                    agent_name: streamingRole,
-                } as DialogueEntry);
-            }
-        }
-
-        return groupDialogue(allEntries, currentSession?.participants);
+        return groupDialogue(history, currentSession?.participants);
     }, [
         currentSession?.dialogue_history,
         currentSession?.participants,
         replayEnabled,
-        streamingContent,
-        streamingRole,
         visibleEventIds,
     ]);
 
     useEffect(() => {
-        if (replayEnabled) {
-            setHistoryRowStart(0);
-            return;
-        }
+        const sessionId = currentSession?.id ?? null;
+        const rowsLength = rows.length;
+        const sessionChanged = previousSessionIdRef.current !== sessionId;
+        const replayChanged = previousReplayEnabledRef.current !== replayEnabled;
 
-        setHistoryRowStart(Math.max(0, rows.length - INITIAL_HISTORY_ROW_WINDOW));
+        setHistoryRowStart((currentStart) => resolveHistoryRowStart({
+            currentStart,
+            rowsLength,
+            previousRowsLength: previousRowsLengthRef.current,
+            replayEnabled,
+            sessionChanged,
+            replayChanged,
+            initialWindowSize: INITIAL_HISTORY_ROW_WINDOW,
+        }));
+
+        previousSessionIdRef.current = sessionId;
+        previousReplayEnabledRef.current = replayEnabled;
+        previousRowsLengthRef.current = rowsLength;
     }, [currentSession?.id, replayEnabled, rows.length]);
 
     const renderedRows = useMemo(
@@ -681,6 +443,17 @@ export default function ChatPanel() {
     );
     const consensusFocused = focusedRuntimeEvent?.type === 'consensus_summary';
 
+    const focusedRowIndex = useMemo(() => {
+        if (!focusedRuntimeEvent) {
+            return -1;
+        }
+
+        return rows.findIndex((row) => {
+            const focusState = resolveRowFocus(row, focusedRuntimeEvent);
+            return focusState.agent || focusState.judge || focusState.system;
+        });
+    }, [focusedRuntimeEvent, rows]);
+
     useLayoutEffect(() => {
         const previousScrollHeight = pendingHistoryPrependScrollHeightRef.current;
         const container = scrollRef.current;
@@ -692,6 +465,14 @@ export default function ChatPanel() {
         }
         pendingHistoryPrependScrollHeightRef.current = null;
     }, [renderedRows.length]);
+
+    useEffect(() => {
+        if (replayEnabled || !focusedRuntimeEventId || focusedRowIndex < 0) {
+            return;
+        }
+
+        setHistoryRowStart((currentStart) => revealFocusedHistoryRow(currentStart, focusedRowIndex));
+    }, [focusedRowIndex, focusedRuntimeEventId, replayEnabled]);
 
     useEffect(() => {
         if (!focusedRuntimeEventId) return;
@@ -715,6 +496,7 @@ export default function ChatPanel() {
             document.body.style.cursor = interactionCursor(interaction);
         }
     };
+
 
     const handleFloatingInspectorMoveStart = (event: ReactPointerEvent<HTMLElement>) => {
         const currentRect = floatingInspectorRectRef.current;
@@ -1141,11 +923,6 @@ export default function ChatPanel() {
                             </div>
                         )}
                         {(() => {
-                            const renderedTurns = new Set(
-                                renderedRows
-                                    .map((row) => row.turn ?? row.agent?.turn ?? row.judge?.turn)
-                                    .filter((value): value is number => value !== undefined),
-                            );
                             return renderedRows.map((row, idx) => {
                                 const turn = row.turn ?? row.agent?.turn ?? row.judge?.turn;
                                 const agentRole = row.agent?.role;
@@ -1160,19 +937,6 @@ export default function ChatPanel() {
                                         accent: agentRole === 'opposer' ? 'var(--color-opposer)' : 'var(--color-proposer)',
                                         entries: teamEntries,
                                     });
-                                }
-
-                                if (turn !== undefined && !renderedTurns.has(turn)) {
-                                    renderedTurns.add(turn);
-                                    const juryEntries = juryDiscussionMap.get(turn) ?? [];
-                                    if (juryEntries.length) {
-                                        sections.push({
-                                            key: `jury-${turn}`,
-                                            title: `第 ${turn + 1} 轮陪审团评议`,
-                                            accent: 'var(--accent-indigo)',
-                                            entries: juryEntries,
-                                        });
-                                    }
                                 }
 
                                 const agentKey = row.agent?.timestamp || `agent-${idx}`;
@@ -1194,15 +958,19 @@ export default function ChatPanel() {
 
                                 return (
                                     <Fragment key={`${agentKey}-${judgeKey}`}>
-                                        <MessageRow
-                                            agentEntry={row.agent}
-                                            judgeEntry={row.judge}
-                                            systemEntry={row.system}
-                                            highlightAgent={focusState.agent}
-                                            highlightJudge={focusState.judge}
-                                            highlightSystem={focusState.system}
-                                            insightSections={sections}
-                                        />
+                                        <div
+                                            data-row-focused={focusState.agent || focusState.judge || focusState.system ? 'true' : 'false'}
+                                        >
+                                            <MessageRow
+                                                agentEntry={row.agent}
+                                                judgeEntry={row.judge}
+                                                systemEntry={row.system}
+                                                highlightAgent={focusState.agent}
+                                                highlightJudge={focusState.judge}
+                                                highlightSystem={focusState.system}
+                                                insightSections={sections}
+                                            />
+                                        </div>
                                         {!!juryEntries.length && (
                                             <div data-row-focused={juryFocused ? 'true' : 'false'}>
                                                 <RoundInsights
@@ -1333,7 +1101,7 @@ export default function ChatPanel() {
                             >
                                 <RuntimeInspector
                                     key="floating-inspector"
-                                    defaultExpanded={false}
+                                    defaultExpanded={floatingInspectorExpanded}
                                     fillHeight={floatingInspectorExpanded}
                                     onExpandedChange={(expanded) => {
                                         setFloatingInspectorExpanded(expanded);

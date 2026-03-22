@@ -127,12 +127,12 @@ class ProviderService:
             return None
 
     def _record_to_response(self, record: ProviderRecord) -> ModelConfigResponse:
-        """Convert database record to response model."""
+        """Convert database record to REST-safe response model."""
         return ModelConfigResponse(
             id=record.id,
             name=record.name,
             provider_type=record.provider_type,
-            api_key=self._decrypt_api_key(record.api_key_encrypted),
+            api_key_configured=bool(record.api_key_encrypted),
             api_base_url=record.api_base_url,
             custom_parameters=record.custom_parameters or {},
             models=record.models or [],
@@ -238,6 +238,18 @@ class ProviderService:
                 return None
 
             update_data = config_in.model_dump(exclude_unset=True)
+            clear_api_key = bool(update_data.pop("clear_api_key", False))
+
+            next_name = update_data.get("name")
+            if next_name and next_name != record.name:
+                existing = await session.execute(
+                    select(ProviderRecord).where(
+                        ProviderRecord.name == next_name,
+                        ProviderRecord.id != config_id,
+                    )
+                )
+                if existing.scalar_one_or_none():
+                    raise ValueError("A model configuration with this name already exists.")
 
             if update_data.get("is_default") is True:
                 await self._clear_defaults(session)
@@ -246,7 +258,9 @@ class ProviderService:
                 record.name = update_data["name"]
             if "provider_type" in update_data:
                 record.provider_type = update_data["provider_type"]
-            if "api_key" in update_data:
+            if clear_api_key:
+                record.api_key_encrypted = None
+            elif "api_key" in update_data and update_data["api_key"] is not None:
                 record.api_key_encrypted = self._encrypt_api_key(update_data["api_key"])
             if "api_base_url" in update_data:
                 record.api_base_url = update_data["api_base_url"]
@@ -261,6 +275,7 @@ class ProviderService:
             await session.commit()
             await session.refresh(record)
             return self._record_to_response(record)
+
 
     async def delete_config(self, config_id: str) -> bool:
         """Delete a provider configuration."""
@@ -281,7 +296,7 @@ class ProviderService:
                     .where(ProviderRecord.id != config_id)
                     .order_by(ProviderRecord.created_at.desc())
                 )
-                new_default = result.scalar_first()
+                new_default = result.scalars().first()
                 if new_default:
                     new_default.is_default = True
 

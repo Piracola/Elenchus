@@ -11,7 +11,7 @@ const baseProvider: ModelConfig = {
     id: 'provider-openai',
     name: 'OpenAI Default',
     provider_type: 'openai',
-    api_key: null,
+    api_key_configured: false,
     api_base_url: 'https://api.openai.com/v1',
     custom_parameters: {},
     models: ['gpt-4o', 'gpt-4.1-mini'],

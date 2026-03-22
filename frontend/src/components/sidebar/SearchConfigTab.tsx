@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { motion } from 'framer-motion';
 
 import { api } from '../../api/client';
@@ -80,7 +80,7 @@ export function SearchConfigTab() {
         setTavilyApiKeyConfigured(config.provider_settings.tavily.api_key_configured);
     };
 
-    const fetchConfig = async () => {
+    const fetchConfig = useCallback(async () => {
         setIsLoading(true);
         setError(null);
 
@@ -95,11 +95,11 @@ export function SearchConfigTab() {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
         void fetchConfig();
-    }, []);
+    }, [fetchConfig]);
 
     const handleProviderChange = async (providerName: SearchProviderType) => {
         if (providerName === currentProvider || isBusy) {

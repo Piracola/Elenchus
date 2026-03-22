@@ -114,6 +114,7 @@ class ModelConfigUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     provider_type: str | None = Field(default=None)
     api_key: str | None = Field(default=None, max_length=255)
+    clear_api_key: bool | None = Field(default=None)
     api_base_url: str | None = Field(default=None, max_length=255)
     custom_parameters: dict[str, Any] | None = Field(default=None)
     models: list[str] | None = Field(default=None)
@@ -244,12 +245,12 @@ class RuntimeEventPageResponse(BaseModel):
 
 
 class ModelConfigResponse(BaseModel):
-    """Detail of a persisted provider configuration."""
+    """Detail of a persisted provider configuration safe for REST responses."""
 
     id: str
     name: str
     provider_type: str
-    api_key: str | None
+    api_key_configured: bool
     api_base_url: str | None
     custom_parameters: dict[str, Any] = Field(default_factory=dict)
     models: list[str]

@@ -30,6 +30,8 @@ export function ProviderForm({
     onSave,
     onClose,
 }: ProviderFormProps) {
+    const showConfiguredHint = !isCreatingNew && formData.apiKeyConfigured && !formData.clearApiKey && !formData.apiKey.trim();
+
     return (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
             <button
@@ -109,14 +111,15 @@ export function ProviderForm({
                     </div>
 
                     <div>
-                        <label style={{ display: 'block', fontSize: '12px', marginBottom: '5px', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                        <label htmlFor="providerApiKey" style={{ display: 'block', fontSize: '12px', marginBottom: '5px', color: 'var(--text-secondary)', fontWeight: 500 }}>
                             API 密钥
                         </label>
                         <input
-                            type="text"
+                            id="providerApiKey"
+                            type="password"
                             value={formData.apiKey}
                             onChange={e => onFieldChange('apiKey', e.target.value)}
-                            placeholder="sk-..."
+                            placeholder={showConfiguredHint ? '已配置，留空则保持不变' : 'sk-...'}
                             autoComplete="off"
                             autoCorrect="off"
                             autoCapitalize="off"
@@ -134,12 +137,27 @@ export function ProviderForm({
                             }}
                             onFocus={(e) => {
                                 e.currentTarget.style.borderColor = 'var(--accent-indigo)';
-                                if (e.currentTarget.value) {
-                                    e.currentTarget.select();
-                                }
                             }}
                             onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border-subtle)'}
                         />
+                        <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                            {isCreatingNew
+                                ? '新建时可直接填写 API Key。'
+                                : '编辑已有配置时，留空会保留当前密钥；填写新值会替换当前密钥。'}
+                        </div>
+                        {!isCreatingNew && formData.apiKeyConfigured && (
+                            <label htmlFor="clearProviderApiKey" style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                                <input
+                                    id="clearProviderApiKey"
+                                    type="checkbox"
+                                    checked={formData.clearApiKey}
+                                    onChange={(e) => onFieldChange('clearApiKey', e.target.checked)}
+                                    disabled={Boolean(formData.apiKey.trim())}
+                                    style={{ cursor: formData.apiKey.trim() ? 'not-allowed' : 'pointer', width: '16px', height: '16px' }}
+                                />
+                                清除已保存的 API 密钥
+                            </label>
+                        )}
                     </div>
 
                     <div>

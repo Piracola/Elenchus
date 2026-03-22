@@ -111,7 +111,7 @@ Each file wraps a capability with LangChain's `@tool` decorator. Both tools dele
 | File | Purpose |
 |------|---------|
 | `session_service.py` | Async DB operations. Resolves API keys server-side from provider store using `provider_id`. Supports `owner_id` for user isolation when auth enabled. Uses DI for provider service. |
-| `provider_service.py` | Database-backed provider store (migrated from JSON file). API keys are **Fernet-encrypted at rest**. Uses SQLAlchemy async sessions. Requires `ELENCHUS_ENCRYPTION_KEY` env var. |
+| `provider_service.py` | Database-backed provider store (migrated from JSON file). API keys are **Fernet-encrypted at rest**. Uses SQLAlchemy async sessions. Auto-prepares a local encryption key for local runtime startup; production should set `ELENCHUS_ENCRYPTION_KEY` explicitly. |
 | `intervention_manager.py` | Thread-safe manager for pending user interventions. Uses per-session `asyncio.Lock` via `_get_session_lock()` method. |
 | `export_service.py` | Converts session data to Markdown or JSON for download. |
 | `log_service.py` | Centralized logging configuration with dynamic level adjustment and file-based logging. |
@@ -120,7 +120,7 @@ Each file wraps a capability with LangChain's `@tool` decorator. Both tools dele
 
 | File | Purpose |
 |------|---------|
-| `schemas.py` | Pydantic API schemas. `ModelConfigResponse.api_key` is masked via `field_validator`. Includes user auth schemas: `UserRegister`, `UserLogin`, `UserResponse`, `TokenResponse`. |
+| `schemas.py` | Pydantic API schemas. `ModelConfigResponse` exposes `api_key_configured` instead of returning plaintext provider secrets. Includes user auth schemas: `UserRegister`, `UserLogin`, `UserResponse`, `TokenResponse`. |
 | `state.py` | `DialogueEntry` Pydantic model. `DialogueEntryDict` and `SharedKnowledgeEntry` TypedDicts. |
 | `scoring.py` | `TurnScore` / `DimensionScore` models. |
 
@@ -162,7 +162,7 @@ Each file wraps a capability with LangChain's `@tool` decorator. Both tools dele
 
 ### `config.py`
 
-Reads `config.yaml` (debate/search settings) and `.env` (secrets). LLM API keys are **not** read from `.env`; they are stored encrypted in `data/providers.json` and managed via the UI.
+Reads `config.yaml` (debate/search settings) and `.env` (secrets). LLM provider API keys are **not** read from `.env`; they are managed via the UI, stored encrypted in the providers database table, and only resolved server-side.
 
 ### `constants.py`
 
@@ -363,9 +363,9 @@ Uses `stream_mode="values"` — each event is the complete merged state after a 
 
 1. Frontend stores `provider_id` (not the raw key) in agent configs
 2. `session_service.create_session()` uses DI to get `provider_service` and resolves the real key server-side
-3. `ModelConfigResponse` always masks the key in API responses (shows only last 4 chars)
+3. `ModelConfigResponse` never returns plaintext provider keys; it only reports `api_key_configured`
 4. Keys are stored Fernet-encrypted in the `providers` database table
-5. Master key **must** be set via `ELENCHUS_ENCRYPTION_KEY` env var (required, not auto-generated)
+5. Local runtime startup auto-prepares `ELENCHUS_ENCRYPTION_KEY`; production should set it explicitly
 
 ### Authentication Flow (Optional)
 
@@ -381,7 +381,7 @@ Uses `stream_mode="values"` — each event is the complete merged state after a 
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `ELENCHUS_ENCRYPTION_KEY` | **Yes** | Fernet key for API key encryption |
+| `ELENCHUS_ENCRYPTION_KEY` | Local runtime auto-generates if missing | Fernet key for API key encryption; set explicitly in production |
 | `AUTH_ENABLED` | No (default: false) | Enable JWT authentication |
 | `JWT_SECRET_KEY` | If auth enabled | JWT signing key |
 | `JWT_EXPIRE_MINUTES` | No (default: 10080) | Token expiry (7 days) |
@@ -394,7 +394,7 @@ Uses `stream_mode="values"` — each event is the complete merged state after a 
 
 | Source | Key | Default | Purpose |
 |--------|-----|---------|---------|
-| `.env` | `ELENCHUS_ENCRYPTION_KEY` | **Required** | Fernet master key for encrypting provider API keys |
+| `.env` | `ELENCHUS_ENCRYPTION_KEY` | Local runtime auto-generates if missing | Fernet master key for encrypting provider API keys; set explicitly in production |
 | `.env` | `AUTH_ENABLED` | `false` | Enable JWT authentication |
 | `.env` | `JWT_SECRET_KEY` | `change-me-in-production` | JWT signing key (change when auth enabled) |
 | `.env` | `JWT_EXPIRE_MINUTES` | `10080` | JWT token expiry (7 days) |
@@ -426,9 +426,9 @@ Uses `stream_mode="values"` — each event is the complete merged state after a 
 | Session ID format | Must match `^[0-9a-f]{12}$` |
 | CORS origins | Default to `localhost:5173/5174`; override via `CORS_ORIGINS` env var |
 | Provider store | Database-backed (migrated from JSON file). Uses SQLAlchemy async sessions. |
-| Encryption key | `ELENCHUS_ENCRYPTION_KEY` is **required** — will raise `ValueError` if not set. |
+| Encryption key | Local runtime startup auto-prepares `ELENCHUS_ENCRYPTION_KEY`; invalid custom values still raise `ValueError`, and production should configure the key explicitly |
 | Intervention manager | Uses per-session `asyncio.Lock` via `_get_session_lock()` method (fixed from `defaultdict` issue). |
-| API key masking | `ModelConfigResponse` masks keys via Pydantic `field_validator` |
+| API key responses | Provider REST responses expose `api_key_configured` and never return plaintext secrets |
 | Reducer delta rule | `dialogue_history` and `shared_knowledge` nodes must return delta only |
 | Node tracking | Explicit via `last_executed_node` field (replaces `_infer_node()` heuristic) |
 | Auth (optional) | When `AUTH_ENABLED=true`, sessions are isolated by `owner_id` |

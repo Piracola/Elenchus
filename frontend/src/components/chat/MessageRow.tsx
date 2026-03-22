@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -7,9 +8,9 @@ import RoundInsights from './RoundInsights';
 import type { InsightSection } from './RoundInsights';
 
 interface MessageRowProps {
-    agentEntry?: (DialogueEntry & { isStreaming?: boolean; streamingContent?: string }) | null;
-    judgeEntry?: (DialogueEntry & { isStreaming?: boolean; streamingContent?: string }) | null;
-    systemEntry?: (DialogueEntry & { isStreaming?: boolean; streamingContent?: string }) | null;
+    agentEntry?: DialogueEntry | null;
+    judgeEntry?: DialogueEntry | null;
+    systemEntry?: DialogueEntry | null;
     highlightAgent?: boolean;
     highlightJudge?: boolean;
     highlightSystem?: boolean;
@@ -394,7 +395,7 @@ function renderMarkdown(text: string) {
     );
 }
 
-export default function MessageRow({
+function MessageRow({
     agentEntry,
     judgeEntry,
     systemEntry,
@@ -405,9 +406,7 @@ export default function MessageRow({
 }: MessageRowProps) {
     const neutralColor = 'var(--color-neutral, #6b7280)';
     const rowFocused = highlightAgent || highlightJudge || highlightSystem;
-    const agentText = agentEntry?.isStreaming
-        ? agentEntry.streamingContent || ''
-        : agentEntry?.content || '';
+    const agentText = agentEntry?.content || '';
 
     if (systemEntry) {
         if (systemEntry.role === 'audience') {
@@ -627,7 +626,7 @@ export default function MessageRow({
                     marginTop: '12px',
                 }}
             >
-                {renderMarkdown(judgeEntry.isStreaming ? judgeEntry.streamingContent || '' : judgeEntry.content || '')}
+                {renderMarkdown(judgeEntry.content || '')}
             </div>
 
             <ScoreGrid judgeEntry={judgeEntry} />
@@ -702,3 +701,5 @@ export default function MessageRow({
         </div>
     );
 }
+
+export default memo(MessageRow);

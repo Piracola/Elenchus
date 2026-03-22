@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Search, Settings, Sun, Moon, Trash2, MessageSquare } from 'lucide-react';
 import { useDebateStore } from '../../stores/debateStore';
@@ -6,10 +6,15 @@ import { useThemeStore } from '../../stores/themeStore';
 import { api } from '../../api/client';
 import SettingsPanel from './SettingsPanel';
 import type { SessionListItem } from '../../types';
+import { filterSessionsByQuery, mergeSessionPage } from '../../utils/sessionList';
 import { toast } from '../../utils/toast';
 
 export default function SessionList() {
-    const { sessions, setSessions, currentSession, setCurrentSession, hydrateRuntimeEvents } = useDebateStore();
+    const sessions = useDebateStore((state) => state.sessions);
+    const currentSessionId = useDebateStore((state) => state.currentSession?.id);
+    const setSessions = useDebateStore((state) => state.setSessions);
+    const setCurrentSession = useDebateStore((state) => state.setCurrentSession);
+    const hydrateRuntimeEvents = useDebateStore((state) => state.hydrateRuntimeEvents);
     const { theme, toggleTheme } = useThemeStore();
     const [isLoading, setIsLoading] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -19,14 +24,13 @@ export default function SessionList() {
     const [hoveredId, setHoveredId] = useState<string | null>(null);
     const sessionSelectionRequestRef = useRef(0);
     const PAGE_SIZE = 50;
-    const currentSessionId = currentSession?.id;
 
-    const loadSessions = async (offset = 0, append = false) => {
+    const loadSessions = useCallback(async (offset = 0, append = false) => {
         try {
             if (offset === 0) setIsLoading(true);
             else setIsLoadingMore(true);
             const data = await api.sessions.list(offset, PAGE_SIZE);
-            setSessions(append ? [...sessions, ...data.sessions] : data.sessions);
+            setSessions((current) => (append ? mergeSessionPage(current, data.sessions) : data.sessions));
             setTotal(data.total);
         } catch (err) {
             console.error('Failed to load sessions', err);
@@ -35,20 +39,20 @@ export default function SessionList() {
             setIsLoading(false);
             setIsLoadingMore(false);
         }
-    };
+    }, [setSessions]);
 
     useEffect(() => {
-        loadSessions();
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+        void loadSessions();
+    }, [loadSessions]);
 
-    const handleSelectSession = async (item: SessionListItem) => {
+    const handleSelectSession = useCallback(async (item: SessionListItem) => {
         if (item.id === currentSessionId) return;
         const requestId = sessionSelectionRequestRef.current + 1;
         sessionSelectionRequestRef.current = requestId;
         try {
             const runtimePagePromise = api.sessions.listRuntimeEvents(item.id).catch((error) => {
                 console.error('Failed to load runtime events', error);
-                    toast('加载执行时间轴失败，已仅打开辩论内容', 'error');
+                toast('加载执行时间轴失败，已仅打开辩论内容', 'error');
                 return null;
             });
             const fullSession = await api.sessions.get(item.id);
@@ -66,12 +70,12 @@ export default function SessionList() {
             console.error('Failed to load session details', err);
             toast('加载辩论记录失败', 'error');
         }
-    };
+    }, [currentSessionId, hydrateRuntimeEvents, setCurrentSession]);
 
-    const handleDelete = async (e: React.MouseEvent, id: string) => {
+    const handleDelete = useCallback(async (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
         e.preventDefault();
-        
+
         const confirmed = window.confirm('确定删除此辩论记录吗？');
         if (!confirmed) return;
 
@@ -86,13 +90,12 @@ export default function SessionList() {
             console.error('Failed to delete session', err);
             toast('删除辩论记录失败', 'error');
         }
-    };
+    }, [currentSessionId, loadSessions, setCurrentSession]);
 
-    const filteredSessions = useMemo(() => {
-        if (!searchQuery.trim()) return sessions;
-        const query = searchQuery.toLowerCase();
-        return sessions.filter(s => s.topic.toLowerCase().includes(query));
-    }, [sessions, searchQuery]);
+    const filteredSessions = useMemo(
+        () => filterSessionsByQuery(sessions, searchQuery),
+        [sessions, searchQuery],
+    );
 
     return (
         <aside style={{

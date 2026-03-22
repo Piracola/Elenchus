@@ -1,16 +1,22 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ProviderForm } from './ProviderForm';
 
+afterEach(() => {
+    cleanup();
+});
+
 describe('ProviderForm', () => {
-    it('shows API keys in plain text so saved credentials can be copied', () => {
+    it('does not show stored API keys in plaintext for existing providers', () => {
         render(
             <ProviderForm
                 formData={{
                     name: 'Custom Provider',
                     providerType: 'openai',
-                    apiKey: 'sk-live-secret',
+                    apiKey: '',
+                    apiKeyConfigured: true,
+                    clearApiKey: false,
                     apiBaseUrl: 'https://example.com/v1',
                     customParametersText: '',
                     models: ['gpt-4o'],
@@ -27,14 +33,44 @@ describe('ProviderForm', () => {
             />,
         );
 
-        const apiKeyInput = screen.getByPlaceholderText('sk-...') as HTMLInputElement;
+        const apiKeyInput = screen.getByLabelText('API 密钥') as HTMLInputElement;
 
-        expect(apiKeyInput).toHaveAttribute('type', 'text');
-        expect(apiKeyInput).toHaveValue('sk-live-secret');
+        expect(apiKeyInput).toHaveAttribute('type', 'password');
+        expect(apiKeyInput).toHaveValue('');
+        expect(apiKeyInput).toHaveAttribute('placeholder', '已配置，留空则保持不变');
+        expect(screen.getByLabelText('清除已保存的 API 密钥')).toBeInTheDocument();
+    });
 
-        fireEvent.focus(apiKeyInput);
+    it('lets the user toggle explicit API key clearing', () => {
+        const onFieldChange = vi.fn();
 
-        expect(apiKeyInput.selectionStart).toBe(0);
-        expect(apiKeyInput.selectionEnd).toBe(apiKeyInput.value.length);
+        render(
+            <ProviderForm
+                formData={{
+                    name: 'Custom Provider',
+                    providerType: 'openai',
+                    apiKey: '',
+                    apiKeyConfigured: true,
+                    clearApiKey: false,
+                    apiBaseUrl: 'https://example.com/v1',
+                    customParametersText: '',
+                    models: ['gpt-4o'],
+                    isDefault: false,
+                }}
+                isCreatingNew={false}
+                newModelInput=""
+                onFieldChange={onFieldChange}
+                onAddModel={vi.fn()}
+                onRemoveModel={vi.fn()}
+                onNewModelInputChange={vi.fn()}
+                onSave={vi.fn()}
+                onClose={vi.fn()}
+            />,
+        );
+
+        fireEvent.click(screen.getByLabelText('清除已保存的 API 密钥'));
+
+        expect(onFieldChange).toHaveBeenCalledWith('clearApiKey', true);
     });
 });
+

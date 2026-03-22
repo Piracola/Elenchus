@@ -1,23 +1,68 @@
 import { useCallback, useState } from 'react';
 
 import { api } from '../api/client';
-import type { ModelConfig, ProviderFormData } from '../types';
+import type { ModelConfig, ModelConfigCreatePayload, ProviderFormData } from '../types';
 import { formatCustomParameters, parseCustomParametersInput } from '../utils/customParameters';
+
+function createEmptyFormData(): ProviderFormData {
+    return {
+        name: '',
+        providerType: 'openai',
+        apiKey: '',
+        apiKeyConfigured: false,
+        clearApiKey: false,
+        apiBaseUrl: '',
+        customParametersText: '',
+        models: [],
+        isDefault: false,
+    };
+}
+
+function buildSavePayload(formData: ProviderFormData): ModelConfigCreatePayload {
+    const payload: ModelConfigCreatePayload = {
+        name: formData.name.trim(),
+        provider_type: formData.providerType,
+        api_base_url: formData.apiBaseUrl.trim() || null,
+        custom_parameters: parseCustomParametersInput(formData.customParametersText),
+        models: formData.models,
+        is_default: formData.isDefault,
+    };
+
+    const nextApiKey = formData.apiKey.trim();
+    if (nextApiKey) {
+        payload.api_key = nextApiKey;
+    } else if (formData.clearApiKey) {
+        payload.clear_api_key = true;
+    }
+
+    return payload;
+}
+
+function findProviderIndexById(
+    providers: ModelConfig[],
+    providerId: string | null,
+    fallbackIndex = 0,
+): number {
+    if (providers.length === 0) {
+        return 0;
+    }
+
+    if (providerId) {
+        const providerIndex = providers.findIndex((provider) => provider.id === providerId);
+        if (providerIndex >= 0) {
+            return providerIndex;
+        }
+    }
+
+    return Math.min(Math.max(fallbackIndex, 0), providers.length - 1);
+}
 
 export function useModelConfigManager() {
     const [providers, setProviders] = useState<ModelConfig[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [activeIndex, setActiveIndex] = useState<number>(0);
     const [isCreatingNew, setIsCreatingNew] = useState(false);
-    const [formData, setFormData] = useState<ProviderFormData>({
-        name: '',
-        providerType: 'openai',
-        apiKey: '',
-        apiBaseUrl: '',
-        customParametersText: '',
-        models: [],
-        isDefault: false,
-    });
+    const [formData, setFormData] = useState<ProviderFormData>(createEmptyFormData);
     const [newModelInput, setNewModelInput] = useState('');
 
     const getActiveIndexClamped = useCallback((length: number, index: number) => {
@@ -31,7 +76,9 @@ export function useModelConfigManager() {
         setFormData({
             name: provider.name,
             providerType: provider.provider_type || 'openai',
-            apiKey: provider.api_key || '',
+            apiKey: '',
+            apiKeyConfigured: provider.api_key_configured || false,
+            clearApiKey: false,
             apiBaseUrl: provider.api_base_url || '',
             customParametersText: formatCustomParameters(provider.custom_parameters),
             models: provider.models || [],
@@ -42,15 +89,7 @@ export function useModelConfigManager() {
 
     const startNew = useCallback(() => {
         setIsCreatingNew(true);
-        setFormData({
-            name: '',
-            providerType: 'openai',
-            apiKey: '',
-            apiBaseUrl: '',
-            customParametersText: '',
-            models: [],
-            isDefault: false,
-        });
+        setFormData(createEmptyFormData());
     }, []);
 
     const fetchConfigs = useCallback(async () => {
@@ -98,22 +137,22 @@ export function useModelConfigManager() {
             return;
         }
 
-        const payload = {
-            name: formData.name.trim(),
-            provider_type: formData.providerType,
-            api_key: formData.apiKey.trim() || null,
-            api_base_url: formData.apiBaseUrl.trim() || null,
-            custom_parameters: parseCustomParametersInput(formData.customParametersText),
-            models: formData.models,
-            is_default: formData.isDefault,
-        };
-
         try {
+            const payload = buildSavePayload(formData);
+
             if (isCreatingNew) {
-                await api.models.create(payload);
-                setIsCreatingNew(false);
-                await fetchConfigs();
-                setActiveIndex(providers.length);
+                const created = await api.models.create(payload);
+                const nextProviders = await api.models.list();
+                setProviders(nextProviders);
+
+                if (nextProviders.length === 0) {
+                    startNew();
+                    return;
+                }
+
+                const nextActiveIndex = findProviderIndexById(nextProviders, created.id, activeIndex);
+                setActiveIndex(nextActiveIndex);
+                fillForm(nextProviders[nextActiveIndex]);
                 return;
             }
 
@@ -127,7 +166,7 @@ export function useModelConfigManager() {
             console.error('Save failed', err);
             alert(`保存失败：${err instanceof Error ? err.message : '未知错误'}`);
         }
-    }, [activeIndex, fetchConfigs, formData, isCreatingNew, providers]);
+    }, [activeIndex, fetchConfigs, fillForm, formData, isCreatingNew, providers, startNew]);
 
     const handleAddModel = useCallback(() => {
         const nextModel = newModelInput.trim();
@@ -155,7 +194,17 @@ export function useModelConfigManager() {
         field: K,
         value: ProviderFormData[K],
     ) => {
-        setFormData((previous) => ({ ...previous, [field]: value }));
+        setFormData((previous) => {
+            if (field === 'apiKey') {
+                const nextApiKey = String(value);
+                return {
+                    ...previous,
+                    apiKey: nextApiKey,
+                    clearApiKey: nextApiKey.trim() ? false : previous.clearApiKey,
+                };
+            }
+            return { ...previous, [field]: value };
+        });
     }, []);
 
     return {
@@ -176,3 +225,5 @@ export function useModelConfigManager() {
         startNew,
     };
 }
+
+export { buildSavePayload, createEmptyFormData, findProviderIndexById };
