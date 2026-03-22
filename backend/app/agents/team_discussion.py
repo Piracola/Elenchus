@@ -192,6 +192,8 @@ async def team_discuss(state: dict[str, Any]) -> dict[str, Any]:
         topic=topic,
         current_turn=current_turn,
         max_turns=max_turns,
+        agent_role=side,
+        judge_history=state.get("judge_history", []),
     )
 
     current_team_discussion: list[dict[str, Any]] = []
