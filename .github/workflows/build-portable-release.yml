@@ -6,7 +6,6 @@ on:
       release_version:
         description: "要发布的版本号或标签，例如 v2.0.1"
         required: true
-        default: "v2.0.1"
       release_title:
         description: "发行版标题；留空时自动使用 Elenchus <版本号>"
         required: false

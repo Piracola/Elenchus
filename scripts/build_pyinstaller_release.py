@@ -109,48 +109,6 @@ def release_name(version: str) -> str:
     return f"elenchus-portable-{version}-windows"
 
 
-def write_quickstart(release_root: Path, version: str) -> None:
-    content = "\n".join(
-        [
-            f"Elenchus Portable Release {version}",
-            "",
-            "1. Extract this folder or zip to a normal writable location.",
-            "2. Double-click `elenchus.exe`.",
-            "3. Wait a moment for the backend to start; the browser opens automatically.",
-            "",
-            "First launch will create a `runtime/` folder beside the executable:",
-            "- runtime/config.json",
-            "- runtime/elenchus.db",
-            "- runtime/logs/",
-            "",
-            "If the browser does not open automatically, visit:",
-            "- http://127.0.0.1:8001 (or the fallback port shown in console)",
-            "",
-            "After launch:",
-            "- Open Settings in the UI",
-            "- Add your model provider API key",
-            "- Start a debate session",
-        ]
-    )
-    (release_root / "QUICKSTART.txt").write_text(content + "\n", encoding="utf-8")
-
-
-def write_runtime_placeholder(release_root: Path) -> None:
-    runtime_dir = release_root / "runtime"
-    runtime_dir.mkdir(parents=True, exist_ok=True)
-    notice = "\n".join(
-        [
-            "This folder stores writable runtime data for the portable release.",
-            "",
-            "It will hold:",
-            "- runtime/config.json",
-            "- runtime/elenchus.db",
-            "- runtime/logs/",
-        ]
-    )
-    (runtime_dir / "README.txt").write_text(notice + "\n", encoding="utf-8")
-
-
 def build_release(version: str, output_dir: Path) -> tuple[Path, Path, Path]:
     pyinstaller_run = load_pyinstaller_runner()
 
@@ -182,9 +140,6 @@ def build_release(version: str, output_dir: Path) -> tuple[Path, Path, Path]:
     if release_root.exists():
         shutil.rmtree(release_root)
     shutil.copytree(built_dir, release_root)
-
-    write_quickstart(release_root, version)
-    write_runtime_placeholder(release_root)
 
     archive_path = output_dir / f"{release_name(version)}.zip"
     if archive_path.exists():
