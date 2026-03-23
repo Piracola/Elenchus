@@ -3,7 +3,7 @@
  * Default state is collapsed to reduce top-bar space usage.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useDebateStore } from '../../stores/debateStore';
 import { getEventNode } from '../../utils/eventFocus';
@@ -25,55 +25,76 @@ const PHASE_LABELS: Record<string, string> = {
 };
 
 export default function StatusBanner() {
-    const {
-        currentSession,
-        isDebating,
-        phase,
-        currentStatus,
-        currentNode,
-        runtimeEvents,
-        visibleRuntimeEvents,
-        focusedRuntimeEventId,
-        replayEnabled,
-        replayCursor,
-    } = useDebateStore();
+    const sessionStatus = useDebateStore((state) => state.currentSession?.status ?? null);
+    const isDebating = useDebateStore((state) => state.isDebating);
+    const phase = useDebateStore((state) => state.phase);
+    const currentStatus = useDebateStore((state) => state.currentStatus);
+    const currentNode = useDebateStore((state) => state.currentNode);
+    const runtimeEventCount = useDebateStore((state) => state.runtimeEvents.length);
+    const visibleRuntimeEvents = useDebateStore((state) => state.visibleRuntimeEvents);
+    const focusedRuntimeEventId = useDebateStore((state) => state.focusedRuntimeEventId);
+    const replayEnabled = useDebateStore((state) => state.replayEnabled);
+    const replayCursor = useDebateStore((state) => state.replayCursor);
     const [expanded, setExpanded] = useState(false);
 
-    const focusedEvent = focusedRuntimeEventId
-        ? visibleRuntimeEvents.find((event) => event.event_id === focusedRuntimeEventId) ?? null
-        : null;
+    const focusedEvent = useMemo(
+        () => (
+            focusedRuntimeEventId
+                ? visibleRuntimeEvents.find((event) => event.event_id === focusedRuntimeEventId) ?? null
+                : null
+        ),
+        [focusedRuntimeEventId, visibleRuntimeEvents],
+    );
     const liveFocusedEvent = replayEnabled ? focusedEvent : null;
-    const latestVisibleEvent = visibleRuntimeEvents.length
-        ? visibleRuntimeEvents[visibleRuntimeEvents.length - 1]
-        : null;
+    const latestVisibleEvent = useMemo(
+        () => (visibleRuntimeEvents.length ? visibleRuntimeEvents[visibleRuntimeEvents.length - 1] : null),
+        [visibleRuntimeEvents],
+    );
     const replayEvent = focusedEvent ?? latestVisibleEvent;
-    const replayView = replayEnabled
-        ? deriveRuntimeViewState(visibleRuntimeEvents, {
-            phase,
-            status: currentStatus,
-            node: currentNode,
-            isDebating,
-        })
-        : null;
+    const replayView = useMemo(
+        () => (
+            replayEnabled
+                ? deriveRuntimeViewState(visibleRuntimeEvents, {
+                    phase,
+                    status: currentStatus,
+                    node: currentNode,
+                    isDebating,
+                })
+                : null
+        ),
+        [currentNode, currentStatus, isDebating, phase, replayEnabled, visibleRuntimeEvents],
+    );
     const replayCursorDisplay = Math.max(0, replayCursor + 1);
     const sessionIsRunning = isDebating;
-    const resumableSession = !sessionIsRunning && currentSession?.status === 'in_progress';
-    const displayStatus = liveFocusedEvent
-        ? `定位事件 #${liveFocusedEvent.seq} · ${liveFocusedEvent.type}`
-        : replayEnabled
-            ? `回放 ${replayCursorDisplay}/${runtimeEvents.length}${replayEvent ? ` · ${replayEvent.type}` : ''}`
-            : (
-                currentStatus
-                || (sessionIsRunning
-                    ? '辩论进行中...'
-                    : (resumableSession ? '历史进度已恢复，可继续辩论' : ''))
-            );
-    const focusedNodeLabel = getLiveGraphNodeLabel(getEventNode(liveFocusedEvent ?? replayEvent));
+    const resumableSession = !sessionIsRunning && sessionStatus === 'in_progress';
+    const displayStatus = useMemo(
+        () => (
+            liveFocusedEvent
+                ? `定位事件 #${liveFocusedEvent.seq} · ${liveFocusedEvent.type}`
+                : replayEnabled
+                    ? `回放 ${replayCursorDisplay}/${runtimeEventCount}${replayEvent ? ` · ${replayEvent.type}` : ''}`
+                    : (
+                        currentStatus
+                        || (sessionIsRunning
+                            ? '辩论进行中...'
+                            : (resumableSession ? '历史进度已恢复，可继续辩论' : ''))
+                    )
+        ),
+        [currentStatus, liveFocusedEvent, replayEnabled, replayCursorDisplay, replayEvent, resumableSession, runtimeEventCount, sessionIsRunning],
+    );
+    const focusedNodeLabel = useMemo(
+        () => getLiveGraphNodeLabel(getEventNode(liveFocusedEvent ?? replayEvent)),
+        [liveFocusedEvent, replayEvent],
+    );
 
-    const hasStatus =
-        Boolean(displayStatus) ||
-        sessionIsRunning ||
-        !((!isDebating || phase === 'idle' || phase === 'complete') && !liveFocusedEvent && !replayEnabled);
+    const hasStatus = useMemo(
+        () => (
+            Boolean(displayStatus)
+            || sessionIsRunning
+            || !((!isDebating || phase === 'idle' || phase === 'complete') && !liveFocusedEvent && !replayEnabled)
+        ),
+        [displayStatus, isDebating, liveFocusedEvent, phase, replayEnabled, sessionIsRunning],
+    );
 
     if (!hasStatus) {
         return null;

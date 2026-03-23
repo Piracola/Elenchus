@@ -60,20 +60,23 @@ function pathBetween(
 }
 
 export default function MemoryPanel({ compact = false, embedded = false }: MemoryPanelProps) {
-    const {
-        visibleRuntimeEvents,
-        replayEnabled,
-        focusedRuntimeEventId,
-        setFocusedRuntimeEventId,
-    } = useDebateStore();
+    const visibleRuntimeEvents = useDebateStore((state) => state.visibleRuntimeEvents);
+    const replayEnabled = useDebateStore((state) => state.replayEnabled);
+    const focusedRuntimeEventId = useDebateStore((state) => state.focusedRuntimeEventId);
+    const setFocusedRuntimeEventId = useDebateStore((state) => state.setFocusedRuntimeEventId);
     const [collapsed, setCollapsed] = useState(embedded ? false : true);
+    const activePanel = embedded || !collapsed;
 
-    const writes = useMemo(
-        () => buildMemoryWriteViews(visibleRuntimeEvents),
+    const memoryWriteCount = useMemo(
+        () => visibleRuntimeEvents.reduce((count, event) => count + (event.type === 'memory_write' ? 1 : 0), 0),
         [visibleRuntimeEvents],
     );
+    const writes = useMemo(
+        () => (activePanel ? buildMemoryWriteViews(visibleRuntimeEvents) : []),
+        [activePanel, visibleRuntimeEvents],
+    );
     const summary = useMemo(() => summarizeMemoryTypes(writes), [writes]);
-    const latestWrites = writes.slice(-4).reverse();
+    const latestWrites = useMemo(() => writes.slice(-4).reverse(), [writes]);
     const graph = useMemo(() => buildMemoryGraph(writes), [writes]);
 
     const { sourceNodeMap, memoryNodeMap } = useMemo(() => ({
@@ -634,7 +637,7 @@ export default function MemoryPanel({ compact = false, embedded = false }: Memor
                         </span>
                     </span>
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                        {writes.length} 条{replayEnabled ? ' · 回放' : ''}
+                        {memoryWriteCount} 条{replayEnabled ? ' · 回放' : ''}
                     </span>
                 </button>
             )}

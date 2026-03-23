@@ -56,16 +56,13 @@ function edgePath(from: { x: number; y: number }, to: { x: number; y: number }, 
 }
 
 export default function LiveGraph({ compact = false, embedded = false }: LiveGraphProps) {
-    const {
-        currentSession,
-        visibleRuntimeEvents,
-        currentNode,
-        focusedRuntimeEventId,
-        setFocusedRuntimeEventId,
-        replayEnabled,
-        exitReplay,
-    } = useDebateStore();
-    const debateMode = currentSession?.debate_mode ?? 'standard';
+    const debateMode = useDebateStore((state) => state.currentSession?.debate_mode ?? 'standard');
+    const visibleRuntimeEvents = useDebateStore((state) => state.visibleRuntimeEvents);
+    const currentNode = useDebateStore((state) => state.currentNode);
+    const focusedRuntimeEventId = useDebateStore((state) => state.focusedRuntimeEventId);
+    const setFocusedRuntimeEventId = useDebateStore((state) => state.setFocusedRuntimeEventId);
+    const replayEnabled = useDebateStore((state) => state.replayEnabled);
+    const exitReplay = useDebateStore((state) => state.exitReplay);
     const [collapsed, setCollapsed] = useState(embedded ? false : compact);
     const graphDefinition = useMemo(
         () => getLiveGraphDefinition(debateMode),
@@ -76,6 +73,8 @@ export default function LiveGraph({ compact = false, embedded = false }: LiveGra
         ? visibleRuntimeEvents.find((event) => event.event_id === focusedRuntimeEventId) ?? null
         : null;
 
+    const activeGraph = embedded || !collapsed;
+
     const nodeMap = useMemo(
         () =>
             Object.fromEntries(
@@ -84,13 +83,12 @@ export default function LiveGraph({ compact = false, embedded = false }: LiveGra
         [graphDefinition.nodes],
     );
 
-    const nodeEvents = useMemo(
-        () =>
-            visibleRuntimeEvents
-                .map((event) => ({ event, node: eventToGraphNode(event, debateMode) }))
-                .filter((item): item is { event: typeof visibleRuntimeEvents[number]; node: string } => Boolean(item.node)),
-        [debateMode, visibleRuntimeEvents],
-    );
+    const nodeEvents = useMemo(() => {
+        if (!activeGraph) return [];
+        return visibleRuntimeEvents
+            .map((event) => ({ event, node: eventToGraphNode(event, debateMode) }))
+            .filter((item): item is { event: typeof visibleRuntimeEvents[number]; node: string } => Boolean(item.node));
+    }, [activeGraph, debateMode, visibleRuntimeEvents]);
 
     const latestNode = nodeEvents.length ? nodeEvents[nodeEvents.length - 1].node : null;
     const activeNode = useMemo(() => {
@@ -105,11 +103,12 @@ export default function LiveGraph({ compact = false, embedded = false }: LiveGra
     const activeNodeLabel = getLiveGraphNodeLabel(activeNode, debateMode);
 
     const previousNode = useMemo(() => {
+        if (!activeGraph) return null;
         if (focusedRuntimeEventId) {
             return findPreviousNode(visibleRuntimeEvents, focusedRuntimeEventId, debateMode);
         }
         return nodeEvents.length > 1 ? nodeEvents[nodeEvents.length - 2].node : null;
-    }, [debateMode, focusedRuntimeEventId, nodeEvents, visibleRuntimeEvents]);
+    }, [activeGraph, debateMode, focusedRuntimeEventId, nodeEvents, visibleRuntimeEvents]);
 
     const activeEdge = useMemo(() => {
         if (!activeNode || !previousNode) return null;
@@ -117,8 +116,8 @@ export default function LiveGraph({ compact = false, embedded = false }: LiveGra
     }, [activeNode, debateMode, previousNode]);
 
     const heatMap = useMemo(
-        () => buildNodeHeat(visibleRuntimeEvents, debateMode),
-        [debateMode, visibleRuntimeEvents],
+        () => (activeGraph ? buildNodeHeat(visibleRuntimeEvents, debateMode) : {}),
+        [activeGraph, debateMode, visibleRuntimeEvents],
     );
     const maxHeat = useMemo(() => {
         const values = Object.values(heatMap);
@@ -126,12 +125,15 @@ export default function LiveGraph({ compact = false, embedded = false }: LiveGra
     }, [heatMap]);
 
     const latestEventByNode = useMemo(() => {
+        if (!activeGraph) {
+            return Object.fromEntries(graphDefinition.nodes.map((node) => [node.id, null]));
+        }
         const map: Record<string, string | null> = {};
         for (const node of graphDefinition.nodes) {
             map[node.id] = findLatestEventIdByNode(visibleRuntimeEvents, node.id, debateMode);
         }
         return map;
-    }, [debateMode, graphDefinition.nodes, visibleRuntimeEvents]);
+    }, [activeGraph, debateMode, graphDefinition.nodes, visibleRuntimeEvents]);
 
     const viewBoxWidth = useMemo(
         () => Math.max(...graphDefinition.nodes.map((node) => node.x)) + 80,

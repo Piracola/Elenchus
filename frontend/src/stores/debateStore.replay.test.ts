@@ -306,7 +306,7 @@ describe('debateStore replay state', () => {
         expect(state.lastEventSeq).toBe(-1);
     });
 
-    it('clears transient streaming content when speech is cancelled', () => {
+    it('clears transient speech status without appending visible dialogue when speech is cancelled', () => {
         const store = useDebateStore.getState();
 
         store.applyRuntimeEvent(
@@ -337,9 +337,12 @@ describe('debateStore replay state', () => {
         const state = useDebateStore.getState();
         expect(state.streamingRole).toBe('');
         expect(state.streamingContent).toBe('');
+        expect(state.currentSession?.dialogue_history).toEqual([]);
+        expect(state.runtimeEvents.map((event) => event.type)).toEqual(['speech_start', 'speech_cancel']);
+        expect(state.visibleRuntimeEvents.map((event) => event.type)).toEqual(['speech_start', 'speech_cancel']);
     });
 
-    it('keeps speech tokens out of runtime history while preserving the live stream buffer', () => {
+    it('keeps speech tokens out of runtime history without mutating visible dialogue state', () => {
         const store = useDebateStore.getState();
 
         store.applyRuntimeEvent(
@@ -361,10 +364,62 @@ describe('debateStore replay state', () => {
 
         const state = useDebateStore.getState();
         expect(state.streamingRole).toBe('proposer');
-        expect(state.streamingContent).toBe('partial');
+        expect(state.streamingContent).toBe('');
+        expect(state.currentSession?.dialogue_history).toEqual([]);
         expect(state.runtimeEvents.map((event) => event.type)).toEqual(['speech_start']);
         expect(state.visibleRuntimeEvents.map((event) => event.type)).toEqual(['speech_start']);
         expect(state.lastEventSeq).toBe(2);
+    });
+
+    it('appends the final speech on speech_end after ignoring token updates', () => {
+        const store = useDebateStore.getState();
+
+        store.applyRuntimeEvent(
+            makeEvent({
+                event_id: 'evt_stream_start',
+                seq: 1,
+                type: 'speech_start',
+                payload: { role: 'proposer' },
+            }),
+        );
+        store.applyRuntimeEvent(
+            makeEvent({
+                event_id: 'evt_stream_token',
+                seq: 2,
+                type: 'speech_token',
+                payload: { token: 'partial' },
+            }),
+        );
+        store.applyRuntimeEvent(
+            makeEvent({
+                event_id: 'evt_stream_end',
+                seq: 3,
+                type: 'speech_end',
+                payload: {
+                    role: 'proposer',
+                    agent_name: '正方',
+                    content: 'complete speech',
+                    citations: ['source-1'],
+                    turn: 0,
+                },
+            }),
+        );
+
+        const state = useDebateStore.getState();
+        expect(state.streamingRole).toBe('');
+        expect(state.streamingContent).toBe('');
+        expect(state.currentSession?.dialogue_history).toHaveLength(1);
+        expect(state.currentSession?.dialogue_history[0]).toMatchObject({
+            role: 'proposer',
+            agent_name: '正方',
+            content: 'complete speech',
+            citations: ['source-1'],
+            turn: 0,
+            event_id: 'evt_stream_end',
+        });
+        expect(state.runtimeEvents.map((event) => event.type)).toEqual(['speech_start', 'speech_end']);
+        expect(state.visibleRuntimeEvents.map((event) => event.type)).toEqual(['speech_start', 'speech_end']);
+        expect(state.lastEventSeq).toBe(3);
     });
 
     it('filters speech tokens out when hydrating runtime history', () => {

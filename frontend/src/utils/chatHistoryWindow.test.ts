@@ -27,6 +27,18 @@ describe('chatHistoryWindow', () => {
         })).toBe(140);
     });
 
+    it('resets to the latest real-history window when the session changes', () => {
+        expect(resolveHistoryRowStart({
+            currentStart: 12,
+            rowsLength: 260,
+            previousRowsLength: 200,
+            replayEnabled: false,
+            sessionChanged: true,
+            replayChanged: false,
+            initialWindowSize: 120,
+        })).toBe(140);
+    });
+
     it('resets to full history in replay mode', () => {
         expect(resolveHistoryRowStart({
             currentStart: 80,

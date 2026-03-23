@@ -11,7 +11,6 @@ import { FileJson, FileText } from 'lucide-react';
 import { api } from '../api/client';
 import { useDebateStore } from '../stores/debateStore';
 import { useSettingsStore, MESSAGE_WIDTH_VALUES } from '../stores/settingsStore';
-import type { DialogueEntry } from '../types';
 import MessageRow from './chat/MessageRow';
 import DebateControls from './chat/DebateControls';
 import RuntimeInspector from './chat/RuntimeInspector';
@@ -53,14 +52,22 @@ const INITIAL_HISTORY_ROW_WINDOW = 120;
 const HISTORY_ROW_BATCH_SIZE = 80;
 const HISTORY_ROW_PRELOAD_THRESHOLD = 240;
 export default function ChatPanel() {
-    const {
-        currentSession,
-        visibleRuntimeEvents,
-        replayEnabled,
-        focusedRuntimeEventId,
-    } = useDebateStore();
+    const currentSessionId = useDebateStore((state) => state.currentSession?.id ?? null);
+    const currentTopic = useDebateStore((state) => state.currentSession?.topic ?? '');
+    const debateMode = useDebateStore((state) => state.currentSession?.debate_mode ?? 'standard');
+    const participants = useDebateStore((state) => state.currentSession?.participants);
+    const dialogueHistory = useDebateStore((state) => state.currentSession?.dialogue_history ?? []);
+    const teamDialogueHistory = useDebateStore((state) => state.currentSession?.team_dialogue_history ?? []);
+    const juryDialogueHistory = useDebateStore((state) => state.currentSession?.jury_dialogue_history ?? []);
+    const currentTurn = useDebateStore((state) => state.currentSession?.current_turn ?? 0);
+    const maxTurns = useDebateStore((state) => state.currentSession?.max_turns ?? 0);
+    const modeArtifactsLength = useDebateStore((state) => state.currentSession?.mode_artifacts?.length ?? 0);
+    const visibleRuntimeEvents = useDebateStore((state) => state.visibleRuntimeEvents);
+    const replayEnabled = useDebateStore((state) => state.replayEnabled);
+    const focusedRuntimeEventId = useDebateStore((state) => state.focusedRuntimeEventId);
     const { displaySettings } = useSettingsStore();
-    const isSophistryMode = currentSession?.debate_mode === 'sophistry_experiment';
+    const hasCurrentSession = currentSessionId !== null;
+    const isSophistryMode = debateMode === 'sophistry_experiment';
     const modeWarning =
         '诡辩实验模式会主动鼓励修辞操控、偷换定义和压力转移，也会积极抓对手的谬误。这里的输出不代表事实结论，搜索与评分都已关闭，请把它当成一场修辞实验。';
 
@@ -98,7 +105,7 @@ export default function ChatPanel() {
     useEffect(() => {
         autoScrollEnabledRef.current = true;
         pendingHistoryPrependScrollHeightRef.current = null;
-    }, [currentSession?.id]);
+    }, [currentSessionId]);
 
     useLayoutEffect(() => {
         if (replayEnabled) return;
@@ -107,10 +114,10 @@ export default function ChatPanel() {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
     }, [
-        currentSession?.dialogue_history,
-        currentSession?.team_dialogue_history,
-        currentSession?.jury_dialogue_history,
-        currentSession?.current_turn,
+        dialogueHistory,
+        teamDialogueHistory,
+        juryDialogueHistory,
+        currentTurn,
         replayEnabled,
     ]);
 
@@ -138,11 +145,11 @@ export default function ChatPanel() {
             observer.disconnect();
             window.removeEventListener('resize', updateHeights);
         };
-    }, [currentSession?.id]);
+    }, [currentSessionId]);
 
     useEffect(() => {
         overlayHeightsRef.current = null;
-    }, [currentSession?.id]);
+    }, [currentSessionId]);
 
     const stopFloatingInspectorInteraction = useCallback(() => {
         if (!floatingInspectorInteractionRef.current) return;
@@ -355,21 +362,21 @@ export default function ChatPanel() {
     );
 
     const rows = useMemo(() => {
-        const fullHistory = currentSession?.dialogue_history || [];
         const history = replayEnabled && visibleEventIds
-            ? fullHistory.filter((entry) => !entry.event_id || visibleEventIds.has(entry.event_id))
-            : fullHistory;
+            ? dialogueHistory.filter((entry) => !entry.event_id || visibleEventIds.has(entry.event_id))
+            : dialogueHistory;
 
-        return groupDialogue(history, currentSession?.participants);
+        return groupDialogue(history, participants);
     }, [
-        currentSession?.dialogue_history,
-        currentSession?.participants,
+        dialogueHistory,
+        participants,
         replayEnabled,
         visibleEventIds,
     ]);
 
+
     useEffect(() => {
-        const sessionId = currentSession?.id ?? null;
+        const sessionId = currentSessionId;
         const rowsLength = rows.length;
         const sessionChanged = previousSessionIdRef.current !== sessionId;
         const replayChanged = previousReplayEnabledRef.current !== replayEnabled;
@@ -387,7 +394,8 @@ export default function ChatPanel() {
         previousSessionIdRef.current = sessionId;
         previousReplayEnabledRef.current = replayEnabled;
         previousRowsLengthRef.current = rowsLength;
-    }, [currentSession?.id, replayEnabled, rows.length]);
+    }, [currentSessionId, replayEnabled, rows.length]);
+
 
     const renderedRows = useMemo(
         () => (replayEnabled || historyRowStart <= 0 ? rows : rows.slice(historyRowStart)),
@@ -396,30 +404,29 @@ export default function ChatPanel() {
     const hiddenHistoryRowCount = replayEnabled ? 0 : historyRowStart;
 
     const visibleTeamDiscussion = useMemo(() => {
-        const fullHistory = currentSession?.team_dialogue_history || [];
         if (!replayEnabled || !visibleEventIds) {
-            return fullHistory;
+            return teamDialogueHistory;
         }
 
-        return fullHistory.filter((entry) => !entry.event_id || visibleEventIds.has(entry.event_id));
+        return teamDialogueHistory.filter((entry) => !entry.event_id || visibleEventIds.has(entry.event_id));
     }, [
-        currentSession?.team_dialogue_history,
+        teamDialogueHistory,
         replayEnabled,
         visibleEventIds,
     ]);
 
     const visibleJuryDiscussion = useMemo(() => {
-        const fullHistory = currentSession?.jury_dialogue_history || [];
         if (!replayEnabled || !visibleEventIds) {
-            return fullHistory;
+            return juryDialogueHistory;
         }
 
-        return fullHistory.filter((entry) => !entry.event_id || visibleEventIds.has(entry.event_id));
+        return juryDialogueHistory.filter((entry) => !entry.event_id || visibleEventIds.has(entry.event_id));
     }, [
-        currentSession?.jury_dialogue_history,
+        juryDialogueHistory,
         replayEnabled,
         visibleEventIds,
     ]);
+
 
     const teamDiscussionMap = useMemo(
         () => buildSpeakerDiscussionMap(visibleTeamDiscussion),
@@ -532,15 +539,15 @@ export default function ChatPanel() {
     const scrollPaddingRight = '4px';
 
     const handleExport = async (format: 'markdown' | 'json') => {
-        if (!currentSession || exportingFormat) return;
+        if (!hasCurrentSession || exportingFormat || !currentSessionId) return;
 
         setExportingFormat(format);
         try {
             if (format === 'markdown') {
-                await api.sessions.exportMarkdown(currentSession.id, currentSession.topic);
+                await api.sessions.exportMarkdown(currentSessionId, currentTopic);
                 toast('已导出 Markdown 辩论记录', 'success');
             } else {
-                await api.sessions.exportJson(currentSession.id, currentSession.topic);
+                await api.sessions.exportJson(currentSessionId, currentTopic);
                 toast('已导出 JSON 辩论数据', 'success');
             }
         } catch (error) {
@@ -661,10 +668,10 @@ export default function ChatPanel() {
                                         margin: 0,
                                     }}
                                 >
-                                    {currentSession ? currentSession.topic : 'Elenchus 辩论场'}
+                                    {hasCurrentSession ? currentTopic : 'Elenchus 辩论场'}
                                 </h2>
 
-                                {currentSession && (
+                                {hasCurrentSession && (
                                     <div
                                         style={{
                                             display: 'flex',
@@ -772,14 +779,14 @@ export default function ChatPanel() {
                                                     fontWeight: 500,
                                                 }}
                                             >
-                                                {currentSession.current_turn} / {currentSession.max_turns} 轮
+                                                {currentTurn} / {maxTurns} 轮
                                             </span>
                                         </span>
                                     </div>
                                 )}
                             </motion.div>
 
-                            {currentSession && isSophistryMode && (
+                            {hasCurrentSession && isSophistryMode && (
                                 <div
                                     style={{
                                         pointerEvents: 'auto',
@@ -819,7 +826,7 @@ export default function ChatPanel() {
                                                 whiteSpace: 'nowrap',
                                             }}
                                         >
-                                            观察报告 {currentSession.mode_artifacts?.length ?? 0} 条
+                                            观察报告 {modeArtifactsLength} 条
                                         </span>
                                     </div>
                                     <div

@@ -90,21 +90,21 @@ export default function ExecutionTimeline({
     embedded = false,
     fillHeight = false,
 }: ExecutionTimelineProps) {
-    const {
-        runtimeEvents,
-        currentSession,
-        replayEnabled,
-        replayCursor,
-        focusedRuntimeEventId,
-        hasOlderRuntimeEvents,
-        setFocusedRuntimeEventId,
-        setReplayEnabled,
-        setReplayCursor,
-        stepReplay,
-        exitReplay,
-        loadRuntimeEventSnapshot,
-        prependRuntimeEvents,
-    } = useDebateStore();
+    const runtimeEvents = useDebateStore((state) => state.runtimeEvents);
+    const currentSessionId = useDebateStore((state) => state.currentSession?.id ?? null);
+    const currentTopic = useDebateStore((state) => state.currentSession?.topic ?? '');
+    const debateMode = useDebateStore((state) => state.currentSession?.debate_mode ?? 'standard');
+    const replayEnabled = useDebateStore((state) => state.replayEnabled);
+    const replayCursor = useDebateStore((state) => state.replayCursor);
+    const focusedRuntimeEventId = useDebateStore((state) => state.focusedRuntimeEventId);
+    const hasOlderRuntimeEvents = useDebateStore((state) => state.hasOlderRuntimeEvents);
+    const setFocusedRuntimeEventId = useDebateStore((state) => state.setFocusedRuntimeEventId);
+    const setReplayEnabled = useDebateStore((state) => state.setReplayEnabled);
+    const setReplayCursor = useDebateStore((state) => state.setReplayCursor);
+    const stepReplay = useDebateStore((state) => state.stepReplay);
+    const exitReplay = useDebateStore((state) => state.exitReplay);
+    const loadRuntimeEventSnapshot = useDebateStore((state) => state.loadRuntimeEventSnapshot);
+    const prependRuntimeEvents = useDebateStore((state) => state.prependRuntimeEvents);
 
     const [expanded, setExpanded] = useState(embedded);
     const [filter, setFilter] = useState<TimelineFilter>('all');
@@ -124,12 +124,22 @@ export default function ExecutionTimeline({
         return map;
     }, [runtimeEvents]);
 
-    const filteredEvents = useMemo(() => {
-        const typeFiltered = filter === 'all'
-            ? runtimeEvents
-            : runtimeEvents.filter((event) => getRuntimeEventGroup(event.type) === filter);
-        return filterIndexedTimelineEvents(buildTimelineSearchIndex(typeFiltered), deferredSearchQuery);
-    }, [deferredSearchQuery, filter, runtimeEvents]);
+    const indexedRuntimeEvents = useMemo(
+        () => buildTimelineSearchIndex(runtimeEvents),
+        [runtimeEvents],
+    );
+
+    const typeFilteredEntries = useMemo(() => {
+        if (filter === 'all') {
+            return indexedRuntimeEvents;
+        }
+        return indexedRuntimeEvents.filter((entry) => getRuntimeEventGroup(entry.event.type) === filter);
+    }, [filter, indexedRuntimeEvents]);
+
+    const filteredEvents = useMemo(
+        () => filterIndexedTimelineEvents(typeFilteredEntries, deferredSearchQuery),
+        [deferredSearchQuery, typeFilteredEntries],
+    );
 
     const pageTotal = useMemo(
         () => computeTimelinePageTotal(filteredEvents.length, TIMELINE_PAGE_SIZE),
@@ -212,7 +222,7 @@ export default function ExecutionTimeline({
             return;
         }
 
-        if (historyLoading || !hasOlderRuntimeEvents || !currentSession?.id || !runtimeEvents.length) {
+        if (historyLoading || !hasOlderRuntimeEvents || !currentSessionId || !runtimeEvents.length) {
             return;
         }
 
@@ -223,7 +233,7 @@ export default function ExecutionTimeline({
 
         try {
             setHistoryLoading(true);
-            const page = await api.sessions.listRuntimeEvents(currentSession.id, {
+            const page = await api.sessions.listRuntimeEvents(currentSessionId, {
                 beforeSeq: oldestSeq,
                 limit: TIMELINE_PAGE_SIZE,
             });
@@ -244,7 +254,7 @@ export default function ExecutionTimeline({
     };
 
     const handleExport = async () => {
-        if (!runtimeEvents.length && !currentSession?.id) {
+        if (!runtimeEvents.length && !currentSessionId) {
             toast('没有可导出的运行事件', 'info');
             return;
         }
@@ -252,8 +262,8 @@ export default function ExecutionTimeline({
         try {
             setSnapshotLoading(true);
 
-            if (currentSession?.id) {
-                await api.sessions.exportRuntimeEventsSnapshot(currentSession.id, currentSession.topic);
+            if (currentSessionId) {
+                await api.sessions.exportRuntimeEventsSnapshot(currentSessionId, currentTopic);
                 toast('完整回放快照已导出', 'success');
                 return;
             }
@@ -275,14 +285,14 @@ export default function ExecutionTimeline({
     };
 
     const handleLoadFullReplay = async () => {
-        if (!currentSession?.id) {
+        if (!currentSessionId) {
             toast('当前会话不支持从后端装载整段回放', 'info');
             return;
         }
 
         try {
             setSnapshotLoading(true);
-            const raw = await api.sessions.getRuntimeEventsSnapshot(currentSession.id);
+            const raw = await api.sessions.getRuntimeEventsSnapshot(currentSessionId);
             const parsedEvents = parseRuntimeEventsSnapshot(raw);
             loadRuntimeEventSnapshot(parsedEvents);
             setFilter('all');
@@ -328,7 +338,7 @@ export default function ExecutionTimeline({
     const replayAtEnd = replayCursor >= runtimeEvents.length - 1;
     const selectedNodeLabel = getLiveGraphNodeLabel(
         getEventNode(selectedEvent),
-        currentSession?.debate_mode ?? 'standard',
+        debateMode,
     );
 
     const timelineContent = (
@@ -481,7 +491,7 @@ export default function ExecutionTimeline({
                                             whiteSpace: 'nowrap',
                                         }}
                                     >
-                                        {summarizeEvent(event, currentSession?.debate_mode ?? 'standard')}
+                                        {summarizeEvent(event, debateMode)}
                                     </div>
                                 </span>
                             </button>
@@ -558,7 +568,7 @@ export default function ExecutionTimeline({
                             返回实时
                         </button>
                     )}
-                    {currentSession?.id && (
+                    {currentSessionId && (
                         <button
                             onClick={() => {
                                 void handleLoadFullReplay();

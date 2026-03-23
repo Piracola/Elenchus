@@ -35,7 +35,11 @@ export default function RuntimeInspector({
     fillHeight?: boolean;
     onExpandedChange?: (expanded: boolean) => void;
 }) {
-    const { runtimeEvents, visibleRuntimeEvents, replayEnabled, currentNode, currentSession } = useDebateStore();
+    const runtimeEventCount = useDebateStore((state) => state.runtimeEvents.length);
+    const visibleRuntimeEvents = useDebateStore((state) => state.visibleRuntimeEvents);
+    const replayEnabled = useDebateStore((state) => state.replayEnabled);
+    const currentNode = useDebateStore((state) => state.currentNode);
+    const debateMode = useDebateStore((state) => state.currentSession?.debate_mode ?? 'standard');
     const [expanded, setExpanded] = useState(defaultExpanded);
     const [activeTab, setActiveTab] = useState<InspectorTab>('timeline');
     const isCollapsed = !expanded && !fillHeight;
@@ -48,24 +52,21 @@ export default function RuntimeInspector({
         });
     };
 
-    const memoryCount = useMemo(
-        () => visibleRuntimeEvents.filter((event) => event.type === 'memory_write').length,
-        [visibleRuntimeEvents],
-    );
+    const memoryCount = useMemo(() => {
+        if (activeTab !== 'memory') return 0;
+        return visibleRuntimeEvents.filter((event) => event.type === 'memory_write').length;
+    }, [activeTab, visibleRuntimeEvents]);
 
     const summaryText = useMemo(() => {
         if (activeTab === 'timeline') {
-            return `${runtimeEvents.length} 条事件${replayEnabled ? ' · 回放' : ''}`;
+            return `${runtimeEventCount} 条事件${replayEnabled ? ' · 回放' : ''}`;
         }
         if (activeTab === 'graph') {
-            const currentLabel = getLiveGraphNodeLabel(
-                currentNode,
-                currentSession?.debate_mode ?? 'standard',
-            );
+            const currentLabel = getLiveGraphNodeLabel(currentNode, debateMode);
             return currentLabel ? `当前节点: ${currentLabel}` : '查看运行节点与路径';
         }
         return `${memoryCount} 条记忆写入`;
-    }, [activeTab, currentNode, currentSession?.debate_mode, memoryCount, replayEnabled, runtimeEvents.length]);
+    }, [activeTab, currentNode, debateMode, memoryCount, replayEnabled, runtimeEventCount]);
 
     return (
         <div
