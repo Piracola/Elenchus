@@ -19,14 +19,20 @@ vi.mock('framer-motion', () => {
         }>((props, ref) => {
             const {
                 children,
-                animate: _animate,
-                exit: _exit,
-                initial: _initial,
-                transition: _transition,
-                whileHover: _whileHover,
-                whileTap: _whileTap,
+                animate,
+                exit,
+                initial,
+                transition,
+                whileHover,
+                whileTap,
                 ...rest
             } = props;
+             void animate;
+             void exit;
+             void initial;
+             void transition;
+             void whileHover;
+             void whileTap;
             return React.createElement(tag, { ...rest, ref }, children);
         });
         Component.displayName = `MockMotion(${tag})`;

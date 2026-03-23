@@ -391,7 +391,7 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
 
         callbacks.set(key, callback);
         return callback;
-    }, []);
+    }, [scheduleRowHeightFlush]);
 
     useEffect(() => {
         const activeKeys = new Set(renderedRowViewModels.map((viewModel) => viewModel.key));
