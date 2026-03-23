@@ -2,13 +2,15 @@
 
 本文档聚焦“如何把 Elenchus 跑起来”。如果你只是想先用起来，从这里开始即可。
 
-## 环境要求
+> 说明：这是仓库内**唯一完整启动文档**。`backend/README.md`、`frontend/README.md` 与开发指南只保留目录定位和开发期补充信息，不再重复完整启动手册。
+
+## 1. 环境要求
 
 - Python 3.10+
 - Node.js 18+
 - npm
 
-## 一键启动
+## 2. 一键启动
 
 项目根目录提供启动脚本，会自动完成环境检查、依赖安装、运行时目录初始化，并启动服务。
 
@@ -47,13 +49,13 @@ chmod +x ./start.sh
 ./start.sh --frontend-only
 ```
 
-## 默认地址
+## 3. 默认地址
 
 - 前端：`http://localhost:5173`
 - 后端：`http://localhost:8001`
 - 后端 API 文档：`http://localhost:8001/docs`
 
-## 首次使用提醒
+## 4. 首次使用提醒
 
 首次启动时，建议按下面顺序确认：
 
@@ -65,14 +67,15 @@ chmod +x ./start.sh
 补充说明：
 
 - 启动脚本会在 `runtime/backend/.env` 初始化本地运行时配置。
+- 启动脚本会准备 `runtime/backend/config.yaml`、`runtime/data/log_config.json`、`runtime/logs/` 等本地运行目录内容。
 - 本地环境首次启动后端时会自动准备本地加密密钥。
 - provider API key 不通过仓库内 `.env` 管理，而是在 Web UI 中配置并持久化。
 
-## 手动启动：最短路径
+## 5. 手动启动：最短路径
 
 如果你不想使用根目录脚本，可以分别启动后端和前端。
 
-### 1. 启动后端
+### 5.1 启动后端
 
 ```bash
 cd backend
@@ -95,7 +98,13 @@ pip install -r requirements.txt
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
-### 2. 启动前端
+如果你准备进行后端开发与测试，还可以额外安装：
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+### 5.2 启动前端
 
 ```bash
 cd frontend
@@ -114,30 +123,30 @@ VITE_BACKEND_PORT=8001
 npm run dev
 ```
 
-## 常用命令速查
+## 6. 开发常用命令速查
 
 ### 后端
 
 ```bash
 cd backend
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 pytest
 pytest tests/test_graph.py
+pip install -r requirements-dev.txt
 ```
 
 ### 前端
 
 ```bash
 cd frontend
-npm install
 npm run dev
 npm run build
 npm run lint
 npm run test:run
+npm run preview
 ```
 
-## 下一步读什么
+## 7. 下一步读什么
 
 - 想理解系统整体结构：读 [architecture.md](./architecture.md)
 - 想了解运行时文件和回放：读 [runtime.md](./runtime.md)

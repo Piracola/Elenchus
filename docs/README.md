@@ -1,58 +1,61 @@
 # Elenchus 文档中心
 
-这份索引页是项目详细文档的统一入口。
+这份索引页是仓库内详细文档的**唯一入口索引**。
 
-- 如果你第一次接触 Elenchus，请先读 [快速开始](./getting-started.md)。
-- 如果你要理解系统怎么组织，请读 [架构总览](./architecture.md) 和 [运行时说明](./runtime.md)。
-- 如果你要开发前端或后端，请直接进入对应开发指南。
+使用规则：
 
-## 1. 快速开始
+- 想把项目跑起来：先读 [快速开始](./getting-started.md)。这是**唯一完整启动文档**。
+- 想理解当前系统结构：读 [系统架构总览](./architecture.md) 与 [运行时与回放](./runtime.md)。
+- 想进入某个子目录：`backend/README.md` 与 `frontend/README.md` 只是**轻量目录入口**，不再承担完整命令手册职责。
+- 遇到历史规划、归档分析、旧 UI 概念稿时，默认先回到本页确认它是否属于“当前事实来源”。
+
+## 1. 当前使用与启动
 
 - [项目入口 README](../README.md)
-- [快速开始](./getting-started.md)
+- [快速开始](./getting-started.md) — **当前启动与默认地址的唯一完整说明**
 
-适合：第一次运行项目、确认默认地址、了解最短启动路径。
+适合：第一次运行项目、确认默认端口、选择一键启动或手动启动路径。
 
-## 2. 架构与运行时
+## 2. 当前架构与运行时
 
-- [系统架构总览](./architecture.md)
-- [运行时与回放](./runtime.md)
+- [系统架构总览](./architecture.md) — **当前系统分层、职责边界、关键模块入口**
+- [运行时与回放](./runtime.md) — **当前 `runtime/` 目录、快照 / 事件 / 回放关系**
 
-适合：理解前后端分层、模式化运行链路、持久化与回放机制。
+说明：
 
-## 3. 模式说明
+- `architecture.md` 负责“系统如何组织”。
+- `runtime.md` 负责“运行后生成什么、放在哪里、如何恢复与回放”。
+- [PLATFORM_SIMPLIFICATION_PLAN.md](../PLATFORM_SIMPLIFICATION_PLAN.md) 仅保留架构收敛的决策背景，不与以上两份当前文档竞争权威性。
 
-- [诡辩实验模式说明](./sophistry-experiment-mode-design.md)
-- [诡辩实验模式谬误库](./sophistry-fallacy-catalog.md)
+## 3. 开发指南
 
-适合：理解模式定位、用户可见行为、与标准模式的差异，以及模式内置标签体系。
+### 后端
 
-## 4. 前端开发
+- [后端开发指南](./guides/backend-development.md) — 后端测试、运行时路径、环境变量、关键入口
+- [后端目录入口 README](../backend/README.md) — 轻量目录说明与继续阅读入口
 
-- [前端开发指南](./guides/frontend-development.md)
-- [前端目录入口 README](../frontend/README.md)
+### 前端
 
-适合：本地启动前端、理解 Vite 代理与数据流、排查联调问题。
+- [前端开发指南](./guides/frontend-development.md) — Vite 代理、联调要点、常用开发命令、关键入口
+- [前端目录入口 README](../frontend/README.md) — 轻量目录说明与继续阅读入口
 
-## 5. 后端开发
+说明：首次安装与启动步骤统一收口到 [快速开始](./getting-started.md)，开发指南不再重复完整启动手册。
 
-- [后端开发指南](./guides/backend-development.md)
-- [后端目录入口 README](../backend/README.md)
+## 4. 特性实现文档
 
-适合：本地启动后端、运行测试、查看关键环境变量与代码入口。
+- [会话级资料池实现说明](./session-reference-library-implementation.md) — **资料池当前实现说明**
+- [诡辩实验模式说明](./sophistry-experiment-mode-design.md) — 当前模式行为与边界
+- [诡辩实验模式谬误库](./sophistry-fallacy-catalog.md) — 模式使用的概念资料
 
-## 6. 特性文档
+说明：如果同一主题同时存在“实现说明”和“规划 / MVP / 方案稿”，默认以实现说明为当前事实来源。
 
-- [会话级资料池实现说明](./session-reference-library-implementation.md)
-- [会话级资料池 MVP 规划](./session-reference-library-mvp-plan.md)
+## 5. 历史 / 归档 / 概念资料
 
-说明：`session-reference-library-implementation.md` 记录当前功能实现；`session-reference-library-mvp-plan.md` 保留规划背景与历史设计思路，不应替代当前实现文档。
-
-## 7. 发布与历史资料
-
+- [会话级资料池 MVP 规划](./session-reference-library-mvp-plan.md) — 历史规划背景，已由实现文档取代当前说明职责
+- [代码质量报告（已核实版）](./CODE_QUALITY_REPORT_2026-03-18.md) — 2026-03-18 该轮清理的主报告
+- [原始代码审查背景](./code-audit-2026-03-18.md) — 原始审查背景，结论以已核实版为准
 - [2.0.0 发布说明](./releases/2.0.0.md)
 - [历史归档](./archive/README.md)
 - [UI 概念设计](./UI概念设计/README.md)
-- [平台收敛方案](../PLATFORM_SIMPLIFICATION_PLAN.md)
 
-说明：`archive/`、部分规划文档和 UI 概念材料主要用于回溯历史背景，不作为当前实现的唯一事实来源。
+说明：这些文档的价值主要在于保留演进背景、设计判断和阶段性记录；除特别标注外，它们**不作为当前实现的唯一事实来源**。

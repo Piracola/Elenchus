@@ -1,5 +1,8 @@
 # 会话级资料池实现说明
 
+> 说明：本文档是“会话级资料池”功能的**当前实现说明**。
+> 如果你只想确认现在系统已经怎么做，请优先阅读本页；MVP 规划背景请见 [session-reference-library-mvp-plan.md](./session-reference-library-mvp-plan.md)。
+
 ## 1. 本次实现范围
 
 本次提交完成了“会话级资料池”的后端第一阶段与第二阶段能力：
