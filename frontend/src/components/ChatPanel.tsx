@@ -7,11 +7,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { motion } from 'framer-motion';
-import { FileJson, FileText } from 'lucide-react';
+import { ChevronDown, FileJson, FileText, PanelLeftOpen } from 'lucide-react';
 import { api } from '../api/client';
-import { useDebateStore } from '../stores/debateStore';
+import { getCollapsedAgentMessagesForSession, useDebateStore } from '../stores/debateStore';
 import { useForegroundDebateSelector } from '../hooks/useForegroundDebateSelector';
 import { useSettingsStore, MESSAGE_WIDTH_VALUES } from '../stores/settingsStore';
+import { DISPLAY_FONT_TOKENS } from '../config/display';
 import MessageRow from './chat/MessageRow';
 import DebateControls from './chat/DebateControls';
 import RuntimeInspector from './chat/RuntimeInspector';
@@ -32,8 +33,13 @@ import {
 import { isElementNearBottom } from '../utils/chatScroll';
 import { resolveHistoryRowStart, revealFocusedHistoryRow } from '../utils/chatHistoryWindow';
 import { toast } from '../utils/toast';
-import { buildTranscriptViewModel } from '../utils/transcriptViewModel';
+import {
+    buildTranscriptViewModel,
+    getTranscriptCollapseSummary,
+    isTranscriptAgentMessageCollapsed,
+} from '../utils/transcriptViewModel';
 import type { DialogueGroupingState } from '../utils/groupDialogue';
+import type { MarkdownExportCategory } from '../types';
 import type {
     FloatingInspectorBounds,
     FloatingInspectorInteraction,
@@ -48,7 +54,19 @@ const HISTORY_ROW_PRELOAD_THRESHOLD = 240;
 const CHAT_ROW_OVERSCAN = 5;
 const DEFAULT_CHAT_ROW_HEIGHT = 320;
 
-export default function ChatPanel() {
+interface ChatPanelProps {
+    isSidebarCollapsed: boolean;
+    onExpandSidebar: () => void;
+}
+
+const MARKDOWN_EXPORT_OPTIONS: { value: MarkdownExportCategory; label: string }[] = [
+    { value: 'group_discussion', label: '组内讨论' },
+    { value: 'judge_messages', label: '裁判消息' },
+    { value: 'jury_messages', label: '审判团消息' },
+    { value: 'consensus_summary', label: '共识收敛消息' },
+];
+
+export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatPanelProps) {
     const currentSessionId = useDebateStore((state) => state.currentSession?.id ?? null);
     const currentTopic = useDebateStore((state) => state.currentSession?.topic ?? '');
     const debateMode = useDebateStore((state) => state.currentSession?.debate_mode ?? 'standard');
@@ -65,6 +83,9 @@ export default function ChatPanel() {
     const visibleRuntimeEvents = useForegroundDebateSelector((state) => state.visibleRuntimeEvents);
     const replayEnabled = useForegroundDebateSelector((state) => state.replayEnabled);
     const focusedRuntimeEventId = useForegroundDebateSelector((state) => state.focusedRuntimeEventId);
+    const collapsedAgentMessages = useDebateStore((state) => getCollapsedAgentMessagesForSession(state, currentSessionId));
+    const toggleAgentMessageCollapsed = useDebateStore((state) => state.toggleAgentMessageCollapsed);
+    const setAllAgentMessagesCollapsed = useDebateStore((state) => state.setAllAgentMessagesCollapsed);
     const hasCurrentSession = currentSessionId !== null;
     const isSophistryMode = debateMode === 'sophistry_experiment';
     const modeWarning =
@@ -84,6 +105,7 @@ export default function ChatPanel() {
     const previousReplayEnabledRef = useRef<boolean | undefined>(undefined);
     const transcriptGroupingStateRef = useRef<DialogueGroupingState | null>(null);
     const measureObserversRef = useRef<Map<string, ResizeObserver>>(new Map());
+    const measureCallbacksRef = useRef<Map<string, (node: HTMLDivElement | null) => void>>(new Map());
     const smoothScrollRestoreRef = useRef<number | null>(null);
 
     const [topOverlayHeight, setTopOverlayHeight] = useState(0);
@@ -96,6 +118,8 @@ export default function ChatPanel() {
     const [floatingInspectorActive, setFloatingInspectorActive] = useState(false);
     const [floatingInspectorExpanded, setFloatingInspectorExpanded] = useState(false);
     const [exportingFormat, setExportingFormat] = useState<'markdown' | 'json' | null>(null);
+    const [showMarkdownExportOptions, setShowMarkdownExportOptions] = useState(false);
+    const [markdownExportCategories, setMarkdownExportCategories] = useState<MarkdownExportCategory[]>([]);
     const [historyRowStart, setHistoryRowStart] = useState(0);
     const [isWideLayout, setIsWideLayout] = useState(() => {
         if (typeof window === 'undefined') return true;
@@ -182,6 +206,32 @@ export default function ChatPanel() {
     ]);
 
     const rows = transcriptViewModel.rows;
+    const transcriptCollapseSummary = useMemo(
+        () => getTranscriptCollapseSummary(transcriptViewModel.rowViewModels, collapsedAgentMessages),
+        [collapsedAgentMessages, transcriptViewModel.rowViewModels],
+    );
+    const bulkCollapseLabel = transcriptCollapseSummary.allCollapsed ? '展开辩手发言' : '折叠辩手发言';
+    const handleToggleAllAgentMessages = useCallback(() => {
+        if (!currentSessionId || !transcriptCollapseSummary.hasAgentRows) {
+            return;
+        }
+        setAllAgentMessagesCollapsed(
+            currentSessionId,
+            transcriptCollapseSummary.keys,
+            !transcriptCollapseSummary.allCollapsed,
+        );
+    }, [currentSessionId, setAllAgentMessagesCollapsed, transcriptCollapseSummary]);
+    const toggleMarkdownExportCategory = useCallback((category: MarkdownExportCategory) => {
+        setMarkdownExportCategories((current) => (
+            current.includes(category)
+                ? current.filter((value) => value !== category)
+                : [...current, category]
+        ));
+    }, []);
+
+    useEffect(() => {
+        setShowMarkdownExportOptions(false);
+    }, [currentSessionId]);
 
     useEffect(() => {
         const sessionId = currentSessionId;
@@ -249,37 +299,75 @@ export default function ChatPanel() {
         virtualItemHeights.slice(0, index).reduce((sum, height) => sum + height, 0)
     ), [virtualItemHeights]);
 
-    const setMeasuredRow = useCallback((key: string) => (node: HTMLDivElement | null) => {
-        const observers = measureObserversRef.current;
-        const previousObserver = observers.get(key);
-        if (previousObserver) {
-            previousObserver.disconnect();
-            observers.delete(key);
+    const setMeasuredRow = useCallback((key: string) => {
+        const callbacks = measureCallbacksRef.current;
+        const cached = callbacks.get(key);
+        if (cached) {
+            return cached;
         }
 
-        if (!node || typeof ResizeObserver === 'undefined') {
-            return;
-        }
+        const callback = (node: HTMLDivElement | null) => {
+            const observers = measureObserversRef.current;
+            const previousObserver = observers.get(key);
+            if (previousObserver) {
+                previousObserver.disconnect();
+                observers.delete(key);
+            }
 
-        const updateHeight = () => {
-            const nextHeight = Math.ceil(node.getBoundingClientRect().height);
-            setRowHeights((previous) => {
-                if (previous[key] === nextHeight) {
-                    return previous;
-                }
-                return { ...previous, [key]: nextHeight };
-            });
+            if (!node || typeof ResizeObserver === 'undefined') {
+                return;
+            }
+
+            const updateHeight = () => {
+                const nextHeight = Math.ceil(node.getBoundingClientRect().height);
+                setRowHeights((previous) => {
+                    if (previous[key] === nextHeight) {
+                        return previous;
+                    }
+                    return { ...previous, [key]: nextHeight };
+                });
+            };
+
+            updateHeight();
+            const observer = new ResizeObserver(updateHeight);
+            observer.observe(node);
+            observers.set(key, observer);
         };
 
-        updateHeight();
-        const observer = new ResizeObserver(updateHeight);
-        observer.observe(node);
-        observers.set(key, observer);
+        callbacks.set(key, callback);
+        return callback;
     }, []);
+
+    useEffect(() => {
+        const activeKeys = new Set(renderedRowViewModels.map((viewModel) => viewModel.key));
+        const callbacks = measureCallbacksRef.current;
+        const observers = measureObserversRef.current;
+
+        callbacks.forEach((_, key) => {
+            if (activeKeys.has(key)) {
+                return;
+            }
+            callbacks.delete(key);
+            const observer = observers.get(key);
+            if (observer) {
+                observer.disconnect();
+                observers.delete(key);
+            }
+        });
+
+        setRowHeights((previous) => {
+            const entries = Object.entries(previous).filter(([key]) => activeKeys.has(key));
+            if (entries.length === Object.keys(previous).length) {
+                return previous;
+            }
+            return Object.fromEntries(entries);
+        });
+    }, [renderedRowViewModels]);
 
     useEffect(() => () => {
         measureObserversRef.current.forEach((observer) => observer.disconnect());
         measureObserversRef.current.clear();
+        measureCallbacksRef.current.clear();
     }, []);
 
     useLayoutEffect(() => {
@@ -631,15 +719,23 @@ export default function ChatPanel() {
     const maxWidthValue = MESSAGE_WIDTH_VALUES[displaySettings.messageWidth];
     const panelMaxWidth = maxWidthValue;
     const scrollPaddingRight = '4px';
+    const chatFontSizes = DISPLAY_FONT_TOKENS[displaySettings.fontSize].chat;
 
     const handleExport = async (format: 'markdown' | 'json') => {
         if (!hasCurrentSession || exportingFormat || !currentSessionId) return;
 
+        const markdownCategories = ['debater_speeches', ...markdownExportCategories] as MarkdownExportCategory[];
+        const normalizedMarkdownCategories = Array.from(new Set(markdownCategories));
+        if (format !== 'markdown') {
+            setShowMarkdownExportOptions(false);
+        }
+
         setExportingFormat(format);
         try {
             if (format === 'markdown') {
-                await api.sessions.exportMarkdown(currentSessionId, currentTopic);
+                await api.sessions.exportMarkdown(currentSessionId, currentTopic, normalizedMarkdownCategories);
                 toast('已导出 Markdown 辩论记录', 'success');
+                setShowMarkdownExportOptions(false);
             } else {
                 await api.sessions.exportJson(currentSessionId, currentTopic);
                 toast('已导出 JSON 辩论数据', 'success');
@@ -651,6 +747,12 @@ export default function ChatPanel() {
             setExportingFormat(null);
         }
     };
+
+    const selectedMarkdownExportCategoryCount = markdownExportCategories.length;
+    const markdownExportButtonLabel = selectedMarkdownExportCategoryCount > 0
+        ? `导出 Markdown +${selectedMarkdownExportCategoryCount}`
+        : '导出 Markdown';
+    const markdownExportOptionPanelVisible = hasCurrentSession && showMarkdownExportOptions;
 
     const loadOlderHistoryRows = () => {
         const container = scrollRef.current;
@@ -739,6 +841,34 @@ export default function ChatPanel() {
                                 pointerEvents: 'auto',
                             }}
                         >
+                            {isSidebarCollapsed && (
+                                <motion.button
+                                    whileHover={{ y: -1 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={onExpandSidebar}
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '6px',
+                                        padding: '10px 12px',
+                                        background: isSophistryMode ? 'var(--mode-sophistry-card)' : 'var(--bg-card)',
+                                        color: isSophistryMode ? 'var(--mode-sophistry-accent)' : 'var(--text-secondary)',
+                                        border: isSophistryMode
+                                            ? '1px solid var(--mode-sophistry-border)'
+                                            : '1px solid var(--border-subtle)',
+                                        borderRadius: 'var(--radius-xl)',
+                                        boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+                                        cursor: 'pointer',
+                                        backdropFilter: 'blur(12px)',
+                                        flexShrink: 0,
+                                    }}
+                                    title="展开历史栏"
+                                >
+                                    <PanelLeftOpen size={16} />
+                                </motion.button>
+                            )}
+
                             <motion.div
                                 style={{
                                     padding: '12px 16px',
@@ -760,7 +890,7 @@ export default function ChatPanel() {
                             >
                                 <h2
                                     style={{
-                                        fontSize: '15px',
+                                        fontSize: chatFontSizes.topicTitle,
                                         fontWeight: 600,
                                         color: 'var(--text-primary)',
                                         letterSpacing: '-0.01em',
@@ -804,32 +934,155 @@ export default function ChatPanel() {
                                         >
                                             {isSophistryMode ? '诡辩实验模式' : '标准辩论'}
                                         </span>
-                                        <motion.button
-                                            whileHover={{ y: -1 }}
-                                            whileTap={{ scale: 0.98 }}
-                                            onClick={() => {
-                                                void handleExport('markdown');
-                                            }}
-                                            disabled={Boolean(exportingFormat)}
-                                            style={{
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                gap: '6px',
-                                                padding: '7px 12px',
-                                                background: 'var(--bg-tertiary)',
-                                                color: 'var(--text-secondary)',
-                                                border: '1px solid var(--border-subtle)',
-                                                borderRadius: 'var(--radius-full)',
-                                                cursor: exportingFormat ? 'not-allowed' : 'pointer',
-                                                fontSize: '12px',
-                                                fontWeight: 600,
-                                                opacity: exportingFormat && exportingFormat !== 'markdown' ? 0.7 : 1,
-                                            }}
-                                            title="导出 Markdown 记录"
-                                        >
-                                            <FileText size={14} />
-                                            {exportingFormat === 'markdown' ? '导出中...' : '导出 Markdown'}
-                                        </motion.button>
+                                        {transcriptCollapseSummary.hasAgentRows && (
+                                            <motion.button
+                                                whileHover={{ y: -1 }}
+                                                whileTap={{ scale: 0.98 }}
+                                                onClick={handleToggleAllAgentMessages}
+                                                style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '6px',
+                                                    padding: '7px 12px',
+                                                    background: 'var(--bg-tertiary)',
+                                                    color: 'var(--text-secondary)',
+                                                    border: '1px solid var(--border-subtle)',
+                                                    borderRadius: 'var(--radius-full)',
+                                                    cursor: 'pointer',
+                                                    fontSize: '12px',
+                                                    fontWeight: 600,
+                                                }}
+                                                title={bulkCollapseLabel}
+                                            >
+                                                {bulkCollapseLabel}
+                                            </motion.button>
+                                        )}
+
+                                        <div style={{ position: 'relative' }}>
+                                            <div
+                                                style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    borderRadius: 'var(--radius-full)',
+                                                    boxShadow: 'var(--shadow-xs)',
+                                                }}
+                                            >
+                                                <motion.button
+                                                    whileHover={{ y: -1 }}
+                                                    whileTap={{ scale: 0.98 }}
+                                                    onClick={() => {
+                                                        void handleExport('markdown');
+                                                    }}
+                                                    disabled={Boolean(exportingFormat)}
+                                                    style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        padding: '7px 12px',
+                                                        background: 'var(--bg-tertiary)',
+                                                        color: 'var(--text-secondary)',
+                                                        border: '1px solid var(--border-subtle)',
+                                                        borderRadius: 'var(--radius-full) 0 0 var(--radius-full)',
+                                                        cursor: exportingFormat ? 'not-allowed' : 'pointer',
+                                                        fontSize: '12px',
+                                                        fontWeight: 600,
+                                                        opacity: exportingFormat && exportingFormat !== 'markdown' ? 0.7 : 1,
+                                                    }}
+                                                    title="导出 Markdown 记录"
+                                                >
+                                                    <FileText size={14} />
+                                                    {exportingFormat === 'markdown' ? '导出中...' : markdownExportButtonLabel}
+                                                </motion.button>
+                                                <motion.button
+                                                    whileHover={{ y: -1 }}
+                                                    whileTap={{ scale: 0.98 }}
+                                                    onClick={() => setShowMarkdownExportOptions((current) => !current)}
+                                                    disabled={!hasCurrentSession}
+                                                    style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        padding: '7px 10px',
+                                                        background: 'var(--bg-tertiary)',
+                                                        color: 'var(--text-secondary)',
+                                                        border: '1px solid var(--border-subtle)',
+                                                        borderLeft: 'none',
+                                                        borderRadius: '0 var(--radius-full) var(--radius-full) 0',
+                                                        cursor: hasCurrentSession ? 'pointer' : 'default',
+                                                        opacity: hasCurrentSession ? 1 : 0.6,
+                                                    }}
+                                                    title={markdownExportOptionPanelVisible ? '收起 Markdown 选项' : '展开 Markdown 选项'}
+                                                >
+                                                    <ChevronDown
+                                                        size={14}
+                                                        style={{
+                                                            transform: markdownExportOptionPanelVisible ? 'rotate(180deg)' : 'rotate(0deg)',
+                                                            transition: 'transform var(--transition-fast)',
+                                                        }}
+                                                    />
+                                                </motion.button>
+                                            </div>
+
+                                            {markdownExportOptionPanelVisible && (
+                                                <div
+                                                    style={{
+                                                        position: 'absolute',
+                                                        top: 'calc(100% + 8px)',
+                                                        right: 0,
+                                                        minWidth: '220px',
+                                                        padding: '12px',
+                                                        borderRadius: 'var(--radius-xl)',
+                                                        background: 'var(--bg-card)',
+                                                        border: '1px solid var(--border-subtle)',
+                                                        boxShadow: '0 10px 28px rgba(15, 23, 42, 0.14)',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: '10px',
+                                                    }}
+                                                >
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                                            Markdown 导出内容
+                                                        </span>
+                                                        <span style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                                                            默认始终包含辩手发言，可额外附带讨论与评议内容。
+                                                        </span>
+                                                    </div>
+                                                    <label
+                                                        style={{
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '8px',
+                                                            fontSize: '12px',
+                                                            color: 'var(--text-secondary)',
+                                                        }}
+                                                    >
+                                                        <input type="checkbox" checked readOnly />
+                                                        <span>辩手发言（默认包含）</span>
+                                                    </label>
+                                                    {MARKDOWN_EXPORT_OPTIONS.map((option) => (
+                                                        <label
+                                                            key={option.value}
+                                                            style={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '8px',
+                                                                fontSize: '12px',
+                                                                color: 'var(--text-secondary)',
+                                                                cursor: 'pointer',
+                                                            }}
+                                                        >
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={markdownExportCategories.includes(option.value)}
+                                                                onChange={() => toggleMarkdownExportCategory(option.value)}
+                                                            />
+                                                            <span>{option.label}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
 
                                         <motion.button
                                             whileHover={{ y: -1 }}
@@ -1052,6 +1305,10 @@ export default function ChatPanel() {
                                             highlightSystem={viewModel.focus.system}
                                             insightSections={viewModel.insightSections}
                                             animated={animated}
+                                            agentCollapsed={isTranscriptAgentMessageCollapsed(viewModel.agentCollapseKey, collapsedAgentMessages)}
+                                            onToggleAgentCollapsed={viewModel.agentCollapseKey && currentSessionId
+                                                ? () => toggleAgentMessageCollapsed(currentSessionId, viewModel.agentCollapseKey as string)
+                                                : undefined}
                                         />
                                     </div>
                                     {!!viewModel.jurySections.length && (
