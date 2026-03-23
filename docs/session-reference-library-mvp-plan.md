@@ -1,5 +1,8 @@
 # 会话级资料池 MVP 规划
 
+> 说明：本文档保留的是功能规划背景与阶段性设计思路，不是当前实现的唯一事实来源。
+> 当前实现请优先参考：[session-reference-library-implementation.md](./session-reference-library-implementation.md)
+
 ## 1. 目标
 
 本规划为每场辩论增加独立资料池，支持用户上传参考文档，由预处理 agent 整理后供辩手参考。
