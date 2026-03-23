@@ -8,6 +8,7 @@ from PyInstaller.utils.hooks import collect_all
 
 # Build scripts invoke PyInstaller from the repository root, so `cwd` is stable.
 ROOT = Path.cwd().resolve()
+ICON_FILE = ROOT / "frontend" / "public" / "brand" / "elenchus.ico"
 
 datas = [
     (str(ROOT / "backend" / "prompts"), "backend/prompts"),
@@ -69,6 +70,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=True,
+    icon=str(ICON_FILE),
 )
 
 coll = COLLECT(

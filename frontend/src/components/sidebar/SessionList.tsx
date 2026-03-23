@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Search, Settings, Sun, Moon, Trash2, MessageSquare } from 'lucide-react';
+import { Plus, Search, Settings, Sun, Moon, Trash2 } from 'lucide-react';
 import { useDebateStore } from '../../stores/debateStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { api } from '../../api/client';
 import SettingsPanel from './SettingsPanel';
+import BrandIcon from '../shared/BrandIcon';
 import type { SessionListItem } from '../../types';
 import { filterSessionsByQuery, mergeSessionPage } from '../../utils/sessionList';
 import { toast } from '../../utils/toast';
@@ -118,18 +119,7 @@ export default function SessionList() {
                 gap: '12px',
                 borderBottom: '1px solid var(--border-subtle)',
             }}>
-                <div style={{
-                    width: '38px',
-                    height: '38px',
-                    borderRadius: 'var(--radius-lg)',
-                    background: 'linear-gradient(135deg, var(--accent-indigo) 0%, var(--accent-cyan) 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 3px 12px rgba(99, 102, 241, 0.25)',
-                }}>
-                    <MessageSquare size={18} color="white" />
-                </div>
+                <BrandIcon size={38} alt="Elenchus 品牌图标" withBadge={false} />
                 <div>
                     <h1 style={{ 
                         fontSize: '17px', 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, ArrowRight, ChevronDown, Settings2, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowRight, ChevronDown, Settings2 } from 'lucide-react';
 
 import { useAgentConfigs } from '../hooks/useAgentConfigs';
 import { useSessionCreate } from '../hooks/useSessionCreate';
@@ -18,6 +18,7 @@ import {
     parseTeamDiscussionRoundsInput,
 } from '../utils/debateSession';
 import AgentConfigPanel from './shared/AgentConfigPanel';
+import BrandIcon from './shared/BrandIcon';
 
 const SOPHISTRY_MODE_WARNING = '诡辩实验模式会鼓励模型主动使用误导性修辞、标签施压、定义操控与叙事转移。它不代表事实结论，也不会提供裁判评分或搜索核验，请将其视为修辞对抗实验。';
 
@@ -180,20 +181,7 @@ export default function HomeView() {
                         marginBottom: '28px',
                     }}
                 >
-                    <div
-                        style={{
-                            width: '44px',
-                            height: '44px',
-                            borderRadius: 'var(--radius-lg)',
-                            background: 'linear-gradient(135deg, var(--accent-indigo) 0%, var(--accent-cyan) 100%)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            boxShadow: '0 4px 20px rgba(99, 102, 241, 0.3)',
-                        }}
-                    >
-                        <Sparkles size={22} color="white" />
-                    </div>
+                    <BrandIcon size={44} alt="Elenchus 品牌图标" withBadge={false} />
                     <h1
                         style={{
                             fontSize: '36px',

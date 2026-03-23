@@ -83,6 +83,7 @@ def ensure_required_files() -> None:
         ROOT / "backend" / "config.yaml",
         ROOT / "backend" / ".env.example",
         ROOT / "frontend" / "dist" / "index.html",
+        ROOT / "frontend" / "public" / "brand" / "elenchus.ico",
         ROOT / "data" / "log_config.json",
         SPEC_FILE,
     ]

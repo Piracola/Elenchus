@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../../api/client';
+import BrandIcon from './BrandIcon';
 
 interface Props {
     children: React.ReactNode;
@@ -83,26 +84,25 @@ export function BackendHealthCheck({ children }: Props) {
                         }}
                     >
                         <div style={{
-                            width: '48px',
-                            height: '48px',
-                            borderRadius: 'var(--radius-lg)',
-                            background: 'linear-gradient(135deg, var(--accent-indigo) 0%, var(--accent-cyan) 100%)',
+                            position: 'relative',
+                            width: '64px',
+                            height: '64px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            boxShadow: '0 4px 20px rgba(99, 102, 241, 0.3)',
                         }}>
                             <motion.div
                                 animate={{ rotate: 360 }}
                                 transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }}
                                 style={{
-                                    width: '24px',
-                                    height: '24px',
-                                    border: '2px solid rgba(255,255,255,0.3)',
-                                    borderTopColor: 'white',
+                                    position: 'absolute',
+                                    inset: 0,
                                     borderRadius: '50%',
+                                    border: '2px solid rgba(99, 102, 241, 0.16)',
+                                    borderTopColor: 'var(--accent-indigo)',
                                 }}
                             />
+                            <BrandIcon size={48} alt="Elenchus 品牌图标" />
                         </div>
                         <div style={{
                             display: 'flex',
