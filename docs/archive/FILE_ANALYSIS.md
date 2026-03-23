@@ -1211,11 +1211,12 @@ return await provider.search(query)
 - import：yaml, pydantic, dotenv
 
 **输出影响**：
-- 加载 .env 和 config.yaml
-- 提供统一配置访问
+- 历史版本中曾加载 `.env` 和 `config.yaml`
+- 当前版本已统一改为读取 `runtime/config.json`
 
 **数据流分析**：
-```
+```text
+历史版本：
 Settings.__init__()
     ↓
 EnvSettings() → 加载 .env
@@ -1223,6 +1224,13 @@ _load_yaml_config() → 加载 config.yaml
     ↓
 self.search = SearchConfig(yaml.get("search"))
 self.debate = DebateConfig(yaml.get("debate"))
+
+当前版本：
+Settings.__init__()
+    ↓
+load_runtime_config() → 读取 runtime/config.json
+    ↓
+self.search / self.debate / self.env / self.auth / self.logging
 ```
 
 **AI调用分析**：无
@@ -1780,6 +1788,8 @@ create_access_token({"sub": user.id})
 ### 文件：backend/scripts/migrate_providers_to_db.py
 
 **模块归属**：脚本层
+
+**历史说明**：该脚本已从当前代码库移除，以下内容仅保留其历史职责说明。
 
 **文件职责**：将 Provider 配置从 JSON 文件迁移到数据库
 

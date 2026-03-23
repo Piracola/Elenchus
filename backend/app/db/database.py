@@ -4,7 +4,6 @@ SQLAlchemy async engine & session setup.
 
 from __future__ import annotations
 
-from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -50,21 +49,5 @@ async def get_db() -> AsyncSession:
 
 
 async def init_db():
-    """Create all tables on startup."""
-    engine = _get_engine()
-    async with engine.begin() as conn:
-        import app.db.models  # noqa: F401
-
-        await conn.run_sync(Base.metadata.create_all)
-        await conn.run_sync(_run_schema_migrations)
-
-
-def _run_schema_migrations(sync_conn) -> None:
-    """Apply lightweight additive schema migrations for existing local databases."""
-    inspector = inspect(sync_conn)
-    if "providers" not in inspector.get_table_names():
-        return
-
-    provider_columns = {column["name"] for column in inspector.get_columns("providers")}
-    if "custom_parameters" not in provider_columns:
-        sync_conn.execute(text("ALTER TABLE providers ADD COLUMN custom_parameters JSON"))
+    """Initialize database resources for session-backed APIs."""
+    _get_engine()

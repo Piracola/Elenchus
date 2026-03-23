@@ -229,7 +229,7 @@ Elenchus/
 | 搜索层 | duckduckgo.py | DuckDuckGo 搜索实现 |
 | 搜索层 | searxng.py | SearXNG 搜索实现 |
 | 搜索层 | tavily.py | Tavily 搜索实现 |
-| 数据模型 | db/models.py | ORM 模型 (SessionRecord, ProviderRecord, UserRecord) |
+| 数据模型 | db/models.py | 历史上承载过 ORM 模型；当前主要保留 `_gen_id()`、`_utcnow()` 等共享辅助函数 |
 | 前端 | debateStore.ts | Zustand 全局状态管理 |
 | 前端 | settingsStore.ts | Zustand 设置状态 (含 persist) |
 | 前端 | useDebateWebSocket.ts | WebSocket 生命周期管理 |
@@ -484,22 +484,23 @@ backend/prompts/
 
 ## 八、配置指南
 
-### 8.1 环境变量 (.env)
+### 8.1 运行时配置（当前以 `runtime/config.json` 为准）
 
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| ELENCHUS_ENCRYPTION_KEY | API Key 加密密钥 (Fernet) | **必需** |
-| DATABASE_URL | SQLite 数据库路径 | sqlite+aiosqlite:///./elenchus.db |
-| AUTH_ENABLED | 是否启用认证 | false |
-| JWT_SECRET_KEY | JWT 签名密钥 | change-me-in-production |
-| JWT_ALGORITHM | JWT 签名算法 | HS256 |
-| JWT_EXPIRE_MINUTES | JWT 过期时间（分钟） | 10080 (7天) |
-| SEARXNG_BASE_URL | SearXNG 地址 | http://localhost:8080 |
-| TAVILY_API_KEY | Tavily API Key | 可选 |
-| HOST | 后端监听地址 | 0.0.0.0 |
-| PORT | 后端监听端口 | 8001 |
-| CORS_ORIGINS | 允许跨域源 | http://localhost:5173 |
-| DEBUG | 调试模式 | False |
+> 历史说明：本节原先按 `.env` / `config.yaml` 分开整理，当前运行时已统一为 `runtime/config.json`。旧文件仅可能在首次启动时作为导入来源。
+
+| 路径 | 键 | 说明 |
+|------|----|------|
+| `runtime/config.json` | `auth.enabled` | 是否启用认证 |
+| `runtime/config.json` | `auth.jwt_secret_key` | JWT 签名密钥 |
+| `runtime/config.json` | `auth.jwt_expire_minutes` | JWT 过期时间（分钟） |
+| `runtime/config.json` | `server.database_url` | SQLite 数据库路径 |
+| `runtime/config.json` | `server.host` / `server.port` | 后端监听地址与端口 |
+| `runtime/config.json` | `server.cors_origins` | 允许跨域源 |
+| `runtime/config.json` | `search.provider` | 当前搜索 Provider |
+| `runtime/config.json` | `search.searxng.base_url` | SearXNG 地址 |
+| `runtime/config.json` | `search.tavily.api_key` | Tavily API Key |
+| `runtime/config.json` | `debate.default_max_turns` | 默认辩论轮数 |
+| `runtime/config.json` | `logging.level` | 日志级别 |
 
 ### 8.2 生成加密密钥
 
@@ -511,19 +512,9 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 openssl rand -hex 32
 ```
 
-### 8.2 应用配置 (config.yaml)
+### 8.3 历史配置拆分说明
 
-```yaml
-search:
-  provider: "duckduckgo"  # duckduckgo | searxng | tavily
-  max_results_per_query: 5
-
-debate:
-  default_max_turns: 5
-  context_window:
-    recent_turns_to_keep: 3
-    enable_summary_compression: true
-```
+历史版本曾将搜索、辩论、日志和部分认证参数分别存放在 `.env`、`config.yaml`、`log_config.json` 等文件中；当前这些配置都已统一收敛到 `runtime/config.json`，以避免多处来源并存。
 
 ---
 

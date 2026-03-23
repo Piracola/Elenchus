@@ -80,11 +80,8 @@ def ensure_required_files() -> None:
     required_paths = [
         ROOT / "backend" / "run_packaged.py",
         ROOT / "backend" / "prompts",
-        ROOT / "backend" / "config.yaml",
-        ROOT / "backend" / ".env.example",
         ROOT / "frontend" / "dist" / "index.html",
         ROOT / "frontend" / "public" / "brand" / "elenchus.ico",
-        ROOT / "data" / "log_config.json",
         SPEC_FILE,
     ]
     missing = [path for path in required_paths if not path.exists()]
@@ -122,7 +119,7 @@ def write_quickstart(release_root: Path, version: str) -> None:
             "3. Wait a moment for the backend to start; the browser opens automatically.",
             "",
             "First launch will create a `runtime/` folder beside the executable:",
-            "- runtime/backend/.env",
+            "- runtime/config.json",
             "- runtime/elenchus.db",
             "- runtime/logs/",
             "",
@@ -146,7 +143,7 @@ def write_runtime_placeholder(release_root: Path) -> None:
             "This folder stores writable runtime data for the portable release.",
             "",
             "It will hold:",
-            "- runtime/backend/.env",
+            "- runtime/config.json",
             "- runtime/elenchus.db",
             "- runtime/logs/",
         ]

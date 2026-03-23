@@ -47,6 +47,7 @@ class RuntimePaths:
     runtime_data_dir: Path
     runtime_backend_dir: Path
     sessions_dir: Path
+    config_json_file: Path
     env_file: Path
     env_example_source: Path
     env_example_runtime_file: Path
@@ -88,6 +89,7 @@ def get_runtime_paths() -> RuntimePaths:
         runtime_data_dir=runtime_data_dir,
         runtime_backend_dir=runtime_backend_dir,
         sessions_dir=sessions_dir,
+        config_json_file=runtime_root / "config.json",
         env_file=runtime_backend_dir / ".env",
         env_example_source=backend_bundle_dir / ".env.example",
         env_example_runtime_file=runtime_backend_dir / ".env.example",
@@ -133,20 +135,8 @@ def prepare_runtime_environment() -> RuntimePaths:
     paths = get_runtime_paths()
 
     paths.runtime_root.mkdir(parents=True, exist_ok=True)
-    paths.runtime_data_dir.mkdir(parents=True, exist_ok=True)
-    paths.runtime_backend_dir.mkdir(parents=True, exist_ok=True)
     paths.sessions_dir.mkdir(parents=True, exist_ok=True)
     paths.logs_dir.mkdir(parents=True, exist_ok=True)
-
-    _copy_if_missing(paths.env_example_source, paths.env_example_runtime_file)
-    _migrate_legacy_file(paths.legacy_env_file, paths.env_file)
-    if not paths.env_file.exists() and paths.env_example_source.exists():
-        _copy_if_missing(paths.env_example_source, paths.env_file)
-
-    _copy_if_missing(paths.config_source, paths.config_file)
-    _migrate_legacy_file(paths.legacy_database_file, paths.default_database_file)
-    _migrate_legacy_file(paths.legacy_log_config_file, paths.log_config_file)
-    _copy_if_missing(paths.log_config_source, paths.log_config_file)
     _migrate_legacy_logs(paths.legacy_logs_dir, paths.logs_dir)
 
     return paths

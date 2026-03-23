@@ -12,10 +12,7 @@ ICON_FILE = ROOT / "frontend" / "public" / "brand" / "elenchus.ico"
 
 datas = [
     (str(ROOT / "backend" / "prompts"), "backend/prompts"),
-    (str(ROOT / "backend" / "config.yaml"), "backend"),
-    (str(ROOT / "backend" / ".env.example"), "backend"),
     (str(ROOT / "frontend" / "dist"), "frontend/dist"),
-    (str(ROOT / "data" / "log_config.json"), "data"),
 ]
 binaries = []
 hiddenimports = []

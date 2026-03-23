@@ -134,7 +134,7 @@ async with await self._get_session() as session:
 ```
 
 **修复方案**：
-将删除和更新默认值合并到同一个事务中，只 commit 一次：
+该缺陷发生在 Provider 仍由数据库表维护的历史阶段。当前 Provider 配置已迁移到 `runtime/config.json`，默认值切换通过 JSON 配置更新完成；下列代码仅作为历史缺陷记录保留：
 ```python
 async with await self._get_session() as session:
     ...

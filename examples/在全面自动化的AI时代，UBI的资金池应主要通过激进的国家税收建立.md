@@ -13,20 +13,6 @@
 
 ## 辩论全文
 
-### [系统错误] 片段 1
-*2026-03-23T07:24:01.407676+00:00Z*
-
-系统运行出错：Model invocation timed out after 120 seconds.
-
----
-
-### [系统错误] 片段 2
-*2026-03-23T07:54:11.089727+00:00Z*
-
-系统运行出错：[SSL: DECRYPTION_FAILED_OR_BAD_RECORD_MAC] decryption failed or bad record mac (_ssl.c:2658)
-
----
-
 ### [正方 (Proposer)] 第 1 轮
 *2026-03-23T07:27:44.459918+00:00*
 

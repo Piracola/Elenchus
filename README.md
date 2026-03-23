@@ -35,6 +35,18 @@ Elenchus 是一个用于多智能体辩论的平台，基于 `FastAPI + LangGrap
 
 更完整的启动与联调说明见：[docs/getting-started.md](./docs/getting-started.md)
 
+## 配置说明
+
+自定义供应商、搜索服务配置、端口设置等设置位于 runtime/config.json 中
+
+`server字段为服务运行端口`
+
+`providers字段为自定义API供应商`
+
+`debate字段为默认最大回合数`
+
+`search字段为搜索服务相关配置`
+
 ## 文档导航
 
 - [文档首页](./docs/README.md)

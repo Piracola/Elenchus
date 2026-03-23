@@ -147,7 +147,7 @@ Each file wraps a capability with LangChain's `@tool` decorator. Both tools dele
 
 | File | Purpose |
 |------|---------|
-| `models.py` | ORM models: `SessionRecord` (with `owner_id` for user isolation), `ProviderRecord` (encrypted API keys), `UserRecord` (auth). Exports `_gen_id()` and `_utcnow()` for use by services. |
+| `models.py` | Shared ID/time helpers for file-backed services. Exports `_gen_id()` and `_utcnow()` for use by services. |
 | `database.py` | Async engine setup, `Base`, session factory. |
 
 ### `search/` — Search Providers
@@ -162,7 +162,7 @@ Each file wraps a capability with LangChain's `@tool` decorator. Both tools dele
 
 ### `config.py`
 
-Reads `config.yaml` (debate/search settings) and `.env` (secrets). LLM provider API keys are **not** read from `.env`; they are managed via the UI, stored encrypted in the providers database table, and only resolved server-side.
+Reads unified runtime settings from `runtime/config.json`. LLM provider API keys are managed via the UI, persisted in that file, and only resolved server-side.
 
 ### `constants.py`
 
@@ -394,18 +394,17 @@ Uses `stream_mode="values"` — each event is the complete merged state after a 
 
 | Source | Key | Default | Purpose |
 |--------|-----|---------|---------|
-| `.env` | `ELENCHUS_ENCRYPTION_KEY` | Local runtime auto-generates if missing | Fernet master key for encrypting provider API keys; set explicitly in production |
-| `.env` | `AUTH_ENABLED` | `false` | Enable JWT authentication |
-| `.env` | `JWT_SECRET_KEY` | `change-me-in-production` | JWT signing key (change when auth enabled) |
-| `.env` | `JWT_EXPIRE_MINUTES` | `10080` | JWT token expiry (7 days) |
-| `.env` | `CORS_ORIGINS` | `http://localhost:5173,...` | Comma-separated allowed origins |
-| `.env` | `DATABASE_URL` | `sqlite+aiosqlite:///./elenchus.db` | DB connection string |
-| `.env` | `SEARXNG_BASE_URL` | `http://localhost:8080` | SearXNG instance URL |
-| `.env` | `TAVILY_API_KEY` | _(empty)_ | Enables Tavily search provider |
-| `config.yaml` | `debate.default_max_turns` | `5` | Default turns per debate |
-| `config.yaml` | `debate.context_window.recent_turns_to_keep` | `3` | Turns kept verbatim before compression |
-| `config.yaml` | `debate.context_window.enable_summary_compression` | `true` | Toggle memo compression |
-| `config.yaml` | `search.provider` | `duckduckgo` | Primary search provider |
+| `runtime/config.json` | `auth.enabled` | `false` | Enable JWT authentication |
+| `runtime/config.json` | `auth.jwt_secret_key` | `change-me-in-production` | JWT signing key |
+| `runtime/config.json` | `auth.jwt_expire_minutes` | `10080` | JWT token expiry (7 days) |
+| `runtime/config.json` | `server.cors_origins` | `http://localhost:5173,...` | Comma-separated allowed origins |
+| `runtime/config.json` | `server.database_url` | `sqlite+aiosqlite:///.../runtime/elenchus.db` | DB connection string |
+| `runtime/config.json` | `search.searxng.base_url` | `http://localhost:8080` | SearXNG instance URL |
+| `runtime/config.json` | `search.tavily.api_key` | _(empty)_ | Enables Tavily search provider |
+| `runtime/config.json` | `debate.default_max_turns` | `5` | Default turns per debate |
+| `runtime/config.json` | `debate.context_window.recent_turns_to_keep` | `3` | Turns kept verbatim before compression |
+| `runtime/config.json` | `debate.context_window.enable_summary_compression` | `true` | Toggle memo compression |
+| `runtime/config.json` | `search.provider` | `duckduckgo` | Primary search provider |
 
 ### Frontend Configuration
 

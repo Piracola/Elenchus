@@ -21,9 +21,9 @@ from app.api.search import router as search_router
 from app.db.database import init_db
 from app.dependencies import get_search_factory
 from app.services.log_service import setup_logging, get_logger
-from app.services.provider_service import ensure_local_encryption_key
 
-setup_logging(level="DEBUG" if get_settings().env.debug else "INFO", log_dir="logs")
+settings = get_settings()
+setup_logging(level=settings.logging.level, log_dir=settings.logging.log_dir)
 logger = get_logger(__name__)
 
 
@@ -31,8 +31,6 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     """Application startup / shutdown lifecycle."""
     logger.info("Elenchus starting up...")
-    ensure_local_encryption_key()
-    logger.info("Local provider encryption key is ready.")
     await init_db()
     logger.info("Database initialized.")
     yield
@@ -42,7 +40,6 @@ async def lifespan(app: FastAPI):
     logger.info("Elenchus shut down.")
 
 
-settings = get_settings()
 frontend_dist_dir = settings.frontend_dist_dir
 frontend_index_file = frontend_dist_dir / "index.html"
 frontend_reserved_roots = {"api", "docs", "redoc", "openapi.json", "health"}

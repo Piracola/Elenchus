@@ -3,34 +3,24 @@ from __future__ import annotations
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
-import yaml
 
 from app import config as config_module
+from app.runtime_config_store import load_runtime_config
 from app.search import factory as factory_module
 from app.search.factory import SearchProviderFactory
+from app.runtime_paths import get_runtime_paths
 
 
 @contextmanager
-def _workspace_runtime_paths():
+def _workspace_runtime_dir():
     runtime_root = Path("backend/.pytest-local/search-config")
     if runtime_root.exists():
         shutil.rmtree(runtime_root)
-    runtime_backend_dir = runtime_root / "backend"
-    runtime_backend_dir.mkdir(parents=True, exist_ok=True)
+    runtime_root.mkdir(parents=True, exist_ok=True)
     try:
-        yield SimpleNamespace(
-            config_file=runtime_backend_dir / "config.yaml",
-            env_file=runtime_backend_dir / ".env",
-            default_database_file=runtime_root / "elenchus.db",
-            runtime_root=runtime_root,
-            runtime_backend_dir=runtime_backend_dir,
-            backend_bundle_dir=runtime_root / "backend-src",
-            prompts_dir=runtime_root / "prompts",
-            frontend_dist_dir=runtime_root / "frontend-dist",
-        )
+        yield runtime_root
     finally:
         shutil.rmtree(runtime_root, ignore_errors=True)
 
@@ -61,18 +51,18 @@ class _FakeTavilyProvider(_FakeDuckDuckGoProvider):
 
 
 @pytest.fixture(autouse=True)
-def _clear_search_settings_cache():
+def _clear_search_settings_cache(monkeypatch):
     config_module.get_settings.cache_clear()
+    get_runtime_paths.cache_clear()
     yield
     config_module.get_settings.cache_clear()
+    get_runtime_paths.cache_clear()
+    monkeypatch.delenv("ELENCHUS_RUNTIME_DIR", raising=False)
 
 
-def test_persist_search_settings_updates_runtime_files_and_snapshot(monkeypatch):
-    with _workspace_runtime_paths() as runtime_paths:
-        monkeypatch.setattr(config_module, "_RUNTIME_PATHS", runtime_paths)
-        monkeypatch.setitem(config_module.EnvSettings.model_config, "env_file", str(runtime_paths.env_file))
-        for key in ("SEARXNG_BASE_URL", "SEARXNG_API_KEY", "TAVILY_API_KEY", "TAVILY_API_URL"):
-            monkeypatch.delenv(key, raising=False)
+def test_persist_search_settings_updates_runtime_config_and_snapshot(monkeypatch):
+    with _workspace_runtime_dir() as runtime_root:
+        monkeypatch.setenv("ELENCHUS_RUNTIME_DIR", str(runtime_root.resolve()))
 
         config_module.persist_search_settings(
             provider="tavily",
@@ -82,14 +72,12 @@ def test_persist_search_settings_updates_runtime_files_and_snapshot(monkeypatch)
             tavily_api_url="https://example.com/tavily/search",
         )
 
-        yaml_data = yaml.safe_load(runtime_paths.config_file.read_text(encoding="utf-8"))
-        assert yaml_data["search"]["provider"] == "tavily"
-
-        env_text = runtime_paths.env_file.read_text(encoding="utf-8")
-        assert "SEARXNG_BASE_URL=http://searx.local:8080" in env_text
-        assert "SEARXNG_API_KEY=searx-secret" in env_text
-        assert "TAVILY_API_KEY=tvly-secret" in env_text
-        assert "TAVILY_API_URL=https://example.com/tavily/search" in env_text
+        runtime_config = load_runtime_config()
+        assert runtime_config["search"]["provider"] == "tavily"
+        assert runtime_config["search"]["searxng"]["base_url"] == "http://searx.local:8080"
+        assert runtime_config["search"]["searxng"]["api_key"] == "searx-secret"
+        assert runtime_config["search"]["tavily"]["api_key"] == "tvly-secret"
+        assert runtime_config["search"]["tavily"]["api_url"] == "https://example.com/tavily/search"
 
         snapshot = config_module.get_search_provider_settings_snapshot()
         assert snapshot["searxng"] == {
@@ -104,18 +92,15 @@ def test_persist_search_settings_updates_runtime_files_and_snapshot(monkeypatch)
         config_module.persist_search_settings(clear_tavily_api_key=True)
 
         snapshot = config_module.get_search_provider_settings_snapshot()
-        env_text = runtime_paths.env_file.read_text(encoding="utf-8")
-        assert "TAVILY_API_KEY" not in env_text
+        runtime_config = load_runtime_config()
+        assert runtime_config["search"]["tavily"]["api_key"] == ""
         assert snapshot["tavily"]["api_key_configured"] is False
 
 
 @pytest.mark.asyncio
 async def test_search_factory_reload_rebuilds_provider_instances(monkeypatch):
-    with _workspace_runtime_paths() as runtime_paths:
-        monkeypatch.setattr(config_module, "_RUNTIME_PATHS", runtime_paths)
-        monkeypatch.setitem(config_module.EnvSettings.model_config, "env_file", str(runtime_paths.env_file))
-        for key in ("SEARXNG_BASE_URL", "SEARXNG_API_KEY", "TAVILY_API_KEY", "TAVILY_API_URL"):
-            monkeypatch.delenv(key, raising=False)
+    with _workspace_runtime_dir() as runtime_root:
+        monkeypatch.setenv("ELENCHUS_RUNTIME_DIR", str(runtime_root.resolve()))
 
         monkeypatch.setattr(factory_module, "DuckDuckGoProvider", _FakeDuckDuckGoProvider)
         monkeypatch.setattr(factory_module, "SearXNGProvider", _FakeSearXNGProvider)

@@ -2,6 +2,7 @@
 
 > 本文档记录项目架构改进的完整过程，包括问题分析、解决方案和实施指南。
 > 生成时间：2026-03-17
+> 历史说明：本文保留的是当时的阶段性方案；当前代码已进一步演进，Provider 配置、搜索配置、认证相关运行时参数与日志级别现统一存储于 `runtime/config.json`，文中涉及 `ProviderRecord`、`backend/scripts/migrate_providers_to_db.py`、`config.yaml`、`runtime/backend/.env` 等内容均仅代表历史背景。
 
 ---
 
@@ -13,7 +14,7 @@
 
 | 改进项 | 状态 | 影响范围 |
 |--------|------|----------|
-| S1: Provider 存储迁移至数据库 | ✅ 完成 | 数据一致性、多实例部署 |
+| S1: Provider 存储曾迁移至数据库（历史阶段） | ✅ 完成 | 当时提升了数据一致性、多实例部署适配；当前已进一步收敛到 `runtime/config.json` |
 | S2: 依赖注入重构 | ✅ 完成 | 可测试性、可维护性 |
 | S3: 显式节点状态追踪 | ✅ 完成 | 可维护性、调试便利 |
 | S5: 认证授权机制 | ✅ 完成 | 安全性、用户隔离 |
@@ -53,7 +54,7 @@
 | Intervention Manager | 内存字典 | 消息队列不共享 |
 
 **解决方案**：
-- Provider 存储迁移至数据库（已完成）
+- Provider 存储曾迁移至数据库（历史阶段已完成，当前又进一步收敛到 `runtime/config.json`）
 - 依赖注入重构支持多实例（已完成）
 - WebSocket 外部化（待实施 - 需要 Redis）
 
@@ -137,7 +138,7 @@
 
 ## 三、架构改进详情
 
-### 3.1 S1: Provider 存储迁移至数据库
+### 3.1 S1: Provider 存储迁移至数据库（历史阶段）
 
 #### 数据库模型
 
@@ -533,7 +534,7 @@ async def get_current_user(...) -> UserRecord | None:
 
 ### 短期（已完成）
 
-- [x] Provider 存储迁移至数据库
+- [x] Provider 存储迁移至数据库（后续版本已继续收敛到 `runtime/config.json`）
 - [x] 显式节点状态追踪
 - [x] 依赖注入重构
 - [x] 认证授权机制

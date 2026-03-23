@@ -5,7 +5,6 @@ Supports dynamic log level adjustment and file-based logging.
 
 from __future__ import annotations
 
-import json
 import logging
 import sys
 from datetime import datetime
@@ -14,8 +13,8 @@ from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from typing import Optional
 
-from pydantic import BaseModel
-
+from app.config import _clear_settings_cache, get_settings
+from app.runtime_config_store import update_runtime_config
 from app.runtime_paths import get_runtime_paths
 
 
@@ -39,13 +38,6 @@ class LogLevel(IntEnum):
 
     def to_string(self) -> str:
         return self.name
-
-
-class LogConfig(BaseModel):
-    level: str = "INFO"
-    log_dir: str = "logs"
-    max_bytes: int = 10 * 1024 * 1024
-    backup_count: int = 5
 
 
 LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s"
@@ -72,25 +64,32 @@ class LogManager:
         return cls._instance
 
     def _load_persisted_level(self) -> LogLevel:
-        log_config_file = get_runtime_paths().log_config_file
-        try:
-            if log_config_file.exists():
-                with open(log_config_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    level_str = data.get("level", "INFO")
-                    return LogLevel.from_string(level_str)
-        except (json.JSONDecodeError, KeyError, OSError):
-            pass
-        return LogLevel.INFO
+        settings = get_settings()
+        return LogLevel.from_string(settings.logging.level)
 
     def _persist_level(self, level: LogLevel) -> None:
-        log_config_file = get_runtime_paths().log_config_file
-        try:
-            log_config_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(log_config_file, "w", encoding="utf-8") as f:
-                json.dump({"level": level.to_string()}, f)
-        except OSError:
-            pass
+        update_runtime_config(
+            lambda config: {
+                **config,
+                "logging": {
+                    **dict(config.get("logging") or {}),
+                    "level": level.to_string(),
+                },
+            }
+        )
+        _clear_settings_cache()
+
+    @staticmethod
+    def _resolve_log_dir(log_dir: str) -> Path:
+        runtime_paths = get_runtime_paths()
+        if log_dir == "logs":
+            return runtime_paths.logs_dir
+        return runtime_paths.runtime_root / log_dir
+
+    @staticmethod
+    def _resolve_backup_count() -> int:
+        settings = get_settings()
+        return settings.logging.backup_count
 
     def setup(
         self,
@@ -99,13 +98,9 @@ class LogManager:
         enable_file_logging: bool = True,
     ) -> None:
         persisted_level = self._load_persisted_level()
-        self._current_level = persisted_level
-        runtime_paths = get_runtime_paths()
-        self._log_dir = (
-            runtime_paths.logs_dir
-            if log_dir == "logs"
-            else runtime_paths.runtime_root / log_dir
-        )
+        self._current_level = persisted_level or level
+        configured_log_dir = get_settings().logging.log_dir or log_dir
+        self._log_dir = self._resolve_log_dir(configured_log_dir)
 
         root_logger = logging.getLogger()
         root_logger.setLevel(self._current_level.value)
@@ -132,7 +127,7 @@ class LogManager:
             filename=str(log_file),
             when="midnight",
             interval=1,
-            backupCount=7,
+            backupCount=self._resolve_backup_count(),
             encoding="utf-8",
         )
         self._file_handler.setLevel(self._current_level.value)

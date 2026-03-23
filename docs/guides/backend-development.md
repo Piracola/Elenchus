@@ -28,45 +28,50 @@ pip install -r requirements-dev.txt
 - `pip install -r requirements.txt`、虚拟环境创建、前后端同时启动等首次启动内容统一留在 [快速开始](../getting-started.md)。
 - `requirements-dev.txt` 会包含 `requirements.txt`，适合本地开发与测试环境。
 
-## 3. 关键环境变量
+## 3. 关键运行时配置
 
-运行时环境变量副本默认位于：`runtime/backend/.env`
+统一运行时配置默认位于：`runtime/config.json`
 
-模板来源：`backend/.env.example`
+常见配置项包括：
 
-常见变量：
-
-```env
-ELENCHUS_ENCRYPTION_KEY=
-SEARXNG_BASE_URL=http://localhost:8080
-SEARXNG_API_KEY=
-TAVILY_API_KEY=
-TAVILY_API_URL=https://api.tavily.com/search
-DATABASE_URL=sqlite+aiosqlite:///./elenchus.db
-HOST=0.0.0.0
-PORT=8001
-DEBUG=false
+```json
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8001,
+    "debug": false,
+    "database_url": "sqlite+aiosqlite:///.../runtime/elenchus.db"
+  },
+  "search": {
+    "provider": "duckduckgo",
+    "searxng": {"base_url": "http://localhost:8080", "api_key": ""},
+    "tavily": {"api_url": "https://api.tavily.com/search", "api_key": ""}
+  },
+  "logging": {
+    "level": "INFO"
+  }
+}
 ```
 
 补充说明：
 
-- 本地启动时会在 `runtime/backend/.env` 初始化运行时配置。
-- `ELENCHUS_ENCRYPTION_KEY` 本地首次运行可自动准备；生产环境应显式配置。
-- provider API key 不在仓库 `.env` 中维护，而是在 Web UI 中配置并加密存储。
+- 本地启动时会在 `runtime/config.json` 初始化运行时配置。
+- provider API key 不在仓库 `.env` 中维护，而是在 Web UI 中配置并存储到 `runtime/config.json`。
+- 当存在旧的 `.env` / `config.yaml` / `log_config.json` / provider DB 配置时，首次启动会自动导入。
 - 当 `DATABASE_URL` 使用相对 SQLite 路径时，后端会把它归一化到 `runtime/` 目录。
 
 ## 4. 运行时相关路径
 
 后端运行时数据统一写入仓库根目录 `runtime/`，重点包括：
 
-- `runtime/backend/.env`
-- `runtime/backend/config.yaml`
-- `runtime/data/log_config.json`
+- `runtime/config.json`
 - `runtime/elenchus.db`
 - `runtime/logs/`
 - `runtime/sessions/<session_id>/...`
 
 这些路径的文件职责与回放关系见：[运行时与回放](../runtime.md)
+
+> 说明：`runtime/backend/.env`、`runtime/backend/config.yaml`、`runtime/data/log_config.json` 已降级为首次迁移导入来源，不再是活动配置源。
 
 ## 5. 关键入口文件
 

@@ -66,10 +66,10 @@ chmod +x ./start.sh
 
 补充说明：
 
-- 启动脚本会在 `runtime/backend/.env` 初始化本地运行时配置。
-- 启动脚本会准备 `runtime/backend/config.yaml`、`runtime/data/log_config.json`、`runtime/logs/` 等本地运行目录内容。
-- 本地环境首次启动后端时会自动准备本地加密密钥。
-- provider API key 不通过仓库内 `.env` 管理，而是在 Web UI 中配置并持久化。
+- 启动后会在 `runtime/config.json` 初始化统一运行时配置。
+- 运行目录会准备 `runtime/elenchus.db`、`runtime/logs/`、`runtime/sessions/` 等本地内容。
+- provider API key 不通过仓库内 `.env` 管理，而是在 Web UI 中配置并持久化到 `runtime/config.json`。
+- 如果存在旧的 `.env` / `config.yaml` / `log_config.json` / provider DB 配置，首次启动会自动导入到 `runtime/config.json`。
 
 ## 5. 手动启动：最短路径
 

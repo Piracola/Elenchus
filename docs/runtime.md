@@ -9,7 +9,7 @@
 
 它承担的职责包括：
 
-- 本地运行配置
+- 统一运行时配置
 - SQLite 数据库与日志
 - 会话快照
 - 实时事件流
@@ -20,12 +20,7 @@
 
 ```text
 runtime/
-├─ backend/
-│  ├─ .env
-│  ├─ .env.example
-│  └─ config.yaml
-├─ data/
-│  └─ log_config.json
+├─ config.json
 ├─ elenchus.db
 ├─ logs/
 └─ sessions/
@@ -42,21 +37,23 @@ runtime/
 
 ## 3. 关键文件职责
 
-### `runtime/backend/.env`
+### `runtime/config.json`
 
-后端运行时环境变量文件。启动脚本与后端初始化逻辑会优先在这里准备本地运行配置。
+统一运行时配置文件，负责保存：
 
-### `runtime/backend/config.yaml`
+- provider 配置与 API key
+- 服务端基础配置（host / port / debug / CORS / database_url）
+- 搜索配置（provider、SearXNG、Tavily）
+- 辩论默认配置（如 `default_max_turns`、context window）
+- 日志级别等非会话配置
 
-运行时使用的配置文件副本。
-
-### `runtime/data/log_config.json`
-
-运行时日志配置文件。
+旧的 `runtime/backend/.env`、`runtime/backend/config.yaml`、`runtime/data/log_config.json` 仅在首次迁移时作为导入来源；一旦 `runtime/config.json` 已生成，后续运行只以它为准。
 
 ### `runtime/elenchus.db`
 
-本地 SQLite 数据库，用于保存后端需要的结构化持久化数据。
+本地 SQLite 数据库，用于保存仍然由数据库负责的结构化持久化数据。
+
+当前 provider 配置已经迁移到 `runtime/config.json`，不再作为 provider 存储主来源。
 
 ### `runtime/logs/`
 
@@ -150,8 +147,7 @@ Elenchus 的历史恢复与回放依赖两类持久化数据配合完成：
 
 ### 运行时生成内容
 
-- 本地 `.env` 副本
-- 运行时配置副本
+- `runtime/config.json`
 - 数据库文件
 - 日志
 - 会话快照
