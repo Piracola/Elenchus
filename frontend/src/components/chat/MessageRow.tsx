@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -15,6 +15,7 @@ interface MessageRowProps {
     highlightJudge?: boolean;
     highlightSystem?: boolean;
     insightSections?: InsightSection[];
+    animated?: boolean;
 }
 
 type RoleVisual = {
@@ -79,6 +80,14 @@ const MODULE_DIMENSIONS: Record<ScoreModuleKey, ScoreDimensionKey[]> = {
     stability: ['consistency'],
     vision: ['persuasiveness'],
 };
+
+const STATIC_MOTION_PROPS = {
+    initial: false,
+    animate: undefined,
+    transition: undefined,
+    whileHover: undefined,
+    whileTap: undefined,
+} as const;
 
 function formatRoleLabel(role: string | undefined): string {
     if (!role) return '辩手';
@@ -207,7 +216,21 @@ function getModuleScore(scores: TurnScore, moduleKey: ScoreModuleKey): number | 
     return getWeightedAverage(scores, MODULE_DIMENSIONS[moduleKey]);
 }
 
-function ScoreGrid({ judgeEntry }: { judgeEntry: NonNullable<MessageRowProps['judgeEntry']> }) {
+function renderMarkdown(text: string) {
+    return (
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {text}
+        </ReactMarkdown>
+    );
+}
+
+function ScoreGrid({
+    judgeEntry,
+    animated,
+}: {
+    judgeEntry: NonNullable<MessageRowProps['judgeEntry']>;
+    animated: boolean;
+}) {
     if (judgeEntry.role !== 'judge' || !judgeEntry.scores || Object.keys(judgeEntry.scores).length === 0) {
         return null;
     }
@@ -224,9 +247,9 @@ function ScoreGrid({ judgeEntry }: { judgeEntry: NonNullable<MessageRowProps['ju
 
     return (
         <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
+            {...(animated
+                ? { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.2 } }
+                : STATIC_MOTION_PROPS)}
             style={{
                 marginTop: '20px',
                 padding: '20px',
@@ -249,7 +272,7 @@ function ScoreGrid({ judgeEntry }: { judgeEntry: NonNullable<MessageRowProps['ju
             </div>
             {comprehensiveScore !== null && (
                 <motion.div
-                    whileHover={{ scale: 1.01 }}
+                    {...(animated ? { whileHover: { scale: 1.01 } } : STATIC_MOTION_PROPS)}
                     style={{
                         display: 'flex',
                         flexDirection: 'column',
@@ -318,7 +341,7 @@ function ScoreGrid({ judgeEntry }: { judgeEntry: NonNullable<MessageRowProps['ju
                 {moduleCards.map((module) => (
                     <motion.div
                         key={module.key}
-                        whileHover={{ scale: 1.02 }}
+                        {...(animated ? { whileHover: { scale: 1.02 } } : STATIC_MOTION_PROPS)}
                         style={{
                             display: 'flex',
                             flexDirection: 'column',
@@ -387,14 +410,6 @@ function ScoreGrid({ judgeEntry }: { judgeEntry: NonNullable<MessageRowProps['ju
     );
 }
 
-function renderMarkdown(text: string) {
-    return (
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {text}
-        </ReactMarkdown>
-    );
-}
-
 function MessageRow({
     agentEntry,
     judgeEntry,
@@ -403,10 +418,13 @@ function MessageRow({
     highlightJudge = false,
     highlightSystem = false,
     insightSections = [],
+    animated = false,
 }: MessageRowProps) {
     const neutralColor = 'var(--color-neutral, #6b7280)';
     const rowFocused = highlightAgent || highlightJudge || highlightSystem;
     const agentText = agentEntry?.content || '';
+    const agentVisual = useMemo(() => getAgentVisual(agentEntry), [agentEntry]);
+    const judgeVisual = useMemo(() => getJudgeVisual(judgeEntry), [judgeEntry]);
 
     if (systemEntry) {
         if (systemEntry.role === 'audience') {
@@ -416,8 +434,9 @@ function MessageRow({
                     style={{ display: 'flex', justifyContent: 'center', margin: '16px 0' }}
                 >
                     <motion.div
-                        initial={{ opacity: 0, y: 6, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        {...(animated
+                            ? { initial: { opacity: 0, y: 6, scale: 0.95 }, animate: { opacity: 1, y: 0, scale: 1 } }
+                            : STATIC_MOTION_PROPS)}
                         style={{
                             padding: '12px 24px',
                             background: 'var(--bg-card)',
@@ -457,8 +476,9 @@ function MessageRow({
                 style={{ display: 'flex', justifyContent: 'center', margin: '16px 0' }}
             >
                 <motion.div
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
+                    {...(animated
+                        ? { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 } }
+                        : STATIC_MOTION_PROPS)}
                     style={{
                         padding: '10px 20px',
                         background: 'var(--bg-tertiary)',
@@ -477,8 +497,6 @@ function MessageRow({
 
     if (!agentEntry && !judgeEntry) return null;
 
-    const agentVisual = getAgentVisual(agentEntry);
-    const judgeVisual = getJudgeVisual(judgeEntry);
     const judgeOnly = Boolean(judgeEntry && !agentEntry);
     const agentOnly = Boolean(agentEntry && !judgeEntry);
     const agentTextStyle = {
@@ -490,9 +508,9 @@ function MessageRow({
 
     const agentCard = agentEntry ? (
         <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
+            {...(animated
+                ? { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.4 } }
+                : STATIC_MOTION_PROPS)}
             style={{
                 position: 'relative',
                 background: 'var(--bg-card)',
@@ -515,7 +533,7 @@ function MessageRow({
                 }}
             >
                 <motion.div
-                    whileHover={{ scale: 1.05 }}
+                    {...(animated ? { whileHover: { scale: 1.05 } } : STATIC_MOTION_PROPS)}
                     style={{
                         width: '40px',
                         height: '40px',
@@ -559,9 +577,13 @@ function MessageRow({
 
     const judgeCard = judgeEntry ? (
         <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: agentEntry ? 0.1 : 0 }}
+            {...(animated
+                ? {
+                    initial: { opacity: 0, y: 16 },
+                    animate: { opacity: 1, y: 0 },
+                    transition: { duration: 0.4, delay: agentEntry ? 0.1 : 0 },
+                }
+                : STATIC_MOTION_PROPS)}
             style={{
                 position: 'relative',
                 background: judgeVisual.background,
@@ -585,7 +607,7 @@ function MessageRow({
                 }}
             >
                 <motion.div
-                    whileHover={{ scale: 1.05 }}
+                    {...(animated ? { whileHover: { scale: 1.05 } } : STATIC_MOTION_PROPS)}
                     style={{
                         width: '36px',
                         height: '36px',
@@ -629,7 +651,7 @@ function MessageRow({
                 {renderMarkdown(judgeEntry.content || '')}
             </div>
 
-            <ScoreGrid judgeEntry={judgeEntry} />
+            <ScoreGrid judgeEntry={judgeEntry} animated={animated} />
         </motion.div>
     ) : null;
 
@@ -702,4 +724,42 @@ function MessageRow({
     );
 }
 
-export default memo(MessageRow);
+function sectionsEqual(previous?: InsightSection[], next?: InsightSection[]): boolean {
+    if (previous === next) return true;
+    if (!previous || !next) return previous === next;
+    if (previous.length !== next.length) return false;
+
+    for (let index = 0; index < previous.length; index += 1) {
+        const previousSection = previous[index];
+        const nextSection = next[index];
+        if (
+            previousSection.key !== nextSection.key
+            || previousSection.title !== nextSection.title
+            || previousSection.accent !== nextSection.accent
+            || previousSection.entries.length !== nextSection.entries.length
+        ) {
+            return false;
+        }
+
+        for (let entryIndex = 0; entryIndex < previousSection.entries.length; entryIndex += 1) {
+            if (previousSection.entries[entryIndex] !== nextSection.entries[entryIndex]) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+function areEqual(previous: MessageRowProps, next: MessageRowProps): boolean {
+    return previous.agentEntry === next.agentEntry
+        && previous.judgeEntry === next.judgeEntry
+        && previous.systemEntry === next.systemEntry
+        && previous.highlightAgent === next.highlightAgent
+        && previous.highlightJudge === next.highlightJudge
+        && previous.highlightSystem === next.highlightSystem
+        && previous.animated === next.animated
+        && sectionsEqual(previous.insightSections, next.insightSections);
+}
+
+export default memo(MessageRow, areEqual);

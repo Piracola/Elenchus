@@ -6,6 +6,7 @@
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useDebateStore } from '../../stores/debateStore';
+import { useForegroundDebateSelector } from '../../hooks/useForegroundDebateSelector';
 import {
     buildNodeHeat,
     edgeId,
@@ -57,11 +58,11 @@ function edgePath(from: { x: number; y: number }, to: { x: number; y: number }, 
 
 export default function LiveGraph({ compact = false, embedded = false }: LiveGraphProps) {
     const debateMode = useDebateStore((state) => state.currentSession?.debate_mode ?? 'standard');
-    const visibleRuntimeEvents = useDebateStore((state) => state.visibleRuntimeEvents);
-    const currentNode = useDebateStore((state) => state.currentNode);
-    const focusedRuntimeEventId = useDebateStore((state) => state.focusedRuntimeEventId);
+    const visibleRuntimeEvents = useForegroundDebateSelector((state) => state.visibleRuntimeEvents);
+    const currentNode = useForegroundDebateSelector((state) => state.currentNode);
+    const focusedRuntimeEventId = useForegroundDebateSelector((state) => state.focusedRuntimeEventId);
     const setFocusedRuntimeEventId = useDebateStore((state) => state.setFocusedRuntimeEventId);
-    const replayEnabled = useDebateStore((state) => state.replayEnabled);
+    const replayEnabled = useForegroundDebateSelector((state) => state.replayEnabled);
     const exitReplay = useDebateStore((state) => state.exitReplay);
     const [collapsed, setCollapsed] = useState(embedded ? false : compact);
     const graphDefinition = useMemo(
@@ -209,8 +210,10 @@ export default function LiveGraph({ compact = false, embedded = false }: LiveGra
                                         stroke="var(--accent-cyan)"
                                         strokeWidth={3}
                                         strokeDasharray="8 8"
-                                        animate={{ strokeDashoffset: [0, -32] }}
-                                        transition={{ repeat: Infinity, duration: 1.3, ease: 'linear' }}
+                                        animate={activeGraph && isActive ? { strokeDashoffset: [0, -32] } : undefined}
+                                        transition={activeGraph && isActive
+                                            ? { repeat: Infinity, duration: 1.3, ease: 'linear' }
+                                            : undefined}
                                     />
                                 )}
                             </g>
@@ -232,8 +235,10 @@ export default function LiveGraph({ compact = false, embedded = false }: LiveGra
                                     r={26 + heatRatio * 10}
                                     fill={stroke}
                                     opacity={0.08 + heatRatio * 0.12}
-                                    animate={isActive ? { opacity: [0.12, 0.28, 0.12] } : { opacity: 0.08 + heatRatio * 0.12 }}
-                                    transition={isActive ? { repeat: Infinity, duration: 1.4 } : undefined}
+                                    animate={activeGraph && isActive
+                                        ? { opacity: [0.12, 0.28, 0.12] }
+                                        : { opacity: 0.08 + heatRatio * 0.12 }}
+                                    transition={activeGraph && isActive ? { repeat: Infinity, duration: 1.4 } : undefined}
                                 />
                                 <motion.circle
                                     cx={node.x}
@@ -248,8 +253,8 @@ export default function LiveGraph({ compact = false, embedded = false }: LiveGra
                                         if (!latestEventId) return;
                                         setFocusedRuntimeEventId(latestEventId);
                                     }}
-                                    animate={isActive ? { scale: [1, 1.06, 1] } : { scale: 1 }}
-                                    transition={isActive ? { repeat: Infinity, duration: 1.2 } : undefined}
+                                    animate={activeGraph && isActive ? { scale: [1, 1.06, 1] } : { scale: 1 }}
+                                    transition={activeGraph && isActive ? { repeat: Infinity, duration: 1.2 } : undefined}
                                 />
                                 <text
                                     x={node.x}

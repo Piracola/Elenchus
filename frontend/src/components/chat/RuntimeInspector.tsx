@@ -8,6 +8,12 @@ import MemoryPanel from './MemoryPanel';
 
 type InspectorTab = 'timeline' | 'graph' | 'memory';
 
+type RuntimeInspectorProps = {
+    defaultExpanded?: boolean;
+    fillHeight?: boolean;
+    onExpandedChange?: (expanded: boolean) => void;
+};
+
 const TAB_LABELS: Record<InspectorTab, string> = {
     timeline: '执行时间线',
     graph: '流程图',
@@ -30,19 +36,16 @@ export default function RuntimeInspector({
     defaultExpanded = false,
     fillHeight = false,
     onExpandedChange,
-}: {
-    defaultExpanded?: boolean;
-    fillHeight?: boolean;
-    onExpandedChange?: (expanded: boolean) => void;
-}) {
+}: RuntimeInspectorProps) {
     const runtimeEventCount = useDebateStore((state) => state.runtimeEvents.length);
-    const visibleRuntimeEvents = useDebateStore((state) => state.visibleRuntimeEvents);
-    const replayEnabled = useDebateStore((state) => state.replayEnabled);
     const currentNode = useDebateStore((state) => state.currentNode);
     const debateMode = useDebateStore((state) => state.currentSession?.debate_mode ?? 'standard');
+    const replayEnabled = useDebateStore((state) => state.replayEnabled);
+    const isDocumentVisible = useDebateStore((state) => state.isDocumentVisible);
     const [expanded, setExpanded] = useState(defaultExpanded);
     const [activeTab, setActiveTab] = useState<InspectorTab>('timeline');
     const isCollapsed = !expanded && !fillHeight;
+    const shouldMountActiveTab = expanded && isDocumentVisible;
 
     const setExpandedState = (value: boolean | ((previous: boolean) => boolean)) => {
         setExpanded((previous) => {
@@ -52,11 +55,6 @@ export default function RuntimeInspector({
         });
     };
 
-    const memoryCount = useMemo(() => {
-        if (activeTab !== 'memory') return 0;
-        return visibleRuntimeEvents.filter((event) => event.type === 'memory_write').length;
-    }, [activeTab, visibleRuntimeEvents]);
-
     const summaryText = useMemo(() => {
         if (activeTab === 'timeline') {
             return `${runtimeEventCount} 条事件${replayEnabled ? ' · 回放' : ''}`;
@@ -65,8 +63,8 @@ export default function RuntimeInspector({
             const currentLabel = getLiveGraphNodeLabel(currentNode, debateMode);
             return currentLabel ? `当前节点: ${currentLabel}` : '查看运行节点与路径';
         }
-        return `${memoryCount} 条记忆写入`;
-    }, [activeTab, currentNode, debateMode, memoryCount, replayEnabled, runtimeEventCount]);
+        return '查看记忆写入与知识图谱';
+    }, [activeTab, currentNode, debateMode, replayEnabled, runtimeEventCount]);
 
     return (
         <div
@@ -230,9 +228,14 @@ export default function RuntimeInspector({
                             }}
                         >
                             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                                {activeTab === 'timeline' && <ExecutionTimeline embedded fillHeight={fillHeight} />}
-                                {activeTab === 'graph' && <LiveGraph embedded />}
-                                {activeTab === 'memory' && <MemoryPanel embedded />}
+                                {!shouldMountActiveTab && (
+                                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '8px' }}>
+                                        标签页恢复后会同步观察器视图。
+                                    </div>
+                                )}
+                                {shouldMountActiveTab && activeTab === 'timeline' && <ExecutionTimeline embedded fillHeight={fillHeight} />}
+                                {shouldMountActiveTab && activeTab === 'graph' && <LiveGraph embedded />}
+                                {shouldMountActiveTab && activeTab === 'memory' && <MemoryPanel embedded />}
                             </div>
                         </div>
                     </motion.div>

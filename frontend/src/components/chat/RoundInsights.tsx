@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -25,7 +25,33 @@ function renderMeta(entry: DialogueEntry): string | null {
     return null;
 }
 
-export default function RoundInsights({ sections }: RoundInsightsProps) {
+function areSectionsEqual(previous: InsightSection[], next: InsightSection[]): boolean {
+    if (previous === next) return true;
+    if (previous.length !== next.length) return false;
+
+    for (let index = 0; index < previous.length; index += 1) {
+        const previousSection = previous[index];
+        const nextSection = next[index];
+        if (
+            previousSection.key !== nextSection.key
+            || previousSection.title !== nextSection.title
+            || previousSection.accent !== nextSection.accent
+            || previousSection.entries.length !== nextSection.entries.length
+        ) {
+            return false;
+        }
+
+        for (let entryIndex = 0; entryIndex < previousSection.entries.length; entryIndex += 1) {
+            if (previousSection.entries[entryIndex] !== nextSection.entries[entryIndex]) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+function RoundInsights({ sections }: RoundInsightsProps) {
     const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
     if (!sections.length) return null;
@@ -170,3 +196,5 @@ export default function RoundInsights({ sections }: RoundInsightsProps) {
         </div>
     );
 }
+
+export default memo(RoundInsights, (previous, next) => areSectionsEqual(previous.sections, next.sections));

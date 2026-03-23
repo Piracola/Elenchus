@@ -4,27 +4,19 @@
  * move beneath the gaps between cards instead of being blocked by a container.
  */
 
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { motion } from 'framer-motion';
 import { FileJson, FileText } from 'lucide-react';
 import { api } from '../api/client';
 import { useDebateStore } from '../stores/debateStore';
+import { useForegroundDebateSelector } from '../hooks/useForegroundDebateSelector';
 import { useSettingsStore, MESSAGE_WIDTH_VALUES } from '../stores/settingsStore';
 import MessageRow from './chat/MessageRow';
 import DebateControls from './chat/DebateControls';
 import RuntimeInspector from './chat/RuntimeInspector';
 import StatusBanner from './chat/StatusBanner';
 import RoundInsights from './chat/RoundInsights';
-import { groupDialogue } from '../utils/groupDialogue';
-import { resolveRowFocus } from '../utils/eventFocus';
-import {
-    eventMatchesTurn,
-    buildSpeakerDiscussionMap,
-    buildTurnDiscussionMap,
-    sideLabel,
-    speakerInsightKey,
-} from '../utils/roundInsights';
 import {
     clampFloatingInspectorRect,
     createDefaultFloatingInspectorRect,
@@ -40,32 +32,39 @@ import {
 import { isElementNearBottom } from '../utils/chatScroll';
 import { resolveHistoryRowStart, revealFocusedHistoryRow } from '../utils/chatHistoryWindow';
 import { toast } from '../utils/toast';
-import type { InsightSection } from './chat/RoundInsights';
+import { buildTranscriptViewModel } from '../utils/transcriptViewModel';
+import type { DialogueGroupingState } from '../utils/groupDialogue';
 import type {
     FloatingInspectorBounds,
     FloatingInspectorInteraction,
     FloatingInspectorRect,
     FloatingInspectorResizeHandle,
 } from '../utils/floatingInspectorLayout';
+import { computeVariableVirtualWindow } from '../utils/virtualWindow';
 
 const INITIAL_HISTORY_ROW_WINDOW = 120;
 const HISTORY_ROW_BATCH_SIZE = 80;
 const HISTORY_ROW_PRELOAD_THRESHOLD = 240;
+const CHAT_ROW_OVERSCAN = 5;
+const DEFAULT_CHAT_ROW_HEIGHT = 320;
+
 export default function ChatPanel() {
     const currentSessionId = useDebateStore((state) => state.currentSession?.id ?? null);
     const currentTopic = useDebateStore((state) => state.currentSession?.topic ?? '');
     const debateMode = useDebateStore((state) => state.currentSession?.debate_mode ?? 'standard');
     const participants = useDebateStore((state) => state.currentSession?.participants);
-    const dialogueHistory = useDebateStore((state) => state.currentSession?.dialogue_history ?? []);
-    const teamDialogueHistory = useDebateStore((state) => state.currentSession?.team_dialogue_history ?? []);
-    const juryDialogueHistory = useDebateStore((state) => state.currentSession?.jury_dialogue_history ?? []);
     const currentTurn = useDebateStore((state) => state.currentSession?.current_turn ?? 0);
     const maxTurns = useDebateStore((state) => state.currentSession?.max_turns ?? 0);
     const modeArtifactsLength = useDebateStore((state) => state.currentSession?.mode_artifacts?.length ?? 0);
-    const visibleRuntimeEvents = useDebateStore((state) => state.visibleRuntimeEvents);
-    const replayEnabled = useDebateStore((state) => state.replayEnabled);
-    const focusedRuntimeEventId = useDebateStore((state) => state.focusedRuntimeEventId);
+    const isDocumentVisible = useDebateStore((state) => state.isDocumentVisible);
+    const visibilityResumeToken = useDebateStore((state) => state.visibilityResumeToken);
     const { displaySettings } = useSettingsStore();
+    const dialogueHistory = useForegroundDebateSelector((state) => state.currentSession?.dialogue_history ?? []);
+    const teamDialogueHistory = useForegroundDebateSelector((state) => state.currentSession?.team_dialogue_history ?? []);
+    const juryDialogueHistory = useForegroundDebateSelector((state) => state.currentSession?.jury_dialogue_history ?? []);
+    const visibleRuntimeEvents = useForegroundDebateSelector((state) => state.visibleRuntimeEvents);
+    const replayEnabled = useForegroundDebateSelector((state) => state.replayEnabled);
+    const focusedRuntimeEventId = useForegroundDebateSelector((state) => state.focusedRuntimeEventId);
     const hasCurrentSession = currentSessionId !== null;
     const isSophistryMode = debateMode === 'sophistry_experiment';
     const modeWarning =
@@ -83,6 +82,9 @@ export default function ChatPanel() {
     const previousRowsLengthRef = useRef(0);
     const previousSessionIdRef = useRef<string | null | undefined>(undefined);
     const previousReplayEnabledRef = useRef<boolean | undefined>(undefined);
+    const transcriptGroupingStateRef = useRef<DialogueGroupingState | null>(null);
+    const measureObserversRef = useRef<Map<string, ResizeObserver>>(new Map());
+    const smoothScrollRestoreRef = useRef<number | null>(null);
 
     const [topOverlayHeight, setTopOverlayHeight] = useState(0);
     const [bottomOverlayHeight, setBottomOverlayHeight] = useState(0);
@@ -99,13 +101,186 @@ export default function ChatPanel() {
         if (typeof window === 'undefined') return true;
         return window.innerWidth >= 1280;
     });
+    const [smoothScrollSuppressed, setSmoothScrollSuppressed] = useState(false);
+    const [viewportHeight, setViewportHeight] = useState(0);
+    const [scrollTop, setScrollTop] = useState(0);
+    const [rowHeights, setRowHeights] = useState<Record<string, number>>({});
     const floatingInspectorWidth = floatingInspectorBounds.width;
     const floatingInspectorHeight = floatingInspectorBounds.height;
 
     useEffect(() => {
+        transcriptGroupingStateRef.current = null;
+        setRowHeights({});
         autoScrollEnabledRef.current = true;
         pendingHistoryPrependScrollHeightRef.current = null;
     }, [currentSessionId]);
+
+    useEffect(() => {
+        transcriptGroupingStateRef.current = null;
+    }, [participants, replayEnabled]);
+
+    useEffect(() => {
+        if (!isDocumentVisible) {
+            return;
+        }
+
+        setSmoothScrollSuppressed(true);
+        if (smoothScrollRestoreRef.current !== null) {
+            cancelAnimationFrame(smoothScrollRestoreRef.current);
+        }
+        smoothScrollRestoreRef.current = requestAnimationFrame(() => {
+            smoothScrollRestoreRef.current = requestAnimationFrame(() => {
+                setSmoothScrollSuppressed(false);
+                smoothScrollRestoreRef.current = null;
+            });
+        });
+
+        return () => {
+            if (smoothScrollRestoreRef.current !== null) {
+                cancelAnimationFrame(smoothScrollRestoreRef.current);
+                smoothScrollRestoreRef.current = null;
+            }
+        };
+    }, [isDocumentVisible, visibilityResumeToken]);
+
+    const focusedRuntimeEvent = useMemo(
+        () => (
+            focusedRuntimeEventId
+                ? visibleRuntimeEvents.find((event) => event.event_id === focusedRuntimeEventId) ?? null
+                : null
+        ),
+        [focusedRuntimeEventId, visibleRuntimeEvents],
+    );
+
+    const visibleEventIds = useMemo(
+        () => (replayEnabled ? new Set(visibleRuntimeEvents.map((event) => event.event_id)) : null),
+        [replayEnabled, visibleRuntimeEvents],
+    );
+
+    const transcriptViewModel = useMemo(() => {
+        const viewModel = buildTranscriptViewModel({
+            dialogueHistory,
+            teamDialogueHistory,
+            juryDialogueHistory,
+            participants,
+            replayEnabled,
+            visibleEventIds,
+            focusedRuntimeEvent,
+            previousGroupingState: replayEnabled ? null : transcriptGroupingStateRef.current,
+        });
+
+        transcriptGroupingStateRef.current = replayEnabled ? null : viewModel.groupingState;
+        return viewModel;
+    }, [
+        dialogueHistory,
+        focusedRuntimeEvent,
+        juryDialogueHistory,
+        participants,
+        replayEnabled,
+        teamDialogueHistory,
+        visibleEventIds,
+    ]);
+
+    const rows = transcriptViewModel.rows;
+
+    useEffect(() => {
+        const sessionId = currentSessionId;
+        const rowsLength = rows.length;
+        const sessionChanged = previousSessionIdRef.current !== sessionId;
+        const replayChanged = previousReplayEnabledRef.current !== replayEnabled;
+
+        setHistoryRowStart((currentStart) => resolveHistoryRowStart({
+            currentStart,
+            rowsLength,
+            previousRowsLength: previousRowsLengthRef.current,
+            replayEnabled,
+            sessionChanged,
+            replayChanged,
+            initialWindowSize: INITIAL_HISTORY_ROW_WINDOW,
+        }));
+
+        previousSessionIdRef.current = sessionId;
+        previousReplayEnabledRef.current = replayEnabled;
+        previousRowsLengthRef.current = rowsLength;
+    }, [currentSessionId, replayEnabled, rows.length]);
+
+    const renderedRowViewModels = useMemo(
+        () => (replayEnabled || historyRowStart <= 0
+            ? transcriptViewModel.rowViewModels
+            : transcriptViewModel.rowViewModels.slice(historyRowStart)),
+        [historyRowStart, replayEnabled, transcriptViewModel.rowViewModels],
+    );
+    const hiddenHistoryRowCount = replayEnabled ? 0 : historyRowStart;
+    const consensusEntries = transcriptViewModel.consensusEntries;
+    const consensusFocused = transcriptViewModel.consensusFocused;
+
+    const estimateRowHeight = useCallback((index: number) => {
+        const viewModel = renderedRowViewModels[index];
+        if (!viewModel) {
+            return DEFAULT_CHAT_ROW_HEIGHT;
+        }
+
+        const baseHeight = viewModel.row.system ? 96 : 260;
+        const insightCount = viewModel.insightSections.length + viewModel.jurySections.length;
+        return baseHeight + insightCount * 64;
+    }, [renderedRowViewModels]);
+
+    const virtualItemHeights = useMemo(
+        () => renderedRowViewModels.map((viewModel, index) => rowHeights[viewModel.key] ?? estimateRowHeight(index)),
+        [estimateRowHeight, renderedRowViewModels, rowHeights],
+    );
+
+    const virtualWindow = useMemo(
+        () => computeVariableVirtualWindow({
+            itemHeights: virtualItemHeights,
+            scrollTop,
+            viewportHeight,
+            overscan: CHAT_ROW_OVERSCAN,
+        }),
+        [scrollTop, viewportHeight, virtualItemHeights],
+    );
+
+    const virtualRows = useMemo(
+        () => renderedRowViewModels.slice(virtualWindow.startIndex, virtualWindow.endIndex),
+        [renderedRowViewModels, virtualWindow.endIndex, virtualWindow.startIndex],
+    );
+
+    const getRenderedRowTop = useCallback((index: number) => (
+        virtualItemHeights.slice(0, index).reduce((sum, height) => sum + height, 0)
+    ), [virtualItemHeights]);
+
+    const setMeasuredRow = useCallback((key: string) => (node: HTMLDivElement | null) => {
+        const observers = measureObserversRef.current;
+        const previousObserver = observers.get(key);
+        if (previousObserver) {
+            previousObserver.disconnect();
+            observers.delete(key);
+        }
+
+        if (!node || typeof ResizeObserver === 'undefined') {
+            return;
+        }
+
+        const updateHeight = () => {
+            const nextHeight = Math.ceil(node.getBoundingClientRect().height);
+            setRowHeights((previous) => {
+                if (previous[key] === nextHeight) {
+                    return previous;
+                }
+                return { ...previous, [key]: nextHeight };
+            });
+        };
+
+        updateHeight();
+        const observer = new ResizeObserver(updateHeight);
+        observer.observe(node);
+        observers.set(key, observer);
+    }, []);
+
+    useEffect(() => () => {
+        measureObserversRef.current.forEach((observer) => observer.disconnect());
+        measureObserversRef.current.clear();
+    }, []);
 
     useLayoutEffect(() => {
         if (replayEnabled) return;
@@ -113,13 +288,7 @@ export default function ChatPanel() {
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
-    }, [
-        dialogueHistory,
-        teamDialogueHistory,
-        juryDialogueHistory,
-        currentTurn,
-        replayEnabled,
-    ]);
+    }, [dialogueHistory, teamDialogueHistory, juryDialogueHistory, currentTurn, replayEnabled]);
 
     useEffect(() => {
         const topElement = topOverlayRef.current;
@@ -311,11 +480,11 @@ export default function ChatPanel() {
 
             setFloatingInspectorRect((prev) => {
                 if (
-                    prev &&
-                    prev.x === nextRect.x &&
-                    prev.y === nextRect.y &&
-                    prev.width === nextRect.width &&
-                    prev.height === nextRect.height
+                    prev
+                    && prev.x === nextRect.x
+                    && prev.y === nextRect.y
+                    && prev.width === nextRect.width
+                    && prev.height === nextRect.height
                 ) {
                     return prev;
                 }
@@ -356,111 +525,6 @@ export default function ChatPanel() {
         overlayHeightsRef.current = nextHeights;
     }, [bottomOverlayHeight, topOverlayHeight]);
 
-    const visibleEventIds = useMemo(
-        () => (replayEnabled ? new Set(visibleRuntimeEvents.map((event) => event.event_id)) : null),
-        [replayEnabled, visibleRuntimeEvents],
-    );
-
-    const rows = useMemo(() => {
-        const history = replayEnabled && visibleEventIds
-            ? dialogueHistory.filter((entry) => !entry.event_id || visibleEventIds.has(entry.event_id))
-            : dialogueHistory;
-
-        return groupDialogue(history, participants);
-    }, [
-        dialogueHistory,
-        participants,
-        replayEnabled,
-        visibleEventIds,
-    ]);
-
-
-    useEffect(() => {
-        const sessionId = currentSessionId;
-        const rowsLength = rows.length;
-        const sessionChanged = previousSessionIdRef.current !== sessionId;
-        const replayChanged = previousReplayEnabledRef.current !== replayEnabled;
-
-        setHistoryRowStart((currentStart) => resolveHistoryRowStart({
-            currentStart,
-            rowsLength,
-            previousRowsLength: previousRowsLengthRef.current,
-            replayEnabled,
-            sessionChanged,
-            replayChanged,
-            initialWindowSize: INITIAL_HISTORY_ROW_WINDOW,
-        }));
-
-        previousSessionIdRef.current = sessionId;
-        previousReplayEnabledRef.current = replayEnabled;
-        previousRowsLengthRef.current = rowsLength;
-    }, [currentSessionId, replayEnabled, rows.length]);
-
-
-    const renderedRows = useMemo(
-        () => (replayEnabled || historyRowStart <= 0 ? rows : rows.slice(historyRowStart)),
-        [historyRowStart, replayEnabled, rows],
-    );
-    const hiddenHistoryRowCount = replayEnabled ? 0 : historyRowStart;
-
-    const visibleTeamDiscussion = useMemo(() => {
-        if (!replayEnabled || !visibleEventIds) {
-            return teamDialogueHistory;
-        }
-
-        return teamDialogueHistory.filter((entry) => !entry.event_id || visibleEventIds.has(entry.event_id));
-    }, [
-        teamDialogueHistory,
-        replayEnabled,
-        visibleEventIds,
-    ]);
-
-    const visibleJuryDiscussion = useMemo(() => {
-        if (!replayEnabled || !visibleEventIds) {
-            return juryDialogueHistory;
-        }
-
-        return juryDialogueHistory.filter((entry) => !entry.event_id || visibleEventIds.has(entry.event_id));
-    }, [
-        juryDialogueHistory,
-        replayEnabled,
-        visibleEventIds,
-    ]);
-
-
-    const teamDiscussionMap = useMemo(
-        () => buildSpeakerDiscussionMap(visibleTeamDiscussion),
-        [visibleTeamDiscussion],
-    );
-    const juryDiscussionMap = useMemo(
-        () => buildTurnDiscussionMap(visibleJuryDiscussion),
-        [visibleJuryDiscussion],
-    );
-    const consensusEntries = useMemo(
-        () => visibleJuryDiscussion.filter((entry) => entry.role === 'consensus_summary'),
-        [visibleJuryDiscussion],
-    );
-
-    const focusedRuntimeEvent = useMemo(
-        () =>
-            focusedRuntimeEventId
-                ? visibleRuntimeEvents.find((event) => event.event_id === focusedRuntimeEventId) ?? null
-                : null,
-        [focusedRuntimeEventId, visibleRuntimeEvents],
-    );
-    const consensusFocused = focusedRuntimeEvent?.type === 'consensus_summary';
-
-    const focusedRowIndex = useMemo(() => {
-        if (!focusedRuntimeEvent) {
-            return -1;
-        }
-
-        return rows.findIndex((row) => {
-            const focusState = resolveRowFocus(row, focusedRuntimeEvent);
-            return focusState.agent || focusState.judge || focusState.system;
-        });
-    }, [focusedRuntimeEvent, rows]);
-
     useLayoutEffect(() => {
         const previousScrollHeight = pendingHistoryPrependScrollHeightRef.current;
         const container = scrollRef.current;
@@ -471,23 +535,54 @@ export default function ChatPanel() {
             container.scrollTop += scrollDelta;
         }
         pendingHistoryPrependScrollHeightRef.current = null;
-    }, [renderedRows.length]);
+    }, [renderedRowViewModels.length, virtualWindow.paddingBottom, virtualWindow.paddingTop]);
 
     useEffect(() => {
-        if (replayEnabled || !focusedRuntimeEventId || focusedRowIndex < 0) {
+        if (replayEnabled || !focusedRuntimeEventId || transcriptViewModel.focusedRowIndex < 0) {
             return;
         }
 
-        setHistoryRowStart((currentStart) => revealFocusedHistoryRow(currentStart, focusedRowIndex));
-    }, [focusedRowIndex, focusedRuntimeEventId, replayEnabled]);
+        setHistoryRowStart((currentStart) => revealFocusedHistoryRow(currentStart, transcriptViewModel.focusedRowIndex));
+    }, [focusedRuntimeEventId, replayEnabled, transcriptViewModel.focusedRowIndex]);
 
     useEffect(() => {
         if (!focusedRuntimeEventId) return;
         const container = scrollRef.current;
         if (!container) return;
+
         const target = container.querySelector('[data-row-focused="true"]') as HTMLElement | null;
-        target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }, [focusedRuntimeEventId, renderedRows]);
+        if (target) {
+            target.scrollIntoView({
+                block: 'center',
+                behavior: smoothScrollSuppressed ? 'auto' : 'smooth',
+            });
+            return;
+        }
+
+        const renderedFocusedIndex = replayEnabled
+            ? transcriptViewModel.focusedRowIndex
+            : transcriptViewModel.focusedRowIndex - historyRowStart;
+        if (renderedFocusedIndex < 0) {
+            return;
+        }
+
+        const top = getRenderedRowTop(renderedFocusedIndex);
+        const height = virtualItemHeights[renderedFocusedIndex] ?? DEFAULT_CHAT_ROW_HEIGHT;
+        const targetScrollTop = Math.max(0, top - (container.clientHeight / 2) + (height / 2));
+        container.scrollTo({
+            top: targetScrollTop,
+            behavior: smoothScrollSuppressed ? 'auto' : 'smooth',
+        });
+    }, [
+        focusedRuntimeEventId,
+        getRenderedRowTop,
+        historyRowStart,
+        replayEnabled,
+        smoothScrollSuppressed,
+        transcriptViewModel.focusedRowIndex,
+        virtualItemHeights,
+        virtualRows,
+    ]);
 
     const startFloatingInspectorInteraction = (
         event: ReactPointerEvent<HTMLElement>,
@@ -503,7 +598,6 @@ export default function ChatPanel() {
             document.body.style.cursor = interactionCursor(interaction);
         }
     };
-
 
     const handleFloatingInspectorMoveStart = (event: ReactPointerEvent<HTMLElement>) => {
         const currentRect = floatingInspectorRectRef.current;
@@ -570,12 +664,22 @@ export default function ChatPanel() {
     const handleScroll = () => {
         const container = scrollRef.current;
         if (!container || replayEnabled) return;
+
+        setScrollTop(container.scrollTop);
+        setViewportHeight(container.clientHeight);
         autoScrollEnabledRef.current = isElementNearBottom(container);
 
         if (hiddenHistoryRowCount > 0 && container.scrollTop <= HISTORY_ROW_PRELOAD_THRESHOLD) {
             loadOlderHistoryRows();
         }
     };
+
+    useEffect(() => {
+        const container = scrollRef.current;
+        if (!container) return;
+        setViewportHeight(container.clientHeight);
+        setScrollTop(container.scrollTop);
+    }, [currentSessionId, renderedRowViewModels.length]);
 
     return (
         <motion.section
@@ -905,7 +1009,7 @@ export default function ChatPanel() {
                             paddingBottom: `${bottomOverlayHeight + 32}px`,
                             display: 'flex',
                             flexDirection: 'column',
-                            scrollBehavior: 'smooth',
+                            scrollBehavior: smoothScrollSuppressed ? 'auto' : 'smooth',
                             gap: '10px',
                         }}
                     >
@@ -929,73 +1033,36 @@ export default function ChatPanel() {
                                 </button>
                             </div>
                         )}
-                        {(() => {
-                            return renderedRows.map((row, idx) => {
-                                const turn = row.turn ?? row.agent?.turn ?? row.judge?.turn;
-                                const agentRole = row.agent?.role;
-                                const focusState = resolveRowFocus(row, focusedRuntimeEvent);
-                                const sections: InsightSection[] = [];
-                                const teamKey = speakerInsightKey(turn, agentRole);
-                                const teamEntries = teamKey ? teamDiscussionMap.get(teamKey) ?? [] : [];
-                                if (teamEntries.length) {
-                                    sections.push({
-                                        key: `team-${teamKey}`,
-                                        title: `${sideLabel(agentRole)}组内讨论`,
-                                        accent: agentRole === 'opposer' ? 'var(--color-opposer)' : 'var(--color-proposer)',
-                                        entries: teamEntries,
-                                    });
-                                }
 
-                                const agentKey = row.agent?.timestamp || `agent-${idx}`;
-                                const judgeKey = row.judge?.timestamp || `judge-${idx}`;
-                                const nextRow = renderedRows[idx + 1];
-                                const nextTurn = nextRow?.turn ?? nextRow?.agent?.turn ?? nextRow?.judge?.turn;
-                                const isLastRowOfTurn = turn !== undefined && nextTurn !== turn;
-                                const juryEntries = isLastRowOfTurn && turn !== undefined
-                                    ? juryDiscussionMap.get(turn) ?? []
-                                    : [];
-                                const safeTurn = turn ?? 0;
-                                const juryFocused =
-                                    turn !== undefined
-                                    && (
-                                        focusedRuntimeEvent?.type === 'jury_discussion'
-                                        || focusedRuntimeEvent?.type === 'jury_summary'
-                                    )
-                                    && eventMatchesTurn(focusedRuntimeEvent, turn);
+                        <div style={{ height: `${virtualWindow.paddingTop}px`, flexShrink: 0 }} />
+                        {virtualRows.map((viewModel, index) => {
+                            const renderedIndex = virtualWindow.startIndex + index;
+                            const rowFocused = viewModel.focus.agent || viewModel.focus.judge || viewModel.focus.system;
+                            const animated = rowFocused || renderedIndex >= Math.max(0, renderedRowViewModels.length - 3);
 
-                                return (
-                                    <Fragment key={`${agentKey}-${judgeKey}`}>
-                                        <div
-                                            data-row-focused={focusState.agent || focusState.judge || focusState.system ? 'true' : 'false'}
-                                        >
-                                            <MessageRow
-                                                agentEntry={row.agent}
-                                                judgeEntry={row.judge}
-                                                systemEntry={row.system}
-                                                highlightAgent={focusState.agent}
-                                                highlightJudge={focusState.judge}
-                                                highlightSystem={focusState.system}
-                                                insightSections={sections}
-                                            />
+                            return (
+                                <div key={viewModel.key} ref={setMeasuredRow(viewModel.key)}>
+                                    <div data-row-focused={rowFocused ? 'true' : 'false'}>
+                                        <MessageRow
+                                            agentEntry={viewModel.row.agent}
+                                            judgeEntry={viewModel.row.judge}
+                                            systemEntry={viewModel.row.system}
+                                            highlightAgent={viewModel.focus.agent}
+                                            highlightJudge={viewModel.focus.judge}
+                                            highlightSystem={viewModel.focus.system}
+                                            insightSections={viewModel.insightSections}
+                                            animated={animated}
+                                        />
+                                    </div>
+                                    {!!viewModel.jurySections.length && (
+                                        <div data-row-focused={viewModel.juryFocused ? 'true' : 'false'}>
+                                            <RoundInsights sections={viewModel.jurySections} />
                                         </div>
-                                        {!!juryEntries.length && (
-                                            <div data-row-focused={juryFocused ? 'true' : 'false'}>
-                                                <RoundInsights
-                                                    sections={[
-                                                        {
-                                                            key: `jury-${safeTurn}`,
-                                                            title: `第 ${safeTurn + 1} 轮陪审团评议`,
-                                                            accent: 'var(--accent-indigo)',
-                                                            entries: juryEntries,
-                                                        },
-                                                    ]}
-                                                />
-                                            </div>
-                                        )}
-                                    </Fragment>
-                                );
-                            });
-                        })()}
+                                    )}
+                                </div>
+                            );
+                        })}
+                        <div style={{ height: `${virtualWindow.paddingBottom}px`, flexShrink: 0 }} />
 
                         {!!consensusEntries.length && (
                             <div data-row-focused={consensusFocused ? 'true' : 'false'}>
@@ -1051,8 +1118,8 @@ export default function ChatPanel() {
                                     justifyContent: 'center',
                                     gap: '4px',
                                     cursor:
-                                        floatingInspectorActive &&
-                                        floatingInspectorInteractionRef.current?.mode === 'move'
+                                        floatingInspectorActive
+                                        && floatingInspectorInteractionRef.current?.mode === 'move'
                                             ? 'grabbing'
                                             : 'grab',
                                     border: '1px solid var(--border-subtle)',

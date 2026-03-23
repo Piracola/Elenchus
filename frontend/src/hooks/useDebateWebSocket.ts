@@ -32,6 +32,25 @@ export function useDebateWebSocket(sessionId: string | null) {
     const isMounted = useRef(true);
 
     useEffect(() => {
+        if (typeof document === 'undefined') {
+            return;
+        }
+
+        const syncVisibility = () => {
+            getStore().markDocumentVisibility(document.visibilityState !== 'hidden');
+        };
+
+        syncVisibility();
+        document.addEventListener('visibilitychange', syncVisibility);
+        window.addEventListener('focus', syncVisibility);
+
+        return () => {
+            document.removeEventListener('visibilitychange', syncVisibility);
+            window.removeEventListener('focus', syncVisibility);
+        };
+    }, []);
+
+    useEffect(() => {
         if (!sessionId) return;
         isMounted.current = true;
 

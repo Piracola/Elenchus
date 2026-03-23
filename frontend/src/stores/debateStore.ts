@@ -35,7 +35,7 @@ import { upsertSessionListItem } from '../utils/sessionList';
 
 // ── Store shape ─────────────────────────────────────────────────
 
-interface DebateState {
+export interface DebateState {
     // Session list (sidebar)
     sessions: SessionListItem[];
     currentSession: Session | null;
@@ -48,6 +48,8 @@ interface DebateState {
     replayEnabled: boolean;
     replayCursor: number;
     hasOlderRuntimeEvents: boolean;
+    isDocumentVisible: boolean;
+    visibilityResumeToken: number;
 
     // Real-time debate state
     isConnected: boolean;
@@ -74,6 +76,7 @@ interface DebateState {
     setConnected: (connected: boolean) => void;
     setDebating: (debating: boolean) => void;
     setPhase: (phase: DebatePhase, status?: string, node?: string) => void;
+    markDocumentVisibility: (visible: boolean) => void;
 
     // Event reducer entrypoint
     applyRuntimeEvent: (event: RuntimeEvent) => void;
@@ -119,6 +122,8 @@ const initialState = {
     replayEnabled: false,
     replayCursor: -1,
     hasOlderRuntimeEvents: false,
+    isDocumentVisible: typeof document === 'undefined' ? true : document.visibilityState !== 'hidden',
+    visibilityResumeToken: 0,
     isConnected: false,
     isDebating: false,
     phase: 'idle' as DebatePhase,
@@ -181,6 +186,16 @@ export const useDebateStore = create<DebateState>((set) => ({
     setDebating: (debating) => set({ isDebating: debating }),
     setPhase: (phase, status = '', node = '') =>
         set({ phase, currentStatus: status, currentNode: node }),
+    markDocumentVisibility: (visible) =>
+        set((state) => {
+            if (state.isDocumentVisible === visible) {
+                return {};
+            }
+            return {
+                isDocumentVisible: visible,
+                visibilityResumeToken: visible ? state.visibilityResumeToken + 1 : state.visibilityResumeToken,
+            };
+        }),
 
     // Event reducer
     applyRuntimeEvent: (rawEvent) =>

@@ -2,6 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { api } from '../../api/client';
 import { useDebateStore } from '../../stores/debateStore';
+import { useForegroundDebateSelector } from '../../hooks/useForegroundDebateSelector';
 import type { RuntimeEvent } from '../../types';
 import { getEventNode } from '../../utils/eventFocus';
 import { getLiveGraphNodeLabel } from '../../utils/liveGraph';
@@ -90,14 +91,14 @@ export default function ExecutionTimeline({
     embedded = false,
     fillHeight = false,
 }: ExecutionTimelineProps) {
-    const runtimeEvents = useDebateStore((state) => state.runtimeEvents);
+    const runtimeEvents = useForegroundDebateSelector((state) => state.runtimeEvents);
     const currentSessionId = useDebateStore((state) => state.currentSession?.id ?? null);
     const currentTopic = useDebateStore((state) => state.currentSession?.topic ?? '');
     const debateMode = useDebateStore((state) => state.currentSession?.debate_mode ?? 'standard');
-    const replayEnabled = useDebateStore((state) => state.replayEnabled);
-    const replayCursor = useDebateStore((state) => state.replayCursor);
-    const focusedRuntimeEventId = useDebateStore((state) => state.focusedRuntimeEventId);
-    const hasOlderRuntimeEvents = useDebateStore((state) => state.hasOlderRuntimeEvents);
+    const replayEnabled = useForegroundDebateSelector((state) => state.replayEnabled);
+    const replayCursor = useForegroundDebateSelector((state) => state.replayCursor);
+    const focusedRuntimeEventId = useForegroundDebateSelector((state) => state.focusedRuntimeEventId);
+    const hasOlderRuntimeEvents = useForegroundDebateSelector((state) => state.hasOlderRuntimeEvents);
     const setFocusedRuntimeEventId = useDebateStore((state) => state.setFocusedRuntimeEventId);
     const setReplayEnabled = useDebateStore((state) => state.setReplayEnabled);
     const setReplayCursor = useDebateStore((state) => state.setReplayCursor);

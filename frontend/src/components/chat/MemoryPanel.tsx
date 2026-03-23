@@ -6,6 +6,7 @@
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useDebateStore } from '../../stores/debateStore';
+import { useForegroundDebateSelector } from '../../hooks/useForegroundDebateSelector';
 import { buildMemoryGraph, getMemoryLaneY } from '../../utils/memoryGraph';
 import {
     buildMemoryWriteViews,
@@ -60,9 +61,9 @@ function pathBetween(
 }
 
 export default function MemoryPanel({ compact = false, embedded = false }: MemoryPanelProps) {
-    const visibleRuntimeEvents = useDebateStore((state) => state.visibleRuntimeEvents);
-    const replayEnabled = useDebateStore((state) => state.replayEnabled);
-    const focusedRuntimeEventId = useDebateStore((state) => state.focusedRuntimeEventId);
+    const visibleRuntimeEvents = useForegroundDebateSelector((state) => state.visibleRuntimeEvents);
+    const replayEnabled = useForegroundDebateSelector((state) => state.replayEnabled);
+    const focusedRuntimeEventId = useForegroundDebateSelector((state) => state.focusedRuntimeEventId);
     const setFocusedRuntimeEventId = useDebateStore((state) => state.setFocusedRuntimeEventId);
     const [collapsed, setCollapsed] = useState(embedded ? false : true);
     const activePanel = embedded || !collapsed;
@@ -275,8 +276,8 @@ export default function MemoryPanel({ compact = false, embedded = false }: Memor
                                             r={node.radius + 5}
                                             fill={typeColor(node.type)}
                                             opacity={isFocused ? 0.16 : 0.08}
-                                            animate={isFocused ? { opacity: [0.12, 0.22, 0.12] } : { opacity: 0.08 }}
-                                            transition={isFocused ? { repeat: Infinity, duration: 1.3 } : undefined}
+                                            animate={activePanel && isFocused ? { opacity: [0.12, 0.22, 0.12] } : { opacity: 0.08 }}
+                                            transition={activePanel && isFocused ? { repeat: Infinity, duration: 1.3 } : undefined}
                                         />
                                         <motion.circle
                                             cx={node.x}
@@ -419,7 +420,7 @@ export default function MemoryPanel({ compact = false, embedded = false }: Memor
                                                     fill={typeColor(type)}
                                                     opacity={type === point.type ? 1 : 0.78}
                                                     style={{ cursor: 'pointer' }}
-                                                    whileHover={{ scaleY: 1.04 }}
+                                                    whileHover={activePanel ? { scaleY: 1.04 } : undefined}
                                                     onClick={() => setFocusedRuntimeEventId(point.eventId)}
                                                 />
                                             );
@@ -572,8 +573,8 @@ export default function MemoryPanel({ compact = false, embedded = false }: Memor
                                 >
                                     <motion.div
                                         initial={{ width: 0 }}
-                                        animate={{ width: `${item.importance}%` }}
-                                        transition={{ duration: 0.35 }}
+                                        animate={activePanel ? { width: `${item.importance}%` } : { width: `${item.importance}%` }}
+                                        transition={activePanel ? { duration: 0.35 } : undefined}
                                         style={{
                                             height: '100%',
                                             borderRadius: '999px',
