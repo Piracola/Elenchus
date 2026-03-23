@@ -9,7 +9,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronDown, FileJson, FileText, PanelLeftOpen } from 'lucide-react';
 import { api } from '../api/client';
-import { getCollapsedAgentMessagesForSession, useDebateStore } from '../stores/debateStore';
+import { useDebateStore } from '../stores/debateStore';
 import { useForegroundDebateSelector } from '../hooks/useForegroundDebateSelector';
 import { useSettingsStore, MESSAGE_WIDTH_VALUES } from '../stores/settingsStore';
 import { DISPLAY_FONT_TOKENS } from '../config/display';
@@ -53,6 +53,9 @@ const HISTORY_ROW_BATCH_SIZE = 80;
 const HISTORY_ROW_PRELOAD_THRESHOLD = 240;
 const CHAT_ROW_OVERSCAN = 5;
 const DEFAULT_CHAT_ROW_HEIGHT = 320;
+const CHAT_ROW_HEIGHT_JITTER_PX = 1;
+const CHAT_SCROLL_EPSILON = 2;
+const EMPTY_COLLAPSED_AGENT_MESSAGES: Record<string, boolean> = {};
 
 interface ChatPanelProps {
     isSidebarCollapsed: boolean;
@@ -83,7 +86,11 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
     const visibleRuntimeEvents = useForegroundDebateSelector((state) => state.visibleRuntimeEvents);
     const replayEnabled = useForegroundDebateSelector((state) => state.replayEnabled);
     const focusedRuntimeEventId = useForegroundDebateSelector((state) => state.focusedRuntimeEventId);
-    const collapsedAgentMessages = useDebateStore((state) => getCollapsedAgentMessagesForSession(state, currentSessionId));
+    const collapsedAgentMessages = useDebateStore((state) => (
+        currentSessionId
+            ? state.collapsedAgentMessagesBySession[currentSessionId] ?? EMPTY_COLLAPSED_AGENT_MESSAGES
+            : EMPTY_COLLAPSED_AGENT_MESSAGES
+    ));
     const toggleAgentMessageCollapsed = useDebateStore((state) => state.toggleAgentMessageCollapsed);
     const setAllAgentMessagesCollapsed = useDebateStore((state) => state.setAllAgentMessagesCollapsed);
     const hasCurrentSession = currentSessionId !== null;
@@ -106,6 +113,8 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
     const transcriptGroupingStateRef = useRef<DialogueGroupingState | null>(null);
     const measureObserversRef = useRef<Map<string, ResizeObserver>>(new Map());
     const measureCallbacksRef = useRef<Map<string, (node: HTMLDivElement | null) => void>>(new Map());
+    const pendingRowHeightsRef = useRef<Map<string, number>>(new Map());
+    const rowHeightFlushFrameRef = useRef<number | null>(null);
     const smoothScrollRestoreRef = useRef<number | null>(null);
 
     const [topOverlayHeight, setTopOverlayHeight] = useState(0);
@@ -134,6 +143,11 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
 
     useEffect(() => {
         transcriptGroupingStateRef.current = null;
+        if (rowHeightFlushFrameRef.current !== null) {
+            cancelAnimationFrame(rowHeightFlushFrameRef.current);
+            rowHeightFlushFrameRef.current = null;
+        }
+        pendingRowHeightsRef.current.clear();
         setRowHeights({});
         autoScrollEnabledRef.current = true;
         pendingHistoryPrependScrollHeightRef.current = null;
@@ -299,6 +313,44 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
         virtualItemHeights.slice(0, index).reduce((sum, height) => sum + height, 0)
     ), [virtualItemHeights]);
 
+    const flushPendingRowHeights = useCallback(() => {
+        rowHeightFlushFrameRef.current = null;
+        const pendingEntries = Array.from(pendingRowHeightsRef.current.entries());
+        if (!pendingEntries.length) {
+            return;
+        }
+
+        pendingRowHeightsRef.current.clear();
+        setRowHeights((previous) => {
+            let nextState = previous;
+            let changed = false;
+
+            for (const [key, nextHeight] of pendingEntries) {
+                const previousHeight = previous[key];
+                if (
+                    previousHeight !== undefined
+                    && Math.abs(previousHeight - nextHeight) <= CHAT_ROW_HEIGHT_JITTER_PX
+                ) {
+                    continue;
+                }
+                if (nextState === previous) {
+                    nextState = { ...previous };
+                }
+                nextState[key] = nextHeight;
+                changed = true;
+            }
+
+            return changed ? nextState : previous;
+        });
+    }, []);
+
+    const scheduleRowHeightFlush = useCallback(() => {
+        if (rowHeightFlushFrameRef.current !== null) {
+            return;
+        }
+        rowHeightFlushFrameRef.current = requestAnimationFrame(flushPendingRowHeights);
+    }, [flushPendingRowHeights]);
+
     const setMeasuredRow = useCallback((key: string) => {
         const callbacks = measureCallbacksRef.current;
         const cached = callbacks.get(key);
@@ -320,12 +372,15 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
 
             const updateHeight = () => {
                 const nextHeight = Math.ceil(node.getBoundingClientRect().height);
-                setRowHeights((previous) => {
-                    if (previous[key] === nextHeight) {
-                        return previous;
-                    }
-                    return { ...previous, [key]: nextHeight };
-                });
+                const pendingHeight = pendingRowHeightsRef.current.get(key);
+                if (
+                    pendingHeight !== undefined
+                    && Math.abs(pendingHeight - nextHeight) <= CHAT_ROW_HEIGHT_JITTER_PX
+                ) {
+                    return;
+                }
+                pendingRowHeightsRef.current.set(key, nextHeight);
+                scheduleRowHeightFlush();
             };
 
             updateHeight();
@@ -342,29 +397,28 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
         const activeKeys = new Set(renderedRowViewModels.map((viewModel) => viewModel.key));
         const callbacks = measureCallbacksRef.current;
         const observers = measureObserversRef.current;
+        const pendingHeights = pendingRowHeightsRef.current;
 
         callbacks.forEach((_, key) => {
             if (activeKeys.has(key)) {
                 return;
             }
             callbacks.delete(key);
+            pendingHeights.delete(key);
             const observer = observers.get(key);
             if (observer) {
                 observer.disconnect();
                 observers.delete(key);
             }
         });
-
-        setRowHeights((previous) => {
-            const entries = Object.entries(previous).filter(([key]) => activeKeys.has(key));
-            if (entries.length === Object.keys(previous).length) {
-                return previous;
-            }
-            return Object.fromEntries(entries);
-        });
     }, [renderedRowViewModels]);
 
     useEffect(() => () => {
+        if (rowHeightFlushFrameRef.current !== null) {
+            cancelAnimationFrame(rowHeightFlushFrameRef.current);
+            rowHeightFlushFrameRef.current = null;
+        }
+        pendingRowHeightsRef.current.clear();
         measureObserversRef.current.forEach((observer) => observer.disconnect());
         measureObserversRef.current.clear();
         measureCallbacksRef.current.clear();
@@ -640,10 +694,16 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
 
         const target = container.querySelector('[data-row-focused="true"]') as HTMLElement | null;
         if (target) {
-            target.scrollIntoView({
-                block: 'center',
-                behavior: smoothScrollSuppressed ? 'auto' : 'smooth',
-            });
+            const containerRect = container.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+            const targetAlreadyVisible = targetRect.top >= containerRect.top + CHAT_SCROLL_EPSILON
+                && targetRect.bottom <= containerRect.bottom - CHAT_SCROLL_EPSILON;
+            if (!targetAlreadyVisible) {
+                target.scrollIntoView({
+                    block: 'center',
+                    behavior: smoothScrollSuppressed ? 'auto' : 'smooth',
+                });
+            }
             return;
         }
 
@@ -657,6 +717,9 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
         const top = getRenderedRowTop(renderedFocusedIndex);
         const height = virtualItemHeights[renderedFocusedIndex] ?? DEFAULT_CHAT_ROW_HEIGHT;
         const targetScrollTop = Math.max(0, top - (container.clientHeight / 2) + (height / 2));
+        if (Math.abs(container.scrollTop - targetScrollTop) <= CHAT_SCROLL_EPSILON) {
+            return;
+        }
         container.scrollTo({
             top: targetScrollTop,
             behavior: smoothScrollSuppressed ? 'auto' : 'smooth',

@@ -112,12 +112,108 @@ describe('debateStore replay state', () => {
             status: 'in_progress',
         });
 
-        useDebateStore.getState().hydrateRuntimeEvents([], false);
+        useDebateStore.getState().hydrateRuntimeEvents([
+            makeEvent({
+                event_id: 'evt_status',
+                seq: 1,
+                type: 'status',
+                phase: 'judging',
+                payload: { content: '裁判评估中...', node: 'judge' },
+            }),
+            makeEvent({
+                event_id: 'evt_fact',
+                seq: 2,
+                type: 'fact_check_start',
+                payload: {},
+            }),
+        ], false);
 
         const state = useDebateStore.getState();
         expect(state.isDebating).toBe(false);
         expect(state.phase).toBe('idle');
         expect(state.currentStatus).toBe('');
+        expect(state.currentNode).toBe('');
+        expect(state.runtimeEvents).toHaveLength(2);
+        expect(state.visibleRuntimeEvents).toHaveLength(2);
+    });
+
+    it('keeps terminal historical sessions on their derived terminal state', () => {
+        useDebateStore.getState().reset();
+        useDebateStore.getState().setCurrentSession({
+            ...makeSession(),
+            status: 'completed',
+        });
+
+        useDebateStore.getState().hydrateRuntimeEvents([
+            makeEvent({
+                event_id: 'evt_done',
+                seq: 3,
+                type: 'debate_complete',
+                payload: { total_turns: 3, final_scores: {} },
+            }),
+        ]);
+
+        let state = useDebateStore.getState();
+        expect(state.isDebating).toBe(false);
+        expect(state.phase).toBe('complete');
+        expect(state.currentStatus).toBe('辩论已完成');
+
+        useDebateStore.getState().reset();
+        useDebateStore.getState().setCurrentSession({
+            ...makeSession(),
+            status: 'error',
+        });
+
+        useDebateStore.getState().hydrateRuntimeEvents([
+            makeEvent({
+                event_id: 'evt_error',
+                seq: 4,
+                type: 'error',
+                payload: { content: '出现错误' },
+            }),
+        ]);
+
+        state = useDebateStore.getState();
+        expect(state.isDebating).toBe(false);
+        expect(state.phase).toBe('error');
+        expect(state.currentStatus).toBe('出现错误');
+    });
+
+    it('switches a resumable session into a fresh live initialization state when continuing', () => {
+        const store = useDebateStore.getState();
+        store.hydrateRuntimeEvents([
+            makeEvent({
+                event_id: 'evt_judge',
+                seq: 1,
+                type: 'judge_start',
+                payload: {},
+            }),
+        ]);
+
+        store.setCurrentSession({
+            ...makeSession(),
+            status: 'in_progress',
+        });
+        store.hydrateRuntimeEvents([
+            makeEvent({
+                event_id: 'evt_old_status',
+                seq: 2,
+                type: 'status',
+                phase: 'judging',
+                payload: { content: '裁判评估中...', node: 'judge' },
+            }),
+        ]);
+
+        store.setDebating(true);
+        store.setPhase('initializing', '辩论准备中...');
+
+        const state = useDebateStore.getState();
+        expect(state.isDebating).toBe(true);
+        expect(state.phase).toBe('initializing');
+        expect(state.currentStatus).toBe('辩论准备中...');
+        expect(state.currentNode).toBe('');
+        expect(state.runtimeEvents).toHaveLength(1);
+        expect(state.runtimeEvents[0]?.event_id).toBe('evt_old_status');
     });
 
     it('keeps the sidebar summary in sync with runtime progress', () => {
@@ -237,6 +333,41 @@ describe('debateStore replay state', () => {
         expect(state.visibleRuntimeEvents).toHaveLength(2);
         expect(state.hasOlderRuntimeEvents).toBe(true);
         expect(state.lastEventSeq).toBe(11);
+    });
+
+    it('returns historical runtime state to a stable realtime window after replay focus cycle', () => {
+        const store = useDebateStore.getState();
+        store.setCurrentSession({
+            ...makeSession(),
+            status: 'completed',
+        });
+        store.hydrateRuntimeEvents(
+            [
+                makeEvent({ event_id: 'evt_10', seq: 10, type: 'status', payload: { content: 'A' } }),
+                makeEvent({ event_id: 'evt_11', seq: 11, type: 'status', payload: { content: 'B' } }),
+                makeEvent({ event_id: 'evt_12', seq: 12, type: 'status', payload: { content: 'C' } }),
+            ],
+            true,
+        );
+
+        store.setReplayCursor(1);
+        store.setFocusedRuntimeEventId('evt_11');
+
+        let state = useDebateStore.getState();
+        expect(state.replayEnabled).toBe(true);
+        expect(state.replayCursor).toBe(1);
+        expect(state.focusedRuntimeEventId).toBe('evt_11');
+        expect(state.visibleRuntimeEvents.map((event) => event.event_id)).toEqual(['evt_10', 'evt_11']);
+
+        store.exitReplay();
+
+        state = useDebateStore.getState();
+        expect(state.replayEnabled).toBe(false);
+        expect(state.focusedRuntimeEventId).toBeNull();
+        expect(state.replayCursor).toBe(2);
+        expect(state.visibleRuntimeEvents.map((event) => event.event_id)).toEqual(['evt_10', 'evt_11', 'evt_12']);
+        expect(state.hasOlderRuntimeEvents).toBe(true);
+        expect(state.phase).toBe('complete');
     });
 
     it('preserves replay focus when older runtime history is prepended', () => {
