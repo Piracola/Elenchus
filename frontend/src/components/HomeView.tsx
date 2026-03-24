@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, ArrowRight, ChevronDown, PanelLeftOpen, Settings2 } from 'lucide-react';
+import { ArrowRight, ChevronDown, Settings2 } from 'lucide-react';
 
 import { useAgentConfigs } from '../hooks/useAgentConfigs';
 import { useSessionCreate } from '../hooks/useSessionCreate';
@@ -21,8 +21,8 @@ import {
 } from '../utils/debateSession';
 import AgentConfigPanel from './shared/AgentConfigPanel';
 import BrandIcon from './shared/BrandIcon';
-
-const SOPHISTRY_MODE_WARNING = '诡辩实验模式会鼓励模型主动使用误导性修辞、标签施压、定义操控与叙事转移。它不代表事实结论，也不会提供裁判评分或搜索核验，请将其视为修辞对抗实验。';
+import SidebarExpandButton from './shared/SidebarExpandButton';
+import SophistryModeNotice from './shared/SophistryModeNotice';
 
 interface HomeViewProps {
     isSidebarCollapsed: boolean;
@@ -139,30 +139,17 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
             }}
         >
             {isSidebarCollapsed && (
-                <motion.button
-                    whileHover={{ y: -1 }}
-                    whileTap={{ scale: 0.98 }}
+                <SidebarExpandButton
                     onClick={onExpandSidebar}
                     style={{
                         position: 'absolute',
                         top: '20px',
                         left: '20px',
                         zIndex: 2,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '10px 12px',
-                        background: 'var(--bg-card)',
-                        color: 'var(--text-secondary)',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 'var(--radius-xl)',
                         boxShadow: 'var(--shadow-sm)',
-                        cursor: 'pointer',
+                        backdropFilter: undefined,
                     }}
-                    title="展开历史栏"
-                >
-                    <PanelLeftOpen size={16} />
-                </motion.button>
+                />
             )}
             <div
                 style={{
@@ -346,26 +333,9 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                             initial={{ opacity: 0, y: -8 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -8 }}
-                            style={{
-                                width: '100%',
-                                marginBottom: '16px',
-                                display: 'flex',
-                                gap: '12px',
-                                padding: '14px 16px',
-                                borderRadius: 'var(--radius-xl)',
-                                background: 'var(--mode-sophistry-card)',
-                                border: '1px solid var(--mode-sophistry-border)',
-                                boxShadow: 'var(--shadow-sm)',
-                                color: 'var(--text-secondary)',
-                            }}
+                            style={{ width: '100%', marginBottom: '16px' }}
                         >
-                            <AlertTriangle
-                                size={18}
-                                style={{ color: 'var(--mode-sophistry-accent)', flexShrink: 0, marginTop: '1px' }}
-                            />
-                            <div style={{ fontSize: homeFontSizes.warningBody, lineHeight: 1.65 }}>
-                                {SOPHISTRY_MODE_WARNING}
-                            </div>
+                            <SophistryModeNotice compact fontSize={homeFontSizes.warningBody} />
                         </motion.div>
                     )}
                 </AnimatePresence>

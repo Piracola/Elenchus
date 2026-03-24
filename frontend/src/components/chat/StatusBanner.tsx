@@ -5,7 +5,7 @@
 
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { useDebateStore } from '../../stores/debateStore';
+import { useRuntimeViewState } from '../../hooks/useDebateViewState';
 import { getEventNode } from '../../utils/eventFocus';
 import { getLiveGraphNodeLabel } from '../../utils/liveGraph';
 import { deriveRuntimeViewState } from '../../utils/replay';
@@ -25,16 +25,18 @@ const PHASE_LABELS: Record<string, string> = {
 };
 
 export default function StatusBanner() {
-    const sessionStatus = useDebateStore((state) => state.currentSession?.status ?? null);
-    const isDebating = useDebateStore((state) => state.isDebating);
-    const phase = useDebateStore((state) => state.phase);
-    const currentStatus = useDebateStore((state) => state.currentStatus);
-    const currentNode = useDebateStore((state) => state.currentNode);
-    const runtimeEventCount = useDebateStore((state) => state.runtimeEvents.length);
-    const visibleRuntimeEvents = useDebateStore((state) => state.visibleRuntimeEvents);
-    const focusedRuntimeEventId = useDebateStore((state) => state.focusedRuntimeEventId);
-    const replayEnabled = useDebateStore((state) => state.replayEnabled);
-    const replayCursor = useDebateStore((state) => state.replayCursor);
+    const {
+        sessionStatus,
+        isDebating,
+        phase,
+        currentStatus,
+        currentNode,
+        runtimeEventCount,
+        visibleRuntimeEvents,
+        focusedRuntimeEventId,
+        replayEnabled,
+        replayCursor,
+    } = useRuntimeViewState();
     const [expanded, setExpanded] = useState(false);
 
     const focusedEvent = useMemo(

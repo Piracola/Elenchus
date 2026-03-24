@@ -35,12 +35,12 @@ import { upsertSessionListItem } from '../utils/sessionList';
 
 // ── Store shape ─────────────────────────────────────────────────
 
-export interface DebateState {
-    // Session list (sidebar)
+export interface DebateSessionSlice {
     sessions: SessionListItem[];
     currentSession: Session | null;
+}
 
-    // Runtime observability
+export interface DebateRuntimeSlice {
     runtimeEvents: RuntimeEvent[];
     visibleRuntimeEvents: RuntimeEvent[];
     lastEventSeq: number;
@@ -51,35 +51,35 @@ export interface DebateState {
     isDocumentVisible: boolean;
     visibilityResumeToken: number;
     collapsedAgentMessagesBySession: Record<string, Record<string, boolean>>;
+}
 
-    // Real-time debate state
+export interface DebateConnectionSlice {
     isConnected: boolean;
     isDebating: boolean;
     phase: DebatePhase;
     currentStatus: string;
     currentNode: string;
+}
 
-    // Streaming speech buffer
+export interface DebateStreamingSlice {
     streamingRole: string;
     streamingContent: string;
+}
 
-    // Latest fact-check results
+export interface DebateSearchSlice {
     lastSearchResults: SearchResult[];
     searchResultCount: number;
+}
 
-    // Actions — session list
+export interface DebateActionSlice {
     setSessions: (
         sessions: SessionListItem[] | ((current: SessionListItem[]) => SessionListItem[])
     ) => void;
     setCurrentSession: (session: Session | null) => void;
-
-    // Actions — connection
     setConnected: (connected: boolean) => void;
     setDebating: (debating: boolean) => void;
     setPhase: (phase: DebatePhase, status?: string, node?: string) => void;
     markDocumentVisibility: (visible: boolean) => void;
-
-    // Event reducer entrypoint
     applyRuntimeEvent: (event: RuntimeEvent) => void;
     setFocusedRuntimeEventId: (eventId: string | null) => void;
     setReplayEnabled: (enabled: boolean) => void;
@@ -92,52 +92,70 @@ export interface DebateState {
     toggleAgentMessageCollapsed: (sessionId: string, collapseKey: string) => void;
     setAllAgentMessagesCollapsed: (sessionId: string, collapseKeys: string[], collapsed: boolean) => void;
     clearSessionCollapsedAgentMessages: (sessionId: string) => void;
-
-    // Actions — dialogue
     appendDialogueEntry: (entry: DialogueEntry) => void;
     startStreaming: (role: string) => void;
     appendStreamToken: (token: string) => void;
     endStreaming: (role: string, content: string, citations: string[], agentName?: string) => void;
-
-    // Actions — scores
     updateCurrentScores: (role: string, scores: TurnScore) => void;
     updateCumulativeScores: (scores: Record<string, Record<string, number[]>>) => void;
     advanceTurn: (turn: number) => void;
-
-    // Actions — search
     setSearchResults: (results: SearchResult[], count: number) => void;
-
-    // Actions — completion
     completeDebate: (finalScores: Record<string, Record<string, number[]>>, totalTurns: number) => void;
-
-    // Reset
     reset: () => void;
 }
 
+export interface DebateState
+    extends DebateSessionSlice,
+    DebateRuntimeSlice,
+    DebateConnectionSlice,
+    DebateStreamingSlice,
+    DebateSearchSlice,
+    DebateActionSlice {}
+
 // ── Initial state ───────────────────────────────────────────────
 
-const initialState = {
-    sessions: [] as SessionListItem[],
-    currentSession: null as Session | null,
-    runtimeEvents: [] as RuntimeEvent[],
-    visibleRuntimeEvents: [] as RuntimeEvent[],
+const initialSessionState: DebateSessionSlice = {
+    sessions: [],
+    currentSession: null,
+};
+
+const initialRuntimeState: DebateRuntimeSlice = {
+    runtimeEvents: [],
+    visibleRuntimeEvents: [],
     lastEventSeq: -1,
-    focusedRuntimeEventId: null as string | null,
+    focusedRuntimeEventId: null,
     replayEnabled: false,
     replayCursor: -1,
     hasOlderRuntimeEvents: false,
     isDocumentVisible: typeof document === 'undefined' ? true : document.visibilityState !== 'hidden',
     visibilityResumeToken: 0,
-    collapsedAgentMessagesBySession: {} as Record<string, Record<string, boolean>>,
+    collapsedAgentMessagesBySession: {},
+};
+
+const initialConnectionState: DebateConnectionSlice = {
     isConnected: false,
     isDebating: false,
-    phase: 'idle' as DebatePhase,
+    phase: 'idle',
     currentStatus: '',
     currentNode: '',
+};
+
+const initialStreamingState: DebateStreamingSlice = {
     streamingRole: '',
     streamingContent: '',
-    lastSearchResults: [] as SearchResult[],
+};
+
+const initialSearchState: DebateSearchSlice = {
+    lastSearchResults: [],
     searchResultCount: 0,
+};
+
+const initialState = {
+    ...initialSessionState,
+    ...initialRuntimeState,
+    ...initialConnectionState,
+    ...initialStreamingState,
+    ...initialSearchState,
 };
 
 function pruneCollapsedState(

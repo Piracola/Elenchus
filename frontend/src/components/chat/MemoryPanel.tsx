@@ -5,8 +5,7 @@
 
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useDebateStore } from '../../stores/debateStore';
-import { useForegroundDebateSelector } from '../../hooks/useForegroundDebateSelector';
+import { useRuntimeActions, useRuntimeViewState } from '../../hooks/useDebateViewState';
 import { buildMemoryGraph, getMemoryLaneY } from '../../utils/memoryGraph';
 import {
     buildMemoryWriteViews,
@@ -61,10 +60,8 @@ function pathBetween(
 }
 
 export default function MemoryPanel({ compact = false, embedded = false }: MemoryPanelProps) {
-    const visibleRuntimeEvents = useForegroundDebateSelector((state) => state.visibleRuntimeEvents);
-    const replayEnabled = useForegroundDebateSelector((state) => state.replayEnabled);
-    const focusedRuntimeEventId = useForegroundDebateSelector((state) => state.focusedRuntimeEventId);
-    const setFocusedRuntimeEventId = useDebateStore((state) => state.setFocusedRuntimeEventId);
+    const { visibleRuntimeEvents, replayEnabled, focusedRuntimeEventId } = useRuntimeViewState();
+    const { setFocusedRuntimeEventId } = useRuntimeActions();
     const [collapsed, setCollapsed] = useState(embedded ? false : true);
     const activePanel = embedded || !collapsed;
 

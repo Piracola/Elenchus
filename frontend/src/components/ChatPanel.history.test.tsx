@@ -155,12 +155,14 @@ function makeSession(overrides: Partial<Session> = {}): Session {
 
 describe('ChatPanel history rendering', () => {
     let measurementPhase = 0;
+    let containerHeight = 320;
 
     beforeEach(() => {
         vi.useFakeTimers();
         useDebateStore.getState().reset();
         MockResizeObserver.reset();
         measurementPhase = 0;
+        containerHeight = 320;
 
         Object.defineProperty(window, 'innerWidth', {
             configurable: true,
@@ -190,6 +192,34 @@ describe('ChatPanel history rendering', () => {
                     height,
                     toJSON: () => ({}),
                 } as DOMRect;
+            },
+        });
+
+        Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+            configurable: true,
+            get() {
+                return containerHeight;
+            },
+        });
+
+        Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+            configurable: true,
+            get() {
+                return containerHeight;
+            },
+        });
+
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+            configurable: true,
+            get() {
+                return 4800;
+            },
+        });
+
+        Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+            configurable: true,
+            get() {
+                return 1024;
             },
         });
 
@@ -237,5 +267,22 @@ describe('ChatPanel history rendering', () => {
         }).not.toThrow();
 
         expect(screen.getAllByTestId('message-row').length).toBeGreaterThan(0);
+    });
+
+    it('updates virtualized rows when the scroll viewport height changes without requiring scroll', () => {
+        useDebateStore.getState().setCurrentSession(makeSession());
+
+        render(<ChatPanel isSidebarCollapsed={false} onExpandSidebar={() => {}} />);
+
+        const before = screen.getAllByTestId('message-row').length;
+
+        act(() => {
+            containerHeight = 1280;
+            MockResizeObserver.triggerAll();
+            vi.runAllTimers();
+        });
+
+        const after = screen.getAllByTestId('message-row').length;
+        expect(after).toBeGreaterThan(before);
     });
 });

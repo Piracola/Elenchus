@@ -5,14 +5,14 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAgentConfigs } from '../../hooks/useAgentConfigs';
+import { useConnectionViewState, useSessionViewState } from '../../hooks/useDebateViewState';
 import { useDebateWebSocket } from '../../hooks/useDebateWebSocket';
 import { useSessionCreate } from '../../hooks/useSessionCreate';
-import { useDebateStore } from '../../stores/debateStore';
 import { DEFAULT_MAX_TURNS, parseMaxTurnsInput } from '../../utils/debateSession';
 import AgentConfigPanel from '../shared/AgentConfigPanel';
 
 function ActiveSessionControls() {
-    const { isDebating, isConnected, currentSession } = useDebateStore();
+    const { isDebating, isConnected, currentSession } = useConnectionViewState();
     const sessionId = currentSession?.id || null;
     const { startDebate, stopDebate, sendIntervention } = useDebateWebSocket(sessionId);
     const [interventionText, setInterventionText] = useState('');
@@ -153,7 +153,7 @@ function ActiveSessionControls() {
                         whileTap={{ scale: 0.98 }}
                         onClick={() =>
                             startDebate(
-                                useDebateStore.getState().currentSession?.topic || '新辩题',
+                                currentSession?.topic || '新辩题',
                                 ['proposer', 'opposer'],
                                 maxTurns,
                             )
@@ -381,6 +381,6 @@ function SessionCreator() {
 }
 
 export default function DebateControls() {
-    const { currentSession } = useDebateStore();
+    const { currentSession } = useSessionViewState();
     return currentSession ? <ActiveSessionControls /> : <SessionCreator />;
 }

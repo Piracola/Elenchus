@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import { useDebateStore } from '../stores/debateStore';
 import { api } from '../api/client';
+import { useSessionActions } from './useDebateViewState';
 import type { AgentConfigResult, DebateMode, JuryConfig, ReasoningConfig, TeamConfig } from '../types';
 
 interface UseSessionCreateResult {
@@ -22,7 +22,7 @@ interface UseSessionCreateResult {
 export function useSessionCreate(): UseSessionCreateResult {
     const [isCreating, setIsCreating] = useState(false);
     const [error, setError] = useState('');
-    const { setCurrentSession } = useDebateStore();
+    const { setCurrentSession } = useSessionActions();
 
     const createSession = useCallback(async (
         topic: string,

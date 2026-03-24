@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useDebateStore } from '../../stores/debateStore';
+import { useRuntimeViewState } from '../../hooks/useDebateViewState';
 import { getLiveGraphNodeLabel } from '../../utils/liveGraph';
 import ExecutionTimeline from './ExecutionTimeline';
 import LiveGraph from './LiveGraph';
@@ -37,11 +37,13 @@ export default function RuntimeInspector({
     fillHeight = false,
     onExpandedChange,
 }: RuntimeInspectorProps) {
-    const runtimeEventCount = useDebateStore((state) => state.runtimeEvents.length);
-    const currentNode = useDebateStore((state) => state.currentNode);
-    const debateMode = useDebateStore((state) => state.currentSession?.debate_mode ?? 'standard');
-    const replayEnabled = useDebateStore((state) => state.replayEnabled);
-    const isDocumentVisible = useDebateStore((state) => state.isDocumentVisible);
+    const {
+        runtimeEventCount,
+        currentNode,
+        debateMode,
+        replayEnabled,
+        isDocumentVisible,
+    } = useRuntimeViewState();
     const [expanded, setExpanded] = useState(defaultExpanded);
     const [activeTab, setActiveTab] = useState<InspectorTab>('timeline');
     const isCollapsed = !expanded && !fillHeight;

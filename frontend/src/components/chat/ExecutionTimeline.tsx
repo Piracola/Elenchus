@@ -1,8 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { api } from '../../api/client';
-import { useDebateStore } from '../../stores/debateStore';
-import { useForegroundDebateSelector } from '../../hooks/useForegroundDebateSelector';
+import { useRuntimeActions, useRuntimeViewState } from '../../hooks/useDebateViewState';
 import type { RuntimeEvent } from '../../types';
 import { getEventNode } from '../../utils/eventFocus';
 import { getLiveGraphNodeLabel } from '../../utils/liveGraph';
@@ -91,21 +90,25 @@ export default function ExecutionTimeline({
     embedded = false,
     fillHeight = false,
 }: ExecutionTimelineProps) {
-    const runtimeEvents = useForegroundDebateSelector((state) => state.runtimeEvents);
-    const currentSessionId = useDebateStore((state) => state.currentSession?.id ?? null);
-    const currentTopic = useDebateStore((state) => state.currentSession?.topic ?? '');
-    const debateMode = useDebateStore((state) => state.currentSession?.debate_mode ?? 'standard');
-    const replayEnabled = useForegroundDebateSelector((state) => state.replayEnabled);
-    const replayCursor = useForegroundDebateSelector((state) => state.replayCursor);
-    const focusedRuntimeEventId = useForegroundDebateSelector((state) => state.focusedRuntimeEventId);
-    const hasOlderRuntimeEvents = useForegroundDebateSelector((state) => state.hasOlderRuntimeEvents);
-    const setFocusedRuntimeEventId = useDebateStore((state) => state.setFocusedRuntimeEventId);
-    const setReplayEnabled = useDebateStore((state) => state.setReplayEnabled);
-    const setReplayCursor = useDebateStore((state) => state.setReplayCursor);
-    const stepReplay = useDebateStore((state) => state.stepReplay);
-    const exitReplay = useDebateStore((state) => state.exitReplay);
-    const loadRuntimeEventSnapshot = useDebateStore((state) => state.loadRuntimeEventSnapshot);
-    const prependRuntimeEvents = useDebateStore((state) => state.prependRuntimeEvents);
+    const {
+        runtimeEvents,
+        currentSessionId,
+        currentTopic,
+        debateMode,
+        replayEnabled,
+        replayCursor,
+        focusedRuntimeEventId,
+        hasOlderRuntimeEvents,
+    } = useRuntimeViewState();
+    const {
+        setFocusedRuntimeEventId,
+        setReplayEnabled,
+        setReplayCursor,
+        stepReplay,
+        exitReplay,
+        loadRuntimeEventSnapshot,
+        prependRuntimeEvents,
+    } = useRuntimeActions();
 
     const [expanded, setExpanded] = useState(embedded);
     const [filter, setFilter] = useState<TimelineFilter>('all');

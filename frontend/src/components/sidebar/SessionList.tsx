@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { PanelLeftClose, Plus, Search, Settings, Sun, Moon, Trash2 } from 'lucide-react';
-import { useDebateStore } from '../../stores/debateStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { api } from '../../api/client';
+import {
+    useRuntimeActions,
+    useSessionActions,
+    useSessionListViewState,
+} from '../../hooks/useDebateViewState';
 import SettingsPanel from './SettingsPanel';
 import BrandIcon from '../shared/BrandIcon';
 import type { SessionListItem } from '../../types';
@@ -15,11 +19,9 @@ interface SessionListProps {
 }
 
 export default function SessionList({ onCollapse }: SessionListProps) {
-    const sessions = useDebateStore((state) => state.sessions);
-    const currentSessionId = useDebateStore((state) => state.currentSession?.id);
-    const setSessions = useDebateStore((state) => state.setSessions);
-    const setCurrentSession = useDebateStore((state) => state.setCurrentSession);
-    const hydrateRuntimeEvents = useDebateStore((state) => state.hydrateRuntimeEvents);
+    const { sessions, currentSessionId } = useSessionListViewState();
+    const { setSessions, setCurrentSession } = useSessionActions();
+    const { hydrateRuntimeEvents } = useRuntimeActions();
     const { theme, toggleTheme } = useThemeStore();
     const [isLoading, setIsLoading] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -35,7 +37,7 @@ export default function SessionList({ onCollapse }: SessionListProps) {
             if (offset === 0) setIsLoading(true);
             else setIsLoadingMore(true);
             const data = await api.sessions.list(offset, PAGE_SIZE);
-            setSessions((current) => (append ? mergeSessionPage(current, data.sessions) : data.sessions));
+            setSessions((current: SessionListItem[]) => (append ? mergeSessionPage(current, data.sessions) : data.sessions));
             setTotal(data.total);
         } catch (err) {
             console.error('Failed to load sessions', err);

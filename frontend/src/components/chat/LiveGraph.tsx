@@ -5,8 +5,7 @@
 
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useDebateStore } from '../../stores/debateStore';
-import { useForegroundDebateSelector } from '../../hooks/useForegroundDebateSelector';
+import { useRuntimeActions, useRuntimeViewState } from '../../hooks/useDebateViewState';
 import {
     buildNodeHeat,
     edgeId,
@@ -57,13 +56,14 @@ function edgePath(from: { x: number; y: number }, to: { x: number; y: number }, 
 }
 
 export default function LiveGraph({ compact = false, embedded = false }: LiveGraphProps) {
-    const debateMode = useDebateStore((state) => state.currentSession?.debate_mode ?? 'standard');
-    const visibleRuntimeEvents = useForegroundDebateSelector((state) => state.visibleRuntimeEvents);
-    const currentNode = useForegroundDebateSelector((state) => state.currentNode);
-    const focusedRuntimeEventId = useForegroundDebateSelector((state) => state.focusedRuntimeEventId);
-    const setFocusedRuntimeEventId = useDebateStore((state) => state.setFocusedRuntimeEventId);
-    const replayEnabled = useForegroundDebateSelector((state) => state.replayEnabled);
-    const exitReplay = useDebateStore((state) => state.exitReplay);
+    const {
+        debateMode,
+        visibleRuntimeEvents,
+        currentNode,
+        focusedRuntimeEventId,
+        replayEnabled,
+    } = useRuntimeViewState();
+    const { setFocusedRuntimeEventId, exitReplay } = useRuntimeActions();
     const [collapsed, setCollapsed] = useState(embedded ? false : compact);
     const graphDefinition = useMemo(
         () => getLiveGraphDefinition(debateMode),

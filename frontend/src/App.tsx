@@ -5,13 +5,13 @@ import SessionList from './components/sidebar/SessionList';
 import { BackendHealthCheck } from './components/shared/BackendHealthCheck';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import { ToastContainer } from './components/shared/ToastContainer';
+import { useSessionViewState } from './hooks/useDebateViewState';
 import { useToastState } from './hooks/useToastState';
-import { useDebateStore } from './stores/debateStore';
 import { useThemeStore } from './stores/themeStore';
 
 function App() {
   const { theme, setTheme } = useThemeStore();
-  const { currentSession } = useDebateStore();
+  const { currentSession } = useSessionViewState();
   const { toasts, removeToast } = useToastState();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
