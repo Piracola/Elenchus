@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import ChatPanel from './components/ChatPanel';
 import HomeView from './components/HomeView';
 import SessionList from './components/sidebar/SessionList';
@@ -13,6 +13,7 @@ function App() {
   const { theme, setTheme } = useThemeStore();
   const { currentSession } = useDebateStore();
   const { toasts, removeToast } = useToastState();
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     setTheme(theme);
@@ -32,7 +33,9 @@ function App() {
             color: 'var(--text-primary)',
           }}
         >
-          <SessionList />
+          {!isSidebarCollapsed && (
+            <SessionList onCollapse={() => setIsSidebarCollapsed(true)} />
+          )}
 
           <main
             style={{
@@ -45,9 +48,15 @@ function App() {
             }}
           >
             {!currentSession ? (
-              <HomeView />
+              <HomeView
+                isSidebarCollapsed={isSidebarCollapsed}
+                onExpandSidebar={() => setIsSidebarCollapsed(false)}
+              />
             ) : (
-              <ChatPanel />
+              <ChatPanel
+                isSidebarCollapsed={isSidebarCollapsed}
+                onExpandSidebar={() => setIsSidebarCollapsed(false)}
+              />
             )}
           </main>
         </div>

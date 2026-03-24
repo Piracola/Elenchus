@@ -18,7 +18,69 @@ export interface TranscriptRowViewModel {
     insightSections: InsightSection[];
     jurySections: InsightSection[];
     juryFocused: boolean;
+    agentCollapseKey: string | null;
 }
+
+function sanitizeCollapseKeyPart(value: unknown): string {
+    if (value === null || value === undefined) {
+        return '';
+    }
+    return String(value).replace(/[|]/g, '_');
+}
+
+function buildAgentCollapseKey(entry: DialogueEntry | null | undefined): string | null {
+    if (!entry) {
+        return null;
+    }
+    if (entry.event_id) {
+        return `event:${entry.event_id}`;
+    }
+    return [
+        'agent',
+        sanitizeCollapseKeyPart(entry.role),
+        sanitizeCollapseKeyPart(entry.turn),
+        sanitizeCollapseKeyPart(entry.timestamp),
+        sanitizeCollapseKeyPart(entry.agent_name),
+        sanitizeCollapseKeyPart(entry.content),
+    ].join('|');
+}
+
+export function getTranscriptAgentCollapseKeys(rowViewModels: TranscriptRowViewModel[]): string[] {
+    const keys = rowViewModels
+        .map((viewModel) => viewModel.agentCollapseKey)
+        .filter((value): value is string => Boolean(value));
+    return Array.from(new Set(keys));
+}
+
+function areAllTranscriptAgentMessagesCollapsed(
+    rowViewModels: TranscriptRowViewModel[],
+    collapsedMap: Record<string, boolean>,
+): boolean {
+    const keys = getTranscriptAgentCollapseKeys(rowViewModels);
+    return keys.length > 0 && keys.every((key) => collapsedMap[key]);
+}
+
+export function getTranscriptCollapseSummary(
+    rowViewModels: TranscriptRowViewModel[],
+    collapsedMap: Record<string, boolean>,
+): { keys: string[]; hasAgentRows: boolean; allCollapsed: boolean } {
+    const keys = getTranscriptAgentCollapseKeys(rowViewModels);
+    return {
+        keys,
+        hasAgentRows: keys.length > 0,
+        allCollapsed: areAllTranscriptAgentMessagesCollapsed(rowViewModels, collapsedMap),
+    };
+}
+
+export function isTranscriptAgentMessageCollapsed(
+    collapseKey: string | null,
+    collapsedMap: Record<string, boolean>,
+): boolean {
+    return Boolean(collapseKey && collapsedMap[collapseKey]);
+}
+
+export { buildAgentCollapseKey };
+
 
 export interface TranscriptViewModel {
     rows: DialogueRow[];
@@ -126,6 +188,7 @@ export function buildTranscriptViewModel({
                 }]
                 : [],
             juryFocused,
+            agentCollapseKey: buildAgentCollapseKey(row.agent),
         };
     });
 

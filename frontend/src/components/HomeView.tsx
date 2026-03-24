@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, ArrowRight, ChevronDown, Settings2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, ChevronDown, PanelLeftOpen, Settings2 } from 'lucide-react';
 
 import { useAgentConfigs } from '../hooks/useAgentConfigs';
 import { useSessionCreate } from '../hooks/useSessionCreate';
+import { useSettingsStore } from '../stores/settingsStore';
+import { DISPLAY_FONT_TOKENS } from '../config/display';
 import type { DebateMode } from '../types';
 import {
     DEFAULT_MAX_TURNS,
@@ -22,7 +24,12 @@ import BrandIcon from './shared/BrandIcon';
 
 const SOPHISTRY_MODE_WARNING = '诡辩实验模式会鼓励模型主动使用误导性修辞、标签施压、定义操控与叙事转移。它不代表事实结论，也不会提供裁判评分或搜索核验，请将其视为修辞对抗实验。';
 
-export default function HomeView() {
+interface HomeViewProps {
+    isSidebarCollapsed: boolean;
+    onExpandSidebar: () => void;
+}
+
+export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeViewProps) {
     const [topic, setTopic] = useState('');
     const [debateMode, setDebateMode] = useState<DebateMode>('standard');
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
@@ -46,6 +53,8 @@ export default function HomeView() {
     } = useAgentConfigs();
 
     const isSophistryMode = debateMode === 'sophistry_experiment';
+    const { displaySettings } = useSettingsStore();
+    const homeFontSizes = useMemo(() => DISPLAY_FONT_TOKENS[displaySettings.fontSize].home, [displaySettings.fontSize]);
     const maxTurns = parseMaxTurnsInput(maxTurnsInput);
     const teamAgents = parseTeamAgentsInput(teamAgentsInput);
     const teamDiscussionRounds = parseTeamDiscussionRoundsInput(teamRoundsInput);
@@ -129,6 +138,32 @@ export default function HomeView() {
                 position: 'relative',
             }}
         >
+            {isSidebarCollapsed && (
+                <motion.button
+                    whileHover={{ y: -1 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={onExpandSidebar}
+                    style={{
+                        position: 'absolute',
+                        top: '20px',
+                        left: '20px',
+                        zIndex: 2,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '10px 12px',
+                        background: 'var(--bg-card)',
+                        color: 'var(--text-secondary)',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 'var(--radius-xl)',
+                        boxShadow: 'var(--shadow-sm)',
+                        cursor: 'pointer',
+                    }}
+                    title="展开历史栏"
+                >
+                    <PanelLeftOpen size={16} />
+                </motion.button>
+            )}
             <div
                 style={{
                     position: 'absolute',
@@ -184,7 +219,7 @@ export default function HomeView() {
                     <BrandIcon size={44} alt="Elenchus 品牌图标" withBadge={false} />
                     <h1
                         style={{
-                            fontSize: '36px',
+                            fontSize: homeFontSizes.title,
                             fontWeight: 700,
                             color: 'var(--text-primary)',
                             letterSpacing: '-0.02em',
@@ -199,7 +234,7 @@ export default function HomeView() {
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.2 }}
                     style={{
-                        fontSize: '15px',
+                        fontSize: homeFontSizes.subtitle,
                         color: 'var(--text-secondary)',
                         marginBottom: '24px',
                         textAlign: 'center',
@@ -293,7 +328,7 @@ export default function HomeView() {
                                 </div>
                                 <div
                                     style={{
-                                        fontSize: '13px',
+                                        fontSize: homeFontSizes.modeDescription,
                                         lineHeight: 1.6,
                                         color: 'var(--text-secondary)',
                                     }}
@@ -328,7 +363,7 @@ export default function HomeView() {
                                 size={18}
                                 style={{ color: 'var(--mode-sophistry-accent)', flexShrink: 0, marginTop: '1px' }}
                             />
-                            <div style={{ fontSize: '13px', lineHeight: 1.65 }}>
+                            <div style={{ fontSize: homeFontSizes.warningBody, lineHeight: 1.65 }}>
                                 {SOPHISTRY_MODE_WARNING}
                             </div>
                         </motion.div>
@@ -388,7 +423,7 @@ export default function HomeView() {
                                 border: 'none',
                                 outline: 'none',
                                 color: 'var(--text-primary)',
-                                fontSize: '16px',
+                                fontSize: homeFontSizes.topicInput,
                                 resize: 'none',
                                 lineHeight: 1.6,
                                 fontWeight: 500,

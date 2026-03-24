@@ -8,6 +8,7 @@ import { ProviderSidebar } from './ProviderSidebar';
 import { ProviderForm } from './ProviderForm';
 import { SearchConfigTab } from './SearchConfigTab';
 import type { LogLevel, DisplaySettings } from '../../types';
+import { DISPLAY_FONT_SIZE_OPTIONS } from '../../config/display';
 import { resetStoredFloatingInspectorRect } from '../../utils/floatingInspector';
 import { toast } from '../../utils/toast';
 
@@ -33,6 +34,76 @@ const MESSAGE_WIDTH_OPTIONS: { value: DisplaySettings['messageWidth']; label: st
     { value: 'wide', label: '宽', description: '1200px — 充分利用屏幕空间' },
     { value: 'full', label: '全宽', description: '100% — 最大化显示区域' },
 ];
+
+function renderRadioCardGroup<T extends string>({
+    options,
+    selectedValue,
+    onSelect,
+}: {
+    options: { value: T; label: string; description: string }[];
+    selectedValue: T;
+    onSelect: (value: T) => void;
+}) {
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {options.map((option) => (
+                <motion.div
+                    key={option.value}
+                    whileHover={{ scale: 1.01 }}
+                    onClick={() => onSelect(option.value)}
+                    style={{
+                        padding: '16px 20px',
+                        borderRadius: 'var(--radius-lg)',
+                        background: selectedValue === option.value ? 'var(--bg-tertiary)' : 'transparent',
+                        border: `1px solid ${selectedValue === option.value ? 'var(--accent-indigo)' : 'var(--border-subtle)'}`,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '16px',
+                        transition: 'all var(--transition-fast)',
+                        boxShadow: selectedValue === option.value ? 'var(--shadow-sm)' : 'none',
+                    }}
+                >
+                    <div style={{
+                        width: '22px',
+                        height: '22px',
+                        borderRadius: '50%',
+                        border: `2px solid ${selectedValue === option.value ? 'var(--accent-indigo)' : 'var(--border-subtle)'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                    }}>
+                        {selectedValue === option.value && (
+                            <div style={{
+                                width: '10px',
+                                height: '10px',
+                                borderRadius: '50%',
+                                background: 'var(--accent-indigo)',
+                            }} />
+                        )}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <div style={{
+                            fontWeight: 700,
+                            fontSize: '15px',
+                            color: 'var(--text-primary)',
+                        }}>
+                            {option.label}
+                        </div>
+                        <div style={{
+                            fontSize: '13px',
+                            color: 'var(--text-muted)',
+                            marginTop: '4px',
+                        }}>
+                            {option.description}
+                        </div>
+                    </div>
+                </motion.div>
+            ))}
+        </div>
+    );
+}
 
 export default function SettingsPanel({
     isOpen,
@@ -126,7 +197,7 @@ export default function SettingsPanel({
                     显示设置
                 </h3>
                 <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)' }}>
-                    自定义消息界面的显示效果，调整宽度以适应不同的屏幕尺寸和使用偏好。
+                    自定义消息界面的显示效果，调整宽度与阅读字号以适应不同的屏幕尺寸和使用偏好。
                 </p>
             </div>
 
@@ -139,63 +210,27 @@ export default function SettingsPanel({
                 }}>
                     消息界面宽度
                 </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {MESSAGE_WIDTH_OPTIONS.map((option) => (
-                        <motion.div
-                            key={option.value}
-                            whileHover={{ scale: 1.01 }}
-                            onClick={() => setDisplaySettings({ messageWidth: option.value })}
-                            style={{
-                                padding: '16px 20px',
-                                borderRadius: 'var(--radius-lg)',
-                                background: displaySettings.messageWidth === option.value ? 'var(--bg-tertiary)' : 'transparent',
-                                border: `1px solid ${displaySettings.messageWidth === option.value ? 'var(--accent-indigo)' : 'var(--border-subtle)'}`,
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '16px',
-                                transition: 'all var(--transition-fast)',
-                                boxShadow: displaySettings.messageWidth === option.value ? 'var(--shadow-sm)' : 'none',
-                            }}
-                        >
-                            <div style={{
-                                width: '22px',
-                                height: '22px',
-                                borderRadius: '50%',
-                                border: `2px solid ${displaySettings.messageWidth === option.value ? 'var(--accent-indigo)' : 'var(--border-subtle)'}`,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexShrink: 0,
-                            }}>
-                                {displaySettings.messageWidth === option.value && (
-                                    <div style={{
-                                        width: '10px',
-                                        height: '10px',
-                                        borderRadius: '50%',
-                                        background: 'var(--accent-indigo)',
-                                    }} />
-                                )}
-                            </div>
-                            <div style={{ flex: 1 }}>
-                                <div style={{
-                                    fontWeight: 700,
-                                    fontSize: '15px',
-                                    color: 'var(--text-primary)',
-                                }}>
-                                    {option.label}
-                                </div>
-                                <div style={{
-                                    fontSize: '13px',
-                                    color: 'var(--text-muted)',
-                                    marginTop: '4px',
-                                }}>
-                                    {option.description}
-                                </div>
-                            </div>
-                        </motion.div>
-                    ))}
-                </div>
+                {renderRadioCardGroup({
+                    options: MESSAGE_WIDTH_OPTIONS,
+                    selectedValue: displaySettings.messageWidth,
+                    onSelect: (value) => setDisplaySettings({ messageWidth: value }),
+                })}
+            </div>
+
+            <div style={{ marginBottom: '24px' }}>
+                <h4 style={{
+                    fontSize: '14px',
+                    margin: '0 0 16px',
+                    color: 'var(--text-primary)',
+                    fontWeight: 600,
+                }}>
+                    字体大小
+                </h4>
+                {renderRadioCardGroup({
+                    options: DISPLAY_FONT_SIZE_OPTIONS,
+                    selectedValue: displaySettings.fontSize,
+                    onSelect: (value) => setDisplaySettings({ fontSize: value }),
+                })}
             </div>
 
             <div style={{

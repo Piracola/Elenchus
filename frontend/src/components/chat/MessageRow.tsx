@@ -2,12 +2,14 @@ import { memo, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { DISPLAY_FONT_TOKENS } from '../../config/display';
 import { SCORE_DIMENSIONS, SCORE_MODULES } from '../../types';
 import type { DialogueEntry, ScoreDimensionKey, ScoreModuleKey, TurnScore } from '../../types';
 import RoundInsights from './RoundInsights';
 import type { InsightSection } from './RoundInsights';
 
-interface MessageRowProps {
+export interface MessageRowProps {
     agentEntry?: DialogueEntry | null;
     judgeEntry?: DialogueEntry | null;
     systemEntry?: DialogueEntry | null;
@@ -16,6 +18,128 @@ interface MessageRowProps {
     highlightSystem?: boolean;
     insightSections?: InsightSection[];
     animated?: boolean;
+    agentCollapsed?: boolean;
+    onToggleAgentCollapsed?: () => void;
+}
+
+const COLLAPSED_AGENT_PLACEHOLDER = '该辩手正文已折叠';
+
+function formatTurnPill(turn?: number): string | null {
+    return typeof turn === 'number' && turn >= 0 ? `第 ${turn + 1} 轮` : null;
+}
+
+function formatCollapsedHint(entry: DialogueEntry | null | undefined): string {
+    const turnLabel = formatTurnPill(entry?.turn);
+    return turnLabel ? `${turnLabel}发言已折叠` : COLLAPSED_AGENT_PLACEHOLDER;
+}
+
+function renderAgentMetaPill(label: string, color: string, background: string) {
+    return (
+        <span
+            style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '5px 10px',
+                borderRadius: 'var(--radius-full)',
+                fontSize: '12px',
+                fontWeight: 600,
+                color,
+                background,
+                whiteSpace: 'nowrap',
+            }}
+        >
+            {label}
+        </span>
+    );
+}
+
+function collapseButtonLabel(collapsed: boolean): string {
+    return collapsed ? '展开正文' : '折叠正文';
+}
+
+function collapseButtonSymbol(collapsed: boolean): string {
+    return collapsed ? '＋' : '－';
+}
+
+function collapseButtonTitle(collapsed: boolean): string {
+    return collapsed ? '展开这条辩手发言正文' : '折叠这条辩手发言正文';
+}
+
+function agentMetaBackground(color: string): string {
+    if (color === 'var(--color-opposer)') {
+        return 'rgba(255, 59, 48, 0.10)';
+    }
+    if (color === 'var(--color-proposer)') {
+        return 'rgba(52, 199, 89, 0.10)';
+    }
+    return 'rgba(99, 102, 241, 0.10)';
+}
+
+function collapseButtonStyle(collapsed: boolean) {
+    return {
+        border: '1px solid var(--border-subtle)',
+        background: collapsed ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
+        color: 'var(--text-secondary)',
+        borderRadius: 'var(--radius-full)',
+        padding: '6px 12px',
+        fontSize: '12px',
+        fontWeight: 600,
+        cursor: 'pointer',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
+        boxShadow: 'var(--shadow-xs)',
+    } as const;
+}
+
+function collapsedBodyStyle(color: string, fontSize: string) {
+    return {
+        color: 'var(--text-secondary)',
+        fontSize,
+        lineHeight: 1.7,
+        marginTop: '16px',
+        padding: '14px 16px',
+        borderRadius: 'var(--radius-lg)',
+        background: 'var(--bg-secondary)',
+        border: `1px dashed ${color}`,
+    } as const;
+}
+
+function bodyHeaderStyle() {
+    return {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+        flexWrap: 'wrap',
+        marginTop: '6px',
+    } as const;
+}
+
+function bodyMetaGroupStyle() {
+    return {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        flexWrap: 'wrap',
+    } as const;
+}
+
+function bodyControlsStyle() {
+    return {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        flexWrap: 'wrap',
+    } as const;
+}
+
+function bodyHintStyle() {
+    return {
+        fontSize: '12px',
+        color: 'var(--text-muted)',
+        fontWeight: 500,
+    } as const;
 }
 
 type RoleVisual = {
@@ -419,12 +543,19 @@ function MessageRow({
     highlightSystem = false,
     insightSections = [],
     animated = false,
+    agentCollapsed = false,
+    onToggleAgentCollapsed,
 }: MessageRowProps) {
     const neutralColor = 'var(--color-neutral, #6b7280)';
     const rowFocused = highlightAgent || highlightJudge || highlightSystem;
     const agentText = agentEntry?.content || '';
     const agentVisual = useMemo(() => getAgentVisual(agentEntry), [agentEntry]);
     const judgeVisual = useMemo(() => getJudgeVisual(judgeEntry), [judgeEntry]);
+    const fontSize = useSettingsStore((state) => state.displaySettings.fontSize);
+    const messageFontSizes = DISPLAY_FONT_TOKENS[fontSize].message;
+    const agentTurnLabel = formatTurnPill(agentEntry?.turn);
+    const collapsedHint = formatCollapsedHint(agentEntry);
+    const metaBackground = agentMetaBackground(agentVisual.color);
 
     if (systemEntry) {
         if (systemEntry.role === 'audience') {
@@ -462,7 +593,7 @@ function MessageRow({
                         >
                             观众介入
                         </span>
-                        <span style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
+                        <span style={{ fontSize: messageFontSizes.audienceBody, color: 'var(--text-primary)', lineHeight: 1.65 }}>
                             {systemEntry.content}
                         </span>
                     </motion.div>
@@ -483,7 +614,7 @@ function MessageRow({
                         padding: '10px 20px',
                         background: 'var(--bg-tertiary)',
                         borderRadius: 'var(--radius-full)',
-                        fontSize: '13px',
+                        fontSize: messageFontSizes.systemBody,
                         color: 'var(--text-muted)',
                         boxShadow: 'var(--shadow-xs)',
                         border: highlightSystem ? '1px solid var(--accent-indigo)' : '1px solid transparent',
@@ -501,7 +632,7 @@ function MessageRow({
     const agentOnly = Boolean(agentEntry && !judgeEntry);
     const agentTextStyle = {
         color: 'var(--text-primary)',
-        fontSize: '15px',
+        fontSize: messageFontSizes.body,
         lineHeight: 1.7,
         marginTop: '16px',
     } as const;
@@ -565,13 +696,47 @@ function MessageRow({
                 </span>
             </div>
 
-            <div
-                className="markdown-body"
-                data-agent-content="visible"
-                style={agentTextStyle}
-            >
-                {renderMarkdown(agentText)}
+            <div style={bodyHeaderStyle()}>
+                <div style={bodyMetaGroupStyle()}>
+                    {renderAgentMetaPill(agentVisual.label, agentVisual.color, metaBackground)}
+                    {agentTurnLabel && renderAgentMetaPill(agentTurnLabel, 'var(--text-secondary)', 'var(--bg-tertiary)')}
+                    {renderAgentMetaPill(
+                        agentVisual.label === '正方' || agentEntry.role === 'proposer'
+                            ? '正方'
+                            : agentVisual.label === '反方' || agentEntry.role === 'opposer'
+                                ? '反方'
+                                : formatRoleLabel(agentEntry.role),
+                        agentVisual.color,
+                        metaBackground,
+                    )}
+                </div>
+                <div style={bodyControlsStyle()}>
+                    {agentCollapsed && <span style={bodyHintStyle()}>{collapsedHint}</span>}
+                    <button
+                        type="button"
+                        onClick={onToggleAgentCollapsed}
+                        style={collapseButtonStyle(agentCollapsed)}
+                        title={collapseButtonTitle(agentCollapsed)}
+                    >
+                        <span>{collapseButtonSymbol(agentCollapsed)}</span>
+                        <span>{collapseButtonLabel(agentCollapsed)}</span>
+                    </button>
+                </div>
             </div>
+
+            {agentCollapsed ? (
+                <div data-agent-content="collapsed" style={collapsedBodyStyle(agentVisual.color, messageFontSizes.body)}>
+                    {collapsedHint}
+                </div>
+            ) : (
+                <div
+                    className="markdown-body"
+                    data-agent-content="visible"
+                    style={agentTextStyle}
+                >
+                    {renderMarkdown(agentText)}
+                </div>
+            )}
         </motion.div>
     ) : null;
 
@@ -643,7 +808,7 @@ function MessageRow({
                 className="markdown-body"
                 style={{
                     color: 'var(--text-secondary)',
-                    fontSize: judgeOnly ? '15px' : '14px',
+                    fontSize: judgeOnly ? messageFontSizes.judgeBody : messageFontSizes.judgeBodyCompact,
                     lineHeight: 1.7,
                     marginTop: '12px',
                 }}
@@ -759,6 +924,7 @@ function areEqual(previous: MessageRowProps, next: MessageRowProps): boolean {
         && previous.highlightJudge === next.highlightJudge
         && previous.highlightSystem === next.highlightSystem
         && previous.animated === next.animated
+        && previous.agentCollapsed === next.agentCollapsed
         && sectionsEqual(previous.insightSections, next.insightSections);
 }
 

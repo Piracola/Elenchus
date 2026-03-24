@@ -9,6 +9,7 @@ import type {
     ModelConfig,
     ModelConfigCreatePayload,
     LogLevel,
+    MarkdownExportCategory,
     RuntimeEventPage,
     SearchConfig,
     SearchConfigUpdatePayload,
@@ -156,8 +157,10 @@ export const api = {
             return download(`/sessions/${id}/export?format=json`, buildTopicFilename(topic, 'json'));
         },
 
-        exportMarkdown: (id: string, topic: string): Promise<void> => {
-            return download(`/sessions/${id}/export?format=markdown`, buildTopicFilename(topic, 'md'));
+        exportMarkdown: (id: string, topic: string, categories?: MarkdownExportCategory[]): Promise<void> => {
+            const params = new URLSearchParams({ format: 'markdown' });
+            categories?.forEach((category) => params.append('categories', category));
+            return download(`/sessions/${id}/export?${params.toString()}`, buildTopicFilename(topic, 'md'));
         },
 
         exportRuntimeEventsSnapshot: (id: string, topic: string): Promise<void> => {

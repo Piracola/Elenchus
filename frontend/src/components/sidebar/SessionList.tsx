@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Search, Settings, Sun, Moon, Trash2 } from 'lucide-react';
+import { PanelLeftClose, Plus, Search, Settings, Sun, Moon, Trash2 } from 'lucide-react';
 import { useDebateStore } from '../../stores/debateStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { api } from '../../api/client';
@@ -10,7 +10,11 @@ import type { SessionListItem } from '../../types';
 import { filterSessionsByQuery, mergeSessionPage } from '../../utils/sessionList';
 import { toast } from '../../utils/toast';
 
-export default function SessionList() {
+interface SessionListProps {
+    onCollapse: () => void;
+}
+
+export default function SessionList({ onCollapse }: SessionListProps) {
     const sessions = useDebateStore((state) => state.sessions);
     const currentSessionId = useDebateStore((state) => state.currentSession?.id);
     const setSessions = useDebateStore((state) => state.setSessions);
@@ -116,22 +120,47 @@ export default function SessionList() {
                 padding: '20px 18px 14px',
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'space-between',
                 gap: '12px',
                 borderBottom: '1px solid var(--border-subtle)',
             }}>
-                <BrandIcon size={38} alt="Elenchus 品牌图标" withBadge={false} />
-                <div>
-                    <h1 style={{ 
-                        fontSize: '17px', 
-                        fontWeight: 700, 
-                        letterSpacing: '-0.02em', 
-                        color: 'var(--text-primary)',
-                        margin: 0,
-                    }}>
-                        Elenchus
-                    </h1>
-                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '2px 0 0' }}>AI 辩论平台</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                    <BrandIcon size={38} alt="Elenchus 品牌图标" withBadge={false} />
+                    <div style={{ minWidth: 0 }}>
+                        <h1 style={{
+                            fontSize: '17px',
+                            fontWeight: 700,
+                            letterSpacing: '-0.02em',
+                            color: 'var(--text-primary)',
+                            margin: 0,
+                        }}>
+                            Elenchus
+                        </h1>
+                        <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '2px 0 0' }}>AI 辩论平台</p>
+                    </div>
                 </div>
+
+                <motion.button
+                    whileHover={{ scale: 1.05, background: 'var(--bg-hover)' }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={onCollapse}
+                    style={{
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border-subtle)',
+                        cursor: 'pointer',
+                        color: 'var(--text-secondary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '9px',
+                        borderRadius: 'var(--radius-lg)',
+                        boxShadow: 'var(--shadow-xs)',
+                        flexShrink: 0,
+                    }}
+                    title="收起历史栏"
+                >
+                    <PanelLeftClose size={18} />
+                </motion.button>
             </div>
 
             {/* Actions */}
