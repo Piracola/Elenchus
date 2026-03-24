@@ -108,10 +108,6 @@ class Settings:
         return _PROJECT_ROOT
 
     @property
-    def backend_runtime_dir(self) -> Path:
-        return _RUNTIME_PATHS.runtime_backend_dir
-
-    @property
     def backend_source_dir(self) -> Path:
         return _RUNTIME_PATHS.backend_bundle_dir
 

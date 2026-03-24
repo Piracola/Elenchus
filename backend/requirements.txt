@@ -2,7 +2,6 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.10.4
-pydantic-settings==2.7.1
 python-multipart==0.0.20
 
 # Database
@@ -21,10 +20,6 @@ openai
 # Search
 httpx==0.28.1
 ddgs>=6.0.0
-
-# Config
-pyyaml==6.0.2
-python-dotenv==1.0.1
 
 # Provider key encryption
 cryptography>=42.0.0

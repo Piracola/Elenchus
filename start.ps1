@@ -106,7 +106,6 @@ $BackendDir = Join-Path $RootDir "backend"
 $FrontendDir = Join-Path $RootDir "frontend"
 $VenvDir = Join-Path $BackendDir "venv"
 $RuntimeDir = Join-Path $RootDir "runtime"
-$RuntimeBackendDir = Join-Path $RuntimeDir "backend"
 $InstallStateDir = Join-Path $RuntimeDir ".install-state"
 
 $BackendPython = Join-Path $VenvDir "Scripts\python.exe"
@@ -232,23 +231,7 @@ if (-not $FrontendOnly) {
     } else {
         Print-Info "Skipping dependency installation"
     }
-
-    $EnvFile = Join-Path $RuntimeBackendDir ".env"
-    $EnvExample = Join-Path $BackendDir ".env.example"
-    if (-not (Test-Path $RuntimeBackendDir)) {
-        New-Item -ItemType Directory -Path $RuntimeBackendDir -Force | Out-Null
-    }
-    if (-not (Test-Path $EnvFile)) {
-        if (Test-Path $EnvExample) {
-            Print-Info "Creating runtime .env config file..."
-            Copy-Item $EnvExample $EnvFile
-            Print-OK "runtime .env file created"
-            Print-Info "A local encryption key will be generated automatically on first backend start"
-            Print-Warn "Model provider API Keys are configured later in the web UI"
-        }
-    } else {
-        Print-OK "runtime .env config file already exists"
-    }
+    Print-Info "Runtime configuration is loaded from $RuntimeDir\\config.json"
 
     Pop-Location
 }
