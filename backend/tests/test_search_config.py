@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
@@ -95,6 +96,28 @@ def test_persist_search_settings_updates_runtime_config_and_snapshot(monkeypatch
         runtime_config = load_runtime_config()
         assert runtime_config["search"]["tavily"]["api_key"] == ""
         assert snapshot["tavily"]["api_key_configured"] is False
+
+
+def test_load_runtime_config_accepts_utf8_bom(monkeypatch):
+    with _workspace_runtime_dir() as runtime_root:
+        monkeypatch.setenv("ELENCHUS_RUNTIME_DIR", str(runtime_root.resolve()))
+
+        payload = {
+            "schema_version": 1,
+            "server": {
+                "host": "127.0.0.1",
+                "port": 18081,
+                "debug": False,
+                "cors_origins": ["http://127.0.0.1:5173"],
+                "database_url": "sqlite+aiosqlite:///./elenchus.db",
+            },
+        }
+        config_path = runtime_root / "config.json"
+        config_path.write_text(json.dumps(payload), encoding="utf-8-sig")
+
+        runtime_config = load_runtime_config()
+        assert runtime_config["server"]["host"] == "127.0.0.1"
+        assert runtime_config["server"]["port"] == 18081
 
 
 @pytest.mark.asyncio

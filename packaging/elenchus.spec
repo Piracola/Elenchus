@@ -17,6 +17,51 @@ datas = [
 binaries = []
 hiddenimports = []
 
+PACKAGE_DATA_EXCLUDES = [
+    "**/__pycache__",
+    "**/docs",
+    "**/docs/**",
+    "**/examples",
+    "**/examples/**",
+    "**/test",
+    "**/test/**",
+    "**/tests",
+    "**/tests/**",
+    "**/testing",
+    "**/testing/**",
+    "**/*.asm",
+    "**/*.c",
+    "**/*.cpp",
+    "**/*.h",
+    "**/*.hpp",
+    "**/*.md",
+    "**/*.obj",
+    "**/*.pxd",
+    "**/*.pyi",
+    "**/*.pyx",
+    "**/*.rst",
+    "**/*.typed",
+]
+
+
+def include_runtime_submodule(name: str) -> bool:
+    lowered = name.lower()
+    return all(
+        part not in lowered
+        for part in (
+            ".test",
+            ".tests",
+            ".testing",
+            ".example",
+            ".examples",
+            ".pytest",
+            ".pytest_plugin",
+            ".mypy",
+            ".__main__",
+            ".cli",
+        )
+    )
+
 for package_name in (
     "uvicorn",
     "websockets",
@@ -34,7 +79,12 @@ for package_name in (
     "greenlet",
     "cryptography",
 ):
-    package_datas, package_binaries, package_hiddenimports = collect_all(package_name)
+    package_datas, package_binaries, package_hiddenimports = collect_all(
+        package_name,
+        include_py_files=False,
+        filter_submodules=include_runtime_submodule,
+        exclude_datas=PACKAGE_DATA_EXCLUDES,
+    )
     datas += package_datas
     binaries += package_binaries
     hiddenimports += package_hiddenimports
