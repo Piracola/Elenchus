@@ -87,6 +87,23 @@ _WINDOWS_RESERVED_NAMES = {
 }
 _MAX_FILENAME_BASE_LENGTH = 120
 _RUNTIME_SNAPSHOT_VERSION = "runtime-events.v1"
+_MARKDOWN_EXPORT_CATEGORY_ORDER = (
+    "debater_speeches",
+    "group_discussion",
+    "judge_messages",
+    "jury_messages",
+    "consensus_summary",
+)
+_MARKDOWN_EXPORT_CATEGORY_SET = set(_MARKDOWN_EXPORT_CATEGORY_ORDER)
+_NON_DEBATER_DIALOGUE_ROLES = {
+    "judge",
+    "system",
+    "fact_checker",
+    "audience",
+    "error",
+    "sophistry_round_report",
+    "sophistry_final_report",
+}
 
 
 def _role_label(role: str) -> str:
@@ -276,7 +293,136 @@ def _resolve_comprehensive_score(scores: dict[str, Any]) -> float | None:
     return _weighted_average(scores_map := _extract_dimension_score_map(scores), tuple(scores_map.keys()))
 
 
-def export_markdown(session_data: dict[str, Any]) -> str:
+def normalize_markdown_export_categories(categories: list[str] | tuple[str, ...] | None) -> list[str] | None:
+    if categories is None:
+        return None
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for category in categories:
+        if category not in _MARKDOWN_EXPORT_CATEGORY_SET or category in seen:
+            continue
+        normalized.append(category)
+        seen.add(category)
+
+    if normalized:
+        return normalized
+    return ["debater_speeches"]
+
+
+def _render_markdown_entry_block(
+    lines: list[str],
+    entry: dict[str, Any],
+    index: int,
+) -> None:
+    content = entry.get("content", "")
+    timestamp = entry.get("timestamp", "")
+    citations = entry.get("citations", [])
+
+    lines.append(f"### [{_format_role_heading(entry)}] {_format_turn_label(entry, index)}")
+    if timestamp:
+        lines.append(f"*{timestamp}*")
+    lines.append("")
+    lines.append(str(content) if content else "（无内容）")
+
+    if citations:
+        lines.append("")
+        lines.append("**引用来源：**")
+        for url in citations:
+            lines.append(f"- {url}")
+
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+
+def _is_debater_speech_entry(entry: dict[str, Any], participants: set[str]) -> bool:
+    role = str(entry.get("role", ""))
+    if role in participants:
+        return True
+    return role not in _NON_DEBATER_DIALOGUE_ROLES
+
+
+def _append_markdown_transcript_sections(
+    lines: list[str],
+    session_data: dict[str, Any],
+    categories: list[str] | None,
+) -> None:
+    history = session_data.get("dialogue_history", [])
+    if not isinstance(history, list):
+        history = []
+
+    if categories is None:
+        if not history:
+            return
+        lines.append("## 辩论全文")
+        lines.append("")
+        for index, entry in enumerate(history, start=1):
+            if isinstance(entry, dict):
+                _render_markdown_entry_block(lines, entry, index)
+        return
+
+    participants_raw = session_data.get("participants", [])
+    participants = {
+        str(role)
+        for role in participants_raw
+        if isinstance(role, str) and role
+    }
+
+    category_entries: dict[str, list[dict[str, Any]]] = {
+        "debater_speeches": [
+            entry for entry in history
+            if isinstance(entry, dict) and _is_debater_speech_entry(entry, participants)
+        ],
+        "group_discussion": [
+            entry for entry in session_data.get("team_dialogue_history", [])
+            if isinstance(entry, dict)
+        ],
+        "judge_messages": [
+            entry for entry in history
+            if isinstance(entry, dict) and str(entry.get("role", "")) == "judge"
+        ],
+        "jury_messages": [
+            entry for entry in session_data.get("jury_dialogue_history", [])
+            if isinstance(entry, dict) and str(entry.get("role", "")) != "consensus_summary"
+        ],
+        "consensus_summary": [
+            entry for entry in session_data.get("jury_dialogue_history", [])
+            if isinstance(entry, dict) and str(entry.get("role", "")) == "consensus_summary"
+        ],
+    }
+    category_titles = {
+        "debater_speeches": "## 辩手发言",
+        "group_discussion": "## 组内讨论",
+        "judge_messages": "## 裁判消息",
+        "jury_messages": "## 审判团消息",
+        "consensus_summary": "## 共识收敛消息",
+    }
+
+    rendered_any = False
+    for category in categories:
+        entries = category_entries.get(category, [])
+        if not entries:
+            continue
+        lines.append(category_titles[category])
+        lines.append("")
+        for index, entry in enumerate(entries, start=1):
+            _render_markdown_entry_block(lines, entry, index)
+        rendered_any = True
+
+    if rendered_any:
+        return
+
+    fallback_entries = category_entries["debater_speeches"]
+    if not fallback_entries:
+        return
+    lines.append(category_titles["debater_speeches"])
+    lines.append("")
+    for index, entry in enumerate(fallback_entries, start=1):
+        _render_markdown_entry_block(lines, entry, index)
+
+
+def export_markdown(session_data: dict[str, Any], categories: list[str] | tuple[str, ...] | None = None) -> str:
     """
     Generate a structured Markdown document from session data.
     Includes metadata, dialogue transcript, and score summaries.
@@ -306,33 +452,9 @@ def export_markdown(session_data: dict[str, Any]) -> str:
     lines.append(f"| **导出时间** | {datetime.now(UTC).isoformat()} |")
     lines.append("")
 
-    history = session_data.get("dialogue_history", [])
-    if history:
-        lines.append("## 辩论全文")
-        lines.append("")
+    normalized_categories = normalize_markdown_export_categories(categories)
+    _append_markdown_transcript_sections(lines, session_data, normalized_categories)
 
-        for index, entry in enumerate(history, start=1):
-            content = entry.get("content", "")
-            timestamp = entry.get("timestamp", "")
-            citations = entry.get("citations", [])
-
-            lines.append(
-                f"### [{_format_role_heading(entry)}] {_format_turn_label(entry, index)}"
-            )
-            if timestamp:
-                lines.append(f"*{timestamp}*")
-            lines.append("")
-            lines.append(str(content) if content else "（无内容）")
-
-            if citations:
-                lines.append("")
-                lines.append("**引用来源：**")
-                for url in citations:
-                    lines.append(f"- {url}")
-
-            lines.append("")
-            lines.append("---")
-            lines.append("")
 
     current_scores = session_data.get("current_scores", {})
     if current_scores:

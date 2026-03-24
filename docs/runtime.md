@@ -47,7 +47,7 @@ runtime/
 - 辩论默认配置（如 `default_max_turns`、context window）
 - 日志级别等非会话配置
 
-旧的 `runtime/backend/.env`、`runtime/backend/config.yaml`、`runtime/data/log_config.json` 仅在首次迁移时作为导入来源；一旦 `runtime/config.json` 已生成，后续运行只以它为准。
+`runtime/config.json` 是当前唯一活动配置源。旧的 `runtime/backend/.env`、`runtime/backend/config.yaml`、`runtime/data/log_config.json`、`backend/data/providers.json` 均已废弃，不再参与启动或导入。
 
 ### `runtime/elenchus.db`
 

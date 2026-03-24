@@ -124,7 +124,6 @@ BACKEND_DIR="$SCRIPT_DIR/backend"
 FRONTEND_DIR="$SCRIPT_DIR/frontend"
 VENV_DIR="$BACKEND_DIR/venv"
 RUNTIME_DIR="$SCRIPT_DIR/runtime"
-RUNTIME_BACKEND_DIR="$RUNTIME_DIR/backend"
 
 PIDS=()
 
@@ -235,21 +234,6 @@ if [[ "$FRONTEND_ONLY" != true ]]; then
         print_success "Backend dependencies installed"
     else
         print_info "Skipping dependency installation"
-    fi
-
-    ENV_FILE="$RUNTIME_BACKEND_DIR/.env"
-    ENV_EXAMPLE="$BACKEND_DIR/.env.example"
-    mkdir -p "$RUNTIME_BACKEND_DIR"
-    if [[ ! -f "$ENV_FILE" ]]; then
-        if [[ -f "$ENV_EXAMPLE" ]]; then
-            print_info "Creating runtime .env config file..."
-            cp "$ENV_EXAMPLE" "$ENV_FILE"
-            print_success "runtime .env file created"
-            print_info "A local encryption key will be generated automatically on first backend start"
-            print_warning "Model provider API Keys are configured later in the web UI"
-        fi
-    else
-        print_success "runtime .env config file already exists"
     fi
 
     cd "$SCRIPT_DIR"

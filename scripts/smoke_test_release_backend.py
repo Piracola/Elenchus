@@ -14,8 +14,6 @@ import shutil
 import sys
 from pathlib import Path
 
-from cryptography.fernet import Fernet
-
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND_DIR = ROOT / "backend"
 FRONTEND_DIST_DIR = ROOT / "frontend" / "dist"
@@ -24,14 +22,10 @@ SMOKE_DIR = ROOT / "dist" / "release-smoke"
 
 def configure_runtime_environment() -> None:
     SMOKE_DIR.mkdir(parents=True, exist_ok=True)
-    db_path = (SMOKE_DIR / "elenchus-smoke.db").resolve().as_posix()
     runtime_root = (SMOKE_DIR / "runtime").resolve()
 
     # Avoid mutating real runtime data during CI or local smoke runs.
     os.environ.setdefault("ELENCHUS_RUNTIME_DIR", str(runtime_root))
-    os.environ.setdefault("ELENCHUS_ENCRYPTION_KEY", Fernet.generate_key().decode())
-    os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
-    os.environ.setdefault("DEBUG", "false")
 
 
 async def run_smoke_test() -> None:

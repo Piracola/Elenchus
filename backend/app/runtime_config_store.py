@@ -1,16 +1,11 @@
 from __future__ import annotations
 
 import json
-import os
-import sqlite3
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any
-
-import yaml
-from dotenv import dotenv_values
 
 from app.runtime_paths import get_runtime_paths, prepare_runtime_environment
 
@@ -231,185 +226,11 @@ def _load_json(path: Path) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
-def _load_yaml(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    try:
-        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
-def _load_log_level(path: Path) -> str | None:
-    payload = _load_json(path)
-    if not payload:
-        return None
-    level = payload.get("level")
-    if not isinstance(level, str) or not level.strip():
-        return None
-    return level.strip().upper()
-
-
-def _load_legacy_env(path: Path) -> dict[str, str]:
-    if not path.exists():
-        return {}
-    values = dotenv_values(path)
-    return {str(key): str(value).strip() for key, value in values.items() if value is not None}
-
-
-def _import_legacy_provider_records() -> list[dict[str, Any]]:
-    try:
-        from app.services.provider_service import decrypt_legacy_api_key
-    except Exception:
-        return []
-
-    database_url = _normalize_database_url(
-        str(
-            _load_legacy_env(get_runtime_paths().env_file).get("DATABASE_URL")
-            or _default_config()["server"]["database_url"]
-        ),
-        runtime_root=get_runtime_paths().runtime_root,
-    )
-    sqlite_prefixes = ("sqlite+aiosqlite:///", "sqlite:///")
-    database_path: Path | None = None
-    for prefix in sqlite_prefixes:
-        if database_url.startswith(prefix):
-            database_path = Path(database_url[len(prefix) :])
-            break
-    if database_path is None or not database_path.exists():
-        return []
-
-    try:
-        connection = sqlite3.connect(database_path)
-        connection.row_factory = sqlite3.Row
-    except sqlite3.Error:
-        return []
-
-    try:
-        columns = {
-            row["name"]
-            for row in connection.execute("PRAGMA table_info(providers)").fetchall()
-        }
-        if not columns:
-            return []
-
-        order_by = "is_default DESC, created_at DESC" if "is_default" in columns and "created_at" in columns else "rowid DESC"
-        rows = connection.execute(f"SELECT * FROM providers ORDER BY {order_by}").fetchall()
-        providers: list[dict[str, Any]] = []
-        for row in rows:
-            provider = {
-                "id": row["id"] if "id" in columns else "",
-                "name": row["name"] if "name" in columns else "",
-                "provider_type": row["provider_type"] if "provider_type" in columns else "openai",
-                "api_key": decrypt_legacy_api_key(row["api_key_encrypted"] if "api_key_encrypted" in columns else None),
-                "api_base_url": row["api_base_url"] if "api_base_url" in columns else None,
-                "custom_parameters": json.loads(row["custom_parameters"] or "{}")
-                if "custom_parameters" in columns and row["custom_parameters"]
-                else {},
-                "models": json.loads(row["models"] or "[]")
-                if "models" in columns and row["models"]
-                else [],
-                "is_default": bool(row["is_default"]) if "is_default" in columns else False,
-                "created_at": row["created_at"] if "created_at" in columns and row["created_at"] else _utcnow_iso(),
-                "updated_at": row["updated_at"] if "updated_at" in columns and row["updated_at"] else _utcnow_iso(),
-            }
-            if provider["id"] and provider["name"]:
-                providers.append(provider)
-        return providers
-    except (sqlite3.Error, json.JSONDecodeError, TypeError, ValueError):
-        return []
-    finally:
-        connection.close()
-
-
-def _load_legacy_env_config() -> dict[str, str]:
-    paths = get_runtime_paths()
-    current = _load_legacy_env(paths.env_file)
-    legacy = _load_legacy_env(paths.legacy_env_file)
-    merged = dict(legacy)
-    merged.update(current)
-    return merged
-
-
-def _load_legacy_yaml_config() -> dict[str, Any]:
-    paths = get_runtime_paths()
-    current = _load_yaml(paths.config_file)
-    legacy = _load_yaml(paths.config_source)
-    merged = dict(legacy)
-    merged.update(current)
-    return merged
-
-
-def _load_legacy_log_level_config() -> str | None:
-    paths = get_runtime_paths()
-    return _load_log_level(paths.log_config_file) or _load_log_level(paths.log_config_source)
-
-
-def _build_initial_runtime_config() -> dict[str, Any]:
-    paths = get_runtime_paths()
-    yaml_config = _load_legacy_yaml_config()
-    env_config = _load_legacy_env_config()
-    legacy_log_level = _load_legacy_log_level_config()
-
-    config = _default_config()
-    search_cfg = yaml_config.get("search") if isinstance(yaml_config.get("search"), dict) else {}
-    debate_cfg = yaml_config.get("debate") if isinstance(yaml_config.get("debate"), dict) else {}
-
-    config["providers"] = _import_legacy_provider_records()
-    config["server"].update(
-        {
-            "host": env_config.get("HOST") or config["server"]["host"],
-            "port": int(env_config.get("PORT") or config["server"]["port"]),
-            "debug": str(env_config.get("DEBUG") or "false").strip().lower() == "true",
-            "cors_origins": _normalize_string_list(env_config.get("CORS_ORIGINS"), config["server"]["cors_origins"]),
-            "database_url": _normalize_database_url(
-                env_config.get("DATABASE_URL") or config["server"]["database_url"],
-                runtime_root=paths.runtime_root,
-            ),
-        }
-    )
-    config["search"] = {
-        "provider": str(search_cfg.get("provider") or config["search"]["provider"]).strip().lower(),
-        "max_results_per_query": int(search_cfg.get("max_results_per_query") or config["search"]["max_results_per_query"]),
-        "searxng": {
-            "base_url": env_config.get("SEARXNG_BASE_URL") or config["search"]["searxng"]["base_url"],
-            "api_key": env_config.get("SEARXNG_API_KEY") or "",
-        },
-        "tavily": {
-            "api_url": env_config.get("TAVILY_API_URL") or config["search"]["tavily"]["api_url"],
-            "api_key": env_config.get("TAVILY_API_KEY") or "",
-        },
-    }
-    config["debate"] = {
-        "default_max_turns": int(debate_cfg.get("default_max_turns") or config["debate"]["default_max_turns"]),
-        "context_window": {
-            "recent_turns_to_keep": int(
-                ((debate_cfg.get("context_window") or {}) if isinstance(debate_cfg.get("context_window"), dict) else {}).get("recent_turns_to_keep")
-                or config["debate"]["context_window"]["recent_turns_to_keep"]
-            ),
-            "enable_summary_compression": bool(
-                ((debate_cfg.get("context_window") or {}) if isinstance(debate_cfg.get("context_window"), dict) else {}).get(
-                    "enable_summary_compression",
-                    config["debate"]["context_window"]["enable_summary_compression"],
-                )
-            ),
-        },
-    }
-    if legacy_log_level:
-        config["logging"]["level"] = legacy_log_level
-    return normalize_runtime_config(config)
-
-
-def _build_legacy_import_config() -> dict[str, Any]:
-    return _build_initial_runtime_config()
-
-
 def _current_or_initial_runtime_config() -> dict[str, Any]:
     current = _load_json(get_runtime_paths().config_json_file)
     if current is not None:
         return normalize_runtime_config(current)
-    return _build_initial_runtime_config()
+    return _default_config()
 
 
 def ensure_runtime_config() -> dict[str, Any]:
@@ -423,9 +244,9 @@ def ensure_runtime_config() -> dict[str, Any]:
                 _write_json_atomic(path, normalized)
             return normalized
 
-        imported = _build_initial_runtime_config()
-        _write_json_atomic(path, imported)
-        return imported
+        initial = _default_config()
+        _write_json_atomic(path, initial)
+        return deepcopy(initial)
 
 
 def load_runtime_config() -> dict[str, Any]:

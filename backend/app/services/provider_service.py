@@ -1,159 +1,19 @@
 """
 Provider configuration service backed by runtime/config.json.
-Legacy Fernet helpers are retained only for one-time imports from the old
-providers database.
 """
 
 from __future__ import annotations
 
-import logging
-import os
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
-
-from cryptography.fernet import Fernet
-from dotenv import dotenv_values, set_key
 
 from app.models.schemas import ModelConfigCreate, ModelConfigResponse, ModelConfigUpdate
 from app.runtime_config_store import load_runtime_config, update_runtime_config
-from app.runtime_paths import get_runtime_paths
-
-logger = logging.getLogger(__name__)
-
-_ENCRYPTION_ENV_KEY = "ELENCHUS_ENCRYPTION_KEY"
-_ENCRYPTION_PLACEHOLDER = "replace-with-a-generated-key"
-
-
-def _normalize_key(candidate: object | None) -> str:
-    if candidate is None:
-        return ""
-    return str(candidate).strip()
-
-
-def _is_valid_fernet_key(candidate: str) -> bool:
-    if not candidate:
-        return False
-    try:
-        Fernet(candidate.encode())
-        return True
-    except Exception:
-        return False
-
-
-def _legacy_env_candidates(env_file: Path | None = None) -> list[Path]:
-    paths = get_runtime_paths()
-    if env_file is not None:
-        candidates = [env_file]
-    else:
-        candidates = [paths.env_file, paths.legacy_env_file]
-    candidates = [path for path in candidates if path is not None]
-    unique: list[Path] = []
-    seen: set[str] = set()
-    for path in candidates:
-        marker = str(path)
-        if marker in seen:
-            continue
-        seen.add(marker)
-        unique.append(path)
-    return unique
-
-
-def _load_legacy_encryption_key(env_file: Path | None = None) -> str:
-    current_key = _normalize_key(os.environ.get(_ENCRYPTION_ENV_KEY))
-    if _is_valid_fernet_key(current_key):
-        return current_key
-
-    for candidate in _legacy_env_candidates(env_file):
-        if not candidate.exists():
-            continue
-        file_values = dotenv_values(candidate)
-        stored_key = _normalize_key(file_values.get(_ENCRYPTION_ENV_KEY))
-        if _is_valid_fernet_key(stored_key):
-            return stored_key
-    return ""
-
-
-def ensure_local_encryption_key(env_file: Path | None = None) -> str:
-    """Keep legacy Fernet bootstrap behavior for local runtimes and tests."""
-
-    current_key = _normalize_key(os.environ.get(_ENCRYPTION_ENV_KEY))
-    if _is_valid_fernet_key(current_key):
-        return current_key
-
-    if current_key and current_key != _ENCRYPTION_PLACEHOLDER:
-        raise ValueError(
-            f"{_ENCRYPTION_ENV_KEY} is set but invalid. "
-            "Refusing to replace it automatically because that could make "
-            "existing encrypted provider API keys undecryptable."
-        )
-
-    for candidate in _legacy_env_candidates(env_file):
-        if not candidate.exists():
-            continue
-        file_values = dotenv_values(candidate)
-        stored_key = _normalize_key(file_values.get(_ENCRYPTION_ENV_KEY))
-        if _is_valid_fernet_key(stored_key):
-            os.environ[_ENCRYPTION_ENV_KEY] = stored_key
-            return stored_key
-        if stored_key and stored_key != _ENCRYPTION_PLACEHOLDER:
-            raise ValueError(
-                f"{_ENCRYPTION_ENV_KEY} in {candidate} is invalid. "
-                "Refusing to overwrite it automatically because that could break "
-                "decryption of existing provider API keys."
-            )
-
-    generated_key = Fernet.generate_key().decode()
-    target_env = env_file or get_runtime_paths().env_file
-    target_env.parent.mkdir(parents=True, exist_ok=True)
-    if not target_env.exists():
-        target_env.touch()
-    set_key(str(target_env), _ENCRYPTION_ENV_KEY, generated_key, quote_mode="never")
-    os.environ[_ENCRYPTION_ENV_KEY] = generated_key
-    logger.info("Generated local provider encryption key at %s", target_env)
-    return generated_key
-
-
-def get_legacy_encryption_key() -> str:
-    """Return the current legacy encryption key without generating a new one."""
-
-    return _load_legacy_encryption_key()
-
-
-def decrypt_legacy_api_key(encrypted: str | None) -> str | None:
-    """Decrypt API keys stored by the legacy DB-backed provider store."""
-
-    if not encrypted:
-        return None
-
-    key = get_legacy_encryption_key()
-    if not key or key == _ENCRYPTION_PLACEHOLDER:
-        return None
-
-    try:
-        return Fernet(key.encode()).decrypt(encrypted.encode()).decode()
-    except Exception:
-        return None
-
-
-def maybe_decrypt_api_key(value: str | None) -> str | None:
-    """Return plaintext if already plaintext; otherwise try legacy Fernet decryption."""
-
-    if not value:
-        return None
-    if not get_legacy_encryption_key():
-        return value
-    decrypted = decrypt_legacy_api_key(value)
-    return decrypted if decrypted is not None else value
 
 
 def has_configured_api_key(value: str | None) -> bool:
-    return bool(maybe_decrypt_api_key(value))
-
-
-def normalize_stored_api_key(value: str | None) -> str:
-    return maybe_decrypt_api_key(value) or ""
+    return bool((value or "").strip())
 
 
 def _utcnow() -> datetime:
@@ -202,7 +62,7 @@ class ProviderService:
             id=str(provider.get("id") or ""),
             name=str(provider.get("name") or ""),
             provider_type=str(provider.get("provider_type") or "openai"),
-            api_key_configured=has_configured_api_key(provider.get("api_key")),
+            api_key_configured=has_configured_api_key(str(provider.get("api_key") or "")),
             api_base_url=provider.get("api_base_url"),
             custom_parameters=dict(provider.get("custom_parameters") or {}),
             models=[str(model) for model in (provider.get("models") or []) if str(model)],
@@ -217,7 +77,7 @@ class ProviderService:
             "id": str(provider.get("id") or ""),
             "name": str(provider.get("name") or ""),
             "provider_type": str(provider.get("provider_type") or "openai"),
-            "api_key": maybe_decrypt_api_key(str(provider.get("api_key") or "") or None),
+            "api_key": str(provider.get("api_key") or ""),
             "api_base_url": provider.get("api_base_url"),
             "custom_parameters": dict(provider.get("custom_parameters") or {}),
             "models": [str(model) for model in (provider.get("models") or []) if str(model)],

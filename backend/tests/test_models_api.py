@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -8,10 +7,7 @@ from app.main import app
 
 def test_create_model_config_without_trailing_slash(
     db_session,
-    monkeypatch,
 ):
-    monkeypatch.setenv("ELENCHUS_ENCRYPTION_KEY", Fernet.generate_key().decode())
-
     client = TestClient(app)
     response = client.post(
         "/api/models",
@@ -37,10 +33,7 @@ def test_create_model_config_without_trailing_slash(
 
 def test_list_model_configs_without_trailing_slash(
     db_session,
-    monkeypatch,
 ):
-    monkeypatch.setenv("ELENCHUS_ENCRYPTION_KEY", Fernet.generate_key().decode())
-
     client = TestClient(app)
     create_response = client.post(
         "/api/models",
@@ -69,10 +62,7 @@ def test_list_model_configs_without_trailing_slash(
 
 def test_update_model_config_returns_secret_presence_only(
     db_session,
-    monkeypatch,
 ):
-    monkeypatch.setenv("ELENCHUS_ENCRYPTION_KEY", Fernet.generate_key().decode())
-
     client = TestClient(app)
     create_response = client.post(
         "/api/models",
@@ -102,10 +92,7 @@ def test_update_model_config_returns_secret_presence_only(
 
 def test_clear_model_config_api_key_returns_unconfigured_state(
     db_session,
-    monkeypatch,
 ):
-    monkeypatch.setenv("ELENCHUS_ENCRYPTION_KEY", Fernet.generate_key().decode())
-
     client = TestClient(app)
     create_response = client.post(
         "/api/models",
@@ -139,10 +126,7 @@ def test_clear_model_config_api_key_returns_unconfigured_state(
 
 def test_update_model_config_rejects_duplicate_name(
     db_session,
-    monkeypatch,
 ):
-    monkeypatch.setenv("ELENCHUS_ENCRYPTION_KEY", Fernet.generate_key().decode())
-
     client = TestClient(app)
     first_response = client.post(
         "/api/models",

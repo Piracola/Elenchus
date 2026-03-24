@@ -1,6 +1,6 @@
 """
 Tavily search provider — optional fallback when SearXNG is unavailable.
-Requires a TAVILY_API_KEY in .env.
+Requires a Tavily API key from runtime configuration.
 """
 
 from __future__ import annotations

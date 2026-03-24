@@ -69,7 +69,7 @@ chmod +x ./start.sh
 - 启动后会在 `runtime/config.json` 初始化统一运行时配置。
 - 运行目录会准备 `runtime/elenchus.db`、`runtime/logs/`、`runtime/sessions/` 等本地内容。
 - provider API key 不通过仓库内 `.env` 管理，而是在 Web UI 中配置并持久化到 `runtime/config.json`。
-- 如果存在旧的 `.env` / `config.yaml` / `log_config.json` / provider DB 配置，首次启动会自动导入到 `runtime/config.json`。
+- 当前只会直接初始化并使用 `runtime/config.json`；旧的 `.env` / `config.yaml` / `log_config.json` / provider DB 残留不会再被自动导入。
 
 ## 5. 手动启动：最短路径
 

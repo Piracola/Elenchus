@@ -162,7 +162,7 @@ session_service.py
     └── provider_service.py (API Key 解析)
 
 provider_service.py
-    └── data/providers.json (文件存储)
+    └── runtime/config.json.providers (当前运行时配置分支，历史上曾使用 data/providers.json)
 
 intervention_manager.py
     └── 内存存储 (asyncio.Lock)

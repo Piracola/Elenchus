@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from app.agents.safe_invoke import normalize_model_text
@@ -9,6 +10,16 @@ from app.models.schemas import DebateMode
 from app.services import runtime_event_service, session_service
 from app.services.builtin_reference_service import ensure_builtin_mode_references
 from app.text_repair import repair_text_tree
+
+_SAFE_RESUME_NODES = {
+    "",
+    "manage_context",
+    "advance_turn",
+    "consensus",
+    "sophistry_postmortem",
+}
+
+
 
 
 def _default_team_config() -> dict[str, int]:
@@ -61,6 +72,135 @@ def _sanitize_dialogue_history(dialogue_history: Any) -> list[dict[str, Any]]:
     return sanitized
 
 
+def _coerce_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _entry_turn(entry: Any) -> int | None:
+    if not isinstance(entry, dict):
+        return None
+    return _coerce_int(entry.get("turn"))
+
+
+def _knowledge_for_turn(entries: Any, turn_index: int) -> list[dict[str, Any]]:
+    if not isinstance(entries, list):
+        return []
+
+    selected: list[dict[str, Any]] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        source_turn = _coerce_int(entry.get("source_turn"))
+        if source_turn is None:
+            source_turn = _coerce_int(entry.get("turn"))
+        if source_turn == turn_index:
+            selected.append(entry)
+    return selected
+
+
+def _rebuild_recent_dialogue_history(dialogue_history: list[dict[str, Any]], current_turn: int) -> list[dict[str, Any]]:
+    recent_entries = [entry for entry in dialogue_history if _entry_turn(entry) == current_turn]
+    return recent_entries or dialogue_history
+
+
+def _recompute_cumulative_scores(judge_history: list[dict[str, Any]]) -> dict[str, dict[str, list[Any]]]:
+    cumulative_scores: dict[str, dict[str, list[Any]]] = {}
+    for entry in judge_history:
+        if not isinstance(entry, dict):
+            continue
+        target_role = str(entry.get("target_role", "") or "")
+        scores = entry.get("scores")
+        if not target_role or not isinstance(scores, dict):
+            continue
+        role_scores = cumulative_scores.setdefault(target_role, {})
+        for dimension, dimension_data in scores.items():
+            if dimension in {"overall_comment", "module_scores", "comprehensive_score"}:
+                continue
+            if not isinstance(dimension_data, dict):
+                continue
+            score_value = dimension_data.get("score")
+            if isinstance(score_value, (int, float)):
+                role_scores.setdefault(str(dimension), []).append(score_value)
+    return cumulative_scores
+
+
+def _normalize_resumable_snapshot(
+    session_snapshot: dict[str, Any],
+    *,
+    current_turn: int,
+) -> dict[str, Any]:
+    snapshot = repair_text_tree(deepcopy(session_snapshot))
+    last_node = str(snapshot.get("last_executed_node", "") or "")
+    if last_node in _SAFE_RESUME_NODES:
+        return snapshot
+
+    snapshot["dialogue_history"] = [
+        entry
+        for entry in _sanitize_dialogue_history(snapshot.get("dialogue_history", []))
+        if _entry_turn(entry) != current_turn
+    ]
+    snapshot["team_dialogue_history"] = [
+        entry
+        for entry in _sanitize_dialogue_history(snapshot.get("team_dialogue_history", []))
+        if _entry_turn(entry) != current_turn
+    ]
+    snapshot["jury_dialogue_history"] = [
+        entry
+        for entry in _sanitize_dialogue_history(snapshot.get("jury_dialogue_history", []))
+        if _entry_turn(entry) != current_turn
+    ]
+    snapshot["judge_history"] = [
+        entry
+        for entry in _sanitize_dialogue_history(snapshot.get("judge_history", []))
+        if _entry_turn(entry) != current_turn
+    ]
+
+    shared_knowledge = snapshot.get("shared_knowledge", [])
+    if isinstance(shared_knowledge, list):
+        current_turn_knowledge = {id(entry) for entry in _knowledge_for_turn(shared_knowledge, current_turn)}
+        snapshot["shared_knowledge"] = [
+            entry
+            for entry in shared_knowledge
+            if id(entry) not in current_turn_knowledge
+        ]
+    else:
+        snapshot["shared_knowledge"] = []
+
+    mode_artifacts = snapshot.get("mode_artifacts", [])
+    if isinstance(mode_artifacts, list):
+        snapshot["mode_artifacts"] = [
+            artifact
+            for artifact in mode_artifacts
+            if _coerce_int(artifact.get("turn") if isinstance(artifact, dict) else None) != current_turn
+        ]
+    else:
+        snapshot["mode_artifacts"] = []
+
+    current_mode_report = snapshot.get("current_mode_report")
+    if isinstance(current_mode_report, dict) and _coerce_int(current_mode_report.get("turn")) == current_turn:
+        snapshot["current_mode_report"] = None
+
+    snapshot["recent_dialogue_history"] = _rebuild_recent_dialogue_history(
+        snapshot["dialogue_history"],
+        current_turn,
+    )
+    snapshot["current_speaker"] = ""
+    snapshot["current_speaker_index"] = -1
+    snapshot["messages"] = []
+    snapshot["current_team_discussion"] = []
+    snapshot["current_team_summary"] = None
+    snapshot["current_jury_discussion"] = []
+    snapshot["current_jury_summary"] = None
+    snapshot["current_scores"] = {}
+    snapshot["cumulative_scores"] = _recompute_cumulative_scores(snapshot["judge_history"])
+    snapshot["last_executed_node"] = "manage_context"
+    snapshot["last_status_message"] = ""
+    return snapshot
+
+
 class SessionRuntimeRepository:
     """Load and persist runtime state without exposing storage details."""
 
@@ -90,7 +230,11 @@ class SessionRuntimeRepository:
         if session_data is None:
             return None
 
-        session_snapshot = (record.state_snapshot or {}) if record is not None else {}
+        raw_snapshot = (record.state_snapshot or {}) if record is not None else {}
+        session_snapshot = _normalize_resumable_snapshot(
+            raw_snapshot,
+            current_turn=int(session_data.get("current_turn", 0) or 0),
+        )
         dialogue_history = _sanitize_dialogue_history(
             session_snapshot.get("dialogue_history", session_data.get("dialogue_history", []))
         )
@@ -163,10 +307,19 @@ class SessionRuntimeRepository:
                 "compressed_history_count": int(
                     session_snapshot.get("compressed_history_count", 0) or 0
                 ),
-                "shared_knowledge": session_data.get("shared_knowledge", []),
+                "shared_knowledge": session_snapshot.get(
+                    "shared_knowledge",
+                    session_data.get("shared_knowledge", []),
+                ),
                 "messages": [],
-                "current_scores": session_data.get("current_scores", {}),
-                "cumulative_scores": session_data.get("cumulative_scores", {}),
+                "current_scores": session_snapshot.get(
+                    "current_scores",
+                    session_data.get("current_scores", {}),
+                ),
+                "cumulative_scores": session_snapshot.get(
+                    "cumulative_scores",
+                    session_data.get("cumulative_scores", {}),
+                ),
                 "status": "in_progress",
                 "error": None,
                 "team_config": team_config,

@@ -57,7 +57,7 @@ pip install -r requirements-dev.txt
 
 - 本地启动时会在 `runtime/config.json` 初始化运行时配置。
 - provider API key 不在仓库 `.env` 中维护，而是在 Web UI 中配置并存储到 `runtime/config.json`。
-- 当存在旧的 `.env` / `config.yaml` / `log_config.json` / provider DB 配置时，首次启动会自动导入。
+- 当前唯一活动配置源是 `runtime/config.json`，旧的 `.env` / `config.yaml` / `log_config.json` / provider DB 残留不会再被导入。
 - 当 `DATABASE_URL` 使用相对 SQLite 路径时，后端会把它归一化到 `runtime/` 目录。
 
 ## 4. 运行时相关路径
@@ -71,7 +71,7 @@ pip install -r requirements-dev.txt
 
 这些路径的文件职责与回放关系见：[运行时与回放](../runtime.md)
 
-> 说明：`runtime/backend/.env`、`runtime/backend/config.yaml`、`runtime/data/log_config.json` 已降级为首次迁移导入来源，不再是活动配置源。
+> 说明：`runtime/backend/.env`、`runtime/backend/config.yaml`、`runtime/data/log_config.json` 与 `backend/data/providers.json` 都已废弃，不再是活动配置源，也不会参与迁移。
 
 ## 5. 关键入口文件
 

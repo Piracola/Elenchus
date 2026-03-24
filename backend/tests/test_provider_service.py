@@ -1,93 +1,13 @@
-"""
-Tests for local encryption key bootstrap behavior.
-"""
-
 from __future__ import annotations
-
-import os
-import shutil
-from contextlib import contextmanager
-from pathlib import Path
 
 import pytest
 
 from app.models.schemas import ModelConfigCreate, ModelConfigUpdate
-from app.services import provider_service
 from app.services.provider_service import ProviderService
 
 
-@contextmanager
-def _workspace_env_file():
-    temp_dir = Path("backend/.pytest-local/provider-service")
-    if temp_dir.exists():
-        shutil.rmtree(temp_dir)
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    try:
-        yield temp_dir / ".env"
-    finally:
-        shutil.rmtree(temp_dir.parent, ignore_errors=True)
-
-
-def test_ensure_local_encryption_key_generates_and_persists_when_missing(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    with _workspace_env_file() as env_file:
-        monkeypatch.delenv("ELENCHUS_ENCRYPTION_KEY", raising=False)
-
-        key = provider_service.ensure_local_encryption_key(env_file)
-
-        assert provider_service._is_valid_fernet_key(key)
-        assert os.environ["ELENCHUS_ENCRYPTION_KEY"] == key
-        assert f"ELENCHUS_ENCRYPTION_KEY={key}" in env_file.read_text(encoding="utf-8")
-
-
-def test_ensure_local_encryption_key_reuses_valid_file_value(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    with _workspace_env_file() as env_file:
-        existing_key = provider_service.Fernet.generate_key().decode()
-        env_file.write_text(
-            f"ELENCHUS_ENCRYPTION_KEY={existing_key}\n",
-            encoding="utf-8",
-        )
-        monkeypatch.delenv("ELENCHUS_ENCRYPTION_KEY", raising=False)
-
-        key = provider_service.ensure_local_encryption_key(env_file)
-
-        assert key == existing_key
-        assert os.environ["ELENCHUS_ENCRYPTION_KEY"] == existing_key
-
-
-def test_ensure_local_encryption_key_replaces_template_placeholder(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    with _workspace_env_file() as env_file:
-        env_file.write_text(
-            "ELENCHUS_ENCRYPTION_KEY=replace-with-a-generated-key\n",
-            encoding="utf-8",
-        )
-        monkeypatch.delenv("ELENCHUS_ENCRYPTION_KEY", raising=False)
-
-        key = provider_service.ensure_local_encryption_key(env_file)
-
-        assert provider_service._is_valid_fernet_key(key)
-        assert key != "replace-with-a-generated-key"
-        assert f"ELENCHUS_ENCRYPTION_KEY={key}" in env_file.read_text(encoding="utf-8")
-
-
-def test_ensure_local_encryption_key_rejects_invalid_custom_value(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    with _workspace_env_file() as env_file:
-        monkeypatch.setenv("ELENCHUS_ENCRYPTION_KEY", "not-a-valid-key")
-
-        with pytest.raises(ValueError, match="invalid"):
-            provider_service.ensure_local_encryption_key(env_file)
-
-
 @pytest.mark.asyncio
-async def test_update_config_preserves_existing_api_key_when_omitted(db_session, monkeypatch):
-    monkeypatch.setenv("ELENCHUS_ENCRYPTION_KEY", provider_service.Fernet.generate_key().decode())
+async def test_update_config_preserves_existing_api_key_when_omitted(db_session):
     service = ProviderService()
 
     created = await service.create_config(
@@ -115,8 +35,7 @@ async def test_update_config_preserves_existing_api_key_when_omitted(db_session,
 
 
 @pytest.mark.asyncio
-async def test_update_config_rejects_duplicate_name(db_session, monkeypatch):
-    monkeypatch.setenv("ELENCHUS_ENCRYPTION_KEY", provider_service.Fernet.generate_key().decode())
+async def test_update_config_rejects_duplicate_name(db_session):
     service = ProviderService()
 
     await service.create_config(
@@ -142,11 +61,12 @@ async def test_update_config_rejects_duplicate_name(db_session, monkeypatch):
         )
     )
 
+    with pytest.raises(ValueError, match="already exists"):
+        await service.update_config(created.id, ModelConfigUpdate(name="provider-a"))
 
 
 @pytest.mark.asyncio
-async def test_delete_default_config_promotes_new_default(db_session, monkeypatch):
-    monkeypatch.setenv("ELENCHUS_ENCRYPTION_KEY", provider_service.Fernet.generate_key().decode())
+async def test_delete_default_config_promotes_new_default(db_session):
     service = ProviderService()
 
     first = await service.create_config(
@@ -179,5 +99,3 @@ async def test_delete_default_config_promotes_new_default(db_session, monkeypatc
     assert len(remaining) == 1
     assert remaining[0].id == second.id
     assert remaining[0].is_default is True
-
-

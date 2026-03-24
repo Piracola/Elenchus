@@ -239,6 +239,7 @@ async def delete_session(
 async def export_session(
     session_id: str,
     format: ExportFormat = Query(default=ExportFormat.JSON),
+    categories: list[str] | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -261,7 +262,7 @@ async def export_session(
             },
         )
 
-    markdown = export_service.export_markdown(data)
+    markdown = export_service.export_markdown(data, categories)
     filename = export_service.build_export_filename(data, "md")
     return Response(
         content=markdown,
