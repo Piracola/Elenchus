@@ -67,11 +67,7 @@ export default function FloatingRuntimeInspector({
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: '4px',
-                        cursor:
-                            floatingInspectorActive
-                            && floatingInspectorInteractionRef.current?.mode === 'move'
-                                ? 'grabbing'
-                                : 'grab',
+                        cursor: floatingInspectorActive ? 'grabbing' : 'grab',
                         border: '1px solid var(--border-subtle)',
                         background: 'var(--glass-bg)',
                         backdropFilter: 'blur(10px)',

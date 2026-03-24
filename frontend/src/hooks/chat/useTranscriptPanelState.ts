@@ -58,9 +58,11 @@ export function useTranscriptPanelState() {
             replayEnabled,
             visibleEventIds,
             focusedRuntimeEvent,
+            // eslint-disable-next-line react-hooks/refs -- preserve the previous grouping snapshot across renders
             previousGroupingState: replayEnabled ? null : transcriptGroupingStateRef.current,
         });
 
+        // eslint-disable-next-line react-hooks/refs -- cache the latest grouping snapshot for the next render
         transcriptGroupingStateRef.current = replayEnabled ? null : viewModel.groupingState;
         return viewModel;
     }, [

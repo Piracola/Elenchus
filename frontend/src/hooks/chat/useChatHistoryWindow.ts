@@ -49,7 +49,9 @@ export function useChatHistoryWindow({
         }
         pendingRowHeightsRef.current.clear();
         pendingHistoryPrependScrollHeightRef.current = null;
-        setRowHeights({});
+        queueMicrotask(() => {
+            setRowHeights({});
+        });
     }, [currentSessionId]);
 
     useEffect(() => {
@@ -253,7 +255,9 @@ export function useChatHistoryWindow({
             return;
         }
 
-        setHistoryRowStart((currentStart) => revealFocusedHistoryRow(currentStart, transcriptViewModel.focusedRowIndex));
+        queueMicrotask(() => {
+            setHistoryRowStart((currentStart) => revealFocusedHistoryRow(currentStart, transcriptViewModel.focusedRowIndex));
+        });
     }, [focusedRuntimeEventId, replayEnabled, transcriptViewModel.focusedRowIndex]);
 
     useEffect(() => {

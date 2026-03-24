@@ -109,7 +109,9 @@ export function useFloatingInspectorState({
 
     useEffect(() => {
         if (!isWideLayout) {
-            setFloatingInspectorExpanded(false);
+            queueMicrotask(() => {
+                setFloatingInspectorExpanded(false);
+            });
             stopFloatingInspectorInteraction();
             return;
         }

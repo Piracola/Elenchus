@@ -47,7 +47,9 @@ export function useChatViewportMetrics({
             return;
         }
 
-        setSmoothScrollSuppressed(true);
+        queueMicrotask(() => {
+            setSmoothScrollSuppressed(true);
+        });
         if (smoothScrollRestoreRef.current !== null) {
             cancelAnimationFrame(smoothScrollRestoreRef.current);
         }
