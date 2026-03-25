@@ -4,13 +4,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../../api/client';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useModelConfigManager } from '../../hooks/useModelConfigManager';
-import { ProviderSidebar } from './ProviderSidebar';
-import { ProviderForm } from './ProviderForm';
 import { SearchConfigTab } from './SearchConfigTab';
 import type { LogLevel, DisplaySettings } from '../../types';
 import { DISPLAY_FONT_SIZE_OPTIONS } from '../../config/display';
 import { resetStoredFloatingInspectorRect } from '../../utils/floatingInspector';
 import { toast } from '../../utils/toast';
+import { SettingsProvidersTab } from './settings/SettingsProvidersTab';
+import { SettingsRadioCardGroup } from './settings/SettingsRadioCardGroup';
 
 export type SettingsTab = 'providers' | 'display' | 'logging' | 'search';
 
@@ -34,76 +34,6 @@ const MESSAGE_WIDTH_OPTIONS: { value: DisplaySettings['messageWidth']; label: st
     { value: 'wide', label: '宽', description: '1200px — 充分利用屏幕空间' },
     { value: 'full', label: '全宽', description: '100% — 最大化显示区域' },
 ];
-
-function renderRadioCardGroup<T extends string>({
-    options,
-    selectedValue,
-    onSelect,
-}: {
-    options: { value: T; label: string; description: string }[];
-    selectedValue: T;
-    onSelect: (value: T) => void;
-}) {
-    return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {options.map((option) => (
-                <motion.div
-                    key={option.value}
-                    whileHover={{ scale: 1.01 }}
-                    onClick={() => onSelect(option.value)}
-                    style={{
-                        padding: '16px 20px',
-                        borderRadius: 'var(--radius-lg)',
-                        background: selectedValue === option.value ? 'var(--bg-tertiary)' : 'transparent',
-                        border: `1px solid ${selectedValue === option.value ? 'var(--accent-indigo)' : 'var(--border-subtle)'}`,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '16px',
-                        transition: 'all var(--transition-fast)',
-                        boxShadow: selectedValue === option.value ? 'var(--shadow-sm)' : 'none',
-                    }}
-                >
-                    <div style={{
-                        width: '22px',
-                        height: '22px',
-                        borderRadius: '50%',
-                        border: `2px solid ${selectedValue === option.value ? 'var(--accent-indigo)' : 'var(--border-subtle)'}`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0,
-                    }}>
-                        {selectedValue === option.value && (
-                            <div style={{
-                                width: '10px',
-                                height: '10px',
-                                borderRadius: '50%',
-                                background: 'var(--accent-indigo)',
-                            }} />
-                        )}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                        <div style={{
-                            fontWeight: 700,
-                            fontSize: '15px',
-                            color: 'var(--text-primary)',
-                        }}>
-                            {option.label}
-                        </div>
-                        <div style={{
-                            fontSize: '13px',
-                            color: 'var(--text-muted)',
-                            marginTop: '4px',
-                        }}>
-                            {option.description}
-                        </div>
-                    </div>
-                </motion.div>
-            ))}
-        </div>
-    );
-}
 
 export default function SettingsPanel({
     isOpen,
@@ -150,31 +80,6 @@ export default function SettingsPanel({
         toast('运行观察器已重置到默认位置', 'success');
     };
 
-    const renderProvidersTab = () => (
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden', gap: '20px' }}>
-            <ProviderSidebar
-                providers={modelConfig.providers}
-                isLoading={modelConfig.isLoading}
-                activeIndex={modelConfig.activeIndex}
-                isCreatingNew={modelConfig.isCreatingNew}
-                onSelect={modelConfig.handleSelectProvider}
-                onDelete={modelConfig.handleDeleteProvider}
-                onNew={modelConfig.startNew}
-            />
-            <ProviderForm
-                formData={modelConfig.formData}
-                isCreatingNew={modelConfig.isCreatingNew}
-                newModelInput={modelConfig.newModelInput}
-                onFieldChange={modelConfig.updateFormField}
-                onAddModel={modelConfig.handleAddModel}
-                onRemoveModel={modelConfig.handleRemoveModel}
-                onNewModelInputChange={modelConfig.setNewModelInput}
-                onSave={modelConfig.handleSave}
-                onClose={onClose}
-            />
-        </div>
-    );
-
     const renderDisplayTab = () => (
         <div style={{
             padding: '24px',
@@ -210,11 +115,11 @@ export default function SettingsPanel({
                 }}>
                     消息界面宽度
                 </h4>
-                {renderRadioCardGroup({
-                    options: MESSAGE_WIDTH_OPTIONS,
-                    selectedValue: displaySettings.messageWidth,
-                    onSelect: (value) => setDisplaySettings({ messageWidth: value }),
-                })}
+                <SettingsRadioCardGroup
+                    options={MESSAGE_WIDTH_OPTIONS}
+                    selectedValue={displaySettings.messageWidth}
+                    onSelect={(value) => setDisplaySettings({ messageWidth: value })}
+                />
             </div>
 
             <div style={{ marginBottom: '24px' }}>
@@ -226,11 +131,11 @@ export default function SettingsPanel({
                 }}>
                     字体大小
                 </h4>
-                {renderRadioCardGroup({
-                    options: DISPLAY_FONT_SIZE_OPTIONS,
-                    selectedValue: displaySettings.fontSize,
-                    onSelect: (value) => setDisplaySettings({ fontSize: value }),
-                })}
+                <SettingsRadioCardGroup
+                    options={DISPLAY_FONT_SIZE_OPTIONS}
+                    selectedValue={displaySettings.fontSize}
+                    onSelect={(value) => setDisplaySettings({ fontSize: value })}
+                />
             </div>
 
             <div style={{
@@ -596,7 +501,12 @@ export default function SettingsPanel({
                                     ×
                                 </motion.button>}
 
-                                {activeTab === 'providers' && renderProvidersTab()}
+                                {activeTab === 'providers' && (
+                                    <SettingsProvidersTab
+                                        modelConfig={modelConfig}
+                                        onClose={onClose}
+                                    />
+                                )}
                                 {activeTab === 'display' && renderDisplayTab()}
                                 {activeTab === 'logging' && renderLoggingTab()}
                                 {activeTab === 'search' && <SearchConfigTab />}
