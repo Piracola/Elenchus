@@ -1,4 +1,44 @@
-import type { Session, SessionListItem } from '../types';
+import type { DebateMode, Session, SessionListItem } from '../types';
+
+export type SessionModePresentation = {
+    label: string;
+    badgeBackground: string;
+    badgeColor: string;
+    badgeBorder: string;
+    inactiveBackground: string;
+    inactiveBorder: string;
+    activeBackground: string;
+    activeBorder: string;
+    activeShadow: string;
+};
+
+export function getSessionModePresentation(mode: DebateMode): SessionModePresentation {
+    if (mode === 'sophistry_experiment') {
+        return {
+            label: '诡辩',
+            badgeBackground: 'var(--mode-sophistry-soft)',
+            badgeColor: 'var(--mode-sophistry-accent)',
+            badgeBorder: '1px solid var(--mode-sophistry-border)',
+            inactiveBackground: 'linear-gradient(135deg, var(--mode-sophistry-bg) 0%, var(--mode-sophistry-card) 100%)',
+            inactiveBorder: '1px solid var(--mode-sophistry-border)',
+            activeBackground: 'var(--mode-sophistry-card)',
+            activeBorder: '1px solid var(--mode-sophistry-accent)',
+            activeShadow: '0 10px 24px var(--mode-sophistry-shadow)',
+        };
+    }
+
+    return {
+        label: '标准',
+        badgeBackground: 'var(--bg-tertiary)',
+        badgeColor: 'var(--text-muted)',
+        badgeBorder: '1px solid transparent',
+        inactiveBackground: 'transparent',
+        inactiveBorder: '1px solid transparent',
+        activeBackground: 'var(--bg-card)',
+        activeBorder: '1px solid var(--border-subtle)',
+        activeShadow: 'var(--shadow-sm)',
+    };
+}
 
 export function toSessionListItem(session: Session | SessionListItem): SessionListItem {
     return {

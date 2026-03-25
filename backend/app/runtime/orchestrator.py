@@ -60,15 +60,44 @@ class DebateOrchestrator:
         max_turns: int = 5,
         agent_configs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        initial_state = await self._repository.build_initial_state(
-            session_id,
-            topic=topic,
-            participants=participants,
-            max_turns=max_turns,
-            agent_configs=agent_configs,
-        )
-        if initial_state is None:
-            raise ValueError(f"Session {session_id} was not found.")
+        final_state: dict[str, Any] = {
+            "session_id": session_id,
+            "topic": topic,
+            "participants": participants or ["proposer", "opposer"],
+            "max_turns": max_turns,
+            "current_turn": 0,
+            "current_speaker": "",
+            "current_speaker_index": -1,
+            "dialogue_history": [],
+            "team_dialogue_history": [],
+            "jury_dialogue_history": [],
+            "judge_history": [],
+            "recent_dialogue_history": [],
+            "shared_knowledge": [],
+            "messages": [],
+            "current_scores": {},
+            "cumulative_scores": {},
+            "mode_artifacts": [],
+            "status": "in_progress",
+            "error": None,
+            "agent_configs": agent_configs or {},
+        }
+        last_node = ""
+
+        try:
+            initial_state = await self._repository.build_initial_state(
+                session_id,
+                topic=topic,
+                participants=participants,
+                max_turns=max_turns,
+                agent_configs=agent_configs,
+            )
+            if initial_state is None:
+                raise ValueError(f"Session {session_id} was not found.")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            return await self._finalize_startup_error(session_id, final_state, exc)
 
         debate_mode = str(initial_state.get("debate_mode", "standard") or "standard")
         last_checkpoint_node = str(initial_state.get("last_executed_node", "") or "")
@@ -136,7 +165,6 @@ class DebateOrchestrator:
         emitted_judge_keys: set[tuple[int, str]] = set()
 
         try:
-            last_node = ""
             last_status_node = "manage_context"
             async for state_snapshot in self._engine.stream(initial_state):
                 node_name = state_snapshot.get("last_executed_node", "")
@@ -285,4 +313,43 @@ class DebateOrchestrator:
                 phase="error",
             )
 
+        return final_state
+
+    async def _finalize_startup_error(
+        self,
+        session_id: str,
+        final_state: dict[str, Any],
+        exc: Exception,
+    ) -> dict[str, Any]:
+        user_facing_error = format_runtime_error_message(exc)
+        logger.error(
+            "Debate failed before streaming started: session=%s error=%s",
+            session_id,
+            exc,
+            exc_info=True,
+        )
+        final_state["status"] = "error"
+        final_state["error"] = user_facing_error
+        final_state["interrupted_at"] = datetime.now(timezone.utc).isoformat()
+        final_state["last_progress_at"] = final_state["interrupted_at"]
+        final_state["last_status_message"] = user_facing_error
+        final_state["dialogue_history"] = [
+            {
+                "role": "error",
+                "content": f"系统运行出错：{user_facing_error}",
+                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "agent_name": "系统",
+                "citations": [],
+            }
+        ]
+        final_state["recent_dialogue_history"] = final_state["dialogue_history"]
+
+        await self._repository.persist_state(session_id, final_state)
+        await self._events.emit_runtime_event(
+            session_id=session_id,
+            event_type="error",
+            payload={"content": f"辩论出错：{user_facing_error}"},
+            source="runtime.orchestrator",
+            phase="error",
+        )
         return final_state

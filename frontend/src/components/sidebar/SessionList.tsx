@@ -11,7 +11,7 @@ import {
 import SettingsPanel from './SettingsPanel';
 import BrandIcon from '../shared/BrandIcon';
 import type { SessionListItem } from '../../types';
-import { filterSessionsByQuery, mergeSessionPage } from '../../utils/sessionList';
+import { filterSessionsByQuery, getSessionModePresentation, mergeSessionPage } from '../../utils/sessionList';
 import { toast } from '../../utils/toast';
 
 interface SessionListProps {
@@ -265,9 +265,12 @@ export default function SessionList({ onCollapse }: SessionListProps) {
                         {filteredSessions.map((item) => {
                             const isActive = item.id === currentSessionId;
                             const isHovered = hoveredId === item.id;
+                            const isSophistryRecord = item.debate_mode === 'sophistry_experiment';
+                            const modePresentation = getSessionModePresentation(item.debate_mode);
                             return (
                                 <motion.div
                                     key={item.id}
+                                    data-session-mode={item.debate_mode}
                                     onMouseEnter={() => setHoveredId(item.id)}
                                     onMouseLeave={() => setHoveredId(null)}
                                     onClick={() => handleSelectSession(item)}
@@ -275,9 +278,15 @@ export default function SessionList({ onCollapse }: SessionListProps) {
                                         padding: '12px 14px',
                                         borderRadius: 'var(--radius-lg)',
                                         cursor: 'pointer',
-                                        background: isActive ? 'var(--bg-card)' : 'transparent',
-                                        border: isActive ? '1px solid var(--border-subtle)' : '1px solid transparent',
-                                        boxShadow: isActive ? 'var(--shadow-sm)' : 'none',
+                                        background: isActive
+                                            ? modePresentation.activeBackground
+                                            : modePresentation.inactiveBackground,
+                                        border: isActive
+                                            ? modePresentation.activeBorder
+                                            : modePresentation.inactiveBorder,
+                                        boxShadow: isActive
+                                            ? modePresentation.activeShadow
+                                            : (isSophistryRecord ? 'var(--shadow-xs)' : 'none'),
                                         transition: 'all var(--transition-fast)',
                                         position: 'relative',
                                         display: 'flex',
@@ -308,7 +317,9 @@ export default function SessionList({ onCollapse }: SessionListProps) {
                                         <div style={{
                                             fontWeight: isActive ? 600 : 500,
                                             fontSize: '13px',
-                                            color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                            color: isSophistryRecord
+                                                ? 'var(--text-primary)'
+                                                : (isActive ? 'var(--text-primary)' : 'var(--text-secondary)'),
                                             overflow: 'hidden',
                                             textOverflow: 'ellipsis',
                                             whiteSpace: 'nowrap',
@@ -322,9 +333,22 @@ export default function SessionList({ onCollapse }: SessionListProps) {
                                             display: 'flex',
                                             alignItems: 'center',
                                             gap: '8px',
+                                            flexWrap: 'wrap',
                                             fontSize: '11px',
                                             color: 'var(--text-muted)',
                                         }}>
+                                            <span style={{
+                                                padding: '2px 6px',
+                                                borderRadius: 'var(--radius-full)',
+                                                background: modePresentation.badgeBackground,
+                                                color: modePresentation.badgeColor,
+                                                border: modePresentation.badgeBorder,
+                                                fontWeight: 700,
+                                                fontSize: '10px',
+                                                letterSpacing: '0.02em',
+                                            }}>
+                                                {modePresentation.label}
+                                            </span>
                                             <span style={{
                                                 padding: '2px 6px',
                                                 borderRadius: 'var(--radius-sm)',

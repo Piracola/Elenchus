@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from typing import Any
 
 from app.dependencies import get_intervention_manager
 from app.runtime.orchestrator import DebateOrchestrator
 from app.runtime.session_repository import SessionRuntimeRepository
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -87,3 +90,16 @@ class DebateRuntimeService:
         current_task = self._tasks.get(session_id)
         if current_task is done_task:
             self._tasks.pop(session_id, None)
+        if done_task.cancelled():
+            return
+        try:
+            error = done_task.exception()
+        except asyncio.CancelledError:
+            return
+        if error is not None:
+            logger.error(
+                "Runtime task failed for session %s: %s",
+                session_id,
+                error,
+                exc_info=(type(error), error, error.__traceback__),
+            )

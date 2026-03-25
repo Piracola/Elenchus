@@ -37,7 +37,6 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
         debateMode,
         currentTurn,
         maxTurns,
-        modeArtifactsLength,
         hasCurrentSession,
         isDocumentVisible,
         visibilityResumeToken,
@@ -145,7 +144,6 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
                     currentTurn={currentTurn}
                     maxTurns={maxTurns}
                     isSophistryMode={isSophistryMode}
-                    modeArtifactsLength={modeArtifactsLength}
                     topicTitleFontSize={chatFontSizes.topicTitle}
                     transcriptCollapseSummary={transcriptCollapseSummary}
                     bulkCollapseLabel={bulkCollapseLabel}

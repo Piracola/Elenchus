@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { SessionListItem } from '../types';
 import {
     filterSessionsByQuery,
+    getSessionModePresentation,
     mergeSessionPage,
     sortSessionListItems,
     upsertSessionListItem,
@@ -69,5 +70,21 @@ describe('sessionList utils', () => {
     it('filters sessions by a trimmed case-insensitive query', () => {
         expect(filterSessionsByQuery(baseSessions, '  beta ')).toEqual([baseSessions[1]]);
         expect(filterSessionsByQuery(baseSessions, '')).toEqual(baseSessions);
+    });
+
+    it('returns a dedicated presentation for sophistry sessions', () => {
+        expect(getSessionModePresentation('standard')).toMatchObject({
+            label: '标准',
+            activeBackground: 'var(--bg-card)',
+            activeBorder: '1px solid var(--border-subtle)',
+        });
+
+        expect(getSessionModePresentation('sophistry_experiment')).toMatchObject({
+            label: '诡辩',
+            badgeBackground: 'var(--mode-sophistry-soft)',
+            badgeColor: 'var(--mode-sophistry-accent)',
+            activeBackground: 'var(--mode-sophistry-card)',
+            activeBorder: '1px solid var(--mode-sophistry-accent)',
+        });
     });
 });

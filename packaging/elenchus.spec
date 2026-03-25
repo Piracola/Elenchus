@@ -13,6 +13,7 @@ ICON_FILE = ROOT / "frontend" / "public" / "brand" / "elenchus.ico"
 datas = [
     (str(ROOT / "backend" / "prompts"), "backend/prompts"),
     (str(ROOT / "frontend" / "dist"), "frontend/dist"),
+    (str(ROOT / "docs" / "sophistry-fallacy-catalog.md"), "docs"),
 ]
 binaries = []
 hiddenimports = []

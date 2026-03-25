@@ -42,81 +42,104 @@ export default function SophistryModeNotice({
         <div
             style={{
                 pointerEvents: 'auto',
-                padding: '12px 14px',
+                padding: '10px 12px',
                 borderRadius: 'var(--radius-xl)',
                 background: 'var(--mode-sophistry-card)',
                 border: '1px solid var(--mode-sophistry-border)',
                 boxShadow: '0 6px 18px rgba(184, 137, 70, 0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                flexWrap: 'wrap',
+                minWidth: 0,
             }}
         >
             <div
                 style={{
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '12px',
-                    flexWrap: 'wrap',
-                    marginBottom: '8px',
+                    gap: '10px',
+                    flex: '0 0 auto',
                 }}
             >
-                <span
-                    style={{
-                        fontSize: '13px',
-                        fontWeight: 700,
-                        color: 'var(--mode-sophistry-accent)',
-                    }}
-                >
-                    模式提示
-                </span>
-                <span
-                    style={{
-                        fontSize: '12px',
-                        color: 'var(--text-secondary)',
-                        padding: '4px 10px',
-                        borderRadius: 'var(--radius-full)',
-                        background: 'rgba(184, 137, 70, 0.10)',
-                        whiteSpace: 'nowrap',
-                    }}
-                >
-                    观察报告 {artifactCount} 条
-                </span>
+                <AlertTriangle
+                    size={18}
+                    style={{ color: 'var(--mode-sophistry-accent)', flexShrink: 0 }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span
+                        style={{
+                            fontSize: '13px',
+                            fontWeight: 700,
+                            color: 'var(--mode-sophistry-accent)',
+                            lineHeight: 1.2,
+                        }}
+                    >
+                        模式提示
+                    </span>
+                    <span
+                        style={{
+                            fontSize: '11px',
+                            color: 'var(--text-secondary)',
+                            lineHeight: 1.2,
+                        }}
+                    >
+                        观察报告 {artifactCount} 条
+                    </span>
+                </div>
             </div>
-            <div
-                style={{
-                    fontSize,
-                    lineHeight: 1.6,
-                    color: 'var(--text-secondary)',
-                    overflow: 'hidden',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                }}
-            >
-                {SOPHISTRY_MODE_WARNING}
-            </div>
+
             <div
                 style={{
                     display: 'flex',
+                    flex: '1 1 320px',
+                    alignItems: 'center',
                     gap: '8px',
                     flexWrap: 'wrap',
-                    marginTop: '8px',
+                    minWidth: 0,
                 }}
             >
-                {SOPHISTRY_MODE_TAGS.map((label) => (
-                    <span
-                        key={label}
-                        style={{
-                            padding: '4px 10px',
-                            borderRadius: 'var(--radius-full)',
-                            background: 'rgba(184, 137, 70, 0.10)',
-                            color: 'var(--mode-sophistry-accent)',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                        }}
-                    >
-                        {label}
-                    </span>
-                ))}
+                <div
+                    style={{
+                        fontSize,
+                        lineHeight: 1.55,
+                        color: 'var(--text-secondary)',
+                        overflow: 'hidden',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        flex: '1 1 220px',
+                        minWidth: 0,
+                    }}
+                >
+                    {SOPHISTRY_MODE_WARNING}
+                </div>
+
+                <div
+                    style={{
+                        display: 'flex',
+                        gap: '6px',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                    }}
+                >
+                    {SOPHISTRY_MODE_TAGS.map((label) => (
+                        <span
+                            key={label}
+                            style={{
+                                padding: '3px 8px',
+                                borderRadius: 'var(--radius-full)',
+                                background: 'rgba(184, 137, 70, 0.10)',
+                                color: 'var(--mode-sophistry-accent)',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {label}
+                        </span>
+                    ))}
+                </div>
             </div>
         </div>
     );

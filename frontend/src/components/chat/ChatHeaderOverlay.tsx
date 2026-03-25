@@ -7,12 +7,11 @@ import { toast } from '../../utils/toast';
 import StatusBanner from './StatusBanner';
 import ReferenceLibraryPanel from './ReferenceLibraryPanel';
 import SidebarExpandButton from '../shared/SidebarExpandButton';
-import SophistryModeNotice from '../shared/SophistryModeNotice';
 
 const MARKDOWN_EXPORT_OPTIONS: { value: MarkdownExportCategory; label: string }[] = [
     { value: 'group_discussion', label: '组内讨论' },
     { value: 'judge_messages', label: '裁判消息' },
-    { value: 'jury_messages', label: '审判团消息' },
+    { value: 'jury_messages', label: '陪审团消息' },
     { value: 'consensus_summary', label: '共识收敛消息' },
 ];
 
@@ -32,7 +31,6 @@ type ChatHeaderOverlayProps = {
     currentTurn: number;
     maxTurns: number;
     isSophistryMode: boolean;
-    modeArtifactsLength: number;
     topicTitleFontSize: string;
     transcriptCollapseSummary: TranscriptCollapseSummary;
     bulkCollapseLabel: string;
@@ -49,7 +47,6 @@ export default function ChatHeaderOverlay({
     currentTurn,
     maxTurns,
     isSophistryMode,
-    modeArtifactsLength,
     topicTitleFontSize,
     transcriptCollapseSummary,
     bulkCollapseLabel,
@@ -420,10 +417,6 @@ export default function ChatHeaderOverlay({
                             </div>
                         )}
                     </motion.div>
-
-                    {hasCurrentSession && isSophistryMode && (
-                        <SophistryModeNotice artifactCount={modeArtifactsLength} />
-                    )}
 
                     <div style={{ pointerEvents: 'auto' }}>
                         <StatusBanner />

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
 from app.db.models import _gen_id, _utcnow
@@ -21,16 +22,46 @@ from app.storage.session_documents import (
 from app.storage.session_files import read_session_record, write_session_record
 
 BUILTIN_SOPHISTRY_DOCUMENT_ID = "builtin-sophistry-fallacy-catalog"
+_CATALOG_FILENAME = "sophistry-fallacy-catalog.md"
 BUILTIN_SOPHISTRY_FILENAME = "诡辩实验模式谬误库.md"
 _SUMMARY_SECTION_KEYS = {"1. 使用说明", "2. 标注谨慎原则", "3. 推荐标准标签表", "6. 标注输出建议", "7. 结语"}
 
 
-def _catalog_path():
-    return get_runtime_paths().bundle_root / "docs" / "sophistry-fallacy-catalog.md"
+def _catalog_path_candidates() -> list[Path]:
+    runtime_paths = get_runtime_paths()
+    candidates = [
+        runtime_paths.bundle_root / "docs" / _CATALOG_FILENAME,
+        runtime_paths.runtime_root.parent / "docs" / _CATALOG_FILENAME,
+        runtime_paths.runtime_root / "docs" / _CATALOG_FILENAME,
+        Path(__file__).resolve().parents[3] / "docs" / _CATALOG_FILENAME,
+    ]
+    unique_candidates: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_candidates.append(candidate)
+    return unique_candidates
+
+
+def _catalog_path() -> Path:
+    candidates = _catalog_path_candidates()
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return candidates[0]
 
 
 def _read_catalog_text() -> str:
-    return _catalog_path().read_text(encoding="utf-8")
+    path = _catalog_path()
+    if not path.is_file():
+        searched_paths = ", ".join(str(candidate) for candidate in _catalog_path_candidates())
+        raise FileNotFoundError(
+            f"Built-in sophistry catalog was not found. Checked: {searched_paths}"
+        )
+    return path.read_text(encoding="utf-8")
 
 
 def _normalize_block(text: str) -> str:

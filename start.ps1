@@ -234,6 +234,24 @@ function Save-DependencyFingerprint {
     Set-Content -Path $StateFile -Value (Get-DependencyFingerprint -Paths $DependencyFiles) -NoNewline
 }
 
+function Test-FrontendDependencyInstallHealthy {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FrontendDirectory
+    )
+
+    $nodeModulesDir = Join-Path $FrontendDirectory "node_modules"
+    if (-not (Test-Path $nodeModulesDir)) {
+        return $false
+    }
+
+    $vitePackageDir = Join-Path $nodeModulesDir "vite"
+    $vitePackageJson = Join-Path $vitePackageDir "package.json"
+    $viteBin = Join-Path $nodeModulesDir ".bin\vite.cmd"
+
+    return (Test-Path $vitePackageDir) -and (Test-Path $vitePackageJson) -and (Test-Path $viteBin)
+}
+
 function Start-DelayedBrowser {
     param(
         [string]$Url,
@@ -410,17 +428,22 @@ if (-not $BackendOnly) {
     Push-Location $FrontendDir
 
     $frontendModulesDir = Join-Path $FrontendDir "node_modules"
-    $frontendInstallNeeded = (-not (Test-Path $frontendModulesDir)) -or (Test-DependencyRefreshNeeded -StateFile $FrontendStateFile -DependencyFiles $FrontendDependencyFiles)
+    $frontendDependenciesHealthy = Test-FrontendDependencyInstallHealthy -FrontendDirectory $FrontendDir
+    $frontendInstallNeeded = (-not $frontendDependenciesHealthy) -or (Test-DependencyRefreshNeeded -StateFile $FrontendStateFile -DependencyFiles $FrontendDependencyFiles)
 
     if ($frontendInstallNeeded) {
         if ($SkipInstall) {
-            if (-not (Test-Path $frontendModulesDir)) {
-                Print-Err "Frontend dependencies are missing. Run once without -SkipInstall."
+            if (-not $frontendDependenciesHealthy) {
+                Print-Err "Frontend dependencies are missing or incomplete. Run once without -SkipInstall."
                 exit 1
             }
 
             Print-Warn "Frontend dependency files changed, but installation was skipped"
         } else {
+            if (Test-Path $frontendModulesDir -and -not $frontendDependenciesHealthy) {
+                Print-Warn "Detected incomplete frontend dependencies; reinstalling packages."
+            }
+
             Print-Info "Installing frontend dependencies..."
             npm install --silent 2>$null
             if ($LASTEXITCODE -ne 0) {

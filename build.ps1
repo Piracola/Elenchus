@@ -366,6 +366,24 @@ function Install-FrontendDependencies {
     }
 }
 
+function Test-FrontendDependencyInstallHealthy {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FrontendDirectory
+    )
+
+    $nodeModulesDir = Join-Path $FrontendDirectory "node_modules"
+    if (-not (Test-Path $nodeModulesDir)) {
+        return $false
+    }
+
+    $vitePackageDir = Join-Path $nodeModulesDir "vite"
+    $vitePackageJson = Join-Path $vitePackageDir "package.json"
+    $viteBin = Join-Path $nodeModulesDir ".bin\vite.cmd"
+
+    return (Test-Path $vitePackageDir) -and (Test-Path $vitePackageJson) -and (Test-Path $viteBin)
+}
+
 function Update-ReleaseArchive {
     param(
         [Parameter(Mandatory = $true)]
@@ -480,8 +498,8 @@ if (-not $NpmVersion.Success) {
 }
 Print-OK "npm $($NpmVersion.Text) installed"
 
-if (-not $DoFrontendInstall -and -not (Test-Path $FrontendModulesDir)) {
-    Print-Err "Frontend dependencies are missing. Re-run without -SkipInstall or -SkipFrontendInstall."
+if (-not $DoFrontendInstall -and -not (Test-FrontendDependencyInstallHealthy -FrontendDirectory $FrontendDir)) {
+    Print-Err "Frontend dependencies are missing or incomplete. Re-run without -SkipInstall or -SkipFrontendInstall."
     exit 1
 }
 
@@ -534,6 +552,10 @@ if ($DoBackendInstall) {
 Write-Section -Step "Step 3/5" -Title "Build Frontend Bundle"
 
 if ($DoFrontendInstall) {
+    if ((Test-Path $FrontendModulesDir) -and -not (Test-FrontendDependencyInstallHealthy -FrontendDirectory $FrontendDir)) {
+        Print-Warn "Detected incomplete frontend dependencies; reinstalling packages."
+    }
+
     Install-FrontendDependencies `
         -NpmExecutable $NpmPath `
         -FrontendDirectory $FrontendDir `

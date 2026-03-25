@@ -24,6 +24,8 @@
   --mode-sophistry-card: #fffdf9;
   --mode-sophistry-border: #eadfcd;
   --mode-sophistry-accent: #b88946;
+  --mode-sophistry-soft: rgba(184, 137, 70, 0.12);
+  --mode-sophistry-shadow: rgba(184, 137, 70, 0.16);
 
   /* Proposer / Opposer colors */
   --color-proposer: #34C759;
@@ -98,6 +100,8 @@
   --mode-sophistry-card: #312a20;
   --mode-sophistry-border: rgba(234, 223, 205, 0.22);
   --mode-sophistry-accent: #d6a363;
+  --mode-sophistry-soft: rgba(214, 163, 99, 0.18);
+  --mode-sophistry-shadow: rgba(214, 163, 99, 0.24);
 
   /* Proposer / Opposer colors */
   --color-proposer: #30D158;
