@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
@@ -60,6 +60,24 @@ describe('MessageRow', () => {
         expect(screen.getByText('Immediate example')).toBeInTheDocument();
         expect(visibleContent?.textContent).toContain('Immediate example');
         expect(document.querySelector('[data-agent-content="reserve"]')).toBeNull();
+    });
+
+    it('collapses leading think blocks by default while keeping the final answer visible', () => {
+        render(
+            <MessageRow
+                agentEntry={makeEntry({
+                    content: '<think>private reasoning</think>\n\nPublic answer',
+                })}
+            />,
+        );
+
+        expect(screen.getByText('Public answer')).toBeInTheDocument();
+        expect(screen.getByText('\u9ed8\u8ba4\u5df2\u6298\u53e0')).toBeInTheDocument();
+        expect(screen.queryByText('private reasoning')).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: '\u5c55\u5f00\u601d\u7ef4\u94fe' }));
+
+        expect(screen.getByText('private reasoning')).toBeInTheDocument();
     });
 
     it('renders sophistry observer reports without the score grid', () => {

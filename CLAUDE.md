@@ -49,6 +49,12 @@ npm --prefix frontend run lint
 npm --prefix frontend run test:run
 ```
 
+### Git
+
+- In this repository, run `git commit` outside the sandbox so local signing keys remain available.
+- Prefer signed commits for repository changes.
+- Do not fall back to `--no-gpg-sign` unless the user explicitly asks for an unsigned commit.
+
 ## 3. Architecture Map
 
 ### Backend

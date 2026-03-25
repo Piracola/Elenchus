@@ -47,11 +47,8 @@ vi.mock('framer-motion', () => {
     };
 });
 
-vi.mock('lucide-react', () => ({
-    ChevronDown: () => null,
-    FileJson: () => null,
-    FileText: () => null,
-    PanelLeftOpen: () => null,
+vi.mock('lucide-react', () => new Proxy({}, {
+    get: () => () => null,
 }));
 
 vi.mock('./chat/MessageRow', () => ({

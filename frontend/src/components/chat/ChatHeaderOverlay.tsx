@@ -5,6 +5,7 @@ import { api } from '../../api/client';
 import type { MarkdownExportCategory } from '../../types';
 import { toast } from '../../utils/toast';
 import StatusBanner from './StatusBanner';
+import ReferenceLibraryPanel from './ReferenceLibraryPanel';
 import SidebarExpandButton from '../shared/SidebarExpandButton';
 import SophistryModeNotice from '../shared/SophistryModeNotice';
 
@@ -226,6 +227,13 @@ export default function ChatHeaderOverlay({
                                     >
                                         {bulkCollapseLabel}
                                     </motion.button>
+                                )}
+
+                                {currentSessionId && (
+                                    <ReferenceLibraryPanel
+                                        currentSessionId={currentSessionId}
+                                        isSophistryMode={isSophistryMode}
+                                    />
                                 )}
 
                                 <div style={{ position: 'relative' }}>

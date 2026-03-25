@@ -31,6 +31,8 @@ export default function FloatingRuntimeInspector({
         return null;
     }
 
+    void floatingInspectorInteractionRef;
+
     return (
         <div
             style={{

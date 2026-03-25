@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -6,6 +6,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { DISPLAY_FONT_TOKENS } from '../../config/display';
 import { SCORE_DIMENSIONS, SCORE_MODULES } from '../../types';
 import type { DialogueEntry, ScoreDimensionKey, ScoreModuleKey, TurnScore } from '../../types';
+import { splitLeadingThinkingContent } from '../../utils/thinkingContent';
 import RoundInsights from './RoundInsights';
 import type { InsightSection } from './RoundInsights';
 
@@ -348,6 +349,151 @@ function renderMarkdown(text: string) {
     );
 }
 
+const THINKING_PANEL_LABEL = '\u601d\u7ef4\u94fe';
+const THINKING_PANEL_SHOW = '\u5c55\u5f00';
+const THINKING_PANEL_HIDE = '\u6298\u53e0';
+const THINKING_PANEL_HINT = '\u9ed8\u8ba4\u5df2\u6298\u53e0';
+const THINKING_PANEL_SHOW_TITLE = '\u5c55\u5f00\u601d\u7ef4\u94fe';
+const THINKING_PANEL_HIDE_TITLE = '\u6298\u53e0\u601d\u7ef4\u94fe';
+
+function messageContentWrapperStyle(marginTop: string) {
+    return {
+        marginTop,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '14px',
+    } as const;
+}
+
+function markdownBodyStyle(fontSize: string, color: string) {
+    return {
+        color,
+        fontSize,
+        lineHeight: 1.7,
+    } as const;
+}
+
+function thinkingPanelStyle(accentColor: string) {
+    return {
+        background: 'var(--bg-secondary)',
+        border: '1px solid var(--border-subtle)',
+        borderLeft: `3px solid ${accentColor}`,
+        borderRadius: 'var(--radius-lg)',
+        boxShadow: 'var(--shadow-xs)',
+        overflow: 'hidden',
+    } as const;
+}
+
+function thinkingHeaderStyle() {
+    return {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+        padding: '12px 16px',
+    } as const;
+}
+
+function thinkingLabelStyle(accentColor: string) {
+    return {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '8px',
+        fontSize: '12px',
+        fontWeight: 700,
+        color: accentColor,
+    } as const;
+}
+
+function thinkingToggleStyle(expanded: boolean) {
+    return {
+        border: '1px solid var(--border-subtle)',
+        background: expanded ? 'var(--bg-tertiary)' : 'var(--bg-card)',
+        color: 'var(--text-secondary)',
+        borderRadius: 'var(--radius-full)',
+        padding: '6px 12px',
+        fontSize: '12px',
+        fontWeight: 600,
+        cursor: 'pointer',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
+        boxShadow: 'var(--shadow-xs)',
+        flexShrink: 0,
+    } as const;
+}
+
+function thinkingHintStyle() {
+    return {
+        padding: '0 16px 16px',
+        color: 'var(--text-muted)',
+        fontSize: '12px',
+        lineHeight: 1.6,
+    } as const;
+}
+
+type ThinkingBlockProps = {
+    content: string | null;
+    accentColor: string;
+    fontSize: string;
+    textColor: string;
+};
+
+function ThinkingBlock({
+    content,
+    accentColor,
+    fontSize,
+    textColor,
+}: ThinkingBlockProps) {
+    const [expanded, setExpanded] = useState(false);
+
+    if (!content) {
+        return null;
+    }
+
+    return (
+        <div
+            data-thinking-block="true"
+            data-thinking-expanded={expanded ? 'true' : 'false'}
+            style={thinkingPanelStyle(accentColor)}
+        >
+            <div style={thinkingHeaderStyle()}>
+                <span style={thinkingLabelStyle(accentColor)}>
+                    <span aria-hidden="true">{expanded ? '-' : '+'}</span>
+                    <span>{THINKING_PANEL_LABEL}</span>
+                </span>
+                <button
+                    type="button"
+                    data-thinking-toggle="true"
+                    aria-expanded={expanded}
+                    aria-label={expanded ? THINKING_PANEL_HIDE_TITLE : THINKING_PANEL_SHOW_TITLE}
+                    title={expanded ? THINKING_PANEL_HIDE_TITLE : THINKING_PANEL_SHOW_TITLE}
+                    onClick={() => setExpanded((current) => !current)}
+                    style={thinkingToggleStyle(expanded)}
+                >
+                    <span>{expanded ? THINKING_PANEL_HIDE : THINKING_PANEL_SHOW}</span>
+                </button>
+            </div>
+            {expanded ? (
+                <div
+                    className="markdown-body"
+                    data-thinking-content="visible"
+                    style={{
+                        ...markdownBodyStyle(fontSize, textColor),
+                        padding: '0 16px 16px',
+                    }}
+                >
+                    {renderMarkdown(content)}
+                </div>
+            ) : (
+                <div data-thinking-content="collapsed" style={thinkingHintStyle()}>
+                    {THINKING_PANEL_HINT}
+                </div>
+            )}
+        </div>
+    );
+}
+
 function ScoreGrid({
     judgeEntry,
     animated,
@@ -549,8 +695,11 @@ function MessageRow({
     const neutralColor = 'var(--color-neutral, #6b7280)';
     const rowFocused = highlightAgent || highlightJudge || highlightSystem;
     const agentText = agentEntry?.content || '';
+    const judgeText = judgeEntry?.content || '';
     const agentVisual = useMemo(() => getAgentVisual(agentEntry), [agentEntry]);
     const judgeVisual = useMemo(() => getJudgeVisual(judgeEntry), [judgeEntry]);
+    const agentContent = useMemo(() => splitLeadingThinkingContent(agentText), [agentText]);
+    const judgeContent = useMemo(() => splitLeadingThinkingContent(judgeText), [judgeText]);
     const fontSize = useSettingsStore((state) => state.displaySettings.fontSize);
     const messageFontSizes = DISPLAY_FONT_TOKENS[fontSize].message;
     const agentTurnLabel = formatTurnPill(agentEntry?.turn);
@@ -630,12 +779,6 @@ function MessageRow({
 
     const judgeOnly = Boolean(judgeEntry && !agentEntry);
     const agentOnly = Boolean(agentEntry && !judgeEntry);
-    const agentTextStyle = {
-        color: 'var(--text-primary)',
-        fontSize: messageFontSizes.body,
-        lineHeight: 1.7,
-        marginTop: '16px',
-    } as const;
 
     const agentCard = agentEntry ? (
         <motion.div
@@ -730,11 +873,23 @@ function MessageRow({
                 </div>
             ) : (
                 <div
-                    className="markdown-body"
                     data-agent-content="visible"
-                    style={agentTextStyle}
+                    style={messageContentWrapperStyle('16px')}
                 >
-                    {renderMarkdown(agentText)}
+                    <ThinkingBlock
+                        content={agentContent.thinking}
+                        accentColor={agentVisual.color}
+                        fontSize={messageFontSizes.body}
+                        textColor="var(--text-primary)"
+                    />
+                    {agentContent.response && (
+                        <div
+                            className="markdown-body"
+                            style={markdownBodyStyle(messageFontSizes.body, 'var(--text-primary)')}
+                        >
+                            {renderMarkdown(agentContent.response)}
+                        </div>
+                    )}
                 </div>
             )}
         </motion.div>
@@ -804,16 +959,24 @@ function MessageRow({
                 </span>
             </div>
 
-            <div
-                className="markdown-body"
-                style={{
-                    color: 'var(--text-secondary)',
-                    fontSize: judgeOnly ? messageFontSizes.judgeBody : messageFontSizes.judgeBodyCompact,
-                    lineHeight: 1.7,
-                    marginTop: '12px',
-                }}
-            >
-                {renderMarkdown(judgeEntry.content || '')}
+            <div style={messageContentWrapperStyle('12px')}>
+                <ThinkingBlock
+                    content={judgeContent.thinking}
+                    accentColor={judgeVisual.color}
+                    fontSize={judgeOnly ? messageFontSizes.judgeBody : messageFontSizes.judgeBodyCompact}
+                    textColor="var(--text-secondary)"
+                />
+                {judgeContent.response && (
+                    <div
+                        className="markdown-body"
+                        style={markdownBodyStyle(
+                            judgeOnly ? messageFontSizes.judgeBody : messageFontSizes.judgeBodyCompact,
+                            'var(--text-secondary)',
+                        )}
+                    >
+                        {renderMarkdown(judgeContent.response)}
+                    </div>
+                )}
             </div>
 
             <ScoreGrid judgeEntry={judgeEntry} animated={animated} />

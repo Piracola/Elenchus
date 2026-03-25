@@ -10,10 +10,12 @@ import type {
     ModelConfigCreatePayload,
     LogLevel,
     MarkdownExportCategory,
+    ReferenceLibraryResponse,
     RuntimeEventPage,
     SearchConfig,
     SearchConfigUpdatePayload,
     SearchProviderStatus,
+    SessionDocumentResponse,
 } from '../types';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
@@ -137,6 +139,26 @@ export const api = {
 
         get: (id: string): Promise<Session> =>
             request(`/sessions/${id}`),
+
+        uploadDocument: async (id: string, file: File): Promise<SessionDocumentResponse> => {
+            const body = new FormData();
+            body.append('file', file);
+
+            const res = await fetch(`${BASE}/sessions/${id}/documents`, {
+                method: 'POST',
+                body,
+            });
+            if (!res.ok) {
+                throw new Error(await readErrorMessage(res));
+            }
+            return res.json() as Promise<SessionDocumentResponse>;
+        },
+
+        deleteDocument: (id: string, documentId: string): Promise<void> =>
+            request(`/sessions/${id}/documents/${documentId}`, { method: 'DELETE' }),
+
+        getReferenceLibrary: (id: string): Promise<ReferenceLibraryResponse> =>
+            request(`/sessions/${id}/reference-library`),
 
         listRuntimeEvents: (
             id: string,

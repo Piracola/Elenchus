@@ -26,6 +26,166 @@ function Print-Err { param($Text) Write-Host $RED"[ERROR]"$RESET" $Text" }
 function Print-Warn { param($Text) Write-Host $YELLOW"[WARN]"$RESET" $Text" }
 function Print-Info { param($Text) Write-Host $BLUE"[INFO]"$RESET" $Text" }
 
+function Resolve-CommandPath {
+    param(
+        [Parameter(Mandatory = $true)]
+        $Command
+    )
+
+    foreach ($property in @("Source", "Path", "Definition", "Name")) {
+        $value = $Command.$property
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            return $value
+        }
+    }
+
+    return $null
+}
+
+function Invoke-CommandCapture {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+        [string[]]$Arguments = @()
+    )
+
+    $previousErrorActionPreference = $ErrorActionPreference
+
+    try {
+        $ErrorActionPreference = "Continue"
+        $output = & $FilePath @Arguments 2>&1
+        $exitCode = $LASTEXITCODE
+        $lines = @()
+
+        if ($null -ne $output) {
+            $lines = @(
+                $output | ForEach-Object {
+                    if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                        $_.ToString()
+                    } else {
+                        "$_"
+                    }
+                }
+            )
+        }
+
+        return [pscustomobject]@{
+            Success  = ($exitCode -eq 0)
+            ExitCode = $exitCode
+            Text     = ($lines -join "`n").Trim()
+        }
+    } catch {
+        return [pscustomobject]@{
+            Success  = $false
+            ExitCode = $null
+            Text     = $_.Exception.Message.Trim()
+        }
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+}
+
+function Resolve-PythonRuntime {
+    param(
+        [string[]]$PreferredPaths = @()
+    )
+
+    $candidates = @()
+
+    foreach ($preferredPath in $PreferredPaths) {
+        if ([string]::IsNullOrWhiteSpace($preferredPath) -or -not (Test-Path $preferredPath)) {
+            continue
+        }
+
+        $candidates += [pscustomobject]@{
+            CommandLabel = $preferredPath
+            FilePath     = $preferredPath
+            Arguments    = @()
+        }
+    }
+
+    $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+    if ($pythonCmd) {
+        $candidates += [pscustomobject]@{
+            CommandLabel = "python"
+            FilePath     = Resolve-CommandPath -Command $pythonCmd
+            Arguments    = @()
+        }
+    }
+
+    $pyCmd = Get-Command py -ErrorAction SilentlyContinue
+    if ($pyCmd) {
+        $pyPath = Resolve-CommandPath -Command $pyCmd
+        $candidates += [pscustomobject]@{
+            CommandLabel = "py -3"
+            FilePath     = $pyPath
+            Arguments    = @("-3")
+        }
+        $candidates += [pscustomobject]@{
+            CommandLabel = "py"
+            FilePath     = $pyPath
+            Arguments    = @()
+        }
+    }
+
+    foreach ($candidate in $candidates) {
+        if ([string]::IsNullOrWhiteSpace($candidate.FilePath)) {
+            continue
+        }
+
+        $versionResult = Invoke-CommandCapture -FilePath $candidate.FilePath -Arguments ($candidate.Arguments + @("--version"))
+        if (-not $versionResult.Success -or [string]::IsNullOrWhiteSpace($versionResult.Text)) {
+            continue
+        }
+
+        if ($versionResult.Text -match "Python\s+([0-9][^\s]*)") {
+            return [pscustomobject]@{
+                CommandLabel = $candidate.CommandLabel
+                FilePath     = $candidate.FilePath
+                Arguments    = $candidate.Arguments
+                Version      = $Matches[1]
+            }
+        }
+    }
+
+    return $null
+}
+
+function Get-ExecutableVersion {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CommandName,
+        [string[]]$VersionArguments = @("--version"),
+        [string]$PrefixToTrim = ""
+    )
+
+    $command = Get-Command $CommandName -ErrorAction SilentlyContinue
+    if (-not $command) {
+        return $null
+    }
+
+    $commandPath = Resolve-CommandPath -Command $command
+    if ([string]::IsNullOrWhiteSpace($commandPath)) {
+        return $null
+    }
+
+    $versionResult = Invoke-CommandCapture -FilePath $commandPath -Arguments $VersionArguments
+    if (-not $versionResult.Success -or [string]::IsNullOrWhiteSpace($versionResult.Text)) {
+        return $null
+    }
+
+    $version = $versionResult.Text.Trim()
+    if ($PrefixToTrim -and $version.StartsWith($PrefixToTrim)) {
+        $version = $version.Substring($PrefixToTrim.Length)
+    }
+
+    return [pscustomobject]@{
+        CommandName = $CommandName
+        FilePath    = $commandPath
+        Version     = $version
+    }
+}
+
 function Get-DependencyFingerprint {
     param(
         [string[]]$Paths
@@ -109,7 +269,6 @@ $RuntimeDir = Join-Path $RootDir "runtime"
 $InstallStateDir = Join-Path $RuntimeDir ".install-state"
 
 $BackendPython = Join-Path $VenvDir "Scripts\python.exe"
-$BackendPip = Join-Path $VenvDir "Scripts\pip.exe"
 $BackendStateFile = Join-Path $InstallStateDir "backend.txt"
 $FrontendStateFile = Join-Path $InstallStateDir "frontend.txt"
 $RootStateFile = Join-Path $InstallStateDir "root.txt"
@@ -132,22 +291,26 @@ Write-Host $CYAN"========================================"$RESET
 Write-Host ""
 
 $checksPassed = $true
-
-Write-Host "Checking Python..."
-$pythonCmd = Get-Command python -ErrorAction SilentlyContinue
-if ($pythonCmd) {
-    $pyVersionRaw = python --version 2>&1
-    $pyVersion = $pyVersionRaw.ToString().Replace("Python ", "").Trim()
-    Print-OK "Python $pyVersion installed"
-} else {
-    Print-Err "Python not found, please install Python 3.10+"
-    $checksPassed = $false
-}
+$PythonRuntime = $null
 
 if (-not $FrontendOnly) {
+    Write-Host "Checking Python..."
+    $PythonRuntime = Resolve-PythonRuntime -PreferredPaths @($BackendPython)
+    if ($PythonRuntime) {
+        Print-OK "Python $($PythonRuntime.Version) installed"
+    } else {
+        Print-Err "Python not found or unusable, please install Python 3.10+"
+        $checksPassed = $false
+    }
+
     Write-Host "Checking pip..."
-    $pipCmd = Get-Command pip -ErrorAction SilentlyContinue
-    if ($pipCmd) {
+    if ($PythonRuntime) {
+        $pipVersionResult = Invoke-CommandCapture -FilePath $PythonRuntime.FilePath -Arguments ($PythonRuntime.Arguments + @("-m", "pip", "--version"))
+    } else {
+        $pipVersionResult = $null
+    }
+
+    if ($pipVersionResult -and $pipVersionResult.Success -and -not [string]::IsNullOrWhiteSpace($pipVersionResult.Text)) {
         Print-OK "pip installed"
     } else {
         Print-Err "pip not found"
@@ -157,19 +320,17 @@ if (-not $FrontendOnly) {
 
 if (-not $BackendOnly) {
     Write-Host "Checking Node.js..."
-    $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
-    if ($nodeCmd) {
-        $nodeVersionRaw = node --version 2>&1
-        $nodeVersion = $nodeVersionRaw.ToString().Replace("v", "").Trim()
-        Print-OK "Node.js $nodeVersion installed"
+    $nodeInfo = Get-ExecutableVersion -CommandName "node" -PrefixToTrim "v"
+    if ($nodeInfo) {
+        Print-OK "Node.js $($nodeInfo.Version) installed"
     } else {
-        Print-Err "Node.js not found, please install Node.js 18+"
+        Print-Err "Node.js not found or unusable, please install Node.js 18+"
         $checksPassed = $false
     }
 
     Write-Host "Checking npm..."
-    $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
-    if ($npmCmd) {
+    $npmInfo = Get-ExecutableVersion -CommandName "npm"
+    if ($npmInfo) {
         Print-OK "npm installed"
     } else {
         Print-Err "npm not found"
@@ -200,7 +361,10 @@ if (-not $FrontendOnly) {
 
     if (-not (Test-Path $BackendPython)) {
         Print-Info "Creating Python virtual environment..."
-        python -m venv $VenvDir
+        $venvArgs = @()
+        $venvArgs += $PythonRuntime.Arguments
+        $venvArgs += "-m", "venv", $VenvDir
+        & $PythonRuntime.FilePath @venvArgs
         if ($LASTEXITCODE -ne 0) {
             Print-Err "Failed to create Python virtual environment"
             exit $LASTEXITCODE
@@ -217,7 +381,7 @@ if (-not $FrontendOnly) {
 
         if ($backendInstallNeeded) {
             Print-Info "Installing backend dependencies..."
-            & $BackendPip install --disable-pip-version-check --quiet -r requirements.txt
+            & $BackendPython -m pip install --disable-pip-version-check --quiet -r requirements.txt
             if ($LASTEXITCODE -ne 0) {
                 Print-Err "Backend dependency installation failed"
                 exit $LASTEXITCODE

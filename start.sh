@@ -312,7 +312,7 @@ echo ""
 cd "$SCRIPT_DIR"
 
 if [[ "$BACKEND_ONLY" == true ]]; then
-    npm run dev:backend:unix
+    npm run dev:backend
 elif [[ "$FRONTEND_ONLY" == true ]]; then
     npm run dev:frontend
 else
