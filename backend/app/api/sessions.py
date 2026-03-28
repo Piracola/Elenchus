@@ -25,6 +25,7 @@ from app.services import (
     runtime_event_service,
     session_service,
 )
+from app.services.session_document_workflow import upload_and_process_session_document
 
 router = APIRouter(tags=["sessions"])
 
@@ -76,9 +77,9 @@ async def upload_session_document(
 
     content = await file.read()
     try:
-        document = await document_service.create_session_document(
+        document = await upload_and_process_session_document(
             db,
-            session_id,
+            session_record=session_record,
             filename=file.filename or "",
             mime_type=file.content_type or "",
             content=content,
@@ -87,19 +88,6 @@ async def upload_session_document(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
         await file.close()
-
-    document_record = await document_service.get_session_document_record(
-        db,
-        session_id,
-        document["id"],
-    )
-    if document_record is not None:
-        processed = await reference_library_service.preprocess_session_document(
-            db,
-            session_record=session_record,
-            document_record=document_record,
-        )
-        document = await document_service.get_session_document(db, session_id, document["id"]) or processed["document"]
 
     return SessionDocumentResponse(**document)
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+import pytest
 
 from app.main import app
 
@@ -167,3 +168,34 @@ def test_reference_library_endpoint_and_shared_knowledge_sync(db_session):
     session_after_delete = client.get(f"/api/sessions/{session_id}")
     assert session_after_delete.status_code == 200
     assert session_after_delete.json()["shared_knowledge"] == []
+
+
+def test_upload_session_document_returns_failed_document_when_preprocess_errors(db_session, monkeypatch: pytest.MonkeyPatch):
+    client = TestClient(app)
+    session_id = _create_session(client, topic="Reference failure")
+
+    async def _raise_preprocess(*args, **kwargs):
+        raise RuntimeError("preprocess exploded")
+
+    monkeypatch.setattr(
+        "app.services.reference_library_service.preprocess_reference_document",
+        _raise_preprocess,
+    )
+
+    upload_response = client.post(
+        f"/api/sessions/{session_id}/documents",
+        files={"file": ("reference.txt", b"Failure path text", "text/plain")},
+    )
+
+    assert upload_response.status_code == 201
+    uploaded = upload_response.json()
+    assert uploaded["status"] == "failed"
+    assert uploaded["error_message"] == "preprocess exploded"
+
+    library_response = client.get(f"/api/sessions/{session_id}/reference-library")
+    assert library_response.status_code == 200
+    assert library_response.json()["entries"] == []
+
+    session_response = client.get(f"/api/sessions/{session_id}")
+    assert session_response.status_code == 200
+    assert session_response.json()["shared_knowledge"] == []
