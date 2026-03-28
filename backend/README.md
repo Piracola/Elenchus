@@ -7,9 +7,24 @@
 ## 目录定位
 
 - `app/`：后端源码
+- `prompts/`：系统提示词文件，按标准模式与诡辩模式组织
 - `tests/`：后端测试
 - `requirements.txt`：运行依赖
 - `requirements-dev.txt`：开发 / 测试依赖
+
+## prompts 目录说明
+
+- `prompts/debater_system.md`：标准模式辩手通用基础提示词
+- `prompts/debater_proposer.md`：标准模式正方补充提示词
+- `prompts/debater_opposer.md`：标准模式反方补充提示词
+- `prompts/judge_system.md`：标准模式裁判提示词
+- `prompts/fact_checker_system.md`：事实核查代理提示词
+- `prompts/sophistry/debater_system.md`：诡辩模式辩手通用基础提示词
+- `prompts/sophistry/debater_proposer.md`：诡辩模式正方补充提示词
+- `prompts/sophistry/debater_opposer.md`：诡辩模式反方补充提示词
+- `prompts/sophistry/observer_system.md`：诡辩模式观察员提示词
+
+这些文件由 [prompt_loader.py](file:///i:/JBCode/AI%20Tools/Elenchus/backend/app/agents/prompt_loader.py) 与 [sophistry_prompt_loader.py](file:///i:/JBCode/AI%20Tools/Elenchus/backend/app/agents/sophistry_prompt_loader.py) 在运行时读取；辩手类提示词采用“基础提示词 + 角色补充提示词”的组合加载方式。
 
 ## 后端单独开发时最常用的命令
 

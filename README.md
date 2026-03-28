@@ -47,6 +47,31 @@ Elenchus 是一个用于多智能体辩论的平台，基于 `FastAPI + LangGrap
 
 `search字段为搜索服务相关配置`
 
+## 提示词文件说明
+
+后端提示词文件集中在 `backend/prompts/`，运行时由 [prompt_loader.py](file:///i:/JBCode/AI%20Tools/Elenchus/backend/app/agents/prompt_loader.py) 和 [sophistry_prompt_loader.py](file:///i:/JBCode/AI%20Tools/Elenchus/backend/app/agents/sophistry_prompt_loader.py) 按模式加载。
+
+标准模式：
+
+- [debater_system.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/debater_system.md)：标准辩手通用基础提示词，定义所有辩手共享的核心行为边界。
+- [debater_proposer.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/debater_proposer.md)：标准模式正方补充提示词，用于给正方角色叠加立场与表达要求。
+- [debater_opposer.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/debater_opposer.md)：标准模式反方补充提示词，用于给反方角色叠加立场与表达要求。
+- [judge_system.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/judge_system.md)：标准模式裁判提示词，负责评分、总结和裁决输出。
+- [fact_checker_system.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/fact_checker_system.md)：事实核查代理提示词，用于事实校验与证据核查链路。
+
+诡辩模式：
+
+- [sophistry/debater_system.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/sophistry/debater_system.md)：诡辩模式辩手通用基础提示词，定义该实验模式下的统一行为框架。
+- [sophistry/debater_proposer.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/sophistry/debater_proposer.md)：诡辩模式正方补充提示词。
+- [sophistry/debater_opposer.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/sophistry/debater_opposer.md)：诡辩模式反方补充提示词。
+- [sophistry/observer_system.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/sophistry/observer_system.md)：诡辩模式观察员提示词，用于旁观评述与过程观察。
+
+补充说明：
+
+- 标准模式辩手提示词采用“基础提示词 + 角色补充提示词”的组合方式。
+- 当 `proposer_1`、`opposer_2` 这类更细分角色没有单独文件时，会回退到 `debater_proposer.md` 或 `debater_opposer.md`。
+- 诡辩模式也采用相同的“基础 + 角色补充”加载策略，但文件位于 `backend/prompts/sophistry/`。
+
 ## 文档导航
 
 - [文档首页](./docs/README.md)

@@ -48,6 +48,20 @@
 - [诡辩实验模式说明](./sophistry-experiment-mode-design.md) — 当前模式行为与边界
 - [诡辩实验模式谬误库](./sophistry-fallacy-catalog.md) — 模式使用的概念资料
 
+### 提示词文件索引
+
+- [backend/prompts/debater_system.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/debater_system.md) — 标准模式辩手通用基础提示词
+- [backend/prompts/debater_proposer.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/debater_proposer.md) — 标准模式正方补充提示词
+- [backend/prompts/debater_opposer.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/debater_opposer.md) — 标准模式反方补充提示词
+- [backend/prompts/judge_system.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/judge_system.md) — 标准模式裁判提示词
+- [backend/prompts/fact_checker_system.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/fact_checker_system.md) — 事实核查代理提示词
+- [backend/prompts/sophistry/debater_system.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/sophistry/debater_system.md) — 诡辩模式辩手通用基础提示词
+- [backend/prompts/sophistry/debater_proposer.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/sophistry/debater_proposer.md) — 诡辩模式正方补充提示词
+- [backend/prompts/sophistry/debater_opposer.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/sophistry/debater_opposer.md) — 诡辩模式反方补充提示词
+- [backend/prompts/sophistry/observer_system.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/sophistry/observer_system.md) — 诡辩模式观察员提示词
+
+说明：标准模式与诡辩模式都采用“基础提示词 + 角色补充提示词”的拼接加载方式；具体加载入口见 [prompt_loader.py](file:///i:/JBCode/AI%20Tools/Elenchus/backend/app/agents/prompt_loader.py) 与 [sophistry_prompt_loader.py](file:///i:/JBCode/AI%20Tools/Elenchus/backend/app/agents/sophistry_prompt_loader.py)。
+
 说明：如果同一主题同时存在“实现说明”和“规划 / MVP / 方案稿”，默认以实现说明为当前事实来源。
 
 ## 5. 历史 / 归档 / 概念资料
