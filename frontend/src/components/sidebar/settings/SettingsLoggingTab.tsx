@@ -17,7 +17,7 @@ type SettingsLoggingTabProps = {
 export function SettingsLoggingTab({ logLevel, onLogLevelChange }: SettingsLoggingTabProps) {
     return (
         <div style={{
-            padding: '24px',
+            padding: '32px',
             overflowY: 'auto',
             background: 'var(--bg-card)',
             borderRadius: 'var(--radius-xl)',
@@ -25,18 +25,18 @@ export function SettingsLoggingTab({ logLevel, onLogLevelChange }: SettingsLoggi
         }}>
             <div style={{
                 borderBottom: '1px solid var(--border-subtle)',
-                paddingBottom: '20px',
-                marginBottom: '24px',
+                paddingBottom: '24px',
+                marginBottom: '28px',
             }}>
                 <h3 style={{
-                    fontSize: '20px',
-                    margin: '0 0 8px',
+                    fontSize: '24px',
+                    margin: '0 0 10px',
                     color: 'var(--text-primary)',
                     fontWeight: 700,
                 }}>
                     日志打印等级
                 </h3>
-                <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)' }}>
+                <p style={{ margin: 0, fontSize: '16px', color: 'var(--text-muted)', lineHeight: 1.7 }}>
                     控制后端服务的日志输出级别，日志将存储在项目根目录的 logs 文件夹中。
                 </p>
             </div>
@@ -100,14 +100,14 @@ export function SettingsLoggingTab({ logLevel, onLogLevelChange }: SettingsLoggi
             </div>
 
             <div style={{
-                marginTop: '28px',
-                padding: '16px 20px',
+                marginTop: '32px',
+                padding: '20px 24px',
                 background: 'var(--bg-tertiary)',
                 borderRadius: 'var(--radius-lg)',
                 boxShadow: 'var(--shadow-inner)',
             }}>
                 <div style={{
-                    fontSize: '13px',
+                    fontSize: '15px',
                     color: 'var(--text-secondary)',
                     marginBottom: '10px',
                     fontWeight: 600,
@@ -115,10 +115,10 @@ export function SettingsLoggingTab({ logLevel, onLogLevelChange }: SettingsLoggi
                     日志文件位置
                 </div>
                 <code style={{
-                    fontSize: '12px',
+                    fontSize: '14px',
                     color: 'var(--text-muted)',
                     background: 'var(--bg-card)',
-                    padding: '10px 14px',
+                    padding: '12px 16px',
                     borderRadius: 'var(--radius-md)',
                     display: 'block',
                     fontFamily: 'monospace',

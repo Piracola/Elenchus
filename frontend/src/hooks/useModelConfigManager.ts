@@ -12,10 +12,23 @@ function createEmptyFormData(): ProviderFormData {
         apiKeyConfigured: false,
         clearApiKey: false,
         apiBaseUrl: '',
+        defaultMaxTokens: '64000',
         customParametersText: '',
         models: [],
         isDefault: false,
     };
+}
+
+function parseDefaultMaxTokensInput(input: string): number {
+    const trimmed = input.trim();
+    if (!trimmed) {
+        return 64000;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+        throw new Error('默认 max_tokens 必须是大于 0 的数字。');
+    }
+    return Math.floor(parsed);
 }
 
 function buildSavePayload(formData: ProviderFormData): ModelConfigCreatePayload {
@@ -23,6 +36,7 @@ function buildSavePayload(formData: ProviderFormData): ModelConfigCreatePayload 
         name: formData.name.trim(),
         provider_type: formData.providerType,
         api_base_url: formData.apiBaseUrl.trim() || null,
+        default_max_tokens: parseDefaultMaxTokensInput(formData.defaultMaxTokens),
         custom_parameters: parseCustomParametersInput(formData.customParametersText),
         models: formData.models,
         is_default: formData.isDefault,
@@ -80,6 +94,7 @@ export function useModelConfigManager() {
             apiKeyConfigured: provider.api_key_configured || false,
             clearApiKey: false,
             apiBaseUrl: provider.api_base_url || '',
+            defaultMaxTokens: String(provider.default_max_tokens ?? 64000),
             customParametersText: formatCustomParameters(provider.custom_parameters),
             models: provider.models || [],
             isDefault: provider.is_default || false,

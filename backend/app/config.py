@@ -51,6 +51,9 @@ class DebateConfig:
     def __init__(self, data: dict[str, Any] | None = None):
         data = data or {}
         self.default_max_turns: int = int(data.get("default_max_turns") or 5)
+        self.default_max_tokens: int = int(data.get("default_max_tokens") or 64000)
+        if self.default_max_tokens < 1:
+            self.default_max_tokens = 64000
         self.context_window = ContextWindowConfig(data.get("context_window"))
 
 

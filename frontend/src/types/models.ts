@@ -4,6 +4,7 @@ export interface ModelConfig {
     provider_type: string;
     api_key_configured: boolean;
     api_base_url: string | null;
+    default_max_tokens: number;
     custom_parameters: Record<string, unknown>;
     models: string[];
     is_default: boolean;
@@ -17,6 +18,7 @@ export interface ModelConfigCreatePayload {
     api_key?: string | null;
     clear_api_key?: boolean;
     api_base_url?: string | null;
+    default_max_tokens: number;
     custom_parameters?: Record<string, unknown>;
     models: string[];
     is_default?: boolean;
@@ -29,6 +31,7 @@ export interface ProviderFormData {
     apiKeyConfigured: boolean;
     clearApiKey: boolean;
     apiBaseUrl: string;
+    defaultMaxTokens: string;
     customParametersText: string;
     models: string[];
     isDefault: boolean;
@@ -40,4 +43,6 @@ export interface AgentConfigResult {
     provider_id: string;
     api_base_url?: string;
     temperature?: number;
+    max_input_tokens?: number;
+    max_tokens?: number;
 }

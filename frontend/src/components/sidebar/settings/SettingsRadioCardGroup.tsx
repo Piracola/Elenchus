@@ -18,29 +18,29 @@ export function SettingsRadioCardGroup<T extends string>({
     onSelect,
 }: SettingsRadioCardGroupProps<T>) {
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {options.map((option) => (
                 <motion.div
                     key={option.value}
                     whileHover={{ scale: 1.01 }}
                     onClick={() => onSelect(option.value)}
                     style={{
-                        padding: '16px 20px',
+                        padding: '24px 28px',
                         borderRadius: 'var(--radius-lg)',
                         background: selectedValue === option.value ? 'var(--bg-tertiary)' : 'transparent',
                         border: `1px solid ${selectedValue === option.value ? 'var(--accent-indigo)' : 'var(--border-subtle)'}`,
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '16px',
+                        gap: '22px',
                         transition: 'all var(--transition-fast)',
                         boxShadow: selectedValue === option.value ? 'var(--shadow-sm)' : 'none',
                     }}
                 >
                     <div
                         style={{
-                            width: '22px',
-                            height: '22px',
+                            width: '28px',
+                            height: '28px',
                             borderRadius: '50%',
                             border: `2px solid ${selectedValue === option.value ? 'var(--accent-indigo)' : 'var(--border-subtle)'}`,
                             display: 'flex',
@@ -52,8 +52,8 @@ export function SettingsRadioCardGroup<T extends string>({
                         {selectedValue === option.value && (
                             <div
                                 style={{
-                                    width: '10px',
-                                    height: '10px',
+                                    width: '14px',
+                                    height: '14px',
                                     borderRadius: '50%',
                                     background: 'var(--accent-indigo)',
                                 }}
@@ -64,7 +64,7 @@ export function SettingsRadioCardGroup<T extends string>({
                         <div
                             style={{
                                 fontWeight: 700,
-                                fontSize: '15px',
+                                fontSize: '20px',
                                 color: 'var(--text-primary)',
                             }}
                         >
@@ -72,9 +72,10 @@ export function SettingsRadioCardGroup<T extends string>({
                         </div>
                         <div
                             style={{
-                                fontSize: '13px',
+                                fontSize: '17px',
                                 color: 'var(--text-muted)',
-                                marginTop: '4px',
+                                marginTop: '8px',
+                                lineHeight: 1.75,
                             }}
                         >
                             {option.description}

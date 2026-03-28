@@ -32,10 +32,10 @@ const sizeStyles = {
         iconSize: 14,
     },
     md: {
-        padding: '8px 12px',
-        fontSize: '13px',
-        height: '36px',
-        iconSize: 16,
+        padding: '12px 16px',
+        fontSize: '16px',
+        height: '46px',
+        iconSize: 18,
     },
     lg: {
         padding: '10px 14px',
@@ -80,10 +80,10 @@ export default function CustomSelect({
             {label && (
                 <label style={{
                     display: 'block',
-                    fontSize: '12px',
-                    marginBottom: '4px',
+                    fontSize: '16px',
+                    marginBottom: '10px',
                     color: 'var(--text-secondary)',
-                    fontWeight: 500,
+                    fontWeight: 600,
                 }}>
                     {label}
                 </label>
@@ -120,6 +120,7 @@ export default function CustomSelect({
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
+                    fontWeight: 500,
                 }}>
                     {selectedOption?.icon}
                     {selectedOption?.label || placeholder}
@@ -142,7 +143,7 @@ export default function CustomSelect({
                         transition={{ duration: 0.15, ease: 'easeOut' }}
                         style={{
                             position: 'absolute',
-                            top: 'calc(100% + 4px)',
+                            top: 'calc(100% + 6px)',
                             left: 0,
                             right: 0,
                             zIndex: 100,
@@ -150,9 +151,9 @@ export default function CustomSelect({
                             border: '1px solid var(--border-subtle)',
                             borderRadius: 'var(--radius-md)',
                             boxShadow: 'var(--shadow-lg)',
-                            maxHeight: '240px',
+                            maxHeight: '280px',
                             overflowY: 'auto',
-                            padding: '4px',
+                            padding: '6px',
                         }}
                     >
                         {options.map((option) => (
@@ -174,7 +175,7 @@ export default function CustomSelect({
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'space-between',
-                                    gap: '8px',
+                                    gap: '10px',
                                     textAlign: 'left',
                                     transition: 'all 0.1s ease',
                                 }}
@@ -191,7 +192,7 @@ export default function CustomSelect({
                                     {option.label}
                                 </span>
                                 {value === option.value && (
-                                    <Check size={14} style={{ color: 'var(--accent-indigo)', flexShrink: 0 }} />
+                                    <Check size={16} style={{ color: 'var(--accent-indigo)', flexShrink: 0 }} />
                                 )}
                             </motion.button>
                         ))}

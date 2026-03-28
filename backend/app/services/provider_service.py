@@ -74,6 +74,7 @@ class ProviderService:
                     "provider_type": config_in.provider_type,
                     "api_key": config_in.api_key or "",
                     "api_base_url": config_in.api_base_url,
+                    "default_max_tokens": config_in.default_max_tokens,
                     "custom_parameters": dict(config_in.custom_parameters or {}),
                     "models": list(config_in.models),
                     "is_default": make_default,
@@ -152,6 +153,8 @@ class ProviderService:
                 provider["api_key"] = update_data["api_key"]
             if "api_base_url" in update_data:
                 provider["api_base_url"] = update_data["api_base_url"]
+            if "default_max_tokens" in update_data and update_data["default_max_tokens"] is not None:
+                provider["default_max_tokens"] = int(update_data["default_max_tokens"])
             if "custom_parameters" in update_data:
                 provider["custom_parameters"] = dict(update_data["custom_parameters"] or {})
             if "models" in update_data:

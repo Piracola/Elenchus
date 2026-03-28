@@ -85,10 +85,10 @@ export default function SettingsPanel({
                             exit={{ opacity: 0, scale: 0.9, y: 30 }}
                             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                             style={{
-                                width: '92%',
-                                maxWidth: '960px',
-                                height: '80vh',
-                                maxHeight: '700px',
+                                width: '95%',
+                                maxWidth: '1360px',
+                                height: '92vh',
+                                maxHeight: '980px',
                                 background: 'var(--bg-secondary)',
                                 borderRadius: 'var(--radius-2xl)',
                                 boxShadow: 'var(--shadow-2xl)',
@@ -99,21 +99,21 @@ export default function SettingsPanel({
                         >
                             {/* Sidebar */}
                             <div style={{
-                                width: '200px',
+                                width: '292px',
                                 background: 'var(--bg-tertiary)',
                                 display: 'flex',
                                 flexDirection: 'column',
-                                padding: '24px 16px',
-                                gap: '8px',
+                                padding: '38px 24px',
+                                gap: '12px',
                             }}>
                                 <div style={{
-                                    padding: '0 8px 20px',
+                                    padding: '0 12px 28px',
                                     borderBottom: '1px solid var(--border-subtle)',
-                                    marginBottom: '8px',
+                                    marginBottom: '12px',
                                 }}>
                                     <h2 style={{
                                         margin: 0,
-                                        fontSize: '18px',
+                                        fontSize: '28px',
                                         fontWeight: 700,
                                         color: 'var(--text-primary)',
                                     }}>
@@ -125,13 +125,13 @@ export default function SettingsPanel({
                                     whileHover={{ scale: 1.02 }}
                                     onClick={() => setActiveTab('providers')}
                                     style={{
-                                        padding: '14px 16px',
+                                        padding: '20px 22px',
                                         borderRadius: 'var(--radius-lg)',
                                         background: activeTab === 'providers' ? 'var(--bg-card)' : 'transparent',
                                         cursor: 'pointer',
                                         color: activeTab === 'providers' ? 'var(--text-primary)' : 'var(--text-secondary)',
                                         fontWeight: activeTab === 'providers' ? 600 : 500,
-                                        fontSize: '14px',
+                                        fontSize: '19px',
                                         boxShadow: activeTab === 'providers' ? 'var(--shadow-xs)' : 'none',
                                         transition: 'all var(--transition-fast)',
                                     }}
@@ -143,13 +143,13 @@ export default function SettingsPanel({
                                     whileHover={{ scale: 1.02 }}
                                     onClick={() => setActiveTab('display')}
                                     style={{
-                                        padding: '14px 16px',
+                                        padding: '20px 22px',
                                         borderRadius: 'var(--radius-lg)',
                                         background: activeTab === 'display' ? 'var(--bg-card)' : 'transparent',
                                         cursor: 'pointer',
                                         color: activeTab === 'display' ? 'var(--text-primary)' : 'var(--text-secondary)',
                                         fontWeight: activeTab === 'display' ? 600 : 500,
-                                        fontSize: '14px',
+                                        fontSize: '19px',
                                         boxShadow: activeTab === 'display' ? 'var(--shadow-xs)' : 'none',
                                         transition: 'all var(--transition-fast)',
                                     }}
@@ -161,13 +161,13 @@ export default function SettingsPanel({
                                     whileHover={{ scale: 1.02 }}
                                     onClick={() => setActiveTab('logging')}
                                     style={{
-                                        padding: '14px 16px',
+                                        padding: '20px 22px',
                                         borderRadius: 'var(--radius-lg)',
                                         background: activeTab === 'logging' ? 'var(--bg-card)' : 'transparent',
                                         cursor: 'pointer',
                                         color: activeTab === 'logging' ? 'var(--text-primary)' : 'var(--text-secondary)',
                                         fontWeight: activeTab === 'logging' ? 600 : 500,
-                                        fontSize: '14px',
+                                        fontSize: '19px',
                                         boxShadow: activeTab === 'logging' ? 'var(--shadow-xs)' : 'none',
                                         transition: 'all var(--transition-fast)',
                                     }}
@@ -179,13 +179,13 @@ export default function SettingsPanel({
                                     whileHover={{ scale: 1.02 }}
                                     onClick={() => setActiveTab('search')}
                                     style={{
-                                        padding: '14px 16px',
+                                        padding: '20px 22px',
                                         borderRadius: 'var(--radius-lg)',
                                         background: activeTab === 'search' ? 'var(--bg-card)' : 'transparent',
                                         cursor: 'pointer',
                                         color: activeTab === 'search' ? 'var(--text-primary)' : 'var(--text-secondary)',
                                         fontWeight: activeTab === 'search' ? 600 : 500,
-                                        fontSize: '14px',
+                                        fontSize: '19px',
                                         boxShadow: activeTab === 'search' ? 'var(--shadow-xs)' : 'none',
                                         transition: 'all var(--transition-fast)',
                                     }}
@@ -201,23 +201,23 @@ export default function SettingsPanel({
                                 flexDirection: 'column',
                                 position: 'relative',
                                 overflow: 'hidden',
-                                padding: '24px',
+                                padding: '38px',
                             }}>
                                 {activeTab !== 'providers' && <motion.button
                                     whileHover={{ scale: 1.1, color: 'var(--text-primary)' }}
                                     onClick={onClose}
                                     style={{
                                         position: 'absolute',
-                                        top: '20px',
-                                        right: '24px',
+                                        top: '28px',
+                                        right: '38px',
                                         zIndex: 10,
                                         background: 'var(--bg-tertiary)',
                                         border: 'none',
                                         color: 'var(--text-muted)',
                                         cursor: 'pointer',
-                                        fontSize: '24px',
-                                        width: '36px',
-                                        height: '36px',
+                                        fontSize: '32px',
+                                        width: '50px',
+                                        height: '50px',
                                         borderRadius: '50%',
                                         display: 'flex',
                                         alignItems: 'center',

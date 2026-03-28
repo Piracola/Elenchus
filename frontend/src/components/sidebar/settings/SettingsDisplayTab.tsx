@@ -25,7 +25,7 @@ export function SettingsDisplayTab({ displaySettings, setDisplaySettings }: Sett
 
     return (
         <div style={{
-            padding: '24px',
+            padding: '40px',
             overflowY: 'auto',
             background: 'var(--bg-card)',
             borderRadius: 'var(--radius-xl)',
@@ -33,26 +33,26 @@ export function SettingsDisplayTab({ displaySettings, setDisplaySettings }: Sett
         }}>
             <div style={{
                 borderBottom: '1px solid var(--border-subtle)',
-                paddingBottom: '20px',
-                marginBottom: '24px',
+                paddingBottom: '30px',
+                marginBottom: '36px',
             }}>
                 <h3 style={{
-                    fontSize: '20px',
-                    margin: '0 0 8px',
+                    fontSize: '30px',
+                    margin: '0 0 14px',
                     color: 'var(--text-primary)',
                     fontWeight: 700,
                 }}>
                     显示设置
                 </h3>
-                <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)' }}>
+                <p style={{ margin: 0, fontSize: '18px', color: 'var(--text-muted)', lineHeight: 1.8 }}>
                     自定义消息界面的显示效果，调整宽度与阅读字号以适应不同的屏幕尺寸和使用偏好。
                 </p>
             </div>
 
-            <div style={{ marginBottom: '24px' }}>
+            <div style={{ marginBottom: '36px' }}>
                 <h4 style={{
-                    fontSize: '14px',
-                    margin: '0 0 16px',
+                    fontSize: '21px',
+                    margin: '0 0 22px',
                     color: 'var(--text-primary)',
                     fontWeight: 600,
                 }}>
@@ -65,10 +65,10 @@ export function SettingsDisplayTab({ displaySettings, setDisplaySettings }: Sett
                 />
             </div>
 
-            <div style={{ marginBottom: '24px' }}>
+            <div style={{ marginBottom: '36px' }}>
                 <h4 style={{
-                    fontSize: '14px',
-                    margin: '0 0 16px',
+                    fontSize: '21px',
+                    margin: '0 0 22px',
                     color: 'var(--text-primary)',
                     fontWeight: 600,
                 }}>
@@ -82,54 +82,55 @@ export function SettingsDisplayTab({ displaySettings, setDisplaySettings }: Sett
             </div>
 
             <div style={{
-                padding: '16px 20px',
+                padding: '24px 28px',
                 background: 'var(--bg-tertiary)',
                 borderRadius: 'var(--radius-lg)',
                 boxShadow: 'var(--shadow-inner)',
             }}>
                 <div style={{
-                    fontSize: '13px',
+                    fontSize: '17px',
                     color: 'var(--text-secondary)',
                     fontWeight: 500,
+                    lineHeight: 1.7,
                 }}>
                     提示：当屏幕缩放比例较小时，建议选择较宽的显示模式以获得更好的阅读体验。
                 </div>
             </div>
 
             <div style={{
-                marginTop: '24px',
-                padding: '20px',
+                marginTop: '36px',
+                padding: '30px',
                 borderRadius: 'var(--radius-lg)',
                 border: '1px solid var(--border-subtle)',
                 background: 'var(--bg-secondary)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                gap: '16px',
+                gap: '20px',
                 flexWrap: 'wrap',
             }}>
                 <div style={{ flex: '1 1 320px' }}>
                     <h4 style={{
-                        fontSize: '14px',
-                        margin: '0 0 8px',
+                        fontSize: '21px',
+                        margin: '0 0 12px',
                         color: 'var(--text-primary)',
                         fontWeight: 600,
                     }}>
                         运行观察器
                     </h4>
                     <div style={{
-                        fontSize: '14px',
+                        fontSize: '18px',
                         color: 'var(--text-secondary)',
                         fontWeight: 600,
-                        marginBottom: '4px',
+                        marginBottom: '8px',
                     }}>
                         重置到默认位置
                     </div>
                     <p style={{
                         margin: 0,
-                        fontSize: '13px',
+                        fontSize: '17px',
                         color: 'var(--text-muted)',
-                        lineHeight: 1.6,
+                        lineHeight: 1.75,
                     }}>
                         如果观察器被拖到异常位置或尺寸不合适，可以恢复到默认位置和大小。
                     </p>
@@ -145,8 +146,8 @@ export function SettingsDisplayTab({ displaySettings, setDisplaySettings }: Sett
                         borderRadius: 'var(--radius-md)',
                         background: 'var(--accent-indigo)',
                         color: 'white',
-                        padding: '10px 16px',
-                        fontSize: '13px',
+                        padding: '14px 24px',
+                        fontSize: '17px',
                         fontWeight: 700,
                         cursor: 'pointer',
                         boxShadow: 'var(--shadow-sm)',

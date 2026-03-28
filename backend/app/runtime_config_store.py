@@ -75,6 +75,7 @@ def _default_config() -> dict[str, Any]:
         "providers": [],
         "debate": {
             "default_max_turns": 5,
+            "default_max_tokens": 64000,
             "context_window": {
                 "recent_turns_to_keep": 3,
                 "enable_summary_compression": True,
@@ -113,12 +114,17 @@ def _normalize_string_list(value: Any, fallback: list[str]) -> list[str]:
 def _normalize_provider(provider: dict[str, Any]) -> dict[str, Any]:
     created_at = provider.get("created_at") or _utcnow_iso()
     updated_at = provider.get("updated_at") or created_at
+    raw_default_max_tokens = provider.get("default_max_tokens")
+    default_max_tokens = int(raw_default_max_tokens) if raw_default_max_tokens is not None else 64000
+    if default_max_tokens < 1:
+        default_max_tokens = 64000
     return {
         "id": str(provider.get("id", "") or ""),
         "name": str(provider.get("name", "") or "").strip(),
         "provider_type": str(provider.get("provider_type", "openai") or "openai"),
         "api_key": str(provider.get("api_key", "") or ""),
         "api_base_url": str(provider.get("api_base_url", "") or "") or None,
+        "default_max_tokens": default_max_tokens,
         "custom_parameters": dict(provider.get("custom_parameters") or {}),
         "models": [str(model) for model in (provider.get("models") or []) if str(model)],
         "is_default": bool(provider.get("is_default", False)),

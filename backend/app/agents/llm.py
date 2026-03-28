@@ -14,9 +14,12 @@ from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 
+from app.config import get_settings
 from app.dependencies import get_agent_config_service, get_llm_router
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_MAX_TOKENS = 64000
 
 
 @dataclass(frozen=True)
@@ -55,10 +58,17 @@ async def resolve_llm_config(
 ) -> ResolvedLLMConfig:
     """Resolve provider, credentials, and generation settings for one call."""
     override = override or {}
+    settings = get_settings()
     model = override.get("model", "gpt-4o")
     provider_type, api_base_url, api_key, custom_parameters = await _resolve_provider_info(override)
     temperature = override.get("temperature", 0.7)
-    max_tokens = override.get("max_tokens", 1500)
+    default_max_tokens = int(
+        custom_parameters.get(
+            "default_max_tokens",
+            getattr(settings.debate, "default_max_tokens", DEFAULT_MAX_TOKENS),
+        )
+    )
+    max_tokens = int(override.get("max_tokens", default_max_tokens))
 
     if not api_key:
         raise ValueError(
@@ -71,7 +81,11 @@ async def resolve_llm_config(
         provider_type=provider_type or "openai",
         api_key=api_key,
         api_base_url=api_base_url,
-        custom_parameters=custom_parameters,
+        custom_parameters={
+            key: value
+            for key, value in custom_parameters.items()
+            if key != "default_max_tokens"
+        },
         temperature=temperature,
         max_tokens=max_tokens,
     )

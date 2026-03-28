@@ -52,23 +52,23 @@ export function SearchProviderSettingsCard({
     return (
         <div
             style={{
-                padding: '20px',
+                padding: '30px',
                 borderRadius: 'var(--radius-lg)',
                 border: '1px solid var(--border-subtle)',
                 background: 'var(--bg-card)',
                 boxShadow: 'var(--shadow-xs)',
             }}
         >
-            <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontSize: '16px', color: 'var(--text-primary)', fontWeight: 700 }}>
+            <div style={{ marginBottom: '22px' }}>
+                <div style={{ fontSize: '22px', color: 'var(--text-primary)', fontWeight: 700 }}>
                     {title}
                 </div>
-                <div style={{ ...helperTextStyle, marginTop: '4px' }}>
+                <div style={{ ...helperTextStyle, marginTop: '8px' }}>
                     {description}
                 </div>
             </div>
 
-            <div style={{ display: 'grid', gap: '14px' }}>
+            <div style={{ display: 'grid', gap: '20px' }}>
                 {fields.map((field) => (
                     <div key={field.label}>
                         <label style={labelStyle}>{field.label}</label>
@@ -87,17 +87,18 @@ export function SearchProviderSettingsCard({
                 ))}
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '18px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '14px', marginTop: '24px', flexWrap: 'wrap' }}>
                 <button
                     onClick={onSave}
                     disabled={isBusy}
                     style={{
-                        padding: '10px 16px',
+                        padding: '14px 22px',
                         background: 'var(--text-primary)',
                         color: 'var(--bg-primary)',
                         border: 'none',
                         borderRadius: 'var(--radius-md)',
                         fontWeight: 600,
+                        fontSize: '16px',
                         cursor: isBusy ? 'not-allowed' : 'pointer',
                         opacity: isBusy ? 0.7 : 1,
                     }}
@@ -110,12 +111,13 @@ export function SearchProviderSettingsCard({
                         onClick={onClear}
                         disabled={isBusy}
                         style={{
-                            padding: '10px 16px',
+                            padding: '14px 22px',
                             background: 'transparent',
                             color: 'var(--text-secondary)',
                             border: '1px solid var(--border-subtle)',
                             borderRadius: 'var(--radius-md)',
                             fontWeight: 600,
+                            fontSize: '16px',
                             cursor: isBusy ? 'not-allowed' : 'pointer',
                             opacity: isBusy ? 0.7 : 1,
                         }}

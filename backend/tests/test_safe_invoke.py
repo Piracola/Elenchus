@@ -10,7 +10,7 @@ import pytest
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 
 from app.agents import safe_invoke
-from app.agents.llm import ResolvedLLMConfig
+from app.agents.llm import DEFAULT_MAX_TOKENS, ResolvedLLMConfig
 from app.agents.runtime_progress import (
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
     MODEL_INVOCATION_TIMEOUT_SECONDS,
@@ -49,7 +49,7 @@ async def test_invoke_chat_model_falls_back_for_openai_shape_errors(monkeypatch)
             api_base_url="https://example.invalid/v1",
             custom_parameters={"reasoning_effort": "medium"},
             temperature=0.7,
-            max_tokens=1500,
+            max_tokens=DEFAULT_MAX_TOKENS,
         )
 
     async def fake_invoke_openai_raw(
@@ -100,7 +100,7 @@ async def test_invoke_chat_model_streams_tokens_and_rebuilds_message(monkeypatch
             api_base_url="https://example.invalid/v1",
             custom_parameters={},
             temperature=0.7,
-            max_tokens=1500,
+            max_tokens=DEFAULT_MAX_TOKENS,
         )
 
     monkeypatch.setattr(safe_invoke, "resolve_llm_config", fake_resolve_llm_config)

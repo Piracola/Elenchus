@@ -31,14 +31,14 @@ export function SearchConfigTab() {
         return (
             <div
                 style={{
-                    padding: '24px',
+                    padding: '40px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     height: '100%',
                 }}
             >
-                <div style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
+                <div style={{ fontSize: '18px', color: 'var(--text-muted)' }}>
                     {'\u6b63\u5728\u52a0\u8f7d\u641c\u7d22\u914d\u7f6e...'}
                 </div>
             </div>
@@ -48,7 +48,7 @@ export function SearchConfigTab() {
     return (
         <div
             style={{
-                padding: '24px',
+                padding: '40px',
                 overflowY: 'auto',
                 background: 'var(--bg-card)',
                 borderRadius: 'var(--radius-xl)',
@@ -58,21 +58,21 @@ export function SearchConfigTab() {
             <div
                 style={{
                     borderBottom: '1px solid var(--border-subtle)',
-                    paddingBottom: '20px',
-                    marginBottom: '24px',
+                    paddingBottom: '30px',
+                    marginBottom: '36px',
                 }}
             >
                 <h3
                     style={{
-                        fontSize: '20px',
-                        margin: '0 0 8px',
+                        fontSize: '30px',
+                        margin: '0 0 14px',
                         color: 'var(--text-primary)',
                         fontWeight: 700,
                     }}
                 >
                     {'\u641c\u7d22\u5f15\u64ce\u914d\u7f6e'}
                 </h3>
-                <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                <p style={{ margin: 0, fontSize: '18px', color: 'var(--text-muted)', lineHeight: 1.8 }}>
                     {'\u53ef\u4ee5\u5728\u8fd9\u91cc\u5207\u6362\u5f53\u524d\u641c\u7d22\u5f15\u64ce\uff0c\u5e76\u7ef4\u62a4 SearXNG / Tavily \u7684\u8fd0\u884c\u65f6\u53c2\u6570\u3002'}
                 </p>
             </div>
@@ -80,13 +80,13 @@ export function SearchConfigTab() {
             {error && (
                 <div
                     style={{
-                        padding: '12px 16px',
+                        padding: '18px 22px',
                         background: 'var(--color-red-50)',
                         border: '1px solid var(--color-red-200)',
                         borderRadius: 'var(--radius-lg)',
-                        marginBottom: '16px',
+                        marginBottom: '20px',
                         color: 'var(--color-red-700)',
-                        fontSize: '13px',
+                        fontSize: '17px',
                     }}
                 >
                     {error}
@@ -105,27 +105,27 @@ export function SearchConfigTab() {
 
             <div
                 style={{
-                    marginTop: '28px',
+                    marginTop: '36px',
                     display: 'grid',
-                    gap: '16px',
+                    gap: '24px',
                 }}
             >
                 <div
                     style={{
-                        padding: '18px 20px',
+                        padding: '28px 30px',
                         background: 'var(--bg-tertiary)',
                         borderRadius: 'var(--radius-lg)',
                         boxShadow: 'var(--shadow-inner)',
                     }}
                 >
-                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '8px' }}>
+                    <div style={{ fontSize: '17px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '12px' }}>
                         {'\u5f53\u524d\u72b6\u6001'}
                     </div>
-                    <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                    <div style={{ fontSize: '17px', color: 'var(--text-muted)' }}>
                         {'\u5f53\u524d\u4f7f\u7528\uff1a'}
                         <strong style={{ color: 'var(--text-primary)' }}> {getProviderLabel(currentProvider)}</strong>
                     </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px', lineHeight: 1.5 }}>
+                    <div style={{ fontSize: '16px', color: 'var(--text-muted)', marginTop: '12px', lineHeight: 1.8 }}>
                         {'\u63d0\u793a\uff1a\u5982\u679c\u5f53\u524d\u5f15\u64ce\u4e0d\u53ef\u7528\uff0c\u7cfb\u7edf\u4f1a\u81ea\u52a8\u5c1d\u8bd5\u56de\u9000\u5230\u5176\u4ed6\u53ef\u7528\u641c\u7d22\u5f15\u64ce\u3002'}
                     </div>
                 </div>
