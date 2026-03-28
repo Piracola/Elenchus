@@ -33,6 +33,7 @@
 
 - [后端开发指南](./guides/backend-development.md) — 后端测试、运行时路径、环境变量、关键入口
 - [后端目录入口 README](../backend/README.md) — 轻量目录说明与继续阅读入口
+- `backend/manual_tests/` — 手动验证脚本目录，与自动化测试目录隔离
 
 ### 前端
 

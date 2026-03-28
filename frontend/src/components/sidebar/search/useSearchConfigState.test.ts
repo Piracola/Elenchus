@@ -1,7 +1,8 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../../api/client';
+import type { SearchConfig } from '../../../types';
 import { toast } from '../../../utils/toast';
 import { useSearchConfigState } from './useSearchConfigState';
 
@@ -19,15 +20,10 @@ vi.mock('../../../utils/toast', () => ({
     toast: vi.fn(),
 }));
 
-const searchApi = api.search as {
-    getConfig: ReturnType<typeof vi.fn>;
-    setProvider: ReturnType<typeof vi.fn>;
-    updateConfig: ReturnType<typeof vi.fn>;
-};
+const searchApi = vi.mocked(api.search);
+const toastMock = vi.mocked(toast);
 
-const toastMock = toast as ReturnType<typeof vi.fn>;
-
-function createSearchConfig(overrides: Record<string, unknown> = {}) {
+function createSearchConfig(overrides: Partial<SearchConfig> = {}): SearchConfig {
     return {
         provider: 'duckduckgo',
         available_providers: [
@@ -46,10 +42,11 @@ function createSearchConfig(overrides: Record<string, unknown> = {}) {
             },
         },
         ...overrides,
-    };
+    } satisfies SearchConfig;
 }
 
 afterEach(() => {
+    cleanup();
     vi.clearAllMocks();
 });
 

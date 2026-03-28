@@ -1,24 +1,20 @@
 import { useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, ChevronDown, Settings2 } from 'lucide-react';
-
+import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentConfigs } from '../hooks/useAgentConfigs';
 import { useSessionCreate } from '../hooks/useSessionCreate';
 import { useSettingsStore } from '../stores/settingsStore';
 import { DISPLAY_FONT_TOKENS } from '../config/display';
 import type { DebateMode } from '../types';
 import {
-    DEFAULT_MAX_TURNS,
-    DEFAULT_JURY_AGENTS_PER_JURY,
-    DEFAULT_JURY_DISCUSSION_ROUNDS,
-    DEFAULT_TEAM_AGENTS_PER_TEAM,
-    DEFAULT_TEAM_DISCUSSION_ROUNDS,
     parseJuryAgentsInput,
     parseJuryDiscussionRoundsInput,
     parseMaxTurnsInput,
     parseTeamAgentsInput,
     parseTeamDiscussionRoundsInput,
 } from '../utils/debateSession';
+import { HomeComposerCard } from './home/HomeComposerCard';
+import { HomeModeSelector } from './home/HomeModeSelector';
+import { HomeStatusLegend } from './home/HomeStatusLegend';
 import AgentConfigPanel from './shared/AgentConfigPanel';
 import BrandIcon from './shared/BrandIcon';
 import SidebarExpandButton from './shared/SidebarExpandButton';
@@ -97,33 +93,6 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                 : undefined,
         );
     };
-
-    const controlStyle = {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '6px',
-        background: 'var(--bg-tertiary)',
-        border: '1px solid var(--border-subtle)',
-        color: 'var(--text-secondary)',
-        padding: '8px 14px',
-        borderRadius: 'var(--radius-md)',
-        fontSize: '13px',
-        fontWeight: 500,
-        boxShadow: 'var(--shadow-xs)',
-    } as const;
-
-    const numberInputStyle = {
-        width: '36px',
-        background: 'transparent',
-        border: 'none',
-        outline: 'none',
-        color: 'var(--text-primary)',
-        fontSize: '13px',
-        fontWeight: 500,
-        textAlign: 'center',
-        MozAppearance: 'textfield',
-        WebkitAppearance: 'none',
-    } as const;
 
     return (
         <div
@@ -231,101 +200,11 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                     AI 多智能体辩论平台，让观点碰撞产出更清晰的过程与结果。
                 </motion.p>
 
-                <div
-                    style={{
-                        width: '100%',
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                        gap: '12px',
-                        marginBottom: '16px',
-                    }}
-                >
-                    {([
-                        {
-                            mode: 'standard' as const,
-                            title: '标准辩论',
-                            description: '保留裁判、陪审团与常规推理增强，用于更传统的攻防与评分。',
-                        },
-                        {
-                            mode: 'sophistry_experiment' as const,
-                            title: '诡辩实验模式',
-                            description: '单独流程，强调诡辩技巧、谬误识别和观察报告，不做评分。',
-                        },
-                    ]).map((item) => {
-                        const active = debateMode === item.mode;
-                        return (
-                            <motion.button
-                                key={item.mode}
-                                whileHover={{ y: -2 }}
-                                whileTap={{ scale: 0.99 }}
-                                onClick={() => setDebateMode(item.mode)}
-                                style={{
-                                    textAlign: 'left',
-                                    padding: '16px 18px',
-                                    borderRadius: 'var(--radius-xl)',
-                                    border: active
-                                        ? `1px solid ${item.mode === 'sophistry_experiment' ? 'var(--mode-sophistry-accent)' : 'var(--accent-indigo)'}`
-                                        : '1px solid var(--border-subtle)',
-                                    background: active && item.mode === 'sophistry_experiment'
-                                        ? 'var(--mode-sophistry-card)'
-                                        : 'var(--bg-card)',
-                                    boxShadow: active ? 'var(--shadow-md)' : 'var(--shadow-xs)',
-                                    cursor: 'pointer',
-                                }}
-                            >
-                                <div
-                                    style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '8px',
-                                        marginBottom: '8px',
-                                    }}
-                                >
-                                    <span
-                                        style={{
-                                            fontSize: '14px',
-                                            fontWeight: 700,
-                                            color: active
-                                                ? (item.mode === 'sophistry_experiment'
-                                                    ? 'var(--mode-sophistry-accent)'
-                                                    : 'var(--accent-indigo)')
-                                                : 'var(--text-primary)',
-                                        }}
-                                    >
-                                        {item.title}
-                                    </span>
-                                    {active && (
-                                        <span
-                                            style={{
-                                                padding: '2px 8px',
-                                                borderRadius: 'var(--radius-full)',
-                                                background: item.mode === 'sophistry_experiment'
-                                                    ? 'rgba(184, 137, 70, 0.12)'
-                                                    : 'rgba(99, 102, 241, 0.12)',
-                                                color: item.mode === 'sophistry_experiment'
-                                                    ? 'var(--mode-sophistry-accent)'
-                                                    : 'var(--accent-indigo)',
-                                                fontSize: '11px',
-                                                fontWeight: 700,
-                                            }}
-                                        >
-                                            当前
-                                        </span>
-                                    )}
-                                </div>
-                                <div
-                                    style={{
-                                        fontSize: homeFontSizes.modeDescription,
-                                        lineHeight: 1.6,
-                                        color: 'var(--text-secondary)',
-                                    }}
-                                >
-                                    {item.description}
-                                </div>
-                            </motion.button>
-                        );
-                    })}
-                </div>
+                <HomeModeSelector
+                    debateMode={debateMode}
+                    homeFontSizes={homeFontSizes}
+                    onModeChange={setDebateMode}
+                />
 
                 <AnimatePresence>
                     {isSophistryMode && (
@@ -362,231 +241,35 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                     )}
                 </AnimatePresence>
 
-                <motion.div
-                    initial={{ opacity: 0, y: 16 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3, duration: 0.5 }}
-                    style={{
-                        width: '100%',
-                        background: isSophistryMode ? 'var(--mode-sophistry-card)' : 'var(--bg-card)',
-                        borderRadius: 'var(--radius-xl)',
-                        boxShadow: 'var(--shadow-md)',
-                        border: isSophistryMode
-                            ? '1px solid var(--mode-sophistry-border)'
-                            : '1px solid var(--border-subtle)',
+                <HomeComposerCard
+                    topic={topic}
+                    isCreating={isCreating}
+                    isSophistryMode={isSophistryMode}
+                    showAdvanced={showAdvanced}
+                    maxTurnsInput={maxTurnsInput}
+                    teamAgentsInput={teamAgentsInput}
+                    teamRoundsInput={teamRoundsInput}
+                    juryAgentsInput={juryAgentsInput}
+                    juryRoundsInput={juryRoundsInput}
+                    steelmanEnabled={steelmanEnabled}
+                    homeFontSizes={homeFontSizes}
+                    onTopicChange={(value) => {
+                        if (error) {
+                            clearError();
+                        }
+                        setTopic(value);
                     }}
-                >
-                    <div style={{ padding: '20px 24px 16px' }}>
-                        <textarea
-                            value={topic}
-                            onChange={(event) => {
-                                if (error) {
-                                    clearError();
-                                }
-                                setTopic(event.target.value);
-                            }}
-                            placeholder={isSophistryMode ? '输入辩题，启动一场诡辩实验...' : '输入辩题，开始一场深入辩论...'}
-                            rows={3}
-                            style={{
-                                width: '100%',
-                                background: 'transparent',
-                                border: 'none',
-                                outline: 'none',
-                                color: 'var(--text-primary)',
-                                fontSize: homeFontSizes.topicInput,
-                                resize: 'none',
-                                lineHeight: 1.6,
-                                fontWeight: 500,
-                            }}
-                        />
-                    </div>
-
-                    <div
-                        style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            gap: '12px',
-                            padding: '12px 16px 16px',
-                            borderTop: isSophistryMode
-                                ? '1px solid var(--mode-sophistry-border)'
-                                : '1px solid var(--border-subtle)',
-                        }}
-                    >
-                        <div
-                            style={{
-                                display: 'flex',
-                                justifyContent: 'flex-start',
-                                flex: 1,
-                                alignItems: 'center',
-                                gap: '10px',
-                                flexWrap: 'wrap',
-                            }}
-                        >
-                            <motion.button
-                                whileHover={{ scale: 1.02, background: 'var(--bg-hover)' }}
-                                whileTap={{ scale: 0.98 }}
-                                onClick={() => setShowAdvanced(!showAdvanced)}
-                                style={{
-                                    ...controlStyle,
-                                    cursor: 'pointer',
-                                    borderColor: showAdvanced ? 'var(--accent-indigo)' : 'var(--border-subtle)',
-                                    color: showAdvanced ? 'var(--accent-indigo)' : 'var(--text-secondary)',
-                                }}
-                            >
-                                <Settings2 size={14} />
-                                Agent
-                                <motion.div
-                                    animate={{ rotate: showAdvanced ? 180 : 0 }}
-                                    transition={{ duration: 0.2 }}
-                                >
-                                    <ChevronDown size={14} />
-                                </motion.div>
-                            </motion.button>
-
-                            <div style={controlStyle}>
-                                <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                                    轮数
-                                </span>
-                                <input
-                                    type="number"
-                                    value={maxTurnsInput}
-                                    onChange={(event) => setMaxTurnsInput(event.target.value)}
-                                    placeholder={String(DEFAULT_MAX_TURNS)}
-                                    min={1}
-                                    max={100}
-                                    style={numberInputStyle}
-                                />
-                            </div>
-
-                            {!isSophistryMode && (
-                                <>
-                                    <div style={controlStyle}>
-                                        <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                                            组内 Agent
-                                        </span>
-                                        <input
-                                            type="number"
-                                            value={teamAgentsInput}
-                                            onChange={(event) => setTeamAgentsInput(event.target.value)}
-                                            placeholder={String(DEFAULT_TEAM_AGENTS_PER_TEAM)}
-                                            min={0}
-                                            max={10}
-                                            style={numberInputStyle}
-                                        />
-                                    </div>
-
-                                    <div style={controlStyle}>
-                                        <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                                            组内轮数
-                                        </span>
-                                        <input
-                                            type="number"
-                                            value={teamRoundsInput}
-                                            onChange={(event) => setTeamRoundsInput(event.target.value)}
-                                            placeholder={String(DEFAULT_TEAM_DISCUSSION_ROUNDS)}
-                                            min={0}
-                                            max={10}
-                                            style={numberInputStyle}
-                                        />
-                                    </div>
-
-                                    <div style={controlStyle}>
-                                        <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                                            陪审 Agent
-                                        </span>
-                                        <input
-                                            type="number"
-                                            value={juryAgentsInput}
-                                            onChange={(event) => setJuryAgentsInput(event.target.value)}
-                                            placeholder={String(DEFAULT_JURY_AGENTS_PER_JURY)}
-                                            min={0}
-                                            max={10}
-                                            style={numberInputStyle}
-                                        />
-                                    </div>
-
-                                    <div style={controlStyle}>
-                                        <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                                            陪审轮数
-                                        </span>
-                                        <input
-                                            type="number"
-                                            value={juryRoundsInput}
-                                            onChange={(event) => setJuryRoundsInput(event.target.value)}
-                                            placeholder={String(DEFAULT_JURY_DISCUSSION_ROUNDS)}
-                                            min={0}
-                                            max={10}
-                                            style={numberInputStyle}
-                                        />
-                                    </div>
-
-                                    <motion.button
-                                        whileHover={{ scale: 1.02, background: 'var(--bg-hover)' }}
-                                        whileTap={{ scale: 0.98 }}
-                                        onClick={() => setSteelmanEnabled((value) => !value)}
-                                        style={{
-                                            ...controlStyle,
-                                            cursor: 'pointer',
-                                            borderColor: steelmanEnabled ? 'var(--accent-indigo)' : 'var(--border-subtle)',
-                                            color: steelmanEnabled ? 'var(--accent-indigo)' : 'var(--text-secondary)',
-                                        }}
-                                    >
-                                        Steelman
-                                        <span style={{ fontSize: '12px', fontWeight: 700 }}>
-                                            {steelmanEnabled ? 'ON' : 'OFF'}
-                                        </span>
-                                    </motion.button>
-                                </>
-                            )}
-
-                            {isSophistryMode && (
-                                <div
-                                    style={{
-                                        ...controlStyle,
-                                        background: 'rgba(184, 137, 70, 0.08)',
-                                        borderColor: 'var(--mode-sophistry-border)',
-                                        color: 'var(--mode-sophistry-accent)',
-                                    }}
-                                >
-                                    搜索已禁用
-                                </div>
-                            )}
-                        </div>
-
-                        <motion.button
-                            whileHover={{ scale: 1.05, boxShadow: 'var(--shadow-md)' }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={handleCreateDebate}
-                            disabled={!topic.trim() || isCreating}
-                            style={{
-                                width: '40px',
-                                height: '40px',
-                                borderRadius: '50%',
-                                background: topic.trim() && !isCreating
-                                    ? (
-                                        isSophistryMode
-                                            ? 'linear-gradient(135deg, var(--mode-sophistry-accent) 0%, #d6a363 100%)'
-                                            : 'linear-gradient(135deg, var(--accent-indigo) 0%, var(--accent-cyan) 100%)'
-                                    )
-                                    : 'var(--bg-tertiary)',
-                                color: topic.trim() && !isCreating ? 'white' : 'var(--text-muted)',
-                                border: 'none',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: topic.trim() && !isCreating ? 'pointer' : 'not-allowed',
-                                transition: 'all var(--transition-fast)',
-                                boxShadow: topic.trim() && !isCreating
-                                    ? '0 4px 16px rgba(99, 102, 241, 0.35)'
-                                    : 'var(--shadow-inner)',
-                                flexShrink: 0,
-                            }}
-                        >
-                            <ArrowRight size={20} />
-                        </motion.button>
-                    </div>
-                </motion.div>
+                    onShowAdvancedChange={setShowAdvanced}
+                    onMaxTurnsChange={setMaxTurnsInput}
+                    onTeamAgentsChange={setTeamAgentsInput}
+                    onTeamRoundsChange={setTeamRoundsInput}
+                    onJuryAgentsChange={setJuryAgentsInput}
+                    onJuryRoundsChange={setJuryRoundsInput}
+                    onSteelmanToggle={() => setSteelmanEnabled((value) => !value)}
+                    onCreateDebate={() => {
+                        void handleCreateDebate();
+                    }}
+                />
 
                 <AnimatePresence>
                     {error && (
@@ -610,52 +293,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                     )}
                 </AnimatePresence>
 
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.5 }}
-                    style={{
-                        display: 'flex',
-                        gap: '24px',
-                        marginTop: '36px',
-                        color: 'var(--text-muted)',
-                        fontSize: '12px',
-                    }}
-                >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div
-                            style={{
-                                width: '6px',
-                                height: '6px',
-                                borderRadius: '50%',
-                                background: 'var(--color-proposer)',
-                            }}
-                        />
-                        <span>正方观点</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div
-                            style={{
-                                width: '6px',
-                                height: '6px',
-                                borderRadius: '50%',
-                                background: 'var(--color-opposer)',
-                            }}
-                        />
-                        <span>反方观点</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div
-                            style={{
-                                width: '6px',
-                                height: '6px',
-                                borderRadius: '50%',
-                                background: isSophistryMode ? 'var(--mode-sophistry-accent)' : 'var(--color-judge)',
-                            }}
-                        />
-                        <span>{isSophistryMode ? '观察报告' : '裁判评分'}</span>
-                    </div>
-                </motion.div>
+                <HomeStatusLegend isSophistryMode={isSophistryMode} />
             </motion.div>
         </div>
     );

@@ -79,20 +79,41 @@ class MockResizeObserver {
     static instances: MockResizeObserver[] = [];
 
     private readonly callback: ResizeObserverCallback;
+    private active = true;
+    private readonly observedElements = new Set<Element>();
 
     constructor(callback: ResizeObserverCallback) {
         this.callback = callback;
         MockResizeObserver.instances.push(this);
     }
 
-    observe(): void {}
+    observe(target: Element): void {
+        if (!this.active) {
+            return;
+        }
+        this.observedElements.add(target);
+    }
 
-    unobserve(): void {}
+    unobserve(target: Element): void {
+        this.observedElements.delete(target);
+    }
 
-    disconnect(): void {}
+    disconnect(): void {
+        this.active = false;
+        this.observedElements.clear();
+    }
 
     trigger(): void {
-        this.callback([], this as unknown as ResizeObserver);
+        if (!this.active || this.observedElements.size === 0) {
+            return;
+        }
+
+        const entries = Array.from(this.observedElements, (target) => ({
+            target,
+            contentRect: target.getBoundingClientRect(),
+        })) as ResizeObserverEntry[];
+
+        this.callback(entries, this as unknown as ResizeObserver);
     }
 
     static reset(): void {
@@ -103,6 +124,21 @@ class MockResizeObserver {
         for (const instance of [...MockResizeObserver.instances]) {
             instance.trigger();
         }
+        MockResizeObserver.instances = MockResizeObserver.instances.filter(
+            (instance) => instance.active || instance.observedElements.size > 0,
+        );
+    }
+}
+
+let animationFrameQueue: Array<{ id: number; callback: FrameRequestCallback }> = [];
+let nextAnimationFrameId = 1;
+
+function flushAnimationFrames() {
+    const queuedFrames = [...animationFrameQueue];
+    animationFrameQueue = [];
+
+    for (const { callback } of queuedFrames) {
+        callback(0);
     }
 }
 
@@ -155,11 +191,42 @@ describe('ChatPanel history rendering', () => {
     let containerHeight = 320;
 
     beforeEach(() => {
-        vi.useFakeTimers();
         useDebateStore.getState().reset();
         MockResizeObserver.reset();
         measurementPhase = 0;
         containerHeight = 320;
+        animationFrameQueue = [];
+        nextAnimationFrameId = 1;
+
+        Object.defineProperty(globalThis, 'requestAnimationFrame', {
+            configurable: true,
+            writable: true,
+            value: vi.fn((callback: FrameRequestCallback) => {
+                const id = nextAnimationFrameId++;
+                animationFrameQueue.push({ id, callback });
+                return id;
+            }),
+        });
+
+        Object.defineProperty(globalThis, 'cancelAnimationFrame', {
+            configurable: true,
+            writable: true,
+            value: vi.fn((id: number) => {
+                animationFrameQueue = animationFrameQueue.filter((frame) => frame.id !== id);
+            }),
+        });
+
+        Object.defineProperty(window, 'requestAnimationFrame', {
+            configurable: true,
+            writable: true,
+            value: globalThis.requestAnimationFrame,
+        });
+
+        Object.defineProperty(window, 'cancelAnimationFrame', {
+            configurable: true,
+            writable: true,
+            value: globalThis.cancelAnimationFrame,
+        });
 
         Object.defineProperty(window, 'innerWidth', {
             configurable: true,
@@ -235,10 +302,10 @@ describe('ChatPanel history rendering', () => {
 
     afterEach(() => {
         cleanup();
+        animationFrameQueue = [];
         useDebateStore.getState().reset();
         MockResizeObserver.reset();
         vi.restoreAllMocks();
-        vi.useRealTimers();
     });
 
     it('keeps historical session rendering stable under repeated ResizeObserver notifications', () => {
@@ -253,13 +320,13 @@ describe('ChatPanel history rendering', () => {
         expect(() => {
             act(() => {
                 MockResizeObserver.triggerAll();
-                vi.runAllTimers();
+                flushAnimationFrames();
                 measurementPhase = 1;
                 MockResizeObserver.triggerAll();
-                vi.runAllTimers();
+                flushAnimationFrames();
                 measurementPhase = 2;
                 MockResizeObserver.triggerAll();
-                vi.runAllTimers();
+                flushAnimationFrames();
             });
         }).not.toThrow();
 
@@ -276,7 +343,7 @@ describe('ChatPanel history rendering', () => {
         act(() => {
             containerHeight = 1280;
             MockResizeObserver.triggerAll();
-            vi.runAllTimers();
+            flushAnimationFrames();
         });
 
         const after = screen.getAllByTestId('message-row').length;
