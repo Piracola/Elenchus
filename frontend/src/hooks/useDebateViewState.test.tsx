@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react';
+import { cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useDebateStore } from '../stores/debateStore';
 import type { RuntimeEvent, Session } from '../types';
@@ -60,6 +60,7 @@ describe('useDebateViewState', () => {
     });
 
     afterEach(() => {
+        cleanup();
         useDebateStore.getState().reset();
     });
 

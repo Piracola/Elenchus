@@ -4,13 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../../api/client';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useModelConfigManager } from '../../hooks/useModelConfigManager';
-import { ProviderSidebar } from './ProviderSidebar';
-import { ProviderForm } from './ProviderForm';
 import { SearchConfigTab } from './SearchConfigTab';
-import type { LogLevel, DisplaySettings } from '../../types';
-import { DISPLAY_FONT_SIZE_OPTIONS } from '../../config/display';
-import { resetStoredFloatingInspectorRect } from '../../utils/floatingInspector';
-import { toast } from '../../utils/toast';
+import type { LogLevel } from '../../types';
+import { SettingsDisplayTab } from './settings/SettingsDisplayTab';
+import { SettingsLoggingTab } from './settings/SettingsLoggingTab';
+import { SettingsProvidersTab } from './settings/SettingsProvidersTab';
 
 export type SettingsTab = 'providers' | 'display' | 'logging' | 'search';
 
@@ -18,91 +16,6 @@ interface Props {
     isOpen: boolean;
     onClose: () => void;
     initialTab?: SettingsTab;
-}
-
-const LOG_LEVELS: { value: LogLevel; label: string; description: string }[] = [
-    { value: 'DEBUG', label: 'DEBUG', description: '详细调试信息，包含所有操作细节' },
-    { value: 'INFO', label: 'INFO', description: '常规运行信息，记录关键操作' },
-    { value: 'WARNING', label: 'WARNING', description: '警告信息，潜在问题提示' },
-    { value: 'ERROR', label: 'ERROR', description: '错误信息，功能异常记录' },
-    { value: 'CRITICAL', label: 'CRITICAL', description: '严重错误，系统级故障' },
-];
-
-const MESSAGE_WIDTH_OPTIONS: { value: DisplaySettings['messageWidth']; label: string; description: string }[] = [
-    { value: 'narrow', label: '窄', description: '600px — 适合专注阅读' },
-    { value: 'medium', label: '中等', description: '900px — 平衡显示效果' },
-    { value: 'wide', label: '宽', description: '1200px — 充分利用屏幕空间' },
-    { value: 'full', label: '全宽', description: '100% — 最大化显示区域' },
-];
-
-function renderRadioCardGroup<T extends string>({
-    options,
-    selectedValue,
-    onSelect,
-}: {
-    options: { value: T; label: string; description: string }[];
-    selectedValue: T;
-    onSelect: (value: T) => void;
-}) {
-    return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {options.map((option) => (
-                <motion.div
-                    key={option.value}
-                    whileHover={{ scale: 1.01 }}
-                    onClick={() => onSelect(option.value)}
-                    style={{
-                        padding: '16px 20px',
-                        borderRadius: 'var(--radius-lg)',
-                        background: selectedValue === option.value ? 'var(--bg-tertiary)' : 'transparent',
-                        border: `1px solid ${selectedValue === option.value ? 'var(--accent-indigo)' : 'var(--border-subtle)'}`,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '16px',
-                        transition: 'all var(--transition-fast)',
-                        boxShadow: selectedValue === option.value ? 'var(--shadow-sm)' : 'none',
-                    }}
-                >
-                    <div style={{
-                        width: '22px',
-                        height: '22px',
-                        borderRadius: '50%',
-                        border: `2px solid ${selectedValue === option.value ? 'var(--accent-indigo)' : 'var(--border-subtle)'}`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0,
-                    }}>
-                        {selectedValue === option.value && (
-                            <div style={{
-                                width: '10px',
-                                height: '10px',
-                                borderRadius: '50%',
-                                background: 'var(--accent-indigo)',
-                            }} />
-                        )}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                        <div style={{
-                            fontWeight: 700,
-                            fontSize: '15px',
-                            color: 'var(--text-primary)',
-                        }}>
-                            {option.label}
-                        </div>
-                        <div style={{
-                            fontSize: '13px',
-                            color: 'var(--text-muted)',
-                            marginTop: '4px',
-                        }}>
-                            {option.description}
-                        </div>
-                    </div>
-                </motion.div>
-            ))}
-        </div>
-    );
 }
 
 export default function SettingsPanel({
@@ -144,287 +57,6 @@ export default function SettingsPanel({
             console.error("Failed to set log level", err);
         }
     };
-
-    const handleFloatingInspectorReset = () => {
-        resetStoredFloatingInspectorRect();
-        toast('运行观察器已重置到默认位置', 'success');
-    };
-
-    const renderProvidersTab = () => (
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden', gap: '20px' }}>
-            <ProviderSidebar
-                providers={modelConfig.providers}
-                isLoading={modelConfig.isLoading}
-                activeIndex={modelConfig.activeIndex}
-                isCreatingNew={modelConfig.isCreatingNew}
-                onSelect={modelConfig.handleSelectProvider}
-                onDelete={modelConfig.handleDeleteProvider}
-                onNew={modelConfig.startNew}
-            />
-            <ProviderForm
-                formData={modelConfig.formData}
-                isCreatingNew={modelConfig.isCreatingNew}
-                newModelInput={modelConfig.newModelInput}
-                onFieldChange={modelConfig.updateFormField}
-                onAddModel={modelConfig.handleAddModel}
-                onRemoveModel={modelConfig.handleRemoveModel}
-                onNewModelInputChange={modelConfig.setNewModelInput}
-                onSave={modelConfig.handleSave}
-                onClose={onClose}
-            />
-        </div>
-    );
-
-    const renderDisplayTab = () => (
-        <div style={{
-            padding: '24px',
-            overflowY: 'auto',
-            background: 'var(--bg-card)',
-            borderRadius: 'var(--radius-xl)',
-            boxShadow: 'var(--shadow-xs)',
-        }}>
-            <div style={{
-                borderBottom: '1px solid var(--border-subtle)',
-                paddingBottom: '20px',
-                marginBottom: '24px',
-            }}>
-                <h3 style={{
-                    fontSize: '20px',
-                    margin: '0 0 8px',
-                    color: 'var(--text-primary)',
-                    fontWeight: 700,
-                }}>
-                    显示设置
-                </h3>
-                <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)' }}>
-                    自定义消息界面的显示效果，调整宽度与阅读字号以适应不同的屏幕尺寸和使用偏好。
-                </p>
-            </div>
-
-            <div style={{ marginBottom: '24px' }}>
-                <h4 style={{
-                    fontSize: '14px',
-                    margin: '0 0 16px',
-                    color: 'var(--text-primary)',
-                    fontWeight: 600,
-                }}>
-                    消息界面宽度
-                </h4>
-                {renderRadioCardGroup({
-                    options: MESSAGE_WIDTH_OPTIONS,
-                    selectedValue: displaySettings.messageWidth,
-                    onSelect: (value) => setDisplaySettings({ messageWidth: value }),
-                })}
-            </div>
-
-            <div style={{ marginBottom: '24px' }}>
-                <h4 style={{
-                    fontSize: '14px',
-                    margin: '0 0 16px',
-                    color: 'var(--text-primary)',
-                    fontWeight: 600,
-                }}>
-                    字体大小
-                </h4>
-                {renderRadioCardGroup({
-                    options: DISPLAY_FONT_SIZE_OPTIONS,
-                    selectedValue: displaySettings.fontSize,
-                    onSelect: (value) => setDisplaySettings({ fontSize: value }),
-                })}
-            </div>
-
-            <div style={{
-                padding: '16px 20px',
-                background: 'var(--bg-tertiary)',
-                borderRadius: 'var(--radius-lg)',
-                boxShadow: 'var(--shadow-inner)',
-            }}>
-                <div style={{
-                    fontSize: '13px',
-                    color: 'var(--text-secondary)',
-                    fontWeight: 500,
-                }}>
-                    提示：当屏幕缩放比例较小时，建议选择较宽的显示模式以获得更好的阅读体验。
-                </div>
-            </div>
-
-            <div style={{
-                marginTop: '24px',
-                padding: '20px',
-                borderRadius: 'var(--radius-lg)',
-                border: '1px solid var(--border-subtle)',
-                background: 'var(--bg-secondary)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '16px',
-                flexWrap: 'wrap',
-            }}>
-                <div style={{ flex: '1 1 320px' }}>
-                    <h4 style={{
-                        fontSize: '14px',
-                        margin: '0 0 8px',
-                        color: 'var(--text-primary)',
-                        fontWeight: 600,
-                    }}>
-                        运行观察器
-                    </h4>
-                    <div style={{
-                        fontSize: '14px',
-                        color: 'var(--text-secondary)',
-                        fontWeight: 600,
-                        marginBottom: '4px',
-                    }}>
-                        重置到默认位置
-                    </div>
-                    <p style={{
-                        margin: 0,
-                        fontSize: '13px',
-                        color: 'var(--text-muted)',
-                        lineHeight: 1.6,
-                    }}>
-                        如果观察器被拖到异常位置或尺寸不合适，可以恢复到默认位置和大小。
-                    </p>
-                </div>
-
-                <motion.button
-                    type="button"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleFloatingInspectorReset}
-                    style={{
-                        border: 'none',
-                        borderRadius: 'var(--radius-md)',
-                        background: 'var(--accent-indigo)',
-                        color: 'white',
-                        padding: '10px 16px',
-                        fontSize: '13px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        boxShadow: 'var(--shadow-sm)',
-                        flexShrink: 0,
-                    }}
-                >
-                    立即重置
-                </motion.button>
-            </div>
-        </div>
-    );
-
-    const renderLoggingTab = () => (
-        <div style={{
-            padding: '24px',
-            overflowY: 'auto',
-            background: 'var(--bg-card)',
-            borderRadius: 'var(--radius-xl)',
-            boxShadow: 'var(--shadow-xs)',
-        }}>
-            <div style={{
-                borderBottom: '1px solid var(--border-subtle)',
-                paddingBottom: '20px',
-                marginBottom: '24px',
-            }}>
-                <h3 style={{
-                    fontSize: '20px',
-                    margin: '0 0 8px',
-                    color: 'var(--text-primary)',
-                    fontWeight: 700,
-                }}>
-                    日志打印等级
-                </h3>
-                <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)' }}>
-                    控制后端服务的日志输出级别，日志将存储在项目根目录的 logs 文件夹中。
-                </p>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {LOG_LEVELS.map((level) => (
-                    <motion.div
-                        key={level.value}
-                        whileHover={{ scale: 1.01 }}
-                        onClick={() => handleLogLevelChange(level.value)}
-                        style={{
-                            padding: '16px 20px',
-                            borderRadius: 'var(--radius-lg)',
-                            background: logLevel === level.value ? 'var(--bg-tertiary)' : 'transparent',
-                            border: `1px solid ${logLevel === level.value ? 'var(--accent-indigo)' : 'var(--border-subtle)'}`,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '16px',
-                            transition: 'all var(--transition-fast)',
-                            boxShadow: logLevel === level.value ? 'var(--shadow-sm)' : 'none',
-                        }}
-                    >
-                        <div style={{
-                            width: '22px',
-                            height: '22px',
-                            borderRadius: '50%',
-                            border: `2px solid ${logLevel === level.value ? 'var(--accent-indigo)' : 'var(--border-subtle)'}`,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0,
-                        }}>
-                            {logLevel === level.value && (
-                                <div style={{
-                                    width: '10px',
-                                    height: '10px',
-                                    borderRadius: '50%',
-                                    background: 'var(--accent-indigo)',
-                                }} />
-                            )}
-                        </div>
-                        <div style={{ flex: 1 }}>
-                            <div style={{
-                                fontWeight: 700,
-                                fontSize: '15px',
-                                color: 'var(--text-primary)',
-                            }}>
-                                {level.label}
-                            </div>
-                            <div style={{
-                                fontSize: '13px',
-                                color: 'var(--text-muted)',
-                                marginTop: '4px',
-                            }}>
-                                {level.description}
-                            </div>
-                        </div>
-                    </motion.div>
-                ))}
-            </div>
-
-            <div style={{
-                marginTop: '28px',
-                padding: '16px 20px',
-                background: 'var(--bg-tertiary)',
-                borderRadius: 'var(--radius-lg)',
-                boxShadow: 'var(--shadow-inner)',
-            }}>
-                <div style={{
-                    fontSize: '13px',
-                    color: 'var(--text-secondary)',
-                    marginBottom: '10px',
-                    fontWeight: 600,
-                }}>
-                    日志文件位置
-                </div>
-                <code style={{
-                    fontSize: '12px',
-                    color: 'var(--text-muted)',
-                    background: 'var(--bg-card)',
-                    padding: '10px 14px',
-                    borderRadius: 'var(--radius-md)',
-                    display: 'block',
-                    fontFamily: 'monospace',
-                    boxShadow: 'var(--shadow-inner)',
-                }}>
-                    ./logs/elenchus_YYYY-MM-DD.log
-                </code>
-            </div>
-        </div>
-    );
 
     const modalContent = (
         <AnimatePresence>
@@ -596,9 +228,24 @@ export default function SettingsPanel({
                                     ×
                                 </motion.button>}
 
-                                {activeTab === 'providers' && renderProvidersTab()}
-                                {activeTab === 'display' && renderDisplayTab()}
-                                {activeTab === 'logging' && renderLoggingTab()}
+                                {activeTab === 'providers' && (
+                                    <SettingsProvidersTab
+                                        modelConfig={modelConfig}
+                                        onClose={onClose}
+                                    />
+                                )}
+                                {activeTab === 'display' && (
+                                    <SettingsDisplayTab
+                                        displaySettings={displaySettings}
+                                        setDisplaySettings={setDisplaySettings}
+                                    />
+                                )}
+                                {activeTab === 'logging' && (
+                                    <SettingsLoggingTab
+                                        logLevel={logLevel}
+                                        onLogLevelChange={handleLogLevelChange}
+                                    />
+                                )}
                                 {activeTab === 'search' && <SearchConfigTab />}
                             </div>
                         </motion.div>

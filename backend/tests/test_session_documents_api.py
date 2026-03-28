@@ -178,7 +178,7 @@ def test_upload_session_document_returns_failed_document_when_preprocess_errors(
         raise RuntimeError("preprocess exploded")
 
     monkeypatch.setattr(
-        "app.services.reference_library_service.preprocess_reference_document",
+        "app.services.reference_library_workflow.preprocess_reference_document",
         _raise_preprocess,
     )
 

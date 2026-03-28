@@ -54,6 +54,14 @@ export function useFloatingInspectorState({
         }
     }, []);
 
+    const clearFloatingInspectorInteraction = useCallback(() => {
+        floatingInspectorInteractionRef.current = null;
+        if (typeof document !== 'undefined') {
+            document.body.style.userSelect = '';
+            document.body.style.cursor = '';
+        }
+    }, []);
+
     useEffect(() => {
         if (typeof window === 'undefined') return;
 
@@ -111,8 +119,9 @@ export function useFloatingInspectorState({
         if (!isWideLayout) {
             queueMicrotask(() => {
                 setFloatingInspectorExpanded(false);
+                setFloatingInspectorActive(false);
             });
-            stopFloatingInspectorInteraction();
+            clearFloatingInspectorInteraction();
             return;
         }
         if (floatingInspectorWidth <= 0 || floatingInspectorHeight <= 0) return;
@@ -122,23 +131,25 @@ export function useFloatingInspectorState({
             height: floatingInspectorHeight,
         };
 
-        setFloatingInspectorRect((prev) => (
-            prev
-                ? clampFloatingInspectorRect(prev, bounds)
-                : clampFloatingInspectorRect(
-                    parseStoredFloatingInspectorRect(
-                        typeof window === 'undefined'
-                            ? null
-                            : window.localStorage.getItem(FLOATING_INSPECTOR_STORAGE_KEY),
-                    ) ?? createDefaultFloatingInspectorRect(bounds, topOverlayHeight + 12),
-                    bounds,
-                )
-        ));
+        queueMicrotask(() => {
+            setFloatingInspectorRect((prev) => (
+                prev
+                    ? clampFloatingInspectorRect(prev, bounds)
+                    : clampFloatingInspectorRect(
+                        parseStoredFloatingInspectorRect(
+                            typeof window === 'undefined'
+                                ? null
+                                : window.localStorage.getItem(FLOATING_INSPECTOR_STORAGE_KEY),
+                        ) ?? createDefaultFloatingInspectorRect(bounds, topOverlayHeight + 12),
+                        bounds,
+                    )
+            ));
+        });
     }, [
         floatingInspectorHeight,
         floatingInspectorWidth,
+        clearFloatingInspectorInteraction,
         isWideLayout,
-        stopFloatingInspectorInteraction,
         topOverlayHeight,
     ]);
 

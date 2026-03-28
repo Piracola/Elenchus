@@ -1,4 +1,4 @@
-import { renderHook, act } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 
 import { api } from '../api/client';
@@ -24,6 +24,7 @@ const modelsApi = api.models as {
 };
 
 afterEach(() => {
+    cleanup();
     vi.clearAllMocks();
 });
 

@@ -10,6 +10,11 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
 
+from .export_runtime_service import (
+    compute_runtime_events_checksum,
+    export_runtime_events_snapshot,
+)
+
 _DIM_LABELS = {
     "logical_rigor": "逻辑严密度",
     "evidence_quality": "证据质量",
@@ -86,7 +91,6 @@ _WINDOWS_RESERVED_NAMES = {
     "LPT9",
 }
 _MAX_FILENAME_BASE_LENGTH = 120
-_RUNTIME_SNAPSHOT_VERSION = "runtime-events.v1"
 _MARKDOWN_EXPORT_CATEGORY_ORDER = (
     "debater_speeches",
     "group_discussion",
@@ -180,64 +184,6 @@ def build_content_disposition(filename: str) -> str:
 def export_json(session_data: dict[str, Any]) -> str:
     """Return pretty-printed JSON of the full session data."""
     return json.dumps(session_data, ensure_ascii=False, indent=2, default=str)
-
-
-def _stable_serialize(value: Any) -> str:
-    if value is None:
-        return "null"
-    if isinstance(value, str):
-        return json.dumps(value, ensure_ascii=False)
-    if isinstance(value, (int, float, bool)):
-        return str(value).lower() if isinstance(value, bool) else str(value)
-    if isinstance(value, list):
-        return f"[{','.join(_stable_serialize(item) for item in value)}]"
-    if isinstance(value, dict):
-        entries = []
-        for key, item in sorted(value.items(), key=lambda pair: str(pair[0])):
-            encoded_key = json.dumps(str(key), ensure_ascii=False)
-            entries.append(f"{encoded_key}:{_stable_serialize(item)}")
-        return f"{{{','.join(entries)}}}"
-    return json.dumps(str(value), ensure_ascii=False)
-
-
-def _fnv1a32(value: str) -> str:
-    hash_value = 0x811C9DC5
-    for char in value:
-        hash_value ^= ord(char)
-        hash_value = (hash_value * 0x01000193) & 0xFFFFFFFF
-    return f"{hash_value:08x}"
-
-
-def compute_runtime_events_checksum(events: list[dict[str, Any]]) -> str:
-    canonical = "|".join(
-        _stable_serialize(
-            [
-                event.get("schema_version"),
-                event.get("event_id"),
-                event.get("session_id"),
-                event.get("seq"),
-                event.get("timestamp"),
-                event.get("source"),
-                event.get("type"),
-                event.get("phase"),
-                event.get("payload", {}),
-            ]
-        )
-        for event in events
-    )
-    return f"fnv1a32-{_fnv1a32(canonical)}-{len(events)}"
-
-
-def export_runtime_events_snapshot(events: list[dict[str, Any]]) -> str:
-    """Return a replay-compatible runtime event snapshot JSON."""
-    snapshot = {
-        "version": _RUNTIME_SNAPSHOT_VERSION,
-        "exported_at": datetime.now(UTC).isoformat(),
-        "event_count": len(events),
-        "trajectory_checksum": compute_runtime_events_checksum(events),
-        "events": events,
-    }
-    return json.dumps(snapshot, ensure_ascii=False, indent=2, default=str)
 
 
 def _extract_dimension_score_map(scores: dict[str, Any]) -> dict[str, float]:
