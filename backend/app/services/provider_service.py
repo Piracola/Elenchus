@@ -5,106 +5,43 @@ Provider configuration service backed by runtime/config.json.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
 from typing import Any
 
 from app.models.schemas import ModelConfigCreate, ModelConfigResponse, ModelConfigUpdate
-from app.runtime_config_store import load_runtime_config, update_runtime_config
-
-
-def has_configured_api_key(value: str | None) -> bool:
-    return bool((value or "").strip())
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-def _parse_timestamp(value: Any) -> datetime:
-    if isinstance(value, datetime):
-        return value
-    text = str(value or "").strip()
-    if text:
-        try:
-            return datetime.fromisoformat(text)
-        except ValueError:
-            pass
-    return _utcnow()
-
-
-def _sort_provider_configs(providers: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return sorted(
-        providers,
-        key=lambda provider: (
-            bool(provider.get("is_default")),
-            _parse_timestamp(provider.get("created_at")),
-        ),
-        reverse=True,
-    )
+from app.services.provider_config_store import ProviderConfigStore
+from app.services.provider_serializers import (
+    parse_provider_timestamp,
+    provider_config_to_dict,
+    provider_config_to_response,
+    utcnow,
+)
 
 
 class ProviderService:
     """Async service for managing LLM provider configurations."""
 
-    @staticmethod
-    def _load_provider_configs() -> list[dict[str, Any]]:
-        config = load_runtime_config()
-        providers = config.get("providers")
-        if not isinstance(providers, list):
-            return []
-        return _sort_provider_configs(
-            [dict(provider) for provider in providers if isinstance(provider, dict)]
-        )
-
-    @staticmethod
-    def _config_to_response(provider: dict[str, Any]) -> ModelConfigResponse:
-        return ModelConfigResponse(
-            id=str(provider.get("id") or ""),
-            name=str(provider.get("name") or ""),
-            provider_type=str(provider.get("provider_type") or "openai"),
-            api_key_configured=has_configured_api_key(str(provider.get("api_key") or "")),
-            api_base_url=provider.get("api_base_url"),
-            custom_parameters=dict(provider.get("custom_parameters") or {}),
-            models=[str(model) for model in (provider.get("models") or []) if str(model)],
-            is_default=bool(provider.get("is_default", False)),
-            created_at=_parse_timestamp(provider.get("created_at")),
-            updated_at=_parse_timestamp(provider.get("updated_at")),
-        )
-
-    @staticmethod
-    def _config_to_dict(provider: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "id": str(provider.get("id") or ""),
-            "name": str(provider.get("name") or ""),
-            "provider_type": str(provider.get("provider_type") or "openai"),
-            "api_key": str(provider.get("api_key") or ""),
-            "api_base_url": provider.get("api_base_url"),
-            "custom_parameters": dict(provider.get("custom_parameters") or {}),
-            "models": [str(model) for model in (provider.get("models") or []) if str(model)],
-            "is_default": bool(provider.get("is_default", False)),
-            "created_at": _parse_timestamp(provider.get("created_at")),
-            "updated_at": _parse_timestamp(provider.get("updated_at")),
-        }
+    def __init__(self, store: ProviderConfigStore | None = None) -> None:
+        self._store = store or ProviderConfigStore()
 
     async def list_configs(self) -> list[ModelConfigResponse]:
         """List all provider configurations."""
         return [
-            self._config_to_response(provider)
-            for provider in self._load_provider_configs()
+            provider_config_to_response(provider)
+            for provider in self._store.load_provider_configs()
         ]
 
     async def list_configs_raw(self) -> list[dict[str, Any]]:
         """Return raw dicts with plaintext api_key for internal server-side use."""
         return [
-            self._config_to_dict(provider)
-            for provider in self._load_provider_configs()
+            provider_config_to_dict(provider)
+            for provider in self._store.load_provider_configs()
         ]
 
     async def get_default_config(self) -> ModelConfigResponse | None:
         """Get the default provider configuration."""
-        for provider in self._load_provider_configs():
+        for provider in self._store.load_provider_configs():
             if provider.get("is_default"):
-                return self._config_to_response(provider)
+                return provider_config_to_response(provider)
         return None
 
     async def create_config(self, config_in: ModelConfigCreate) -> ModelConfigResponse:
@@ -114,7 +51,7 @@ class ProviderService:
             raise ValueError("Model configuration name cannot be empty.")
 
         config_id = str(uuid.uuid4())
-        created_at = _utcnow().isoformat()
+        created_at = utcnow().isoformat()
 
         def mutator(config: dict[str, Any]) -> dict[str, Any]:
             providers = [
@@ -147,7 +84,7 @@ class ProviderService:
             config["providers"] = providers
             return config
 
-        updated = update_runtime_config(mutator)
+        updated = self._store.update_provider_configs(mutator)
         created = next(
             (
                 provider
@@ -158,7 +95,7 @@ class ProviderService:
         )
         if created is None:
             raise RuntimeError("Failed to persist provider configuration.")
-        return self._config_to_response(created)
+        return provider_config_to_response(created)
 
     async def update_config(
         self,
@@ -220,12 +157,12 @@ class ProviderService:
             if "models" in update_data:
                 provider["models"] = list(update_data["models"] or [])
 
-            provider["updated_at"] = _utcnow().isoformat()
+            provider["updated_at"] = utcnow().isoformat()
             providers[target_index] = provider
             config["providers"] = providers
             return config
 
-        updated = update_runtime_config(mutator)
+        updated = self._store.update_provider_configs(mutator)
         provider = next(
             (
                 item
@@ -236,7 +173,7 @@ class ProviderService:
         )
         if provider is None:
             return None
-        return self._config_to_response(provider)
+        return provider_config_to_response(provider)
 
     async def delete_config(self, config_id: str) -> bool:
         """Delete a provider configuration."""
@@ -261,12 +198,12 @@ class ProviderService:
             if bool(target.get("is_default")) and remaining:
                 promoted = max(
                     remaining,
-                    key=lambda provider: _parse_timestamp(provider.get("created_at")),
+                    key=lambda provider: parse_provider_timestamp(provider.get("created_at")),
                 )
                 for provider in remaining:
                     provider["is_default"] = provider.get("id") == promoted.get("id")
             config["providers"] = remaining
             return config
 
-        update_runtime_config(mutator)
+        self._store.update_provider_configs(mutator)
         return deleted

@@ -7,14 +7,18 @@
 
 ## 文档列表
 
+以下文档仍属历史资料，其中部分高噪点文件已经移除，只保留更有价值的阶段记录：
+
+- `FILE_ANALYSIS.md`
+- `ARCHITECTURE_IMPROVEMENT.md`
+- `bug.md`
+
 - [`ARCHITECTURE_IMPROVEMENT.md`](./ARCHITECTURE_IMPROVEMENT.md)
-- [`PROJECT_KNOWLEDGE.md`](./PROJECT_KNOWLEDGE.md)
-- [`MODULE_SUMMARY.md`](./MODULE_SUMMARY.md)
 - [`FILE_ANALYSIS.md`](./FILE_ANALYSIS.md)
 - [`bug.md`](./bug.md)
 
 ## 使用说明
 
-- 这些文档反映的是“当时状态”，可能与当前代码有差异。
+- 这些文档反映的是“当时状态”，部分内容已明显过时，可能与当前代码有差异。
 - 当前开发、排查与实现判断应优先参考主文档和代码本身。
 - 如果历史文档与 `docs/` 当前文档发生冲突，以当前文档和现有代码为准。

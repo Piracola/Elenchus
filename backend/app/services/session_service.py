@@ -4,377 +4,32 @@ Session CRUD service backed by file-based session storage.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
-from app.agents.safe_invoke import normalize_model_text
 from app.db.models import _gen_id, _utcnow
 from app.dependencies import get_agent_config_service
-from app.models.schemas import DebateMode, SessionCreate, SessionStatus
+from app.models.schemas import SessionCreate, SessionStatus
+from app.services.session_service_helpers import (
+    effective_configs_for_mode,
+    normalize_mode_config,
+    sanitize_state_snapshot,
+)
+from app.services.session_service_serializers import (
+    serialize_session_record,
+    sync_session_round_results as sync_session_round_results_files,
+)
 from app.storage.session_files import (
     StoredSessionRecord,
-    delete_round_results_after,
     delete_session_storage,
     list_session_records,
     read_session_record,
-    write_round_result,
     write_session_record,
 )
-from app.text_repair import repair_text_tree
-
-
-def _default_team_config() -> dict[str, int]:
-    return {
-        "agents_per_team": 0,
-        "discussion_rounds": 0,
-    }
-
-
-def _default_jury_config() -> dict[str, int]:
-    return {
-        "agents_per_jury": 0,
-        "discussion_rounds": 0,
-    }
-
-
-def _default_reasoning_config() -> dict[str, bool]:
-    return {
-        "steelman_enabled": True,
-        "counterfactual_enabled": True,
-        "consensus_enabled": True,
-    }
-
-
-def _default_mode_config(debate_mode: str) -> dict[str, Any]:
-    if debate_mode == DebateMode.SOPHISTRY_EXPERIMENT.value:
-        return {
-            "seed_reference_enabled": True,
-            "observer_enabled": True,
-            "artifact_detail_level": "full",
-        }
-    return {}
-
-
-def _normalize_mode_config(debate_mode: str, value: Any) -> dict[str, Any]:
-    base = _default_mode_config(debate_mode)
-    if isinstance(value, dict):
-        base.update(value)
-    return base
-
-
-def _effective_configs_for_mode(
-    debate_mode: str,
-    team_config: dict[str, int],
-    jury_config: dict[str, int],
-    reasoning_config: dict[str, bool],
-) -> tuple[dict[str, int], dict[str, int], dict[str, bool]]:
-    if debate_mode != DebateMode.SOPHISTRY_EXPERIMENT.value:
-        return team_config, jury_config, reasoning_config
-
-    return (
-        _default_team_config(),
-        _default_jury_config(),
-        {
-            "steelman_enabled": False,
-            "counterfactual_enabled": False,
-            "consensus_enabled": False,
-        },
-    )
-
-
-def _sanitize_dialogue_history(dialogue_history: Any) -> list[dict[str, Any]]:
-    if not isinstance(dialogue_history, list):
-        return []
-
-    sanitized: list[dict[str, Any]] = []
-    for entry in dialogue_history:
-        if not isinstance(entry, dict):
-            continue
-
-        normalized_entry = repair_text_tree(dict(entry))
-        content = normalized_entry.get("content")
-        if isinstance(content, str) and content:
-            normalized_entry["content"] = normalize_model_text(content)
-        sanitized.append(normalized_entry)
-
-    return sanitized
-
-
-def _backfill_judge_history_turns(
-    dialogue_history: list[dict[str, Any]],
-    judge_history: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    if not judge_history:
-        return []
-
-    annotated_dialogue: list[tuple[datetime, int]] = []
-    for entry in dialogue_history:
-        if not isinstance(entry, dict):
-            continue
-        turn = _coerce_int(entry.get("turn"))
-        if turn is None or turn < 0:
-            continue
-        annotated_dialogue.append((_parse_timestamp(entry.get("timestamp")), turn))
-
-    last_known_turn = 0
-    normalized_history: list[dict[str, Any]] = []
-    for entry in judge_history:
-        if not isinstance(entry, dict):
-            continue
-
-        normalized_entry = dict(entry)
-        explicit_turn = _coerce_int(normalized_entry.get("turn"))
-        if explicit_turn is not None and explicit_turn >= 0:
-            last_known_turn = explicit_turn
-            normalized_history.append(normalized_entry)
-            continue
-
-        judge_time = _parse_timestamp(normalized_entry.get("timestamp"))
-        inferred_turn = None
-        for dialogue_time, dialogue_turn in annotated_dialogue:
-            if dialogue_time <= judge_time:
-                inferred_turn = dialogue_turn
-            else:
-                break
-
-        normalized_entry["turn"] = inferred_turn if inferred_turn is not None else last_known_turn
-        last_known_turn = int(normalized_entry["turn"] or 0)
-        normalized_history.append(normalized_entry)
-
-    return normalized_history
-
-
-def _sanitize_state_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
-    sanitized = repair_text_tree(dict(snapshot))
-    dialogue_history = _sanitize_dialogue_history(sanitized.get("dialogue_history", []))
-    sanitized["dialogue_history"] = dialogue_history
-    if "team_dialogue_history" in sanitized:
-        sanitized["team_dialogue_history"] = _sanitize_dialogue_history(
-            sanitized.get("team_dialogue_history", [])
-        )
-    if "jury_dialogue_history" in sanitized:
-        sanitized["jury_dialogue_history"] = _sanitize_dialogue_history(
-            sanitized.get("jury_dialogue_history", [])
-        )
-    if "judge_history" in sanitized:
-        judge_history = _sanitize_dialogue_history(
-            sanitized.get("judge_history", [])
-        )
-        sanitized["judge_history"] = _backfill_judge_history_turns(
-            dialogue_history,
-            judge_history,
-        )
-    if "recent_dialogue_history" in sanitized:
-        sanitized["recent_dialogue_history"] = _sanitize_dialogue_history(
-            sanitized.get("recent_dialogue_history", [])
-        )
-    return sanitized
-
-
-def _parse_timestamp(value: Any) -> datetime:
-    if not isinstance(value, str) or not value:
-        return datetime.min.replace(tzinfo=timezone.utc)
-
-    normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
-    try:
-        parsed = datetime.fromisoformat(normalized)
-    except ValueError:
-        return datetime.min.replace(tzinfo=timezone.utc)
-
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
-
-
-def _merge_dialogue_for_display(
-    dialogue_history: list[dict[str, Any]],
-    judge_history: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    merged = [*dialogue_history, *judge_history]
-    merged.sort(
-        key=lambda entry: (
-            _parse_timestamp(entry.get("timestamp")),
-            1 if entry.get("role") == "judge" else 0,
-        )
-    )
-    return merged
-
-
-def _record_to_dict(record: StoredSessionRecord) -> dict[str, Any]:
-    snapshot = _sanitize_state_snapshot(record.state_snapshot or {})
-    dialogue_history = snapshot.get("dialogue_history", [])
-    team_dialogue_history = snapshot.get("team_dialogue_history", [])
-    jury_dialogue_history = snapshot.get("jury_dialogue_history", [])
-    judge_history = snapshot.get("judge_history", [])
-    debate_mode = str(
-        snapshot.get("debate_mode")
-        or record.debate_mode
-        or DebateMode.STANDARD.value
-    )
-    return {
-        "id": record.id,
-        "topic": record.topic,
-        "debate_mode": debate_mode,
-        "mode_config": _normalize_mode_config(
-            debate_mode,
-            snapshot.get("mode_config", record.mode_config),
-        ),
-        "participants": record.participants or ["proposer", "opposer"],
-        "max_turns": record.max_turns,
-        "current_turn": record.current_turn,
-        "status": record.status,
-        "created_at": record.created_at,
-        "updated_at": record.updated_at,
-        "dialogue_history": _merge_dialogue_for_display(dialogue_history, judge_history),
-        "team_dialogue_history": team_dialogue_history,
-        "jury_dialogue_history": jury_dialogue_history,
-        "shared_knowledge": snapshot.get("shared_knowledge", []),
-        "current_scores": snapshot.get("current_scores", {}),
-        "cumulative_scores": snapshot.get("cumulative_scores", {}),
-        "agent_configs": snapshot.get("agent_configs", {}),
-        "team_config": snapshot.get("team_config", _default_team_config()),
-        "jury_config": snapshot.get("jury_config", _default_jury_config()),
-        "reasoning_config": snapshot.get("reasoning_config", _default_reasoning_config()),
-        "mode_artifacts": snapshot.get("mode_artifacts", []),
-        "current_mode_report": snapshot.get("current_mode_report"),
-        "final_mode_report": snapshot.get("final_mode_report"),
-    }
-
-
-def _coerce_int(value: Any) -> int | None:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _entry_turn(entry: Any) -> int | None:
-    if not isinstance(entry, dict):
-        return None
-    return _coerce_int(entry.get("turn"))
-
-
-def _entries_for_turn(entries: Any, turn_index: int) -> list[dict[str, Any]]:
-    if not isinstance(entries, list):
-        return []
-    return [
-        entry
-        for entry in entries
-        if isinstance(entry, dict) and _entry_turn(entry) == turn_index
-    ]
-
-
-def _knowledge_for_turn(entries: Any, turn_index: int) -> list[dict[str, Any]]:
-    if not isinstance(entries, list):
-        return []
-
-    selected: list[dict[str, Any]] = []
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        source_turn = _coerce_int(entry.get("source_turn"))
-        if source_turn is None:
-            source_turn = _coerce_int(entry.get("turn"))
-        if source_turn == turn_index:
-            selected.append(entry)
-    return selected
-
-
-def _collect_round_timestamps(*collections: list[dict[str, Any]]) -> list[datetime]:
-    parsed: list[datetime] = []
-    floor = datetime.min.replace(tzinfo=timezone.utc)
-    for collection in collections:
-        for entry in collection:
-            timestamp = entry.get("timestamp") if isinstance(entry, dict) else None
-            moment = _parse_timestamp(timestamp)
-            if moment != floor:
-                parsed.append(moment)
-    return parsed
-
-
-def _completed_turn_count(record: StoredSessionRecord) -> int:
-    snapshot = record.state_snapshot or {}
-    last_node = str(snapshot.get("last_executed_node", "") or "")
-    current_turn = max(0, int(record.current_turn or 0))
-    max_turns = max(0, int(record.max_turns or 0))
-
-    completed = min(current_turn, max_turns)
-    if last_node in {"judge", "sophistry_observer"}:
-        completed = min(current_turn + 1, max_turns)
-    return completed
-
-
-def _mode_report_for_turn(snapshot: dict[str, Any], turn_index: int) -> dict[str, Any] | None:
-    current_report = snapshot.get("current_mode_report")
-    if isinstance(current_report, dict) and _coerce_int(current_report.get("turn")) == turn_index:
-        return current_report
-
-    mode_artifacts = snapshot.get("mode_artifacts", [])
-    if not isinstance(mode_artifacts, list):
-        return None
-
-    for artifact in reversed(mode_artifacts):
-        if not isinstance(artifact, dict):
-            continue
-        if _coerce_int(artifact.get("turn")) == turn_index:
-            return artifact
-    return None
-
-
-def _build_round_result(record: StoredSessionRecord, turn_index: int) -> dict[str, Any]:
-    snapshot = _sanitize_state_snapshot(record.state_snapshot or {})
-    debate_entries = _entries_for_turn(snapshot.get("dialogue_history", []), turn_index)
-    judge_entries = _entries_for_turn(snapshot.get("judge_history", []), turn_index)
-    team_entries = _entries_for_turn(snapshot.get("team_dialogue_history", []), turn_index)
-    jury_entries = _entries_for_turn(snapshot.get("jury_dialogue_history", []), turn_index)
-    shared_knowledge = _knowledge_for_turn(snapshot.get("shared_knowledge", []), turn_index)
-    mode_report = _mode_report_for_turn(snapshot, turn_index)
-    timestamps = _collect_round_timestamps(
-        debate_entries,
-        judge_entries,
-        team_entries,
-        jury_entries,
-    )
-
-    scores_by_role: dict[str, Any] = {}
-    for entry in judge_entries:
-        target_role = str(entry.get("target_role", "") or "")
-        scores = entry.get("scores")
-        if target_role and isinstance(scores, dict):
-            scores_by_role[target_role] = scores
-
-    started_at = min(timestamps).isoformat() if timestamps else None
-    completed_at = max(timestamps).isoformat() if timestamps else None
-    return {
-        "session_id": record.id,
-        "topic": record.topic,
-        "debate_mode": record.debate_mode,
-        "participants": record.participants or ["proposer", "opposer"],
-        "turn": turn_index,
-        "turn_number": turn_index + 1,
-        "status": "completed",
-        "started_at": started_at,
-        "completed_at": completed_at,
-        "debate": debate_entries,
-        "judge": judge_entries,
-        "team_discussion": team_entries,
-        "jury_discussion": jury_entries,
-        "shared_knowledge": shared_knowledge,
-        "scores_by_role": scores_by_role,
-        "mode_report": mode_report,
-    }
-
-
-def _sync_round_results(record: StoredSessionRecord) -> None:
-    completed_turn_count = _completed_turn_count(record)
-    delete_round_results_after(record.id, completed_turn_count)
-    for turn_index in range(completed_turn_count):
-        write_round_result(record.id, turn_index, _build_round_result(record, turn_index))
 
 
 def sync_session_round_results(record: StoredSessionRecord) -> None:
     """Materialize per-round JSON files for a stored session record."""
-    _sync_round_results(record)
+    sync_session_round_results_files(record)
 
 
 async def create_session(_db: Any, body: SessionCreate) -> dict[str, Any]:
@@ -382,8 +37,8 @@ async def create_session(_db: Any, body: SessionCreate) -> dict[str, Any]:
     now = _utcnow()
     agent_config_service = get_agent_config_service()
     debate_mode = body.debate_mode.value
-    mode_config = _normalize_mode_config(debate_mode, body.mode_config)
-    team_config, jury_config, reasoning_config = _effective_configs_for_mode(
+    mode_config = normalize_mode_config(debate_mode, body.mode_config)
+    team_config, jury_config, reasoning_config = effective_configs_for_mode(
         debate_mode,
         body.team_config.model_dump(),
         body.jury_config.model_dump(),
@@ -428,7 +83,7 @@ async def create_session(_db: Any, body: SessionCreate) -> dict[str, Any]:
         updated_at=now,
     )
     write_session_record(record)
-    return _record_to_dict(record)
+    return serialize_session_record(record)
 
 
 async def list_sessions(
@@ -462,7 +117,7 @@ async def get_session(_db: Any, session_id: str) -> dict[str, Any] | None:
     record = read_session_record(session_id)
     if record is None:
         return None
-    return _record_to_dict(record)
+    return serialize_session_record(record)
 
 
 async def get_session_record(_db: Any, session_id: str) -> StoredSessionRecord | None:
@@ -488,7 +143,7 @@ async def update_session_state(
     if status is not None:
         record.status = status
     if state_snapshot is not None:
-        sanitized_snapshot = _sanitize_state_snapshot(state_snapshot)
+        sanitized_snapshot = sanitize_state_snapshot(state_snapshot)
         record.state_snapshot = sanitized_snapshot
         debate_mode = sanitized_snapshot.get("debate_mode")
         if isinstance(debate_mode, str) and debate_mode:
@@ -499,8 +154,8 @@ async def update_session_state(
 
     record.updated_at = _utcnow()
     write_session_record(record)
-    _sync_round_results(record)
-    return _record_to_dict(record)
+    sync_session_round_results_files(record)
+    return serialize_session_record(record)
 
 
 async def delete_session(_db: Any, session_id: str) -> bool:

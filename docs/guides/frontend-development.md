@@ -101,6 +101,17 @@ VITE_BACKEND_PORT=8001
 - 前端：`frontend/src/api/client.ts`
 - 后端：对应 `/api/...` 路由
 
+### 页面出现中文乱码
+
+优先检查：
+
+- `frontend/index.html` 是否保留 UTF-8 声明
+- 新提交的源码文件是否被错误保存成 ANSI / GBK
+- 接口下载响应是否显式返回 `charset=utf-8`
+- 导入文件是否本身不是 UTF-8 编码
+
+编码处理统一规范见：[编码规范指南](./encoding.md)
+
 ## 8. 阅读代码建议
 
 如果你是第一次看这个前端，推荐阅读顺序：
@@ -118,3 +129,4 @@ VITE_BACKEND_PORT=8001
 - [运行时与回放](../runtime.md)
 - [快速开始](../getting-started.md)
 - [后端开发指南](./backend-development.md)
+- [编码规范指南](./encoding.md)
