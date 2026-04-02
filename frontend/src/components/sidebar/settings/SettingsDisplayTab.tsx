@@ -25,7 +25,7 @@ export function SettingsDisplayTab({ displaySettings, setDisplaySettings }: Sett
 
     return (
         <div style={{
-            padding: '40px',
+            padding: '28px',
             overflowY: 'auto',
             background: 'var(--bg-card)',
             borderRadius: 'var(--radius-xl)',
@@ -33,8 +33,8 @@ export function SettingsDisplayTab({ displaySettings, setDisplaySettings }: Sett
         }}>
             <div style={{
                 borderBottom: '1px solid var(--border-subtle)',
-                paddingBottom: '30px',
-                marginBottom: '36px',
+                paddingBottom: '22px',
+                marginBottom: '28px',
             }}>
                 <h3 style={{
                     fontSize: '30px',
@@ -49,10 +49,10 @@ export function SettingsDisplayTab({ displaySettings, setDisplaySettings }: Sett
                 </p>
             </div>
 
-            <div style={{ marginBottom: '36px' }}>
+            <div style={{ marginBottom: '28px' }}>
                 <h4 style={{
                     fontSize: '21px',
-                    margin: '0 0 22px',
+                    margin: '0 0 18px',
                     color: 'var(--text-primary)',
                     fontWeight: 600,
                 }}>
@@ -65,10 +65,10 @@ export function SettingsDisplayTab({ displaySettings, setDisplaySettings }: Sett
                 />
             </div>
 
-            <div style={{ marginBottom: '36px' }}>
+            <div style={{ marginBottom: '28px' }}>
                 <h4 style={{
                     fontSize: '21px',
-                    margin: '0 0 22px',
+                    margin: '0 0 18px',
                     color: 'var(--text-primary)',
                     fontWeight: 600,
                 }}>
@@ -82,7 +82,7 @@ export function SettingsDisplayTab({ displaySettings, setDisplaySettings }: Sett
             </div>
 
             <div style={{
-                padding: '24px 28px',
+                padding: '18px 22px',
                 background: 'var(--bg-tertiary)',
                 borderRadius: 'var(--radius-lg)',
                 boxShadow: 'var(--shadow-inner)',
@@ -98,21 +98,21 @@ export function SettingsDisplayTab({ displaySettings, setDisplaySettings }: Sett
             </div>
 
             <div style={{
-                marginTop: '36px',
-                padding: '30px',
+                marginTop: '28px',
+                padding: '24px',
                 borderRadius: 'var(--radius-lg)',
                 border: '1px solid var(--border-subtle)',
                 background: 'var(--bg-secondary)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                gap: '20px',
+                gap: '16px',
                 flexWrap: 'wrap',
             }}>
                 <div style={{ flex: '1 1 320px' }}>
                     <h4 style={{
                         fontSize: '21px',
-                        margin: '0 0 12px',
+                        margin: '0 0 10px',
                         color: 'var(--text-primary)',
                         fontWeight: 600,
                     }}>
@@ -122,7 +122,7 @@ export function SettingsDisplayTab({ displaySettings, setDisplaySettings }: Sett
                         fontSize: '18px',
                         color: 'var(--text-secondary)',
                         fontWeight: 600,
-                        marginBottom: '8px',
+                        marginBottom: '6px',
                     }}>
                         重置到默认位置
                     </div>
@@ -146,7 +146,7 @@ export function SettingsDisplayTab({ displaySettings, setDisplaySettings }: Sett
                         borderRadius: 'var(--radius-md)',
                         background: 'var(--accent-indigo)',
                         color: 'white',
-                        padding: '14px 24px',
+                        padding: '12px 20px',
                         fontSize: '17px',
                         fontWeight: 700,
                         cursor: 'pointer',

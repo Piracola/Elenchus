@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { RuntimeEvent, Session, TurnScore } from '../types';
+import type { Session, TurnScore } from '../types';
+import { makeRuntimeEvent } from '../test/runtimeEventFactory';
 import { useDebateStore } from './debateStore';
 import { repairKnownMojibakeText } from '../utils/textRepair';
 
@@ -53,20 +54,6 @@ function makeScores(comment: string): TurnScore {
     };
 }
 
-function makeEvent(overrides: Partial<RuntimeEvent>): RuntimeEvent {
-    return {
-        schema_version: '2026-03-17',
-        event_id: 'evt_default',
-        session_id: 'session_1',
-        seq: 1,
-        timestamp: '2026-03-17T00:00:00+00:00',
-        source: 'runtime.orchestrator',
-        type: 'status',
-        payload: {},
-        ...overrides,
-    };
-}
-
 describe('debateStore replay state', () => {
     beforeEach(() => {
         useDebateStore.getState().reset();
@@ -113,15 +100,17 @@ describe('debateStore replay state', () => {
         });
 
         useDebateStore.getState().hydrateRuntimeEvents([
-            makeEvent({
+            makeRuntimeEvent({
                 event_id: 'evt_status',
+                session_id: 'session_1',
                 seq: 1,
                 type: 'status',
                 phase: 'judging',
                 payload: { content: '裁判评估中...', node: 'judge' },
             }),
-            makeEvent({
+            makeRuntimeEvent({
                 event_id: 'evt_fact',
+                session_id: 'session_1',
                 seq: 2,
                 type: 'fact_check_start',
                 payload: {},
@@ -145,8 +134,9 @@ describe('debateStore replay state', () => {
         });
 
         useDebateStore.getState().hydrateRuntimeEvents([
-            makeEvent({
+            makeRuntimeEvent({
                 event_id: 'evt_done',
+                session_id: 'session_1',
                 seq: 3,
                 type: 'debate_complete',
                 payload: { total_turns: 3, final_scores: {} },
@@ -165,8 +155,9 @@ describe('debateStore replay state', () => {
         });
 
         useDebateStore.getState().hydrateRuntimeEvents([
-            makeEvent({
+            makeRuntimeEvent({
                 event_id: 'evt_error',
+                session_id: 'session_1',
                 seq: 4,
                 type: 'error',
                 payload: { content: '出现错误' },
@@ -182,8 +173,9 @@ describe('debateStore replay state', () => {
     it('switches a resumable session into a fresh live initialization state when continuing', () => {
         const store = useDebateStore.getState();
         store.hydrateRuntimeEvents([
-            makeEvent({
+            makeRuntimeEvent({
                 event_id: 'evt_judge',
+                session_id: 'session_1',
                 seq: 1,
                 type: 'judge_start',
                 payload: {},
@@ -195,8 +187,9 @@ describe('debateStore replay state', () => {
             status: 'in_progress',
         });
         store.hydrateRuntimeEvents([
-            makeEvent({
+            makeRuntimeEvent({
                 event_id: 'evt_old_status',
+                session_id: 'session_1',
                 seq: 2,
                 type: 'status',
                 phase: 'judging',
@@ -219,8 +212,9 @@ describe('debateStore replay state', () => {
     it('keeps the sidebar summary in sync with runtime progress', () => {
         const store = useDebateStore.getState();
 
-        store.applyRuntimeEvent(makeEvent({
+        store.applyRuntimeEvent(makeRuntimeEvent({
             event_id: 'evt_turn',
+            session_id: 'session_1',
             seq: 1,
             type: 'turn_complete',
             payload: {
@@ -235,8 +229,9 @@ describe('debateStore replay state', () => {
             status: 'in_progress',
         });
 
-        store.applyRuntimeEvent(makeEvent({
+        store.applyRuntimeEvent(makeRuntimeEvent({
             event_id: 'evt_done',
+            session_id: 'session_1',
             seq: 2,
             type: 'debate_complete',
             payload: {
@@ -254,20 +249,23 @@ describe('debateStore replay state', () => {
 
     it('locks visible window while replay mode is active', () => {
         const store = useDebateStore.getState();
-        store.applyRuntimeEvent(makeEvent({
+        store.applyRuntimeEvent(makeRuntimeEvent({
             event_id: 'evt_1',
+            session_id: 'session_1',
             seq: 1,
             type: 'speech_end',
             payload: { role: 'proposer', content: 'A' },
         }));
-        store.applyRuntimeEvent(makeEvent({
+        store.applyRuntimeEvent(makeRuntimeEvent({
             event_id: 'evt_2',
+            session_id: 'session_1',
             seq: 2,
             type: 'judge_score',
             payload: { role: 'proposer', turn: 1, scores: makeScores('good') },
         }));
-        store.applyRuntimeEvent(makeEvent({
+        store.applyRuntimeEvent(makeRuntimeEvent({
             event_id: 'evt_3',
+            session_id: 'session_1',
             seq: 3,
             type: 'speech_end',
             payload: { role: 'opposer', content: 'B' },
@@ -277,8 +275,9 @@ describe('debateStore replay state', () => {
         expect(useDebateStore.getState().replayEnabled).toBe(true);
         expect(useDebateStore.getState().visibleRuntimeEvents).toHaveLength(1);
 
-        useDebateStore.getState().applyRuntimeEvent(makeEvent({
+        useDebateStore.getState().applyRuntimeEvent(makeRuntimeEvent({
             event_id: 'evt_4',
+            session_id: 'session_1',
             seq: 4,
             type: 'speech_end',
             payload: { role: 'proposer', content: 'C' },
@@ -292,8 +291,8 @@ describe('debateStore replay state', () => {
 
     it('returns to realtime window when exiting replay', () => {
         const store = useDebateStore.getState();
-        store.applyRuntimeEvent(makeEvent({ event_id: 'evt_1', seq: 1, type: 'status' }));
-        store.applyRuntimeEvent(makeEvent({ event_id: 'evt_2', seq: 2, type: 'status' }));
+        store.applyRuntimeEvent(makeRuntimeEvent({ event_id: 'evt_1', session_id: 'session_1', seq: 1, type: 'status' }));
+        store.applyRuntimeEvent(makeRuntimeEvent({ event_id: 'evt_2', session_id: 'session_1', seq: 2, type: 'status' }));
 
         useDebateStore.getState().setReplayCursor(0);
         useDebateStore.getState().exitReplay();
@@ -306,8 +305,8 @@ describe('debateStore replay state', () => {
 
     it('loads imported snapshots into replay mode', () => {
         useDebateStore.getState().loadRuntimeEventSnapshot([
-            makeEvent({ event_id: 'evt_1', seq: 1, type: 'status', payload: { content: 'A' } }),
-            makeEvent({ event_id: 'evt_2', seq: 2, type: 'status', payload: { content: 'B' } }),
+            makeRuntimeEvent({ event_id: 'evt_1', session_id: 'session_1', seq: 1, type: 'status', payload: { content: 'A' } }),
+            makeRuntimeEvent({ event_id: 'evt_2', session_id: 'session_1', seq: 2, type: 'status', payload: { content: 'B' } }),
         ]);
 
         const state = useDebateStore.getState();
@@ -321,8 +320,8 @@ describe('debateStore replay state', () => {
     it('hydrates persisted runtime history without forcing replay mode', () => {
         useDebateStore.getState().hydrateRuntimeEvents(
             [
-                makeEvent({ event_id: 'evt_10', seq: 10, type: 'status', payload: { content: 'A' } }),
-                makeEvent({ event_id: 'evt_11', seq: 11, type: 'status', payload: { content: 'B' } }),
+                makeRuntimeEvent({ event_id: 'evt_10', session_id: 'session_1', seq: 10, type: 'status', payload: { content: 'A' } }),
+                makeRuntimeEvent({ event_id: 'evt_11', session_id: 'session_1', seq: 11, type: 'status', payload: { content: 'B' } }),
             ],
             true,
         );
@@ -343,9 +342,9 @@ describe('debateStore replay state', () => {
         });
         store.hydrateRuntimeEvents(
             [
-                makeEvent({ event_id: 'evt_10', seq: 10, type: 'status', payload: { content: 'A' } }),
-                makeEvent({ event_id: 'evt_11', seq: 11, type: 'status', payload: { content: 'B' } }),
-                makeEvent({ event_id: 'evt_12', seq: 12, type: 'status', payload: { content: 'C' } }),
+                makeRuntimeEvent({ event_id: 'evt_10', session_id: 'session_1', seq: 10, type: 'status', payload: { content: 'A' } }),
+                makeRuntimeEvent({ event_id: 'evt_11', session_id: 'session_1', seq: 11, type: 'status', payload: { content: 'B' } }),
+                makeRuntimeEvent({ event_id: 'evt_12', session_id: 'session_1', seq: 12, type: 'status', payload: { content: 'C' } }),
             ],
             true,
         );
@@ -373,15 +372,15 @@ describe('debateStore replay state', () => {
     it('preserves replay focus when older runtime history is prepended', () => {
         const store = useDebateStore.getState();
         store.hydrateRuntimeEvents([
-            makeEvent({ event_id: 'evt_3', seq: 3, type: 'status', payload: { content: 'C' } }),
-            makeEvent({ event_id: 'evt_4', seq: 4, type: 'status', payload: { content: 'D' } }),
+            makeRuntimeEvent({ event_id: 'evt_3', session_id: 'session_1', seq: 3, type: 'status', payload: { content: 'C' } }),
+            makeRuntimeEvent({ event_id: 'evt_4', session_id: 'session_1', seq: 4, type: 'status', payload: { content: 'D' } }),
         ]);
 
         store.setReplayCursor(1);
         store.prependRuntimeEvents(
             [
-                makeEvent({ event_id: 'evt_1', seq: 1, type: 'status', payload: { content: 'A' } }),
-                makeEvent({ event_id: 'evt_2', seq: 2, type: 'status', payload: { content: 'B' } }),
+                makeRuntimeEvent({ event_id: 'evt_1', session_id: 'session_1', seq: 1, type: 'status', payload: { content: 'A' } }),
+                makeRuntimeEvent({ event_id: 'evt_2', session_id: 'session_1', seq: 2, type: 'status', payload: { content: 'B' } }),
             ],
             false,
         );
@@ -403,8 +402,9 @@ describe('debateStore replay state', () => {
 
         for (let index = 0; index < 1500; index++) {
             store.applyRuntimeEvent(
-                makeEvent({
+                makeRuntimeEvent({
                     event_id: `evt_${index + 1}`,
+                    session_id: 'session_1',
                     seq: index + 1,
                     type: 'status',
                     payload: { content: `event ${index + 1}` },
@@ -423,8 +423,9 @@ describe('debateStore replay state', () => {
         const store = useDebateStore.getState();
 
         store.applyRuntimeEvent(
-            makeEvent({
+            makeRuntimeEvent({
                 event_id: 'evt_pong',
+                session_id: 'session_1',
                 seq: 1,
                 type: 'pong',
                 payload: {},
@@ -441,24 +442,27 @@ describe('debateStore replay state', () => {
         const store = useDebateStore.getState();
 
         store.applyRuntimeEvent(
-            makeEvent({
+            makeRuntimeEvent({
                 event_id: 'evt_stream_start',
+                session_id: 'session_1',
                 seq: 1,
                 type: 'speech_start',
                 payload: { role: 'proposer' },
             }),
         );
         store.applyRuntimeEvent(
-            makeEvent({
+            makeRuntimeEvent({
                 event_id: 'evt_stream_token',
+                session_id: 'session_1',
                 seq: 2,
                 type: 'speech_token',
                 payload: { token: '半句' },
             }),
         );
         store.applyRuntimeEvent(
-            makeEvent({
+            makeRuntimeEvent({
                 event_id: 'evt_stream_cancel',
+                session_id: 'session_1',
                 seq: 3,
                 type: 'speech_cancel',
                 payload: { role: 'proposer' },
@@ -477,16 +481,18 @@ describe('debateStore replay state', () => {
         const store = useDebateStore.getState();
 
         store.applyRuntimeEvent(
-            makeEvent({
+            makeRuntimeEvent({
                 event_id: 'evt_stream_start',
+                session_id: 'session_1',
                 seq: 1,
                 type: 'speech_start',
                 payload: { role: 'proposer' },
             }),
         );
         store.applyRuntimeEvent(
-            makeEvent({
+            makeRuntimeEvent({
                 event_id: 'evt_stream_token',
+                session_id: 'session_1',
                 seq: 2,
                 type: 'speech_token',
                 payload: { token: 'partial' },
@@ -506,24 +512,27 @@ describe('debateStore replay state', () => {
         const store = useDebateStore.getState();
 
         store.applyRuntimeEvent(
-            makeEvent({
+            makeRuntimeEvent({
                 event_id: 'evt_stream_start',
+                session_id: 'session_1',
                 seq: 1,
                 type: 'speech_start',
                 payload: { role: 'proposer' },
             }),
         );
         store.applyRuntimeEvent(
-            makeEvent({
+            makeRuntimeEvent({
                 event_id: 'evt_stream_token',
+                session_id: 'session_1',
                 seq: 2,
                 type: 'speech_token',
                 payload: { token: 'partial' },
             }),
         );
         store.applyRuntimeEvent(
-            makeEvent({
+            makeRuntimeEvent({
                 event_id: 'evt_stream_end',
+                session_id: 'session_1',
                 seq: 3,
                 type: 'speech_end',
                 payload: {
@@ -555,10 +564,11 @@ describe('debateStore replay state', () => {
 
     it('filters speech tokens out when hydrating runtime history', () => {
         useDebateStore.getState().hydrateRuntimeEvents([
-            makeEvent({ event_id: 'evt_1', seq: 1, type: 'speech_start', payload: { role: 'proposer' } }),
-            makeEvent({ event_id: 'evt_2', seq: 2, type: 'speech_token', payload: { token: 'partial' } }),
-            makeEvent({
+            makeRuntimeEvent({ event_id: 'evt_1', session_id: 'session_1', seq: 1, type: 'speech_start', payload: { role: 'proposer' } }),
+            makeRuntimeEvent({ event_id: 'evt_2', session_id: 'session_1', seq: 2, type: 'speech_token', payload: { token: 'partial' } }),
+            makeRuntimeEvent({
                 event_id: 'evt_3',
+                session_id: 'session_1',
                 seq: 3,
                 type: 'speech_end',
                 payload: { role: 'proposer', content: 'complete speech' },
@@ -575,8 +585,9 @@ describe('debateStore replay state', () => {
         const store = useDebateStore.getState();
         const raw = '濮濓絽婀弫瀵告倞娑撳﹣绗呴弬?.';
         store.applyRuntimeEvent(
-            makeEvent({
+            makeRuntimeEvent({
                 event_id: 'evt_garbled',
+                session_id: 'session_1',
                 seq: 1,
                 type: 'status',
                 payload: { content: raw },
@@ -597,8 +608,9 @@ describe('debateStore replay state', () => {
         });
 
         store.applyRuntimeEvent(
-            makeEvent({
+            makeRuntimeEvent({
                 event_id: 'evt_report',
+                session_id: 'session_1',
                 seq: 1,
                 type: 'sophistry_round_report',
                 payload: {

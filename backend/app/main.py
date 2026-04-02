@@ -18,6 +18,7 @@ from app.api.websocket import router as ws_router
 from app.api.models import router as models_router
 from app.api.log import router as log_router
 from app.api.search import router as search_router
+from app.api.search import build_search_health_payload
 from app.db.database import init_db
 from app.dependencies import get_search_factory
 from app.services.log_service import setup_logging, get_logger
@@ -82,17 +83,13 @@ async def health_check():
 async def search_health():
     """Check which search provider is available."""
     search_factory = get_search_factory()
-    provider = await search_factory.get_provider()
-    if provider is None:
+    payload = await build_search_health_payload(search_factory)
+    if payload["status"] == "unavailable":
         return {
-            "status": "unavailable",
-            "provider": None,
+            **payload,
             "message": "No search provider is reachable.",
         }
-    return {
-        "status": "ok",
-        "provider": provider.__class__.__name__,
-    }
+    return payload
 
 
 def _is_reserved_frontend_path(path: str) -> bool:

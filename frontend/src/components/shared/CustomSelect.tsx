@@ -3,9 +3,10 @@
  * 替代原生select，提供统一的视觉风格和交互体验
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Check } from 'lucide-react';
+import { createPortal } from 'react-dom';
 
 interface Option {
     value: string;
@@ -57,18 +58,67 @@ export default function CustomSelect({
 }: CustomSelectProps) {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+    const [menuStyle, setMenuStyle] = useState({ top: 0, left: 0, width: 0, maxHeight: 280, placement: 'below' as 'above' | 'below' });
     const selectedOption = options.find(opt => opt.value === value);
     const styles = sizeStyles[size];
 
+    const updateMenuPosition = () => {
+        if (!containerRef.current) {
+            return;
+        }
+
+        const rect = containerRef.current.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        const spaceBelow = viewportHeight - rect.bottom - 12;
+        const spaceAbove = rect.top - 12;
+        const shouldOpenAbove = spaceBelow < 220 && spaceAbove > spaceBelow;
+        const maxHeight = Math.max(160, Math.min(280, shouldOpenAbove ? spaceAbove : spaceBelow));
+        const menuHeight = menuRef.current?.offsetHeight ?? maxHeight;
+
+        setMenuStyle({
+            top: shouldOpenAbove ? Math.max(12, rect.top - menuHeight - 6) : rect.bottom + 6,
+            left: rect.left,
+            width: rect.width,
+            maxHeight,
+            placement: shouldOpenAbove ? 'above' : 'below',
+        });
+    };
+
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+            const target = e.target as Node;
+            if (
+                containerRef.current
+                && !containerRef.current.contains(target)
+                && !menuRef.current?.contains(target)
+            ) {
                 setIsOpen(false);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    useLayoutEffect(() => {
+        if (!isOpen) {
+            return;
+        }
+
+        updateMenuPosition();
+        const rafId = window.requestAnimationFrame(updateMenuPosition);
+
+        const handleViewportChange = () => updateMenuPosition();
+
+        window.addEventListener('resize', handleViewportChange);
+        window.addEventListener('scroll', handleViewportChange, true);
+
+        return () => {
+            window.cancelAnimationFrame(rafId);
+            window.removeEventListener('resize', handleViewportChange);
+            window.removeEventListener('scroll', handleViewportChange, true);
+        };
+    }, [isOpen]);
 
     const handleSelect = (optValue: string) => {
         onChange(optValue);
@@ -134,71 +184,76 @@ export default function CustomSelect({
                 </motion.div>
             </motion.button>
 
-            <AnimatePresence>
-                {isOpen && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -8, scale: 0.96 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -8, scale: 0.96 }}
-                        transition={{ duration: 0.15, ease: 'easeOut' }}
-                        style={{
-                            position: 'absolute',
-                            top: 'calc(100% + 6px)',
-                            left: 0,
-                            right: 0,
-                            zIndex: 100,
-                            background: 'var(--bg-card)',
-                            border: '1px solid var(--border-subtle)',
-                            borderRadius: 'var(--radius-md)',
-                            boxShadow: 'var(--shadow-lg)',
-                            maxHeight: '280px',
-                            overflowY: 'auto',
-                            padding: '6px',
-                        }}
-                    >
-                        {options.map((option) => (
-                            <motion.button
-                                key={option.value}
-                                type="button"
-                                onClick={() => handleSelect(option.value)}
-                                whileHover={{ backgroundColor: 'var(--bg-hover)' }}
-                                whileTap={{ scale: 0.98 }}
-                                style={{
-                                    width: '100%',
-                                    padding: styles.padding,
-                                    borderRadius: 'var(--radius-sm)',
-                                    border: 'none',
-                                    background: value === option.value ? 'var(--bg-tertiary)' : 'transparent',
-                                    color: 'var(--text-primary)',
-                                    fontSize: styles.fontSize,
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    gap: '10px',
-                                    textAlign: 'left',
-                                    transition: 'all 0.1s ease',
-                                }}
-                            >
-                                <span style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap',
-                                }}>
-                                    {option.icon}
-                                    {option.label}
-                                </span>
-                                {value === option.value && (
-                                    <Check size={16} style={{ color: 'var(--accent-indigo)', flexShrink: 0 }} />
-                                )}
-                            </motion.button>
-                        ))}
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {typeof document !== 'undefined' && createPortal(
+                <AnimatePresence>
+                    {isOpen && (
+                        <motion.div
+                            ref={menuRef}
+                            initial={{ opacity: 0, y: menuStyle.placement === 'above' ? 8 : -8, scale: 0.96 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: menuStyle.placement === 'above' ? 8 : -8, scale: 0.96 }}
+                            transition={{ duration: 0.15, ease: 'easeOut' }}
+                            style={{
+                                position: 'fixed',
+                                top: menuStyle.top,
+                                left: menuStyle.left,
+                                width: menuStyle.width,
+                                zIndex: 1000,
+                                background: 'var(--bg-card)',
+                                border: '1px solid var(--border-subtle)',
+                                borderRadius: 'var(--radius-md)',
+                                boxShadow: 'var(--shadow-lg)',
+                                maxHeight: `${menuStyle.maxHeight}px`,
+                                overflowY: 'auto',
+                                padding: '6px',
+                                transformOrigin: menuStyle.placement === 'above' ? 'bottom center' : 'top center',
+                            }}
+                        >
+                            {options.map((option) => (
+                                <motion.button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => handleSelect(option.value)}
+                                    whileHover={{ backgroundColor: 'var(--bg-hover)' }}
+                                    whileTap={{ scale: 0.98 }}
+                                    style={{
+                                        width: '100%',
+                                        padding: styles.padding,
+                                        borderRadius: 'var(--radius-sm)',
+                                        border: 'none',
+                                        background: value === option.value ? 'var(--bg-tertiary)' : 'transparent',
+                                        color: 'var(--text-primary)',
+                                        fontSize: styles.fontSize,
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        gap: '10px',
+                                        textAlign: 'left',
+                                        transition: 'all 0.1s ease',
+                                    }}
+                                >
+                                    <span style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                    }}>
+                                        {option.icon}
+                                        {option.label}
+                                    </span>
+                                    {value === option.value && (
+                                        <Check size={16} style={{ color: 'var(--accent-indigo)', flexShrink: 0 }} />
+                                    )}
+                                </motion.button>
+                            ))}
+                        </motion.div>
+                    )}
+                </AnimatePresence>,
+                document.body,
+            )}
         </div>
     );
 }

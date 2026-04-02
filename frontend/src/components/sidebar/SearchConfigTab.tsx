@@ -48,7 +48,7 @@ export function SearchConfigTab() {
     return (
         <div
             style={{
-                padding: '40px',
+                padding: '28px',
                 overflowY: 'auto',
                 background: 'var(--bg-card)',
                 borderRadius: 'var(--radius-xl)',
@@ -58,8 +58,8 @@ export function SearchConfigTab() {
             <div
                 style={{
                     borderBottom: '1px solid var(--border-subtle)',
-                    paddingBottom: '30px',
-                    marginBottom: '36px',
+                    paddingBottom: '22px',
+                    marginBottom: '28px',
                 }}
             >
                 <h3
@@ -80,11 +80,11 @@ export function SearchConfigTab() {
             {error && (
                 <div
                     style={{
-                        padding: '18px 22px',
+                        padding: '14px 18px',
                         background: 'var(--color-red-50)',
                         border: '1px solid var(--color-red-200)',
                         borderRadius: 'var(--radius-lg)',
-                        marginBottom: '20px',
+                        marginBottom: '16px',
                         color: 'var(--color-red-700)',
                         fontSize: '17px',
                     }}
@@ -105,27 +105,27 @@ export function SearchConfigTab() {
 
             <div
                 style={{
-                    marginTop: '36px',
+                    marginTop: '28px',
                     display: 'grid',
-                    gap: '24px',
+                    gap: '18px',
                 }}
             >
                 <div
                     style={{
-                        padding: '28px 30px',
+                        padding: '22px 24px',
                         background: 'var(--bg-tertiary)',
                         borderRadius: 'var(--radius-lg)',
                         boxShadow: 'var(--shadow-inner)',
                     }}
                 >
-                    <div style={{ fontSize: '17px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '12px' }}>
+                    <div style={{ fontSize: '17px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '8px' }}>
                         {'\u5f53\u524d\u72b6\u6001'}
                     </div>
                     <div style={{ fontSize: '17px', color: 'var(--text-muted)' }}>
                         {'\u5f53\u524d\u4f7f\u7528\uff1a'}
                         <strong style={{ color: 'var(--text-primary)' }}> {getProviderLabel(currentProvider)}</strong>
                     </div>
-                    <div style={{ fontSize: '16px', color: 'var(--text-muted)', marginTop: '12px', lineHeight: 1.8 }}>
+                    <div style={{ fontSize: '16px', color: 'var(--text-muted)', marginTop: '8px', lineHeight: 1.7 }}>
                         {'\u63d0\u793a\uff1a\u5982\u679c\u5f53\u524d\u5f15\u64ce\u4e0d\u53ef\u7528\uff0c\u7cfb\u7edf\u4f1a\u81ea\u52a8\u5c1d\u8bd5\u56de\u9000\u5230\u5176\u4ed6\u53ef\u7528\u641c\u7d22\u5f15\u64ce\u3002'}
                     </div>
                 </div>

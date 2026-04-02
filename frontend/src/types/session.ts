@@ -30,6 +30,8 @@ export interface ModeArtifact {
     type: string;
     title?: string;
     turn?: number;
+    source_turn?: number;
+    source_roles?: string[];
     content: string;
     created_at?: string;
 }
@@ -42,6 +44,8 @@ export interface DialogueEntry {
     timestamp: string;
     event_id?: string;
     turn?: number;
+    source_turn?: number;
+    source_roles?: string[];
     target_role?: string;
     scores?: TurnScore;
     discussion_kind?: string;

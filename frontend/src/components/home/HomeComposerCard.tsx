@@ -264,7 +264,7 @@ export function HomeComposerCard({
                                 color: 'var(--mode-sophistry-accent)',
                             }}
                         >
-                            鎼滅储宸茬鐢?
+                            搜索已禁用
                         </div>
                     )}
                 </div>

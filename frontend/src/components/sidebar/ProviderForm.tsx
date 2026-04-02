@@ -38,16 +38,16 @@ export function ProviderForm({
                 onClick={onClose}
                 style={{
                     position: 'absolute',
-                    top: '22px',
-                    right: '22px',
+                    top: '18px',
+                    right: '18px',
                     zIndex: 10,
                     background: 'transparent',
                     border: 'none',
                     color: 'var(--text-muted)',
                     cursor: 'pointer',
                     fontSize: '32px',
-                    width: '48px',
-                    height: '48px',
+                    width: '42px',
+                    height: '42px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -66,15 +66,15 @@ export function ProviderForm({
                 ×
             </button>
 
-            <div style={{ flex: 1, padding: '44px 48px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '30px' }}>
-                <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '24px' }}>
+            <div style={{ flex: 1, padding: '32px 36px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '18px' }}>
                     <h3 style={{ fontSize: '28px', margin: '0 0 12px', color: 'var(--text-primary)', fontWeight: 700 }}>
                         {isCreatingNew ? '配置新提供商' : '服务商配置'}
                     </h3>
                     <p style={{ margin: 0, fontSize: '17px', color: 'var(--text-muted)', lineHeight: 1.75 }}>定义连接参数及挂载的子模型</p>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                     <div>
                         <label style={{ display: 'block', fontSize: '16px', marginBottom: '10px', color: 'var(--text-secondary)', fontWeight: 600 }}>
                             提供商名称 *
@@ -86,7 +86,7 @@ export function ProviderForm({
                             placeholder="如：AiHubMix / DeepSeek"
                             style={{
                                 width: '100%',
-                                padding: '14px 16px',
+                                padding: '12px 14px',
                                 borderRadius: 'var(--radius-md)',
                                 background: 'var(--bg-secondary)',
                                 border: '1px solid var(--border-subtle)',
@@ -126,7 +126,7 @@ export function ProviderForm({
                             spellCheck={false}
                             style={{
                                 width: '100%',
-                                padding: '14px 16px',
+                                padding: '12px 14px',
                                 borderRadius: 'var(--radius-md)',
                                 background: 'var(--bg-secondary)',
                                 border: '1px solid var(--border-subtle)',
@@ -146,7 +146,7 @@ export function ProviderForm({
                                 : '编辑已有配置时，留空会保留当前密钥；填写新值会替换当前密钥。'}
                         </div>
                         {!isCreatingNew && formData.apiKeyConfigured && (
-                            <label htmlFor="clearProviderApiKey" style={{ marginTop: '14px', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '16px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                            <label htmlFor="clearProviderApiKey" style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '16px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                                 <input
                                     id="clearProviderApiKey"
                                     type="checkbox"
@@ -171,7 +171,7 @@ export function ProviderForm({
                             placeholder="https://api.example.com/v1"
                             style={{
                                 width: '100%',
-                                padding: '14px 16px',
+                                padding: '12px 14px',
                                 borderRadius: 'var(--radius-md)',
                                 background: 'var(--bg-secondary)',
                                 border: '1px solid var(--border-subtle)',
@@ -198,7 +198,7 @@ export function ProviderForm({
                             step={1}
                             style={{
                                 width: '100%',
-                                padding: '14px 16px',
+                                padding: '12px 14px',
                                 borderRadius: 'var(--radius-md)',
                                 background: 'var(--bg-secondary)',
                                 border: '1px solid var(--border-subtle)',
@@ -227,7 +227,7 @@ export function ProviderForm({
                             rows={7}
                             style={{
                                 width: '100%',
-                                padding: '16px 18px',
+                                padding: '14px 16px',
                                 borderRadius: 'var(--radius-md)',
                                 background: 'var(--bg-secondary)',
                                 border: '1px solid var(--border-subtle)',
@@ -238,7 +238,7 @@ export function ProviderForm({
                                 resize: 'vertical',
                                 lineHeight: 1.65,
                                 transition: 'border-color 0.15s ease',
-                                minHeight: '150px',
+                                minHeight: '136px',
                             }}
                             onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent-indigo)'}
                             onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border-subtle)'}

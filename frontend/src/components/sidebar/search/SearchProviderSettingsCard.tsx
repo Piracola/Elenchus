@@ -52,14 +52,14 @@ export function SearchProviderSettingsCard({
     return (
         <div
             style={{
-                padding: '30px',
+                padding: '22px 24px',
                 borderRadius: 'var(--radius-lg)',
                 border: '1px solid var(--border-subtle)',
                 background: 'var(--bg-card)',
                 boxShadow: 'var(--shadow-xs)',
             }}
         >
-            <div style={{ marginBottom: '22px' }}>
+            <div style={{ marginBottom: '18px' }}>
                 <div style={{ fontSize: '22px', color: 'var(--text-primary)', fontWeight: 700 }}>
                     {title}
                 </div>
@@ -68,7 +68,7 @@ export function SearchProviderSettingsCard({
                 </div>
             </div>
 
-            <div style={{ display: 'grid', gap: '20px' }}>
+            <div style={{ display: 'grid', gap: '16px' }}>
                 {fields.map((field) => (
                     <div key={field.label}>
                         <label style={labelStyle}>{field.label}</label>
@@ -87,12 +87,12 @@ export function SearchProviderSettingsCard({
                 ))}
             </div>
 
-            <div style={{ display: 'flex', gap: '14px', marginTop: '24px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '18px', flexWrap: 'wrap' }}>
                 <button
                     onClick={onSave}
                     disabled={isBusy}
                     style={{
-                        padding: '14px 22px',
+                        padding: '12px 18px',
                         background: 'var(--text-primary)',
                         color: 'var(--bg-primary)',
                         border: 'none',
@@ -111,7 +111,7 @@ export function SearchProviderSettingsCard({
                         onClick={onClear}
                         disabled={isBusy}
                         style={{
-                            padding: '14px 22px',
+                            padding: '12px 18px',
                             background: 'transparent',
                             color: 'var(--text-secondary)',
                             border: '1px solid var(--border-subtle)',

@@ -21,28 +21,28 @@ export function ProviderSidebar({
 }: ProviderSidebarProps) {
     return (
         <div style={{
-            width: '340px',
+            width: '300px',
             borderRight: '1px solid var(--border-subtle)',
             background: 'var(--bg-secondary)',
             display: 'flex',
             flexDirection: 'column'
         }}>
-            <div style={{ padding: '30px 28px', borderBottom: '1px solid var(--border-subtle)' }}>
+            <div style={{ padding: '24px 22px', borderBottom: '1px solid var(--border-subtle)' }}>
                 <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)' }}>
                     模型服务商
                 </h2>
             </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
                 {isLoading ? (
                     <div style={{ color: 'var(--text-muted)', fontSize: '17px' }}>加载中...</div>
                 ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {providers.map((p, idx) => (
                             <div
                                 key={p.id}
                                 onClick={() => onSelect(idx)}
                                 style={{
-                                    padding: '16px 20px',
+                                    padding: '14px 16px',
                                     borderRadius: 'var(--radius-sm)',
                                     background: (!isCreatingNew && activeIndex === idx) ? 'var(--bg-tertiary)' : 'transparent',
                                     cursor: 'pointer',
@@ -66,8 +66,8 @@ export function ProviderSidebar({
                                             color: 'var(--text-muted)',
                                             cursor: 'pointer',
                                             fontSize: '22px',
-                                            width: '28px',
-                                            height: '28px'
+                                            width: '24px',
+                                            height: '24px'
                                         }}
                                     >
                                         ×
@@ -79,7 +79,7 @@ export function ProviderSidebar({
                         <div
                             onClick={onNew}
                             style={{
-                                padding: '16px 20px',
+                                padding: '14px 16px',
                                 borderRadius: 'var(--radius-sm)',
                                 background: isCreatingNew ? 'var(--bg-tertiary)' : 'transparent',
                                 cursor: 'pointer',

@@ -1,5 +1,7 @@
 # Elenchus 架构改进文档
 
+> 统一入口：若要快速了解 2026-03-17 这轮审查，请先读 [2026-03-17-audit-summary.md](./2026-03-17-audit-summary.md)。本文保留为当时的原始架构改进方案。
+
 > 本文档记录项目架构改进的完整过程，包括问题分析、解决方案和实施指南。
 > 生成时间：2026-03-17
 > 历史说明：本文保留的是当时的阶段性方案；当前代码已进一步演进，Provider 配置、搜索配置、认证相关运行时参数与日志级别现统一存储于 `runtime/config.json`，文中涉及 `ProviderRecord`、`backend/scripts/migrate_providers_to_db.py`、`config.yaml`、`runtime/backend/.env` 等内容均仅代表历史背景。

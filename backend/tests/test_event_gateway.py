@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.runtime.event_gateway import EventStreamGateway
+from app.runtime.bus import RuntimeBus
 
 
 @pytest.mark.asyncio
@@ -14,7 +14,7 @@ async def test_event_gateway_emits_sequenced_events():
     async def sink(session_id: str, message: dict) -> None:
         delivered.append((session_id, message))
 
-    gateway = EventStreamGateway(sink)
+    gateway = RuntimeBus(sink)
 
     first = await gateway.emit(
         session_id="abc123def456",
@@ -48,7 +48,7 @@ async def test_event_gateway_sequence_isolated_per_session():
     async def sink(session_id: str, message: dict) -> None:
         delivered.append((session_id, message))
 
-    gateway = EventStreamGateway(sink)
+    gateway = RuntimeBus(sink)
 
     first_a = await gateway.create_event(
         session_id="aaaaaaaaaaaa",
@@ -91,7 +91,7 @@ async def test_event_gateway_resumes_sequence_from_repository():
             self.persisted.append(event)
 
     repository = _Repository()
-    gateway = EventStreamGateway(sink, repository=repository)
+    gateway = RuntimeBus(sink, repository=repository)
 
     event = await gateway.emit(
         session_id="resume123456",

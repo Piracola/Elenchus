@@ -31,7 +31,7 @@ def _speaker_entries_for_turn(
         for entry in dialogue_history
         if isinstance(entry, dict)
         and entry.get("role") in participants
-        and int(entry.get("turn", -1) or -1) == current_turn
+        and int(entry.get("turn", -1) if entry.get("turn", -1) is not None else -1) == current_turn
     ]
 
 
@@ -113,11 +113,19 @@ async def sophistry_observer_report(state: dict[str, Any]) -> dict[str, Any]:
         "citations": [],
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "turn": current_turn,
+        "source_turn": current_turn,
+        "source_roles": [
+            str(item.get("role", "") or "")
+            for item in turn_entries
+            if isinstance(item, dict)
+        ],
     }
     artifact = {
         "type": "sophistry_round_report",
         "title": "本轮观察",
         "turn": current_turn,
+        "source_turn": current_turn,
+        "source_roles": entry["source_roles"],
         "content": report,
         "created_at": entry["timestamp"],
     }

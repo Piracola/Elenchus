@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from app.runtime.event_gateway import EventStreamGateway
+from app.runtime.bus import RuntimeBus
 from app.runtime.orchestrator import DebateOrchestrator
 
 
@@ -214,11 +214,11 @@ async def test_orchestrator_preannounces_speaker_status_after_set_speaker():
     async def _sink(_session_id: str, event: dict[str, Any]) -> None:
         captured.append(event)
 
-    gateway = EventStreamGateway(_sink)
+    runtime_bus = RuntimeBus(_sink)
     orchestrator = DebateOrchestrator(
         repository=_FakeRepository(),
         engine=_FakeEngine(),
-        event_gateway=gateway,
+        runtime_bus=runtime_bus,
     )
 
     await orchestrator.run_debate(
@@ -257,11 +257,11 @@ async def test_orchestrator_emits_sophistry_status_sequence():
     async def _sink(_session_id: str, event: dict[str, Any]) -> None:
         captured.append(event)
 
-    gateway = EventStreamGateway(_sink)
+    runtime_bus = RuntimeBus(_sink)
     orchestrator = DebateOrchestrator(
         repository=_FakeSophistryRepository(),
         engine=_FakeSophistryEngine(),
-        event_gateway=gateway,
+        runtime_bus=runtime_bus,
     )
 
     await orchestrator.run_debate(

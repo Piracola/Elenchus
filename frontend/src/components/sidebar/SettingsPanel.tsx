@@ -86,9 +86,9 @@ export default function SettingsPanel({
                             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                             style={{
                                 width: '95%',
-                                maxWidth: '1360px',
-                                height: '92vh',
-                                maxHeight: '980px',
+                                maxWidth: '1240px',
+                                height: '88vh',
+                                maxHeight: '900px',
                                 background: 'var(--bg-secondary)',
                                 borderRadius: 'var(--radius-2xl)',
                                 boxShadow: 'var(--shadow-2xl)',
@@ -99,17 +99,17 @@ export default function SettingsPanel({
                         >
                             {/* Sidebar */}
                             <div style={{
-                                width: '292px',
+                                width: '264px',
                                 background: 'var(--bg-tertiary)',
                                 display: 'flex',
                                 flexDirection: 'column',
-                                padding: '38px 24px',
-                                gap: '12px',
+                                padding: '30px 20px',
+                                gap: '10px',
                             }}>
                                 <div style={{
-                                    padding: '0 12px 28px',
+                                    padding: '0 10px 22px',
                                     borderBottom: '1px solid var(--border-subtle)',
-                                    marginBottom: '12px',
+                                    marginBottom: '10px',
                                 }}>
                                     <h2 style={{
                                         margin: 0,
@@ -125,7 +125,7 @@ export default function SettingsPanel({
                                     whileHover={{ scale: 1.02 }}
                                     onClick={() => setActiveTab('providers')}
                                     style={{
-                                        padding: '20px 22px',
+                                        padding: '16px 18px',
                                         borderRadius: 'var(--radius-lg)',
                                         background: activeTab === 'providers' ? 'var(--bg-card)' : 'transparent',
                                         cursor: 'pointer',
@@ -143,7 +143,7 @@ export default function SettingsPanel({
                                     whileHover={{ scale: 1.02 }}
                                     onClick={() => setActiveTab('display')}
                                     style={{
-                                        padding: '20px 22px',
+                                        padding: '16px 18px',
                                         borderRadius: 'var(--radius-lg)',
                                         background: activeTab === 'display' ? 'var(--bg-card)' : 'transparent',
                                         cursor: 'pointer',
@@ -161,7 +161,7 @@ export default function SettingsPanel({
                                     whileHover={{ scale: 1.02 }}
                                     onClick={() => setActiveTab('logging')}
                                     style={{
-                                        padding: '20px 22px',
+                                        padding: '16px 18px',
                                         borderRadius: 'var(--radius-lg)',
                                         background: activeTab === 'logging' ? 'var(--bg-card)' : 'transparent',
                                         cursor: 'pointer',
@@ -179,7 +179,7 @@ export default function SettingsPanel({
                                     whileHover={{ scale: 1.02 }}
                                     onClick={() => setActiveTab('search')}
                                     style={{
-                                        padding: '20px 22px',
+                                        padding: '16px 18px',
                                         borderRadius: 'var(--radius-lg)',
                                         background: activeTab === 'search' ? 'var(--bg-card)' : 'transparent',
                                         cursor: 'pointer',
@@ -201,23 +201,23 @@ export default function SettingsPanel({
                                 flexDirection: 'column',
                                 position: 'relative',
                                 overflow: 'hidden',
-                                padding: '38px',
+                                padding: '28px',
                             }}>
                                 {activeTab !== 'providers' && <motion.button
                                     whileHover={{ scale: 1.1, color: 'var(--text-primary)' }}
                                     onClick={onClose}
                                     style={{
                                         position: 'absolute',
-                                        top: '28px',
-                                        right: '38px',
+                                        top: '20px',
+                                        right: '28px',
                                         zIndex: 10,
                                         background: 'var(--bg-tertiary)',
                                         border: 'none',
                                         color: 'var(--text-muted)',
                                         cursor: 'pointer',
                                         fontSize: '32px',
-                                        width: '50px',
-                                        height: '50px',
+                                        width: '44px',
+                                        height: '44px',
                                         borderRadius: '50%',
                                         display: 'flex',
                                         alignItems: 'center',

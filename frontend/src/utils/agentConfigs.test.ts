@@ -13,6 +13,7 @@ const baseProvider: ModelConfig = {
     provider_type: 'openai',
     api_key_configured: false,
     api_base_url: 'https://api.openai.com/v1',
+    default_max_tokens: 64000,
     custom_parameters: {},
     models: ['gpt-4o', 'gpt-4.1-mini'],
     is_default: true,

@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from app.runtime.event_gateway import EventStreamGateway
+from app.runtime.bus import RuntimeBus
 from app.runtime.orchestrator import DebateOrchestrator
 
 
@@ -98,12 +98,12 @@ async def test_orchestrator_emits_memory_write_events_once_per_new_item():
     async def _sink(_session_id: str, event: dict[str, Any]) -> None:
         captured.append(event)
 
-    gateway = EventStreamGateway(_sink)
+    runtime_bus = RuntimeBus(_sink)
     repository = _FakeRepository()
     orchestrator = DebateOrchestrator(
         repository=repository,
         engine=_FakeEngine(),
-        event_gateway=gateway,
+        runtime_bus=runtime_bus,
     )
 
     await orchestrator.run_debate(

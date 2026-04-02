@@ -227,6 +227,10 @@ export function applyRuntimeEventPatch(
                 timestamp: event.timestamp || new Date().toISOString(),
                 event_id: event.event_id,
                 turn: getPayloadNumber(payload, 'turn'),
+                source_turn: getPayloadNumber(payload, 'source_turn'),
+                source_roles: Array.isArray(payload.source_roles)
+                    ? payload.source_roles.filter((item): item is string => typeof item === 'string')
+                    : undefined,
             };
 
             patch.currentSession = {

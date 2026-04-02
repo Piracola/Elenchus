@@ -206,41 +206,6 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                     onModeChange={setDebateMode}
                 />
 
-                <AnimatePresence>
-                    {isSophistryMode && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -8 }}
-                            style={{ width: '100%', marginBottom: '16px' }}
-                        >
-                            <SophistryModeNotice compact fontSize={homeFontSizes.warningBody} />
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
-                <AnimatePresence>
-                    {showAdvanced && (
-                        <motion.div
-                            initial={{ opacity: 0, marginBottom: 0 }}
-                            animate={{ opacity: 1, marginBottom: 12 }}
-                            exit={{ opacity: 0, marginBottom: 0 }}
-                            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-                            style={{ width: '100%' }}
-                        >
-                            <AgentConfigPanel
-                                savedConfigs={savedConfigs}
-                                selectedConfigIds={selectedConfigIds}
-                                temperatureInputs={temperatureInputs}
-                                showConfigManager={showConfigManager}
-                                setShowConfigManager={setShowConfigManager}
-                                handleConfigSelect={handleConfigSelect}
-                                handleTemperatureChange={handleTemperatureChange}
-                            />
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
                 <HomeComposerCard
                     topic={topic}
                     isCreating={isCreating}
@@ -270,6 +235,56 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                         void handleCreateDebate();
                     }}
                 />
+
+                <div
+                    style={{
+                        width: '100%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px',
+                        marginTop: '16px',
+                    }}
+                >
+                    <AnimatePresence initial={false}>
+                        {isSophistryMode && (
+                            <motion.div
+                                key="sophistry-notice"
+                                layout
+                                initial={{ opacity: 0, height: 0, y: -10, scale: 0.98 }}
+                                animate={{ opacity: 1, height: 'auto', y: 0, scale: 1 }}
+                                exit={{ opacity: 0, height: 0, y: -6, scale: 0.985 }}
+                                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                                style={{ width: '100%', overflow: 'hidden' }}
+                            >
+                                <SophistryModeNotice compact fontSize={homeFontSizes.warningBody} />
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    <AnimatePresence initial={false}>
+                        {showAdvanced && (
+                            <motion.div
+                                key="agent-config-panel"
+                                layout
+                                initial={{ opacity: 0, height: 0, y: -8, scale: 0.985 }}
+                                animate={{ opacity: 1, height: 'auto', y: 0, scale: 1 }}
+                                exit={{ opacity: 0, height: 0, y: -4, scale: 0.99 }}
+                                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                                style={{ width: '100%', overflow: 'hidden' }}
+                            >
+                                <AgentConfigPanel
+                                    savedConfigs={savedConfigs}
+                                    selectedConfigIds={selectedConfigIds}
+                                    temperatureInputs={temperatureInputs}
+                                    showConfigManager={showConfigManager}
+                                    setShowConfigManager={setShowConfigManager}
+                                    handleConfigSelect={handleConfigSelect}
+                                    handleTemperatureChange={handleTemperatureChange}
+                                />
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
 
                 <AnimatePresence>
                     {error && (

@@ -237,34 +237,37 @@ class RuntimeEventEmitter:
         if curr_history_len <= prev_history_len or not history:
             return prev_history_len
 
-        latest = history[-1]
+        new_entries = history[prev_history_len:curr_history_len]
         already_streamed = bool(final_state.get("speech_was_streamed"))
         speech_node = (
             "sophistry_speaker"
             if str(final_state.get("debate_mode", "") or "") == "sophistry_experiment"
             else "speaker"
         )
-        if not already_streamed:
-            await self.emit_speech_start(
-                session_id,
-                role=latest.get("role", ""),
-                agent_name=latest.get("agent_name", ""),
-                turn=latest.get("turn"),
-                node_name=speech_node,
+        for index, latest in enumerate(new_entries):
+            if not isinstance(latest, dict):
+                continue
+            if index == 0 and not already_streamed:
+                await self.emit_speech_start(
+                    session_id,
+                    role=latest.get("role", ""),
+                    agent_name=latest.get("agent_name", ""),
+                    turn=latest.get("turn"),
+                    node_name=speech_node,
+                )
+            await self.emit_runtime_event(
+                session_id=session_id,
+                event_type="speech_end",
+                payload={
+                    "role": latest.get("role", ""),
+                    "agent_name": latest.get("agent_name", ""),
+                    "content": latest.get("content", ""),
+                    "citations": latest.get("citations", []),
+                    "turn": latest.get("turn"),
+                },
+                source=f"runtime.node.{speech_node}",
+                phase="speaking",
             )
-        await self.emit_runtime_event(
-            session_id=session_id,
-            event_type="speech_end",
-            payload={
-                "role": latest.get("role", ""),
-                "agent_name": latest.get("agent_name", ""),
-                "content": latest.get("content", ""),
-                "citations": latest.get("citations", []),
-                "turn": latest.get("turn"),
-            },
-            source=f"runtime.node.{speech_node}",
-            phase="speaking",
-        )
         return curr_history_len
 
     async def emit_sophistry_reports(
@@ -301,6 +304,14 @@ class RuntimeEventEmitter:
                     "content": entry.get("content", ""),
                     "citations": entry.get("citations", []),
                     "turn": entry.get("turn"),
+                    "source_turn": entry.get("turn"),
+                    "source_roles": [
+                        speaker_entry.get("role", "")
+                        for speaker_entry in history
+                        if isinstance(speaker_entry, dict)
+                        and speaker_entry.get("role") in {"proposer", "opposer"}
+                        and speaker_entry.get("turn") == entry.get("turn")
+                    ],
                     "report": report_payload if isinstance(report_payload, dict) else {},
                 },
                 source=(

@@ -17,7 +17,7 @@ type SettingsLoggingTabProps = {
 export function SettingsLoggingTab({ logLevel, onLogLevelChange }: SettingsLoggingTabProps) {
     return (
         <div style={{
-            padding: '32px',
+            padding: '26px',
             overflowY: 'auto',
             background: 'var(--bg-card)',
             borderRadius: 'var(--radius-xl)',
@@ -25,8 +25,8 @@ export function SettingsLoggingTab({ logLevel, onLogLevelChange }: SettingsLoggi
         }}>
             <div style={{
                 borderBottom: '1px solid var(--border-subtle)',
-                paddingBottom: '24px',
-                marginBottom: '28px',
+                paddingBottom: '18px',
+                marginBottom: '22px',
             }}>
                 <h3 style={{
                     fontSize: '24px',
@@ -41,28 +41,28 @@ export function SettingsLoggingTab({ logLevel, onLogLevelChange }: SettingsLoggi
                 </p>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {LOG_LEVELS.map((level) => (
                     <motion.div
                         key={level.value}
                         whileHover={{ scale: 1.01 }}
                         onClick={() => onLogLevelChange(level.value)}
                         style={{
-                            padding: '16px 20px',
+                            padding: '14px 18px',
                             borderRadius: 'var(--radius-lg)',
                             background: logLevel === level.value ? 'var(--bg-tertiary)' : 'transparent',
                             border: `1px solid ${logLevel === level.value ? 'var(--accent-indigo)' : 'var(--border-subtle)'}`,
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '16px',
+                            gap: '12px',
                             transition: 'all var(--transition-fast)',
                             boxShadow: logLevel === level.value ? 'var(--shadow-sm)' : 'none',
                         }}
                     >
                         <div style={{
-                            width: '22px',
-                            height: '22px',
+                            width: '20px',
+                            height: '20px',
                             borderRadius: '50%',
                             border: `2px solid ${logLevel === level.value ? 'var(--accent-indigo)' : 'var(--border-subtle)'}`,
                             display: 'flex',
@@ -72,8 +72,8 @@ export function SettingsLoggingTab({ logLevel, onLogLevelChange }: SettingsLoggi
                         }}>
                             {logLevel === level.value && (
                                 <div style={{
-                                    width: '10px',
-                                    height: '10px',
+                                    width: '8px',
+                                    height: '8px',
                                     borderRadius: '50%',
                                     background: 'var(--accent-indigo)',
                                 }} />
@@ -100,8 +100,8 @@ export function SettingsLoggingTab({ logLevel, onLogLevelChange }: SettingsLoggi
             </div>
 
             <div style={{
-                marginTop: '32px',
-                padding: '20px 24px',
+                marginTop: '24px',
+                padding: '18px 20px',
                 background: 'var(--bg-tertiary)',
                 borderRadius: 'var(--radius-lg)',
                 boxShadow: 'var(--shadow-inner)',
@@ -109,7 +109,7 @@ export function SettingsLoggingTab({ logLevel, onLogLevelChange }: SettingsLoggi
                 <div style={{
                     fontSize: '15px',
                     color: 'var(--text-secondary)',
-                    marginBottom: '10px',
+                    marginBottom: '8px',
                     fontWeight: 600,
                 }}>
                     日志文件位置
@@ -118,7 +118,7 @@ export function SettingsLoggingTab({ logLevel, onLogLevelChange }: SettingsLoggi
                     fontSize: '14px',
                     color: 'var(--text-muted)',
                     background: 'var(--bg-card)',
-                    padding: '12px 16px',
+                    padding: '10px 14px',
                     borderRadius: 'var(--radius-md)',
                     display: 'block',
                     fontFamily: 'monospace',

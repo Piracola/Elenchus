@@ -25,7 +25,7 @@
 
 - `architecture.md` 负责“系统如何组织”。
 - `runtime.md` 负责“运行后生成什么、放在哪里、如何恢复与回放”。
-- [PLATFORM_SIMPLIFICATION_PLAN.md](../PLATFORM_SIMPLIFICATION_PLAN.md) 仅保留架构收敛的决策背景，不与以上两份当前文档竞争权威性。
+- [2026-03-17 历史审查合并摘要](./archive/2026-03-17-audit-summary.md) 保留架构收敛与历史审查背景，不与以上两份当前文档竞争权威性。
 
 ## 3. 开发指南
 
@@ -66,10 +66,12 @@
 
 ## 5. 历史 / 归档 / 概念资料
 
+- [代码优化与架构审查报告（2026-04-02）](./CODE_OPTIMIZATION_AUDIT_2026-04-02.md) — **当前项目级综合审查结论、长度分析与优化路线图**
 - [会话级资料池 MVP 规划](./session-reference-library-mvp-plan.md) — 历史规划背景，已由实现文档取代当前说明职责
 - [代码质量报告（已核实版）](./CODE_QUALITY_REPORT_2026-03-18.md) — 2026-03-18 该轮清理的主报告
 - [原始代码审查背景](./code-audit-2026-03-18.md) — 原始审查背景，结论以已核实版为准
-- [2.0.0 发布说明](./releases/2.0.0.md)
+- [2026-03-17 历史审查合并摘要](./archive/2026-03-17-audit-summary.md) — archive 三份历史审查材料的统一入口
+- [3.1.0 发布说明](./releases/3.1.0.md)
 - [历史归档](./archive/README.md)
 - [UI 概念设计](./UI概念设计/README.md)
 

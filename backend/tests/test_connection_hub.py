@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.connection_hub import ConnectionHub
+from app.runtime.bus import RuntimeBus
 
 
 class _FakeWebSocket:
@@ -24,7 +24,7 @@ class _FakeWebSocket:
 
 @pytest.mark.asyncio
 async def test_connection_hub_tracks_connections_and_broadcasts():
-    hub = ConnectionHub()
+    hub = RuntimeBus()
     ws1 = _FakeWebSocket()
     ws2 = _FakeWebSocket()
 
@@ -44,7 +44,7 @@ async def test_connection_hub_tracks_connections_and_broadcasts():
 
 @pytest.mark.asyncio
 async def test_connection_hub_drops_dead_connections_on_broadcast():
-    hub = ConnectionHub()
+    hub = RuntimeBus()
     alive = _FakeWebSocket()
     dead = _FakeWebSocket(fail_send=True)
 

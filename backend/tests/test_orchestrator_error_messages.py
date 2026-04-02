@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from app.runtime.event_gateway import EventStreamGateway
+from app.runtime.bus import RuntimeBus
 from app.runtime.orchestrator import DebateOrchestrator
 
 
@@ -71,11 +71,11 @@ async def test_orchestrator_emits_clean_user_facing_error_messages():
         captured.append(event)
 
     repository = _FakeRepository()
-    gateway = EventStreamGateway(_sink)
+    runtime_bus = RuntimeBus(_sink)
     orchestrator = DebateOrchestrator(
         repository=repository,
         engine=_ExplodingEngine(),
-        event_gateway=gateway,
+        runtime_bus=runtime_bus,
     )
 
     final_state = await orchestrator.run_debate(
@@ -106,11 +106,11 @@ async def test_orchestrator_emits_error_when_initial_state_build_fails():
         captured.append(event)
 
     repository = _InitExplodingRepository()
-    gateway = EventStreamGateway(_sink)
+    runtime_bus = RuntimeBus(_sink)
     orchestrator = DebateOrchestrator(
         repository=repository,
         engine=_ExplodingEngine(),
-        event_gateway=gateway,
+        runtime_bus=runtime_bus,
     )
 
     final_state = await orchestrator.run_debate(

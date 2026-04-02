@@ -74,6 +74,19 @@ async def _build_search_config_response(factory: SearchProviderFactory) -> Searc
     )
 
 
+async def build_search_health_payload(factory: SearchProviderFactory) -> dict[str, str | None]:
+    provider = await factory.get_provider()
+    if provider is None:
+        return {
+            "status": "unavailable",
+            "provider": None,
+        }
+    return {
+        "status": "ok",
+        "provider": factory.get_current_provider(),
+    }
+
+
 @router.get("/config", response_model=SearchConfigResponse)
 async def get_search_config(
     factory: SearchProviderFactory = Depends(get_search_factory),
@@ -131,11 +144,4 @@ async def search_health(
     factory: SearchProviderFactory = Depends(get_search_factory),
 ):
     """Check current search engine health status."""
-
-    provider = await factory.get_provider()
-    if provider is None:
-        return {"status": "unavailable", "provider": None}
-    return {
-        "status": "ok",
-        "provider": factory.get_current_provider(),
-    }
+    return await build_search_health_payload(factory)

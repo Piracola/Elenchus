@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { DialogueEntry, RuntimeEvent } from '../types';
+import type { DialogueEntry } from '../types';
 import {
     appendDialogueWithDedupe,
     appendModeArtifact,
@@ -11,21 +11,7 @@ import {
     normalizeRuntimeEvents,
     sanitizeIncomingContent,
 } from './debateStoreHelpers';
-
-function makeEvent(overrides: Partial<RuntimeEvent>): RuntimeEvent {
-    return {
-        schema_version: '2026-03-17',
-        event_id: 'evt-1',
-        session_id: 'session-1',
-        seq: 1,
-        timestamp: '2026-03-17T00:00:00Z',
-        source: 'runtime.test',
-        type: 'status',
-        phase: 'processing',
-        payload: {},
-        ...overrides,
-    };
-}
+import { makeRuntimeEvent } from '../test/runtimeEventFactory';
 
 describe('debateStoreHelpers', () => {
     it('filters HTML provider responses into a safe message', () => {
@@ -47,10 +33,10 @@ describe('debateStoreHelpers', () => {
 
     it('dedupes and sorts normalized runtime events while dropping speech tokens', () => {
         const normalized = normalizeRuntimeEvents([
-            makeEvent({ event_id: 'evt-2', seq: 2, type: 'speech_token' }),
-            makeEvent({ event_id: 'evt-3', seq: 3 }),
-            makeEvent({ event_id: 'evt-1', seq: 1 }),
-            makeEvent({ event_id: 'evt-3', seq: 3 }),
+            makeRuntimeEvent({ event_id: 'evt-2', seq: 2, type: 'speech_token' }),
+            makeRuntimeEvent({ event_id: 'evt-3', seq: 3 }),
+            makeRuntimeEvent({ event_id: 'evt-1', seq: 1 }),
+            makeRuntimeEvent({ event_id: 'evt-3', seq: 3 }),
         ]);
 
         expect(normalized.map((event) => event.event_id)).toEqual(['evt-1', 'evt-3']);
@@ -72,11 +58,12 @@ describe('debateStoreHelpers', () => {
 
     it('tracks the highest non-negative event sequence', () => {
         expect(computeLastEventSeq([
-            makeEvent({ event_id: 'evt-1', seq: -1 }),
-            makeEvent({ event_id: 'evt-2', seq: 3 }),
-            makeEvent({ event_id: 'evt-3', seq: 2 }),
+            makeRuntimeEvent({ event_id: 'evt-1', seq: -1 }),
+            makeRuntimeEvent({ event_id: 'evt-2', seq: 3 }),
+            makeRuntimeEvent({ event_id: 'evt-3', seq: 2 }),
         ])).toBe(3);
     });
+
 
     it('does not append duplicate mode artifacts', () => {
         const artifact = {
