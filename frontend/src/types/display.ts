@@ -1,11 +1,11 @@
 export type LogLevel = 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
 
-export const DISPLAY_FONT_SIZE_IDS = ['small', 'default', 'large', 'extraLarge', 'huge'] as const;
-export type DisplayFontSize = typeof DISPLAY_FONT_SIZE_IDS[number];
-
 export interface DisplaySettings {
     messageWidth: 'narrow' | 'medium' | 'wide' | 'full';
-    fontSize: DisplayFontSize;
+    /** Message interface font size (in px), user-configurable */
+    messageFontSize?: number;
+    /** Settings panel font size (in px), independent from message font size */
+    settingsFontSize?: number;
 }
 
 export const MARKDOWN_EXPORT_CATEGORY_IDS = [

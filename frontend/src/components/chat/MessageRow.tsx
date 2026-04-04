@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { DISPLAY_FONT_TOKENS } from '../../config/display';
+import { getMessageFontTokens } from '../../config/display';
 import type { DialogueEntry } from '../../types';
 import { splitLeadingThinkingContent } from '../../utils/thinkingContent';
 import RoundInsights from './RoundInsights';
@@ -63,8 +63,8 @@ function MessageRow({
     const judgeVisual = useMemo(() => getJudgeVisual(judgeEntry), [judgeEntry]);
     const agentContent = useMemo(() => splitLeadingThinkingContent(agentText), [agentText]);
     const judgeContent = useMemo(() => splitLeadingThinkingContent(judgeText), [judgeText]);
-    const fontSize = useSettingsStore((state) => state.displaySettings.fontSize);
-    const messageFontSizes = DISPLAY_FONT_TOKENS[fontSize].message;
+    const messageFontSize = useSettingsStore((state) => state.displaySettings.messageFontSize ?? 15);
+    const messageFontSizes = useMemo(() => getMessageFontTokens(messageFontSize).message, [messageFontSize]);
     const agentTurnLabel = formatTurnPill(agentEntry?.turn);
     const collapsedHint = formatCollapsedHint(agentEntry);
     const metaBackground = agentMetaBackground(agentVisual.color);

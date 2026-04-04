@@ -2,7 +2,6 @@
 
 from app.services.intervention_manager import InterventionManager
 from app.services.agent_config_service import AgentConfigService
-from app.services.connection_hub import ConnectionHub
 
 # Re-export dependency injection functions for convenience
 from app.dependencies import (
@@ -18,7 +17,6 @@ from app.dependencies import (
 __all__ = [
     "InterventionManager",
     "AgentConfigService",
-    "ConnectionHub",
     "get_intervention_manager",
     "get_agent_config_service",
     "get_runtime_bus",

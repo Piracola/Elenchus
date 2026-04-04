@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentConfigs } from '../hooks/useAgentConfigs';
 import { useSessionCreate } from '../hooks/useSessionCreate';
 import { useSettingsStore } from '../stores/settingsStore';
-import { DISPLAY_FONT_TOKENS } from '../config/display';
+import { getMessageFontTokens } from '../config/display';
 import type { DebateMode } from '../types';
 import {
     parseJuryAgentsInput,
@@ -50,7 +50,8 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
 
     const isSophistryMode = debateMode === 'sophistry_experiment';
     const { displaySettings } = useSettingsStore();
-    const homeFontSizes = useMemo(() => DISPLAY_FONT_TOKENS[displaySettings.fontSize].home, [displaySettings.fontSize]);
+    const messageFontSize = displaySettings.messageFontSize ?? 15;
+    const homeFontSizes = useMemo(() => getMessageFontTokens(messageFontSize).home, [messageFontSize]);
     const maxTurns = parseMaxTurnsInput(maxTurnsInput);
     const teamAgents = parseTeamAgentsInput(teamAgentsInput);
     const teamDiscussionRounds = parseTeamDiscussionRoundsInput(teamRoundsInput);

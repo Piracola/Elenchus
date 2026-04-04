@@ -3,9 +3,9 @@
  * Orchestrates transcript state, history virtualization, overlays, and the runtime inspector.
  */
 
-import { useRef } from 'react';
+import { useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { DISPLAY_FONT_TOKENS } from '../config/display';
+import { getMessageFontTokens } from '../config/display';
 import { useFloatingInspectorState } from '../hooks/chat/useFloatingInspectorState';
 import { useChatHistoryWindow } from '../hooks/chat/useChatHistoryWindow';
 import { useChatViewportMetrics } from '../hooks/chat/useChatViewportMetrics';
@@ -86,7 +86,8 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
 
     const isSophistryMode = debateMode === 'sophistry_experiment';
     const panelMaxWidth = MESSAGE_WIDTH_VALUES[displaySettings.messageWidth];
-    const chatFontSizes = DISPLAY_FONT_TOKENS[displaySettings.fontSize].chat;
+    const messageFontSize = displaySettings.messageFontSize ?? 15;
+    const chatFontSizes = useMemo(() => getMessageFontTokens(messageFontSize).chat, [messageFontSize]);
 
     const handleScroll = () => {
         viewportMetrics.handleScroll();

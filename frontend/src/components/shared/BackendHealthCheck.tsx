@@ -83,27 +83,7 @@ export function BackendHealthCheck({ children }: Props) {
                             gap: '20px',
                         }}
                     >
-                        <div style={{
-                            position: 'relative',
-                            width: '64px',
-                            height: '64px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                        }}>
-                            <motion.div
-                                animate={{ rotate: 360 }}
-                                transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }}
-                                style={{
-                                    position: 'absolute',
-                                    inset: 0,
-                                    borderRadius: '50%',
-                                    border: '2px solid rgba(99, 102, 241, 0.16)',
-                                    borderTopColor: 'var(--accent-indigo)',
-                                }}
-                            />
-                            <BrandIcon size={48} alt="Elenchus 品牌图标" />
-                        </div>
+                        <BrandIcon size={64} alt="Elenchus 品牌图标" withBadge={false} />
                         <div style={{
                             display: 'flex',
                             flexDirection: 'column',

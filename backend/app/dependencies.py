@@ -88,9 +88,6 @@ def get_runtime_bus() -> "RuntimeBus":
     repository = SessionRuntimeRepository()
     return RuntimeBus(repository=repository)
 
-# Deprecated compatibility aliases. Prefer `get_runtime_bus()`.
-get_connection_hub = get_runtime_bus
-
 
 @lru_cache()
 def get_agent_config_service() -> "AgentConfigService":
@@ -98,8 +95,6 @@ def get_agent_config_service() -> "AgentConfigService":
     from app.services.agent_config_service import AgentConfigService
 
     return AgentConfigService()
-
-get_event_stream_gateway = get_runtime_bus
 
 
 @lru_cache()

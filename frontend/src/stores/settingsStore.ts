@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { LogLevel, DisplaySettings } from '../types';
-import { normalizeDisplayFontSize } from '../config/display';
 
 export interface SettingsState {
   logLevel: LogLevel;
@@ -23,7 +22,8 @@ export const useSettingsStore = create<SettingsState>()(
       logLevel: 'INFO',
       displaySettings: {
         messageWidth: 'wide',
-        fontSize: 'default',
+        messageFontSize: 15,
+        settingsFontSize: 13,
       },
       setLogLevel: (level) => set({ logLevel: level }),
       setDisplaySettings: (settings) => set((state) => ({
@@ -32,22 +32,6 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'elenchus-settings',
-      merge: (persistedState, currentState) => {
-        const persisted = persistedState as Partial<SettingsState>;
-        const mergedDisplaySettings = {
-          ...currentState.displaySettings,
-          ...persisted.displaySettings,
-        };
-
-        return {
-          ...currentState,
-          ...persisted,
-          displaySettings: {
-            ...mergedDisplaySettings,
-            fontSize: normalizeDisplayFontSize(mergedDisplaySettings.fontSize),
-          },
-        };
-      },
     }
   )
 );

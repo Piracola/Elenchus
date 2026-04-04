@@ -440,7 +440,7 @@ if (-not $BackendOnly) {
 
             Print-Warn "Frontend dependency files changed, but installation was skipped"
         } else {
-            if (Test-Path $frontendModulesDir -and -not $frontendDependenciesHealthy) {
+            if ((Test-Path $frontendModulesDir) -and (-not $frontendDependenciesHealthy)) {
                 Print-Warn "Detected incomplete frontend dependencies; reinstalling packages."
             }
 

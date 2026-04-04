@@ -8,6 +8,7 @@
 .opencode/
 .claude/
 .trae/
+.qwen/
 
 # ========================================
 # Sensitive Files (never commit)

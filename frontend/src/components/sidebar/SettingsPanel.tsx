@@ -9,6 +9,8 @@ import type { LogLevel } from '../../types';
 import { SettingsDisplayTab } from './settings/SettingsDisplayTab';
 import { SettingsLoggingTab } from './settings/SettingsLoggingTab';
 import { SettingsProvidersTab } from './settings/SettingsProvidersTab';
+import { createSettingsFonts } from '../../config/settingsFonts';
+import { DEFAULT_SETTINGS_FONT_SIZE } from '../../config/display';
 
 export type SettingsTab = 'providers' | 'display' | 'logging' | 'search';
 
@@ -25,6 +27,10 @@ export default function SettingsPanel({
 }: Props) {
     const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
     const { logLevel, setLogLevel, displaySettings, setDisplaySettings } = useSettingsStore();
+    
+    // Create fonts config based on user's settings font size
+    const userSettingsFontSize = displaySettings.settingsFontSize ?? DEFAULT_SETTINGS_FONT_SIZE;
+    const fonts = createSettingsFonts(userSettingsFontSize);
 
     // Use the extracted hook for provider management
     const modelConfig = useModelConfigManager();
@@ -85,12 +91,12 @@ export default function SettingsPanel({
                             exit={{ opacity: 0, scale: 0.9, y: 30 }}
                             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                             style={{
-                                width: '95%',
-                                maxWidth: '1240px',
-                                height: '88vh',
-                                maxHeight: '900px',
+                                width: '92%',
+                                maxWidth: '1100px',
+                                height: '82vh',
+                                maxHeight: '760px',
                                 background: 'var(--bg-secondary)',
-                                borderRadius: 'var(--radius-2xl)',
+                                borderRadius: 'var(--radius-xl)',
                                 boxShadow: 'var(--shadow-2xl)',
                                 display: 'flex',
                                 overflow: 'hidden',
@@ -99,21 +105,21 @@ export default function SettingsPanel({
                         >
                             {/* Sidebar */}
                             <div style={{
-                                width: '264px',
+                                width: '200px',
                                 background: 'var(--bg-tertiary)',
                                 display: 'flex',
                                 flexDirection: 'column',
-                                padding: '30px 20px',
-                                gap: '10px',
+                                padding: '20px 14px',
+                                gap: '6px',
                             }}>
                                 <div style={{
-                                    padding: '0 10px 22px',
+                                    padding: '0 8px 16px',
                                     borderBottom: '1px solid var(--border-subtle)',
-                                    marginBottom: '10px',
+                                    marginBottom: '8px',
                                 }}>
                                     <h2 style={{
                                         margin: 0,
-                                        fontSize: '28px',
+                                        fontSize: '20px',
                                         fontWeight: 700,
                                         color: 'var(--text-primary)',
                                     }}>
@@ -125,13 +131,13 @@ export default function SettingsPanel({
                                     whileHover={{ scale: 1.02 }}
                                     onClick={() => setActiveTab('providers')}
                                     style={{
-                                        padding: '16px 18px',
+                                        padding: `${fonts.spacingSm} ${fonts.spacingSm}`,
                                         borderRadius: 'var(--radius-lg)',
                                         background: activeTab === 'providers' ? 'var(--bg-card)' : 'transparent',
                                         cursor: 'pointer',
                                         color: activeTab === 'providers' ? 'var(--text-primary)' : 'var(--text-secondary)',
                                         fontWeight: activeTab === 'providers' ? 600 : 500,
-                                        fontSize: '19px',
+                                        fontSize: `${fonts.navItem}px`,
                                         boxShadow: activeTab === 'providers' ? 'var(--shadow-xs)' : 'none',
                                         transition: 'all var(--transition-fast)',
                                     }}
@@ -143,13 +149,13 @@ export default function SettingsPanel({
                                     whileHover={{ scale: 1.02 }}
                                     onClick={() => setActiveTab('display')}
                                     style={{
-                                        padding: '16px 18px',
+                                        padding: `${fonts.spacingSm} ${fonts.spacingSm}`,
                                         borderRadius: 'var(--radius-lg)',
                                         background: activeTab === 'display' ? 'var(--bg-card)' : 'transparent',
                                         cursor: 'pointer',
                                         color: activeTab === 'display' ? 'var(--text-primary)' : 'var(--text-secondary)',
                                         fontWeight: activeTab === 'display' ? 600 : 500,
-                                        fontSize: '19px',
+                                        fontSize: `${fonts.navItem}px`,
                                         boxShadow: activeTab === 'display' ? 'var(--shadow-xs)' : 'none',
                                         transition: 'all var(--transition-fast)',
                                     }}
@@ -161,13 +167,13 @@ export default function SettingsPanel({
                                     whileHover={{ scale: 1.02 }}
                                     onClick={() => setActiveTab('logging')}
                                     style={{
-                                        padding: '16px 18px',
+                                        padding: `${fonts.spacingSm} ${fonts.spacingSm}`,
                                         borderRadius: 'var(--radius-lg)',
                                         background: activeTab === 'logging' ? 'var(--bg-card)' : 'transparent',
                                         cursor: 'pointer',
                                         color: activeTab === 'logging' ? 'var(--text-primary)' : 'var(--text-secondary)',
                                         fontWeight: activeTab === 'logging' ? 600 : 500,
-                                        fontSize: '19px',
+                                        fontSize: `${fonts.navItem}px`,
                                         boxShadow: activeTab === 'logging' ? 'var(--shadow-xs)' : 'none',
                                         transition: 'all var(--transition-fast)',
                                     }}
@@ -179,13 +185,13 @@ export default function SettingsPanel({
                                     whileHover={{ scale: 1.02 }}
                                     onClick={() => setActiveTab('search')}
                                     style={{
-                                        padding: '16px 18px',
+                                        padding: `${fonts.spacingSm} ${fonts.spacingSm}`,
                                         borderRadius: 'var(--radius-lg)',
                                         background: activeTab === 'search' ? 'var(--bg-card)' : 'transparent',
                                         cursor: 'pointer',
                                         color: activeTab === 'search' ? 'var(--text-primary)' : 'var(--text-secondary)',
                                         fontWeight: activeTab === 'search' ? 600 : 500,
-                                        fontSize: '19px',
+                                        fontSize: `${fonts.navItem}px`,
                                         boxShadow: activeTab === 'search' ? 'var(--shadow-xs)' : 'none',
                                         transition: 'all var(--transition-fast)',
                                     }}
@@ -201,23 +207,23 @@ export default function SettingsPanel({
                                 flexDirection: 'column',
                                 position: 'relative',
                                 overflow: 'hidden',
-                                padding: '28px',
+                                padding: '18px',
                             }}>
                                 {activeTab !== 'providers' && <motion.button
                                     whileHover={{ scale: 1.1, color: 'var(--text-primary)' }}
                                     onClick={onClose}
                                     style={{
                                         position: 'absolute',
-                                        top: '20px',
-                                        right: '28px',
+                                        top: '12px',
+                                        right: '18px',
                                         zIndex: 10,
                                         background: 'var(--bg-tertiary)',
                                         border: 'none',
                                         color: 'var(--text-muted)',
                                         cursor: 'pointer',
                                         fontSize: '32px',
-                                        width: '44px',
-                                        height: '44px',
+                                        width: '36px',
+                                        height: '36px',
                                         borderRadius: '50%',
                                         display: 'flex',
                                         alignItems: 'center',

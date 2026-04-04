@@ -31,6 +31,11 @@ import {
     createReplayEnabledPatch,
     createReplayStepPatch,
 } from './debateStore.runtime';
+import {
+    patchCollapsedKey,
+    patchCollapsedKeys,
+    patchClearSessionCollapsedKeys,
+} from './debateStore.collapsedState';
 
 export interface DebateSessionSlice {
     sessions: SessionListItem[];
@@ -153,78 +158,7 @@ const initialState = {
     ...initialSearchState,
 };
 
-function pruneCollapsedState(
-    state: Record<string, Record<string, boolean>>,
-    sessionId: string,
-    collapseKeys: string[],
-    collapsed: boolean,
-): Record<string, Record<string, boolean>> {
-    const existing = state[sessionId] ?? {};
-    if (!collapseKeys.length) {
-        return state;
-    }
-
-    const nextSessionState = { ...existing };
-    for (const key of collapseKeys) {
-        if (!key) continue;
-        if (collapsed) {
-            nextSessionState[key] = true;
-        } else {
-            delete nextSessionState[key];
-        }
-    }
-
-    if (Object.keys(nextSessionState).length === 0) {
-        return Object.fromEntries(
-            Object.entries(state).filter(([key]) => key !== sessionId),
-        );
-    }
-
-    return {
-        ...state,
-        [sessionId]: nextSessionState,
-    };
-}
-
-function toggleCollapsedState(
-    state: Record<string, Record<string, boolean>>,
-    sessionId: string,
-    collapseKey: string,
-): Record<string, Record<string, boolean>> {
-    if (!sessionId || !collapseKey) {
-        return state;
-    }
-    const existing = state[sessionId] ?? {};
-    const nextSessionState = { ...existing };
-    if (nextSessionState[collapseKey]) {
-        delete nextSessionState[collapseKey];
-    } else {
-        nextSessionState[collapseKey] = true;
-    }
-
-    if (Object.keys(nextSessionState).length === 0) {
-        return Object.fromEntries(
-            Object.entries(state).filter(([key]) => key !== sessionId),
-        );
-    }
-
-    return {
-        ...state,
-        [sessionId]: nextSessionState,
-    };
-}
-
-function clearCollapsedStateForSession(
-    state: Record<string, Record<string, boolean>>,
-    sessionId: string,
-): Record<string, Record<string, boolean>> {
-    if (!sessionId || !state[sessionId]) {
-        return state;
-    }
-    return Object.fromEntries(
-        Object.entries(state).filter(([key]) => key !== sessionId),
-    );
-}
+const EMPTY_COLLAPSED_AGENT_MESSAGES: Record<string, boolean> = {};
 
 function createInitialState() {
     return {
@@ -239,12 +173,6 @@ function createInitialState() {
     };
 }
 
-const EMPTY_COLLAPSED_AGENT_MESSAGES: Record<string, boolean> = {};
-
-function uniqueCollapseKeys(collapseKeys: string[]): string[] {
-    return Array.from(new Set(collapseKeys.filter(Boolean)));
-}
-
 export function getCollapsedAgentMessagesForSession(
     state: DebateState,
     sessionId: string | null | undefined,
@@ -253,48 +181,6 @@ export function getCollapsedAgentMessagesForSession(
         return EMPTY_COLLAPSED_AGENT_MESSAGES;
     }
     return state.collapsedAgentMessagesBySession[sessionId] ?? EMPTY_COLLAPSED_AGENT_MESSAGES;
-}
-
-function patchCollapsedKeys(
-    state: DebateState,
-    sessionId: string,
-    collapseKeys: string[],
-    collapsed: boolean,
-): Partial<DebateState> {
-    return {
-        collapsedAgentMessagesBySession: pruneCollapsedState(
-            state.collapsedAgentMessagesBySession,
-            sessionId,
-            uniqueCollapseKeys(collapseKeys),
-            collapsed,
-        ),
-    };
-}
-
-function patchCollapsedKey(
-    state: DebateState,
-    sessionId: string,
-    collapseKey: string,
-): Partial<DebateState> {
-    return {
-        collapsedAgentMessagesBySession: toggleCollapsedState(
-            state.collapsedAgentMessagesBySession,
-            sessionId,
-            collapseKey,
-        ),
-    };
-}
-
-function patchClearSessionCollapsedKeys(
-    state: DebateState,
-    sessionId: string,
-): Partial<DebateState> {
-    return {
-        collapsedAgentMessagesBySession: clearCollapsedStateForSession(
-            state.collapsedAgentMessagesBySession,
-            sessionId,
-        ),
-    };
 }
 
 const storeInitialState = createInitialState();

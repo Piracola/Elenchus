@@ -16,7 +16,6 @@ __all__ = [
     "SessionRuntimeRepository",
     "SessionStartResult",
     "RuntimeBus",
-    "EventStreamGateway",
     "RuntimeEvent",
 ]
 
@@ -27,7 +26,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "SessionStartResult": ("app.runtime.service", "SessionStartResult"),
     "SessionRuntimeRepository": ("app.runtime.session_repository", "SessionRuntimeRepository"),
     "RuntimeBus": ("app.runtime.bus", "RuntimeBus"),
-    "EventStreamGateway": ("app.runtime.event_gateway", "EventStreamGateway"),
     "RuntimeEvent": ("app.runtime.event_schema", "RuntimeEvent"),
 }
 

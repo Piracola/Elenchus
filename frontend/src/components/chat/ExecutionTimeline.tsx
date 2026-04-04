@@ -1,10 +1,8 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { api } from '../../api/client';
 import { useRuntimeActions, useRuntimeViewState } from '../../hooks/useDebateViewState';
 import { getEventNode } from '../../utils/eventFocus';
 import { getLiveGraphNodeLabel } from '../../utils/liveGraph';
-import { parseRuntimeEventsSnapshot, serializeRuntimeEventsSnapshot } from '../../utils/replaySnapshot';
 import {
     buildTimelineSearchIndex,
     computeTimelinePageTotal,
@@ -13,24 +11,10 @@ import {
     TIMELINE_PAGE_SIZE,
 } from '../../utils/timelineWindow';
 import { getRuntimeEventGroup } from '../../utils/runtimeEventDictionary';
-import { toast } from '../../utils/toast';
 import { ExecutionTimelineDetailPane } from './executionTimeline/ExecutionTimelineDetailPane';
 import { ExecutionTimelineListPane } from './executionTimeline/ExecutionTimelineListPane';
 import type { ExecutionTimelineProps, TimelineFilter } from './executionTimeline/shared';
-
-async function readJsonFileWithEncodingFallback(file: File): Promise<string> {
-    const buffer = await file.arrayBuffer();
-
-    for (const label of ['utf-8', 'gb18030']) {
-        try {
-            return new TextDecoder(label, { fatal: true }).decode(buffer);
-        } catch {
-            continue;
-        }
-    }
-
-    return new TextDecoder().decode(buffer);
-}
+import { useTimelineActions } from './executionTimeline/useTimelineActions';
 
 export default function ExecutionTimeline({
     compact = false,
@@ -53,8 +37,6 @@ export default function ExecutionTimeline({
         setReplayCursor,
         stepReplay,
         exitReplay,
-        loadRuntimeEventSnapshot,
-        prependRuntimeEvents,
     } = useRuntimeActions();
 
     const [expanded, setExpanded] = useState(embedded);
@@ -62,10 +44,7 @@ export default function ExecutionTimeline({
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
     const [pageCount, setPageCount] = useState(1);
-    const [historyLoading, setHistoryLoading] = useState(false);
-    const [snapshotLoading, setSnapshotLoading] = useState(false);
 
-    const fileInputRef = useRef<HTMLInputElement | null>(null);
     const listRef = useRef<HTMLDivElement | null>(null);
     const deferredSearchQuery = useDeferredValue(searchQuery);
 
@@ -101,6 +80,23 @@ export default function ExecutionTimeline({
         () => sliceTimelineTail(filteredEvents, TIMELINE_PAGE_SIZE, pageCount),
         [filteredEvents, pageCount],
     );
+
+    const handleFilterReset = () => {
+        setFilter('all');
+        setSearchQuery('');
+        setPageCount(1);
+        setSelectedEventId(null);
+    };
+
+    const {
+        historyLoading,
+        snapshotLoading,
+        fileInputRef,
+        handleLoadOlder,
+        handleExport,
+        handleLoadFullReplay,
+        handleImportFile,
+    } = useTimelineActions(pageCount, pageTotal, currentTopic, handleFilterReset);
 
     const canLoadOlder = pageCount < pageTotal || hasOlderRuntimeEvents;
 
@@ -167,120 +163,6 @@ export default function ExecutionTimeline({
         if (targetIndex !== undefined) setReplayCursor(targetIndex);
     };
 
-    const handleLoadOlder = async () => {
-        if (pageCount < pageTotal) {
-            setPageCount((prev) => Math.min(pageTotal, prev + 1));
-            return;
-        }
-
-        if (historyLoading || !hasOlderRuntimeEvents || !currentSessionId || !runtimeEvents.length) {
-            return;
-        }
-
-        const oldestSeq = runtimeEvents[0]?.seq;
-        if (!(typeof oldestSeq === 'number' && oldestSeq > 0)) {
-            return;
-        }
-
-        try {
-            setHistoryLoading(true);
-            const page = await api.sessions.listRuntimeEvents(currentSessionId, {
-                beforeSeq: oldestSeq,
-                limit: TIMELINE_PAGE_SIZE,
-            });
-
-            if (!page.events.length) {
-                prependRuntimeEvents([], false);
-                toast('没有更多历史事件了', 'info');
-                return;
-            }
-
-            prependRuntimeEvents(page.events, page.has_more);
-            setPageCount((prev) => prev + 1);
-        } catch (error) {
-            toast(error instanceof Error ? error.message : '加载历史事件失败', 'error');
-        } finally {
-            setHistoryLoading(false);
-        }
-    };
-
-    const handleExport = async () => {
-        if (!runtimeEvents.length && !currentSessionId) {
-            toast('没有可导出的运行事件', 'info');
-            return;
-        }
-
-        try {
-            setSnapshotLoading(true);
-
-            if (currentSessionId) {
-                await api.sessions.exportRuntimeEventsSnapshot(currentSessionId, currentTopic);
-                toast('完整回放快照已导出', 'success');
-                return;
-            }
-
-            const snapshot = serializeRuntimeEventsSnapshot(runtimeEvents);
-            const blob = new Blob([snapshot], { type: 'application/json;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const anchor = document.createElement('a');
-            anchor.href = url;
-            anchor.download = `runtime-events-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-            anchor.click();
-            URL.revokeObjectURL(url);
-            toast('回放快照已导出', 'success');
-        } catch (error) {
-            toast(error instanceof Error ? error.message : '导出失败', 'error');
-        } finally {
-            setSnapshotLoading(false);
-        }
-    };
-
-    const handleLoadFullReplay = async () => {
-        if (!currentSessionId) {
-            toast('当前会话不支持从后端装载整段回放', 'info');
-            return;
-        }
-
-        try {
-            setSnapshotLoading(true);
-            const raw = await api.sessions.getRuntimeEventsSnapshot(currentSessionId);
-            const parsedEvents = parseRuntimeEventsSnapshot(raw);
-            loadRuntimeEventSnapshot(parsedEvents);
-            setFilter('all');
-            setSearchQuery('');
-            setPageCount(1);
-            setSelectedEventId(parsedEvents[parsedEvents.length - 1]?.event_id ?? null);
-            toast(`已装载整段回放，共 ${parsedEvents.length} 条事件`, 'success');
-        } catch (error) {
-            if (error instanceof Error && error.message.includes('no usable events')) {
-                toast('当前会话还没有可回放的历史事件', 'info');
-                return;
-            }
-            toast(error instanceof Error ? error.message : '装载整段回放失败', 'error');
-        } finally {
-            setSnapshotLoading(false);
-        }
-    };
-
-    const handleImportFile = async (file: File | null) => {
-        if (!file) return;
-
-        try {
-            const raw = await readJsonFileWithEncodingFallback(file);
-            const parsedEvents = parseRuntimeEventsSnapshot(raw);
-            loadRuntimeEventSnapshot(parsedEvents);
-            setFilter('all');
-            setSearchQuery('');
-            setPageCount(1);
-            setSelectedEventId(parsedEvents[parsedEvents.length - 1]?.event_id ?? null);
-            toast(`已导入 ${parsedEvents.length} 条事件`, 'success');
-        } catch (error) {
-            toast(error instanceof Error ? error.message : '导入失败', 'error');
-        } finally {
-            if (fileInputRef.current) fileInputRef.current.value = '';
-        }
-    };
-
     const replayProgress = replayEnabled
         ? `回放 ${Math.max(0, replayCursor + 1)} / ${runtimeEvents.length}`
         : `实时 ${runtimeEvents.length}`;
@@ -332,7 +214,11 @@ export default function ExecutionTimeline({
                     setPageCount(1);
                 }}
                 onLoadOlder={() => {
-                    void handleLoadOlder();
+                    if (pageCount < pageTotal) {
+                        setPageCount((prev) => Math.min(pageTotal, prev + 1));
+                    } else {
+                        void handleLoadOlder();
+                    }
                 }}
                 onSelectEvent={handleSelectEvent}
             />
