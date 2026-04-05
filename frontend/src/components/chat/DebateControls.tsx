@@ -21,6 +21,7 @@ function ActiveSessionControls() {
     );
 
     // Sync with session changes (e.g., after creating a new session)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     useEffect(() => {
         if (currentSession?.max_turns != null) {
             setMaxTurnsInput(String(currentSession.max_turns));

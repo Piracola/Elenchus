@@ -94,8 +94,6 @@ export default function ChatHeaderOverlay({
         }
     };
 
-    const selectedMarkdownExportCategoryCount = markdownExportCategories.length;
-
     return (
         <div
             ref={overlayRef}

@@ -82,8 +82,8 @@ yarn-error.log*
 *.orig
 err.txt
 
-# Runtime data
-runtime/
+# Runtime data (root directory only)
+/runtime/
 
 # SearXNG data (kept within project directory for easy cleanup)
 searxng-data/

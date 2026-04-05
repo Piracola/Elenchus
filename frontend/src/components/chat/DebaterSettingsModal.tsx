@@ -20,7 +20,7 @@ interface DebaterSettingsModalProps {
 export default function DebaterSettingsModal({
     isOpen,
     onClose,
-    sessionId,
+    // sessionId reserved for future use
 }: DebaterSettingsModalProps) {
     const {
         savedConfigs,

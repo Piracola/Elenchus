@@ -64,7 +64,7 @@ export default function ExecutionTimeline({
         if (filter === 'all') {
             // 过滤掉心跳事件（heartbeat），避免刷屏
             return indexedRuntimeEvents.filter(
-                (entry) => !(entry.event.payload && (entry.event.payload as any).heartbeat),
+                (entry) => !(entry.event.payload && typeof entry.event.payload === 'object' && 'heartbeat' in entry.event.payload),
             );
         }
         const entries = indexedRuntimeEvents.filter(
