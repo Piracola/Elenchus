@@ -6,7 +6,7 @@ from typing import Any
 ProgressCallback = Callable[[float], Awaitable[None]]
 
 MODEL_HEARTBEAT_INTERVAL_SECONDS = 8.0
-MODEL_INVOCATION_TIMEOUT_SECONDS = 120.0
+MODEL_INVOCATION_TIMEOUT_SECONDS = 300.0
 
 _NODE_PHASES = {
     "manage_context": "context",

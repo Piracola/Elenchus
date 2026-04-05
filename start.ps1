@@ -8,7 +8,8 @@
 param(
     [switch]$SkipInstall,
     [switch]$BackendOnly,
-    [switch]$FrontendOnly
+    [switch]$FrontendOnly,
+    [switch]$SkipSearXNG
 )
 
 $ErrorActionPreference = "Stop"
@@ -266,6 +267,76 @@ function Start-DelayedBrowser {
         -WindowStyle Hidden | Out-Null
 }
 
+function Test-DockerInstalled {
+    try {
+        $null = docker --version 2>$null
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Test-SearXNGHealthy {
+    try {
+        $response = Invoke-WebRequest -Uri "http://localhost:8080/healthz" -TimeoutSec 2 -UseBasicParsing -ErrorAction SilentlyContinue
+        return ($response.StatusCode -eq 200)
+    } catch {
+        return $false
+    }
+}
+
+function Start-SearXNGIfNeeded {
+    if ($SkipSearXNG) {
+        Print-Info "Skipping SearXNG startup (user requested)"
+        return $true
+    }
+
+    if (-not (Test-DockerInstalled)) {
+        Print-Warn "Docker not installed - SearXNG will be unavailable"
+        Print-Info "Install Docker Desktop: https://www.docker.com/products/docker-desktop/"
+        return $false
+    }
+
+    if (Test-SearXNGHealthy) {
+        Print-OK "SearXNG is already running and healthy"
+        return $true
+    }
+
+    Print-Info "Starting SearXNG service..."
+    
+    $searxngScript = Join-Path $RootDir "scripts\start_searxng.ps1"
+    if (-not (Test-Path $searxngScript)) {
+        Print-Warn "SearXNG management script not found"
+        return $false
+    }
+
+    try {
+        & $searxngScript start
+        if ($LASTEXITCODE -eq 0) {
+            Print-OK "SearXNG started successfully"
+            return $true
+        } else {
+            Print-Warn "Failed to start SearXNG (exit code: $LASTEXITCODE)"
+            return $false
+        }
+    } catch {
+        Print-Warn "Failed to start SearXNG: $_"
+        return $false
+    }
+}
+
+function Stop-SearXNGGracefully {
+    Print-Info "Stopping SearXNG container..."
+    $searxngScript = Join-Path $RootDir "scripts\start_searxng.ps1"
+    if (Test-Path $searxngScript) {
+        try {
+            & $searxngScript stop 2>$null
+        } catch {
+            # Ignore errors during shutdown
+        }
+    }
+}
+
 Clear-Host
 Write-Host ""
 Write-Host $BOLD$CYAN"   __                                         "$RESET
@@ -499,9 +570,25 @@ if (-not $BackendOnly -and -not $FrontendOnly) {
     Pop-Location
 }
 
+if (-not $FrontendOnly -and -not $BackendOnly) {
+    Write-Host ""
+    Write-Host $CYAN"========================================"$RESET
+    Write-Host $BOLD"Step 5/6: SearXNG Search Service"$RESET
+    Write-Host $CYAN"========================================"$RESET
+    Write-Host ""
+
+    $searxngHealthy = Start-SearXNGIfNeeded
+
+    if ($searxngHealthy) {
+        Print-OK "SearXNG is ready at http://localhost:8080"
+    } else {
+        Print-Warn "SearXNG not available - using DuckDuckGo as default search provider"
+    }
+}
+
 Write-Host ""
 Write-Host $CYAN"========================================"$RESET
-Write-Host $BOLD"Step 5/5: Starting Services"$RESET
+Write-Host $BOLD"Step 6/6: Starting Services"$RESET
 Write-Host $CYAN"========================================"$RESET
 Write-Host ""
 
@@ -586,6 +673,11 @@ if (-not $FrontendOnly) {
 }
 if (-not $BackendOnly) {
     Write-Host "    Frontend UI:  "$BOLD"http://localhost:5173"$RESET
+}
+if (-not $FrontendOnly -and -not $BackendOnly -and -not $SkipSearXNG) {
+    if (Test-SearXNGHealthy) {
+        Write-Host "    SearXNG:      "$BOLD"http://localhost:8080"$RESET
+    }
 }
 Write-Host ""
 

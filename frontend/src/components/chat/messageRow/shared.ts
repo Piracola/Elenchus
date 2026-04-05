@@ -248,7 +248,7 @@ export function getJudgeVisual(judgeEntry?: DialogueEntry | null): JudgeVisual {
         label: judgeEntry?.agent_name || '裁判评分',
         color: 'var(--color-judge)',
         background: 'var(--bg-secondary)',
-        border: 'rgba(255, 149, 0, 0.14)',
-        glowTint: 'rgba(255, 149, 0, 0.35)',
+        border: 'var(--border-subtle)',
+        glowTint: 'rgba(148, 163, 184, 0.25)',
     };
 }

@@ -198,7 +198,7 @@ export default function CustomSelect({
                                 top: menuStyle.top,
                                 left: menuStyle.left,
                                 width: menuStyle.width,
-                                zIndex: 1000,
+                                zIndex: 3000,
                                 background: 'var(--bg-card)',
                                 border: '1px solid var(--border-subtle)',
                                 borderRadius: 'var(--radius-md)',

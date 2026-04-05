@@ -160,6 +160,13 @@ export function createDefaultFloatingInspectorRect(
     );
 }
 
+export function getCollapsedFloatingInspectorSize(): { width: number; height: number } {
+    return {
+        width: FLOATING_INSPECTOR_MIN_SIZE.width,
+        height: FLOATING_INSPECTOR_MIN_SIZE.height,
+    };
+}
+
 export function resizeFloatingInspectorRect(
     startRect: FloatingInspectorRect,
     handle: FloatingInspectorResizeHandle,

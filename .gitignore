@@ -84,3 +84,10 @@ err.txt
 
 # Runtime data
 runtime/
+
+# SearXNG data (kept within project directory for easy cleanup)
+searxng-data/
+
+# Test files
+test_thinking_chain
+test_thinking_chain.*

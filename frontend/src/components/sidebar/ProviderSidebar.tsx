@@ -21,28 +21,23 @@ export function ProviderSidebar({
 }: ProviderSidebarProps) {
     return (
         <div style={{
-            width: '300px',
+            width: '260px',
             borderRight: '1px solid var(--border-subtle)',
             background: 'var(--bg-secondary)',
             display: 'flex',
             flexDirection: 'column'
         }}>
-            <div style={{ padding: '24px 22px', borderBottom: '1px solid var(--border-subtle)' }}>
-                <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    模型服务商
-                </h2>
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
                 {isLoading ? (
                     <div style={{ color: 'var(--text-muted)', fontSize: '17px' }}>加载中...</div>
                 ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         {providers.map((p, idx) => (
                             <div
                                 key={p.id}
                                 onClick={() => onSelect(idx)}
                                 style={{
-                                    padding: '14px 16px',
+                                    padding: '10px 12px',
                                     borderRadius: 'var(--radius-sm)',
                                     background: (!isCreatingNew && activeIndex === idx) ? 'var(--bg-tertiary)' : 'transparent',
                                     cursor: 'pointer',
@@ -53,9 +48,9 @@ export function ProviderSidebar({
                                     fontWeight: (!isCreatingNew && activeIndex === idx) ? 600 : 400,
                                 }}
                             >
-                                <span style={{ fontSize: '17px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{ fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     {p.name}
-                                    {p.is_default && <span title="默认服务商" style={{ fontSize: '15px', color: '#f59e0b' }}>⭐</span>}
+                                    {p.is_default && <span title="默认服务商" style={{ fontSize: '13px', color: '#f59e0b' }}>⭐</span>}
                                 </span>
                                 {(!isCreatingNew && activeIndex === idx) && (
                                     <button
@@ -65,9 +60,9 @@ export function ProviderSidebar({
                                             border: 'none',
                                             color: 'var(--text-muted)',
                                             cursor: 'pointer',
-                                            fontSize: '22px',
-                                            width: '24px',
-                                            height: '24px'
+                                            fontSize: '20px',
+                                            width: '20px',
+                                            height: '20px'
                                         }}
                                     >
                                         ×
@@ -79,7 +74,7 @@ export function ProviderSidebar({
                         <div
                             onClick={onNew}
                             style={{
-                                padding: '14px 16px',
+                                padding: '10px 12px',
                                 borderRadius: 'var(--radius-sm)',
                                 background: isCreatingNew ? 'var(--bg-tertiary)' : 'transparent',
                                 cursor: 'pointer',
@@ -87,10 +82,10 @@ export function ProviderSidebar({
                                 fontWeight: isCreatingNew ? 600 : 400,
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '10px'
+                                gap: '8px'
                             }}
                         >
-                            <span style={{ fontSize: '17px' }}>+ 添加提供商</span>
+                            <span style={{ fontSize: '15px' }}>+ 添加提供商</span>
                         </div>
                     </div>
                 )}

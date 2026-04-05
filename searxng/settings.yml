@@ -1,0 +1,55 @@
+# SearXNG Settings Configuration
+# Optimized for Elenchus project - JSON API enabled
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: "Elenchus SearXNG"
+
+search:
+  safe_search: 0
+  autocomplete: "google"
+  default_lang: "auto"
+  formats:
+    - html
+    - json
+
+server:
+  port: 8080
+  bind_address: "0.0.0.0"
+  secret_key: "changeme-in-production"
+  limiter: false
+  image_proxy: false
+  
+ui:
+  static_use_hash: true
+
+# Enable JSON API for programmatic access
+outgoing:
+  request_timeout: 10.0
+  max_request_timeout: 30.0
+  useragent_suffix: ""
+  pool_connections: 100
+  pool_maxsize: 20
+
+engines:
+  - name: google
+    engine: google
+    shortcut: g
+    use_mobile_ui: false
+    
+  - name: bing
+    engine: bing
+    shortcut: b
+    
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: ddg
+    
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: wp
+    
+  - name: wikidata
+    engine: wikidata
+    shortcut: wd

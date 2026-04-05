@@ -1,7 +1,7 @@
 # 会话级资料池实现说明
 
 > 说明：本文档是“会话级资料池”功能的**当前实现说明**。
-> 如果你只想确认现在系统已经怎么做，请优先阅读本页；MVP 规划背景请见 [session-reference-library-mvp-plan.md](./session-reference-library-mvp-plan.md)。
+> 如果你只想确认现在系统已经怎么做，请优先阅读本页；MVP 规划已并入本实现说明。
 
 ## 1. 本次实现范围
 
@@ -262,8 +262,7 @@
 - `backend/app/services/reference_library_service.py`
 - `backend/app/agents/reference_preprocessor.py`
 - `backend/tests/test_session_documents_api.py`
-- `docs/session-reference-library-mvp-plan.md`
-- `docs/session-reference-library-implementation.md`
+- `docs/session-reference-library-implementation.md`（本文档）
 
 ### 修改文件
 

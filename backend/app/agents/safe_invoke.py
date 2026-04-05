@@ -41,6 +41,7 @@ async def invoke_chat_model(
     on_progress: ProgressCallback | None = None,
     timeout_seconds: float = 120.0,
     heartbeat_interval_seconds: float = 8.0,
+    max_retries: int = 2,
 ) -> AIMessage | str:
     """
     Invoke a chat model and normalize known OpenAI-compatible response quirks.
@@ -50,51 +51,73 @@ async def invoke_chat_model(
     that class of failure, retry with the raw OpenAI transport and coerce the
     result into an `AIMessage`.
     """
-    config = await resolve_llm_config(override)
-    llm = create_llm_from_config(config, streaming=on_token is not None)
-    bound_tools = list(tools or [])
+    last_exception = None
+    config = None
+    
+    for attempt in range(max_retries + 1):
+        try:
+            config = await resolve_llm_config(override)
+            llm = create_llm_from_config(config, streaming=on_token is not None)
+            bound_tools = list(tools or [])
 
-    if bound_tools:
-        llm = llm.bind_tools(bound_tools)
+            if bound_tools:
+                llm = llm.bind_tools(bound_tools)
 
-    try:
-        if on_token is not None:
+            if on_token is not None:
+                return await _run_with_heartbeat(
+                    lambda: _invoke_chat_model_streaming(
+                        llm=llm,
+                        messages=list(messages),
+                        on_token=on_token,
+                    ),
+                    on_progress=on_progress,
+                    timeout_seconds=timeout_seconds,
+                    heartbeat_interval_seconds=heartbeat_interval_seconds,
+                )
             return await _run_with_heartbeat(
-                lambda: _invoke_chat_model_streaming(
-                    llm=llm,
-                    messages=list(messages),
-                    on_token=on_token,
-                ),
+                lambda: llm.ainvoke(list(messages)),
                 on_progress=on_progress,
                 timeout_seconds=timeout_seconds,
                 heartbeat_interval_seconds=heartbeat_interval_seconds,
             )
-        return await _run_with_heartbeat(
-            lambda: llm.ainvoke(list(messages)),
-            on_progress=on_progress,
-            timeout_seconds=timeout_seconds,
-            heartbeat_interval_seconds=heartbeat_interval_seconds,
-        )
-    except Exception as exc:
-        if not _should_use_openai_raw_fallback(config, exc):
-            raise
-
-        logger.warning(
-            "Falling back to raw OpenAI transport for provider=%s model=%s base=%s: %s",
-            config.provider_type,
-            config.model,
-            config.api_base_url or "(default)",
-            exc,
-        )
-        return await _invoke_openai_raw(
-            messages=list(messages),
-            config=config,
-            tools=bound_tools,
-            on_token=on_token,
-            on_progress=on_progress,
-            timeout_seconds=timeout_seconds,
-            heartbeat_interval_seconds=heartbeat_interval_seconds,
-        )
+        except Exception as exc:
+            last_exception = exc
+            current_config = config if config is not None else await resolve_llm_config(override)
+            if not _should_use_openai_raw_fallback(current_config, exc):
+                if attempt < max_retries:
+                    logger.warning(
+                        "Model invocation failed (attempt %d/%d), retrying: %s",
+                        attempt + 1,
+                        max_retries + 1,
+                        exc,
+                    )
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                else:
+                    logger.error(
+                        "Model invocation failed after %d attempts: %s",
+                        max_retries + 1,
+                        exc,
+                    )
+                    raise
+            else:
+                # 立即使用 OpenAI raw fallback，不重试
+                logger.warning(
+                    "Falling back to raw OpenAI transport for provider=%s model=%s base=%s: %s",
+                    current_config.provider_type,
+                    current_config.model,
+                    current_config.api_base_url or "(default)",
+                    exc,
+                )
+                return await _invoke_openai_raw(
+                    messages=list(messages),
+                    config=current_config,
+                    tools=bound_tools,
+                    on_token=on_token,
+                    on_progress=on_progress,
+                    timeout_seconds=timeout_seconds,
+                    heartbeat_interval_seconds=heartbeat_interval_seconds,
+                )
 
 
 async def invoke_text_model(
@@ -106,21 +129,43 @@ async def invoke_text_model(
     on_progress: ProgressCallback | None = None,
     timeout_seconds: float = 120.0,
     heartbeat_interval_seconds: float = 8.0,
+    max_retries: int = 2,
 ) -> str:
-    """Invoke a chat model and return plain text content."""
-    response = await invoke_chat_model(
-        messages,
-        override=override,
-        tools=tools,
-        on_token=on_token,
-        on_progress=on_progress,
-        timeout_seconds=timeout_seconds,
-        heartbeat_interval_seconds=heartbeat_interval_seconds,
-    )
+    """Invoke a chat model and return plain text content with automatic retry."""
+    last_exception = None
+    
+    for attempt in range(max_retries + 1):
+        try:
+            response = await invoke_chat_model(
+                messages,
+                override=override,
+                tools=tools,
+                on_token=on_token,
+                on_progress=on_progress,
+                timeout_seconds=timeout_seconds,
+                heartbeat_interval_seconds=heartbeat_interval_seconds,
+            )
 
-    if hasattr(response, "content"):
-        return extract_text_content(response.content)
-    return extract_text_content(response)
+            if hasattr(response, "content"):
+                return extract_text_content(response.content)
+            return extract_text_content(response)
+        except Exception as exc:
+            last_exception = exc
+            if attempt < max_retries:
+                logger.warning(
+                    "Model invocation failed (attempt %d/%d), retrying: %s",
+                    attempt + 1,
+                    max_retries + 1,
+                    exc,
+                )
+                await asyncio.sleep(2 ** attempt)
+            else:
+                logger.error(
+                    "Model invocation failed after %d attempts: %s",
+                    max_retries + 1,
+                    exc,
+                )
+                raise
 
 
 def extract_text_content(value: Any) -> str:
@@ -223,6 +268,38 @@ async def _invoke_chat_model_streaming(
         return AIMessage(content="")
 
     if isinstance(aggregated_chunk, AIMessage):
+        # 处理 reasoning_content 字段（如 doubao-seed 模型的思维链）
+        raw_content = getattr(aggregated_chunk, "content", "")
+        reasoning = getattr(aggregated_chunk, "reasoning_content", None)
+        
+        if reasoning and len(str(reasoning)) > 0:
+            reasoning_str = str(reasoning)
+            content_str = str(raw_content) if raw_content else ""
+            
+            # 包装为前端期望的 <think> 标签格式
+            if content_str:
+                new_content = f"<think>{reasoning_str}</think>\n\n{content_str}"
+            else:
+                new_content = f"<think>{reasoning_str}</think>"
+            
+            aggregated_chunk.content = new_content
+            
+            logger.debug(
+                "[Model Response] Extracted reasoning_content: reasoning_length=%d, content_length=%d, has_think_tags=%s",
+                len(reasoning_str),
+                len(content_str),
+                "<think" in content_str.lower(),
+            )
+        elif raw_content and len(str(raw_content)) > 0:
+            # 记录原始响应内容以便调试
+            content_str = str(raw_content)
+            logger.debug(
+                "[Model Response] content_length=%d has_think_tags=%s content_preview=%s",
+                len(content_str),
+                "<think" in content_str.lower(),
+                content_str[:200] if content_str else "",
+            )
+        
         return aggregated_chunk
 
     return AIMessage(

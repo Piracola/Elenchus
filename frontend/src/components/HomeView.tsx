@@ -13,12 +13,15 @@ import {
     parseTeamDiscussionRoundsInput,
 } from '../utils/debateSession';
 import { HomeComposerCard } from './home/HomeComposerCard';
+import type { PendingReferenceDocument } from './home/HomeComposerCard';
 import { HomeModeSelector } from './home/HomeModeSelector';
 import { HomeStatusLegend } from './home/HomeStatusLegend';
 import AgentConfigPanel from './shared/AgentConfigPanel';
 import BrandIcon from './shared/BrandIcon';
 import SidebarExpandButton from './shared/SidebarExpandButton';
 import SophistryModeNotice from './shared/SophistryModeNotice';
+import { api } from '../api/client';
+import { toast } from '../utils/toast';
 
 interface HomeViewProps {
     isSidebarCollapsed: boolean;
@@ -34,6 +37,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
     const [juryAgentsInput, setJuryAgentsInput] = useState('');
     const [juryRoundsInput, setJuryRoundsInput] = useState('');
     const [steelmanEnabled, setSteelmanEnabled] = useState(true);
+    const [pendingDocuments, setPendingDocuments] = useState<PendingReferenceDocument[]>([]);
     const { isCreating, error, createSession, clearError } = useSessionCreate();
     const {
         showAdvanced,
@@ -63,36 +67,66 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
             return;
         }
 
-        await createSession(
-            topic,
-            maxTurns,
-            buildAgentConfigs(),
-            isSophistryMode
-                ? { agents_per_team: 0, discussion_rounds: 0 }
-                : { agents_per_team: teamAgents, discussion_rounds: teamDiscussionRounds },
-            isSophistryMode
-                ? { agents_per_jury: 0, discussion_rounds: 0 }
-                : { agents_per_jury: juryAgents, discussion_rounds: juryDiscussionRounds },
-            isSophistryMode
-                ? {
-                    steelman_enabled: false,
-                    counterfactual_enabled: false,
-                    consensus_enabled: false,
+        try {
+            const sessionId = await createSession(
+                topic,
+                maxTurns,
+                buildAgentConfigs(),
+                isSophistryMode
+                    ? { agents_per_team: 0, discussion_rounds: 0 }
+                    : { agents_per_team: teamAgents, discussion_rounds: teamDiscussionRounds },
+                isSophistryMode
+                    ? { agents_per_jury: 0, discussion_rounds: 0 }
+                    : { agents_per_jury: juryAgents, discussion_rounds: juryDiscussionRounds },
+                isSophistryMode
+                    ? {
+                        steelman_enabled: false,
+                        counterfactual_enabled: false,
+                        consensus_enabled: false,
+                    }
+                    : {
+                        steelman_enabled: steelmanEnabled,
+                        counterfactual_enabled: true,
+                        consensus_enabled: true,
+                    },
+                debateMode,
+                isSophistryMode
+                    ? {
+                        seed_reference_enabled: true,
+                        observer_enabled: true,
+                        artifact_detail_level: 'full',
+                    }
+                    : undefined,
+            );
+
+            // 如果有待上传的参考资料，在创建会话后上传
+            if (sessionId && pendingDocuments.length > 0) {
+                let successCount = 0;
+                let failCount = 0;
+                
+                for (const doc of pendingDocuments) {
+                    try {
+                        await api.sessions.uploadDocument(sessionId, doc.file);
+                        successCount++;
+                    } catch (error) {
+                        console.error(`上传参考资料失败: ${doc.name}`, error);
+                        failCount++;
+                    }
                 }
-                : {
-                    steelman_enabled: steelmanEnabled,
-                    counterfactual_enabled: true,
-                    consensus_enabled: true,
-                },
-            debateMode,
-            isSophistryMode
-                ? {
-                    seed_reference_enabled: true,
-                    observer_enabled: true,
-                    artifact_detail_level: 'full',
+                
+                if (successCount > 0) {
+                    toast(`成功上传 ${successCount} 个参考资料${failCount > 0 ? `，${failCount} 个失败` : ''}`, 
+                        'success');
+                } else if (failCount > 0) {
+                    toast('参考资料上传失败，但辩论已创建', 'error');
                 }
-                : undefined,
-        );
+                
+                // 清空待上传文档列表
+                setPendingDocuments([]);
+            }
+        } catch (error) {
+            console.error('创建辩论失败:', error);
+        }
     };
 
     return (
@@ -219,6 +253,8 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                     juryRoundsInput={juryRoundsInput}
                     steelmanEnabled={steelmanEnabled}
                     homeFontSizes={homeFontSizes}
+                    pendingDocuments={pendingDocuments}
+                    onDocumentsChange={setPendingDocuments}
                     onTopicChange={(value) => {
                         if (error) {
                             clearError();

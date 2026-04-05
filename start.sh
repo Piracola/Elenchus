@@ -9,9 +9,36 @@
 #   ./start.sh --skip-install  # Skip dependency installation
 #   ./start.sh --backend-only  # Backend only
 #   ./start.sh --frontend-only # Frontend only
+#   ./start.sh --skip-searxng  # Skip SearXNG startup
 #
 
 set -e
+
+SKIP_INSTALL=false
+BACKEND_ONLY=false
+FRONTEND_ONLY=false
+SKIP_SEARXNG=false
+
+for arg in "$@"; do
+    case $arg in
+        --skip-install)
+            SKIP_INSTALL=true
+            shift
+            ;;
+        --backend-only)
+            BACKEND_ONLY=true
+            shift
+            ;;
+        --frontend-only)
+            FRONTEND_ONLY=true
+            shift
+            ;;
+        --skip-searxng)
+            SKIP_SEARXNG=true
+            shift
+            ;;
+    esac
+done
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -135,11 +162,72 @@ cleanup() {
             kill "$pid" 2>/dev/null || true
         fi
     done
+    
+    # Stop SearXNG if it was started
+    if [[ "$SEARXNG_STARTED" == "true" ]]; then
+        print_info "Stopping SearXNG container..."
+        if [[ -f "$SCRIPT_DIR/scripts/start_searxng.sh" ]]; then
+            "$SCRIPT_DIR/scripts/start_searxng.sh" stop 2>/dev/null || true
+        fi
+    fi
+    
     print_success "Services stopped"
     exit 0
 }
 
 trap cleanup SIGINT SIGTERM
+
+# SearXNG functions
+test_docker_installed() {
+    if command -v docker &> /dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+test_searxng_healthy() {
+    if curl -s -m 2 "http://localhost:8080/healthz" &> /dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+start_searxng_if_needed() {
+    if [[ "$SKIP_SEARXNG" == true ]]; then
+        print_info "Skipping SearXNG startup (user requested)"
+        return 1
+    fi
+
+    if ! test_docker_installed; then
+        print_warning "Docker not installed - SearXNG will be unavailable"
+        print_info "Install Docker: https://docs.docker.com/engine/install/"
+        return 1
+    fi
+
+    if test_searxng_healthy; then
+        print_success "SearXNG is already running and healthy"
+        return 0
+    fi
+
+    print_info "Starting SearXNG service..."
+    
+    local searxng_script="$SCRIPT_DIR/scripts/start_searxng.sh"
+    if [[ ! -f "$searxng_script" ]]; then
+        print_warning "SearXNG management script not found"
+        return 1
+    fi
+
+    if "$searxng_script" start; then
+        print_success "SearXNG started successfully"
+        SEARXNG_STARTED=true
+        return 0
+    else
+        print_warning "Failed to start SearXNG"
+        return 1
+    fi
+}
 
 print_header "Step 1/5: Environment Check"
 
@@ -271,9 +359,22 @@ else
     print_success "Process manager already installed"
 fi
 
+# SearXNG Setup
+if [[ "$FRONTEND_ONLY" != true && "$BACKEND_ONLY" != true ]]; then
+    print_header "Step 5/6: SearXNG Search Service"
+
+    SEARXNG_STARTED=false
+    
+    if start_searxng_if_needed; then
+        print_success "SearXNG is ready at http://localhost:8080"
+    else
+        print_warning "SearXNG not available - using DuckDuckGo as default search provider"
+    fi
+fi
+
 BACKEND_PORT=8001
 
-print_header "Step 5/5: Starting Services"
+print_header "Step 6/6: Starting Services"
 
 echo ""
 echo -e "${BOLD}${GREEN}  Elenchus Starting...${RESET}"
@@ -285,6 +386,11 @@ if [[ "$FRONTEND_ONLY" != true ]]; then
 fi
 if [[ "$BACKEND_ONLY" != true ]]; then
     echo -e "    Frontend UI:  ${BOLD}http://localhost:5173${RESET}"
+fi
+if [[ "$FRONTEND_ONLY" != true && "$BACKEND_ONLY" != true && "$SKIP_SEARXNG" != true ]]; then
+    if test_searxng_healthy; then
+        echo -e "    SearXNG:      ${BOLD}http://localhost:8080${RESET}"
+    fi
 fi
 echo ""
 

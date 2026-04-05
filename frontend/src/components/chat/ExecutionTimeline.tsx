@@ -44,6 +44,7 @@ export default function ExecutionTimeline({
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
     const [pageCount, setPageCount] = useState(1);
+    const [isDraggingSlider, setIsDraggingSlider] = useState(false);
 
     const listRef = useRef<HTMLDivElement | null>(null);
     const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -61,9 +62,18 @@ export default function ExecutionTimeline({
 
     const typeFilteredEntries = useMemo(() => {
         if (filter === 'all') {
-            return indexedRuntimeEvents;
+            // 过滤掉心跳事件（heartbeat），避免刷屏
+            return indexedRuntimeEvents.filter(
+                (entry) => !(entry.event.payload && (entry.event.payload as any).heartbeat),
+            );
         }
-        return indexedRuntimeEvents.filter((entry) => getRuntimeEventGroup(entry.event.type) === filter);
+        const entries = indexedRuntimeEvents.filter(
+            (entry) => getRuntimeEventGroup(entry.event.type) === filter,
+        );
+        // 同样过滤心跳事件
+        return entries.filter(
+            (entry) => !(entry.event.payload && (entry.event.payload as any).heartbeat),
+        );
     }, [filter, indexedRuntimeEvents]);
 
     const filteredEvents = useMemo(
@@ -124,7 +134,8 @@ export default function ExecutionTimeline({
     }, [filteredEvents, focusedRuntimeEventId, replayEnabled, selectedEventId]);
 
     useEffect(() => {
-        if (!replayEnabled) return;
+        // 拖动滑块时不同步选中事件，避免闪烁
+        if (!replayEnabled || isDraggingSlider) return;
         if (replayCursor < 0 || replayCursor >= runtimeEvents.length) return;
 
         const cursorEventId = runtimeEvents[replayCursor].event_id;
@@ -132,12 +143,23 @@ export default function ExecutionTimeline({
         if (focusedRuntimeEventId !== cursorEventId) setFocusedRuntimeEventId(cursorEventId);
     }, [
         focusedRuntimeEventId,
+        isDraggingSlider,
         replayCursor,
         replayEnabled,
         runtimeEvents,
         selectedEventId,
         setFocusedRuntimeEventId,
     ]);
+
+    // 退出回放时，选中最新事件
+    useEffect(() => {
+        if (!replayEnabled && filteredEvents.length > 0) {
+            const latestEvent = filteredEvents[filteredEvents.length - 1];
+            if (selectedEventId !== latestEvent.event_id) {
+                setSelectedEventId(latestEvent.event_id);
+            }
+        }
+    }, [replayEnabled, filteredEvents, selectedEventId]);
 
     useEffect(() => {
         if (!selectedEventId || !expanded) return;
@@ -158,9 +180,25 @@ export default function ExecutionTimeline({
         setSelectedEventId(eventId);
         setFocusedRuntimeEventId(eventId);
 
-        if (!replayEnabled) return;
         const targetIndex = runtimeEventIndex.get(eventId);
-        if (targetIndex !== undefined) setReplayCursor(targetIndex);
+        if (targetIndex === undefined) return;
+
+        // 点击事件时自动进入回放模式
+        if (!replayEnabled) {
+            setReplayEnabled(true);
+        }
+        setReplayCursor(targetIndex);
+    };
+
+    // 处理滑块拖动结束时的同步
+    const handleSliderDragEnd = () => {
+        setIsDraggingSlider(false);
+        // 拖动结束时，同步选中事件
+        if (replayEnabled && replayCursor >= 0 && replayCursor < runtimeEvents.length) {
+            const cursorEventId = runtimeEvents[replayCursor].event_id;
+            setSelectedEventId(cursorEventId);
+            setFocusedRuntimeEventId(cursorEventId);
+        }
     };
 
     const replayProgress = replayEnabled
@@ -246,6 +284,8 @@ export default function ExecutionTimeline({
                 }}
                 onImport={() => fileInputRef.current?.click()}
                 onReplayCursorChange={setReplayCursor}
+                onSliderDragStart={() => setIsDraggingSlider(true)}
+                onSliderDragEnd={handleSliderDragEnd}
             />
         </motion.div>
     );

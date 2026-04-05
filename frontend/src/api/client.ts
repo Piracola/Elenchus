@@ -259,4 +259,24 @@ export const api = {
         getHealth: (): Promise<{ status: string; provider: string | null }> =>
             request('/search/health'),
     },
+
+    searxng: {
+        getStatus: (): Promise<{
+            docker_available: boolean;
+            searxng_running: boolean;
+            searxng_healthy: boolean;
+            searxng_url: string;
+        }> =>
+            request('/searxng/status'),
+
+        start: (): Promise<{ success: boolean; message: string }> =>
+            request('/searxng/start', {
+                method: 'POST',
+            }),
+
+        stop: (): Promise<{ success: boolean; message: string }> =>
+            request('/searxng/stop', {
+                method: 'POST',
+            }),
+    },
 };

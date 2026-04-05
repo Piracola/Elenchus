@@ -2,6 +2,7 @@ import type { RefObject } from 'react';
 import type { DialogueEntry } from '../../types';
 import MessageRow from './MessageRow';
 import RoundInsights from './RoundInsights';
+import StreamingMessage from './StreamingMessage';
 import type { VirtualVariableWindow } from '../../utils/virtualWindow';
 import type { TranscriptRowViewModel } from '../../utils/transcriptViewModel';
 import { isTranscriptAgentMessageCollapsed } from '../../utils/transcriptViewModel';
@@ -131,6 +132,9 @@ export default function ChatHistoryList({
                     />
                 </div>
             )}
+
+            {/* 流式消息：实时显示辩手发言内容 */}
+            <StreamingMessage />
         </div>
     );
 }

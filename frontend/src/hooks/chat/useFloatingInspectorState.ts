@@ -3,6 +3,8 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import {
     clampFloatingInspectorRect,
     createDefaultFloatingInspectorRect,
+    FLOATING_INSPECTOR_MIN_SIZE,
+    getCollapsedFloatingInspectorSize,
     interactionCursor,
     parseStoredFloatingInspectorRect,
     resizeFloatingInspectorRect,
@@ -36,6 +38,8 @@ export function useFloatingInspectorState({
     const [floatingInspectorRect, setFloatingInspectorRect] = useState<FloatingInspectorRect | null>(null);
     const [floatingInspectorActive, setFloatingInspectorActive] = useState(false);
     const [floatingInspectorExpanded, setFloatingInspectorExpanded] = useState(false);
+    // 保存展开状态下的尺寸，用于展开时恢复
+    const expandedRectRef = useRef<FloatingInspectorRect | null>(null);
     const [isWideLayout, setIsWideLayout] = useState(() => {
         if (typeof window === 'undefined') return true;
         return window.innerWidth >= 1280;
@@ -76,7 +80,11 @@ export function useFloatingInspectorState({
 
     useEffect(() => {
         floatingInspectorRectRef.current = floatingInspectorRect;
-    }, [floatingInspectorRect]);
+        // 如果是展开状态，保存展开时的尺寸
+        if (floatingInspectorExpanded && floatingInspectorRect) {
+            expandedRectRef.current = floatingInspectorRect;
+        }
+    }, [floatingInspectorRect, floatingInspectorExpanded]);
 
     useEffect(() => {
         if (typeof window === 'undefined' || !floatingInspectorRect) {
@@ -140,7 +148,7 @@ export function useFloatingInspectorState({
                             typeof window === 'undefined'
                                 ? null
                                 : window.localStorage.getItem(FLOATING_INSPECTOR_STORAGE_KEY),
-                        ) ?? createDefaultFloatingInspectorRect(bounds, topOverlayHeight + 12),
+                        ) ?? createDefaultFloatingInspectorRect(bounds, topOverlayHeight),
                         bounds,
                     )
             ));
@@ -172,7 +180,7 @@ export function useFloatingInspectorState({
                         width: floatingInspectorWidth,
                         height: floatingInspectorHeight,
                     },
-                    topOverlayHeight + 12,
+                    topOverlayHeight,
                 ),
             );
             setFloatingInspectorExpanded(false);
@@ -258,14 +266,27 @@ export function useFloatingInspectorState({
         const currentRect = floatingInspectorRectRef.current;
         if (!currentRect) return;
 
+        // 收起时使用最小尺寸作为拖动基准，避免位置计算错误
+        const collapsedSize = getCollapsedFloatingInspectorSize();
+        const effectiveWidth = floatingInspectorExpanded ? currentRect.width : collapsedSize.width;
+        const effectiveHeight = floatingInspectorExpanded ? currentRect.height : collapsedSize.height;
+        
+        // 保持左上角位置，使用有效尺寸计算边界
+        const effectiveRect = {
+            x: currentRect.x,
+            y: currentRect.y,
+            width: effectiveWidth,
+            height: effectiveHeight,
+        };
+
         startFloatingInspectorInteraction(event, {
             mode: 'move',
             startX: event.clientX,
             startY: event.clientY,
-            startRect: currentRect,
+            startRect: effectiveRect,
             bounds: floatingInspectorBounds,
         });
-    }, [floatingInspectorBounds, startFloatingInspectorInteraction]);
+    }, [floatingInspectorBounds, floatingInspectorExpanded, startFloatingInspectorInteraction]);
 
     const handleFloatingInspectorResizeStart = useCallback(
         (handle: FloatingInspectorResizeHandle) =>
@@ -294,6 +315,42 @@ export function useFloatingInspectorState({
         handleFloatingInspectorMoveStart,
         handleFloatingInspectorResizeStart,
         handleFloatingInspectorExpandedChange: (expanded: boolean) => {
+            if (expanded) {
+                // 展开时：恢复之前保存的展开尺寸，保持位置不变
+                setFloatingInspectorRect((prev) => {
+                    if (!prev) return prev;
+                    const savedExpandedRect = expandedRectRef.current;
+                    if (savedExpandedRect) {
+                        // 恢复展开时的尺寸，但保持当前位置
+                        return {
+                            ...prev,
+                            width: savedExpandedRect.width,
+                            height: savedExpandedRect.height,
+                        };
+                    }
+                    // 如果没有保存的展开尺寸，使用默认展开尺寸
+                    const defaultExpandedSize = {
+                        width: Math.min(560, floatingInspectorBounds.width - 32),
+                        height: Math.min(600, floatingInspectorBounds.height - 32),
+                    };
+                    return {
+                        ...prev,
+                        width: defaultExpandedSize.width,
+                        height: defaultExpandedSize.height,
+                    };
+                });
+            } else {
+                // 收起时：保持当前位置和收起尺寸
+                setFloatingInspectorRect((prev) => {
+                    if (!prev) return prev;
+                    const collapsedSize = getCollapsedFloatingInspectorSize();
+                    return {
+                        ...prev,
+                        width: collapsedSize.width,
+                        height: collapsedSize.height,
+                    };
+                });
+            }
             setFloatingInspectorExpanded(expanded);
             if (!expanded) {
                 setFloatingInspectorActive(false);

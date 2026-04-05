@@ -85,6 +85,9 @@ export function buildAgentConfigsPayload(
             provider_id: configDef.id,
             api_base_url: configDef.api_base_url || undefined,
             ...(temperature !== undefined ? { temperature } : {}),
+            ...(configDef.custom_parameters && Object.keys(configDef.custom_parameters).length > 0
+                ? { custom_parameters: configDef.custom_parameters }
+                : {}),
         };
     }
 

@@ -15,7 +15,7 @@ interface UseSessionCreateResult {
         reasoningConfig?: ReasoningConfig,
         debateMode?: DebateMode,
         modeConfig?: Record<string, unknown>,
-    ) => Promise<void>;
+    ) => Promise<string | null>;
     clearError: () => void;
 }
 
@@ -33,8 +33,8 @@ export function useSessionCreate(): UseSessionCreateResult {
         reasoningConfig?: ReasoningConfig,
         debateMode: DebateMode = 'standard',
         modeConfig?: Record<string, unknown>,
-    ) => {
-        if (!topic.trim() || isCreating) return;
+    ): Promise<string | null> => {
+        if (!topic.trim() || isCreating) return null;
 
         try {
             setIsCreating(true);
@@ -50,9 +50,11 @@ export function useSessionCreate(): UseSessionCreateResult {
                 mode_config: modeConfig,
             });
             setCurrentSession(session);
+            return session.id;
         } catch (err) {
             console.error('Failed to create session:', err);
             setError(err instanceof Error ? err.message : '创建会话失败，请检查后端服务是否正常运行');
+            return null;
         } finally {
             setIsCreating(false);
         }

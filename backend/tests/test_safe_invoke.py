@@ -67,7 +67,8 @@ async def test_invoke_chat_model_falls_back_for_openai_shape_errors(monkeypatch)
         assert tools == []
         assert on_token is None
         assert on_progress is None
-        assert timeout_seconds == MODEL_INVOCATION_TIMEOUT_SECONDS
+        # invoke_chat_model 默认超时为 120 秒
+        assert timeout_seconds == 120.0
         assert heartbeat_interval_seconds == MODEL_HEARTBEAT_INTERVAL_SECONDS
         return AIMessage(content="Recovered fallback response")
 
