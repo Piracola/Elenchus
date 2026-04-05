@@ -47,30 +47,160 @@ Elenchus 是一个用于多智能体辩论的平台，基于 `FastAPI + LangGrap
 
 `search字段为搜索服务相关配置`
 
-## 提示词文件说明
+<details>
+<summary><b>SearXNG 搜索服务（可选）</b></summary>
 
-后端提示词文件集中在 `backend/prompts/`，运行时由 [prompt_loader.py](file:///i:/JBCode/AI%20Tools/Elenchus/backend/app/agents/prompt_loader.py) 和 [sophistry_prompt_loader.py](file:///i:/JBCode/AI%20Tools/Elenchus/backend/app/agents/sophistry_prompt_loader.py) 按模式加载。
+本项目支持一键部署 SearXNG 元搜索引擎作为搜索服务的后端，所有数据保存在项目目录内，删除项目文件夹即完全清理。
 
-标准模式：
+### 前置要求
 
-- [debater_system.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/debater_system.md)：标准辩手通用基础提示词，定义所有辩手共享的核心行为边界。
-- [debater_proposer.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/debater_proposer.md)：标准模式正方补充提示词，用于给正方角色叠加立场与表达要求。
-- [debater_opposer.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/debater_opposer.md)：标准模式反方补充提示词，用于给反方角色叠加立场与表达要求。
-- [judge_system.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/judge_system.md)：标准模式裁判提示词，负责评分、总结和裁决输出。
-- [fact_checker_system.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/fact_checker_system.md)：事实核查代理提示词，用于事实校验与证据核查链路。
+- 已安装 Docker Desktop（Windows/macOS）或 Docker Engine（Linux）
+- Docker Compose 可用（Docker Desktop 已内置）
 
-诡辩模式：
+### 方式一：前端 UI 管理（推荐）
 
-- [sophistry/debater_system.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/sophistry/debater_system.md)：诡辩模式辩手通用基础提示词，定义该实验模式下的统一行为框架。
-- [sophistry/debater_proposer.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/sophistry/debater_proposer.md)：诡辩模式正方补充提示词。
-- [sophistry/debater_opposer.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/sophistry/debater_opposer.md)：诡辩模式反方补充提示词。
-- [sophistry/observer_system.md](file:///i:/JBCode/AI%20Tools/Elenchus/backend/prompts/sophistry/observer_system.md)：诡辩模式观察员提示词，用于旁观评述与过程观察。
+启动项目后，从 Web UI 左下角打开 **设置** → **搜索引擎** 标签页，你会看到"本地 SearXNG 部署"管理卡片。
 
-补充说明：
+1. 点击 **一键启动 SearXNG** 按钮
+2. 等待状态变为"运行正常"（绿色）
+3. 在上方将搜索提供商切换为 **SearXNG**
+4. 点击 **保存 SearXNG** 即可使用
 
-- 标准模式辩手提示词采用“基础提示词 + 角色补充提示词”的组合方式。
-- 当 `proposer_1`、`opposer_2` 这类更细分角色没有单独文件时，会回退到 `debater_proposer.md` 或 `debater_opposer.md`。
-- 诡辩模式也采用相同的“基础 + 角色补充”加载策略，但文件位于 `backend/prompts/sophistry/`。
+如未安装 Docker，卡片会显示安装提示。
+
+### 方式二：命令行启动
+
+```bash
+# Windows
+.\start.bat
+
+# Linux/macOS
+./start.sh
+```
+
+启动脚本会自动检测 Docker 并启动 SearXNG 容器，服务地址：`http://localhost:8080`
+
+**跳过 SearXNG 启动：**
+```bash
+# Windows
+.\start.bat --skip-searxng
+
+# Linux/macOS
+./start.sh --skip-searxng
+```
+
+### 手动管理 SearXNG
+
+```bash
+# 查看状态
+.\scripts\start_searxng.ps1 status   # Windows
+./scripts/start_searxng.sh status     # Linux/macOS
+
+# 启动/重启
+.\scripts\start_searxng.ps1 start
+./scripts/start_searxng.sh start
+
+# 停止
+.\scripts\start_searxng.ps1 stop
+./scripts/start_searxng.sh stop
+
+# 查看日志
+.\scripts\start_searxng.ps1 logs
+./scripts/start_searxng.sh logs
+
+# 清理数据
+.\scripts\start_searxng.ps1 clean
+./scripts/start_searxng.sh clean
+```
+
+### 配置文件位置
+
+- Docker 配置：`searxng/docker-compose.yml`
+- SearXNG 设置：`searxng/settings.yml`
+- 限流配置：`searxng/limiter.toml`
+- 持久化数据：`searxng-data/`（运行时创建）
+
+**注意：** 如未安装 Docker 或跳过启动，系统将默认使用 DuckDuckGo 作为搜索提供商，不影响正常使用。
+
+</details>
+
+<details>
+<summary><b>openclaw 运行说明</b></summary>
+
+本项目支持通过 REST API 与 openclaw 等外部 AI 代理集成，实现自然语言操控辩论。
+
+### 功能概述
+
+通过新增的 REST API，openclaw 可以：
+- 创建辩论会话并指定模型配置
+- 启动/停止辩论
+- 实时监控辩论进展
+- 向辩论中插入用户干预
+- 导出辩论结果
+
+### API 端点
+
+| 方法 | 路径 | 功能 |
+|------|------|------|
+| POST | `/api/sessions/{id}/start` | 启动辩论 |
+| POST | `/api/sessions/{id}/stop` | 停止辩论 |
+| POST | `/api/sessions/{id}/intervene` | 干预辩论 |
+| GET | `/api/sessions/{id}/status` | 获取辩论状态 |
+| GET | `/api/sessions/{id}/live-events` | 轮询实时事件 |
+
+### openclaw 配置示例
+
+在 openclaw 中添加 Elenchus 工具：
+
+```yaml
+tools:
+  - name: elenchus
+    type: rest_api
+    base_url: http://<服务器地址>:8001
+    description: "多智能体辩论平台"
+```
+
+### 使用示例
+
+用户："帮我创建一个关于 AI 安全的辩论，用 GPT-4 和 Claude"
+
+openclaw 自动执行：
+1. `POST /api/sessions` → 创建会话
+2. `POST /api/sessions/{id}/start` → 启动辩论
+3. 循环轮询 `GET /api/sessions/{id}/live-events` → 实时展示进展
+4. `GET /api/sessions/{id}/export?format=markdown` → 导出结果
+
+### 完整文档
+
+- API 参考文档：[docs/API_REFERENCE.md](./docs/API_REFERENCE.md)
+- openclaw 集成指南：[docs/Elenchus.md](./docs/Elenchus.md)
+
+</details>
+
+<details>
+<summary><b>提示词文件说明</b></summary>
+
+后端提示词文件集中在 `backend/prompts/`，运行时由 prompt_loader.py 和 sophistry_prompt_loader.py 按模式加载。
+
+**标准模式**：
+- `debater_system.md`：标准辩手通用基础提示词
+- `debater_proposer.md`：标准模式正方补充提示词
+- `debater_opposer.md`：标准模式反方补充提示词
+- `judge_system.md`：标准模式裁判提示词
+- `fact_checker_system.md`：事实核查代理提示词
+
+**诡辩模式**：
+- `sophistry/debater_system.md`：诡辩模式辩手通用基础提示词
+- `sophistry/debater_proposer.md`：诡辩模式正方补充提示词
+- `sophistry/debater_opposer.md`：诡辩模式反方补充提示词
+- `sophistry/observer_system.md`：诡辩模式观察员提示词
+
+**补充说明**：
+- 标准模式辩手提示词采用"基础提示词 + 角色补充提示词"的组合方式
+- 当细分角色没有单独文件时，会回退到对应的通用角色文件
+- 诡辩模式也采用相同的"基础 + 角色补充"加载策略
+
+</details>
 
 ## 文档导航
 

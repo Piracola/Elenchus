@@ -3,11 +3,7 @@ Manual test script for double debate runner.
 
 Run with: python backend/manual_tests/manual_test_double.py
 """
-import asyncio
-import os
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from scripts.test_utils import setup_backend_path, run_async
 
 from app.agents.runner import run_debate
 
@@ -27,4 +23,5 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    setup_backend_path()
+    run_async(main)

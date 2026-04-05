@@ -1,5 +1,8 @@
+import { useCallback } from 'react';
+
 import { SearchProviderSelector } from './search/SearchProviderSelector';
 import { SearchProviderSettingsCard } from './search/SearchProviderSettingsCard';
+import { SearXNGLocalManagerCard } from './search/SearXNGLocalManagerCard';
 import { getProviderLabel } from './search/searchConfigShared';
 import { useSearchConfigState } from './search/useSearchConfigState';
 
@@ -26,6 +29,11 @@ export function SearchConfigTab() {
         handleSaveTavily,
         handleClearKey,
     } = useSearchConfigState();
+
+    const handleSearXNGReady = useCallback(() => {
+        // SearXNG 启动后刷新配置
+        window.location.reload();
+    }, []);
 
     if (isLoading) {
         return (
@@ -110,6 +118,8 @@ export function SearchConfigTab() {
                     gap: '18px',
                 }}
             >
+                <SearXNGLocalManagerCard onSearXNGReady={handleSearXNGReady} />
+
                 <div
                     style={{
                         padding: '22px 24px',

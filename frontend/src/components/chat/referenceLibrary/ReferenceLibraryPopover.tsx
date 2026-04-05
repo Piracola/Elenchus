@@ -43,7 +43,7 @@ export function ReferenceLibraryPopover({
             style={{
                 position: 'absolute',
                 top: 'calc(100% + 8px)',
-                right: 0,
+                left: 0,
                 width: 'min(360px, calc(100vw - 64px))',
                 padding: '14px',
                 borderRadius: 'var(--radius-xl)',
@@ -55,6 +55,7 @@ export function ReferenceLibraryPopover({
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '12px',
+                zIndex: 100,
             }}
         >
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>

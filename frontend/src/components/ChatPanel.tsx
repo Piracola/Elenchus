@@ -186,18 +186,6 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
                     />
                 </div>
 
-                {floatingInspector.isWideLayout && (
-                    <FloatingRuntimeInspector
-                        floatingInspectorRect={floatingInspector.floatingInspectorRect}
-                        floatingInspectorExpanded={floatingInspector.floatingInspectorExpanded}
-                        floatingInspectorActive={floatingInspector.floatingInspectorActive}
-                        floatingInspectorInteractionRef={floatingInspector.floatingInspectorInteractionRef}
-                        onMoveStart={floatingInspector.handleFloatingInspectorMoveStart}
-                        onResizeStart={floatingInspector.handleFloatingInspectorResizeStart}
-                        onExpandedChange={floatingInspector.handleFloatingInspectorExpandedChange}
-                    />
-                )}
-
                 <div
                     ref={bottomOverlayRef}
                     style={{
@@ -221,6 +209,19 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
                     </div>
                 </div>
             </div>
+
+            {/* 浮动观察器放在 panelRef 外层，确保不被任何元素遮挡 */}
+            {floatingInspector.isWideLayout && (
+                <FloatingRuntimeInspector
+                    floatingInspectorRect={floatingInspector.floatingInspectorRect}
+                    floatingInspectorExpanded={floatingInspector.floatingInspectorExpanded}
+                    floatingInspectorActive={floatingInspector.floatingInspectorActive}
+                    floatingInspectorInteractionRef={floatingInspector.floatingInspectorInteractionRef}
+                    onMoveStart={floatingInspector.handleFloatingInspectorMoveStart}
+                    onResizeStart={floatingInspector.handleFloatingInspectorResizeStart}
+                    onExpandedChange={floatingInspector.handleFloatingInspectorExpandedChange}
+                />
+            )}
         </motion.section>
     );
 }

@@ -38,16 +38,16 @@ export function ProviderForm({
                 onClick={onClose}
                 style={{
                     position: 'absolute',
-                    top: '18px',
-                    right: '18px',
+                    top: '12px',
+                    right: '16px',
                     zIndex: 10,
-                    background: 'transparent',
-                    border: 'none',
+                    background: 'var(--bg-tertiary)',
+                    border: '1px solid var(--border-subtle)',
                     color: 'var(--text-muted)',
                     cursor: 'pointer',
-                    fontSize: '32px',
-                    width: '42px',
-                    height: '42px',
+                    fontSize: '24px',
+                    width: '32px',
+                    height: '32px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -55,28 +55,29 @@ export function ProviderForm({
                     transition: 'all 0.15s ease',
                 }}
                 onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'var(--bg-tertiary)';
+                    e.currentTarget.style.background = 'var(--bg-secondary)';
                     e.currentTarget.style.color = 'var(--text-primary)';
                 }}
                 onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.background = 'var(--bg-tertiary)';
                     e.currentTarget.style.color = 'var(--text-muted)';
                 }}
             >
                 ×
             </button>
 
-            <div style={{ flex: 1, padding: '32px 36px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '18px' }}>
-                    <h3 style={{ fontSize: '28px', margin: '0 0 12px', color: 'var(--text-primary)', fontWeight: 700 }}>
-                        {isCreatingNew ? '配置新提供商' : '服务商配置'}
-                    </h3>
-                    <p style={{ margin: 0, fontSize: '17px', color: 'var(--text-muted)', lineHeight: 1.75 }}>定义连接参数及挂载的子模型</p>
-                </div>
+            {/* 标题栏 */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-secondary)' }}>
+                <h3 style={{ fontSize: '18px', margin: '0', color: 'var(--text-primary)', fontWeight: 700 }}>
+                    {isCreatingNew ? '配置新提供商' : '服务商配置'}
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5 }}>定义连接参数及挂载的子模型</p>
+            </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <div style={{ flex: 1, padding: '20px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                     <div>
-                        <label style={{ display: 'block', fontSize: '16px', marginBottom: '10px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                        <label style={{ display: 'block', fontSize: '14px', marginBottom: '6px', color: 'var(--text-secondary)', fontWeight: 600 }}>
                             提供商名称 *
                         </label>
                         <input
@@ -86,12 +87,12 @@ export function ProviderForm({
                             placeholder="如：AiHubMix / DeepSeek"
                             style={{
                                 width: '100%',
-                                padding: '12px 14px',
+                                padding: '10px 12px',
                                 borderRadius: 'var(--radius-md)',
                                 background: 'var(--bg-secondary)',
                                 border: '1px solid var(--border-subtle)',
                                 color: 'var(--text-primary)',
-                                fontSize: '16px',
+                                fontSize: '14px',
                                 outline: 'none',
                                 transition: 'border-color 0.15s ease',
                             }}
@@ -111,7 +112,7 @@ export function ProviderForm({
                     </div>
 
                     <div>
-                        <label htmlFor="providerApiKey" style={{ display: 'block', fontSize: '16px', marginBottom: '10px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                        <label htmlFor="providerApiKey" style={{ display: 'block', fontSize: '14px', marginBottom: '6px', color: 'var(--text-secondary)', fontWeight: 600 }}>
                             API 密钥
                         </label>
                         <input
@@ -126,12 +127,12 @@ export function ProviderForm({
                             spellCheck={false}
                             style={{
                                 width: '100%',
-                                padding: '12px 14px',
+                                padding: '10px 12px',
                                 borderRadius: 'var(--radius-md)',
                                 background: 'var(--bg-secondary)',
                                 border: '1px solid var(--border-subtle)',
                                 color: 'var(--text-primary)',
-                                fontSize: '16px',
+                                fontSize: '14px',
                                 outline: 'none',
                                 transition: 'border-color 0.15s ease',
                             }}
@@ -140,20 +141,20 @@ export function ProviderForm({
                             }}
                             onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border-subtle)'}
                         />
-                        <div style={{ marginTop: '10px', fontSize: '16px', color: 'var(--text-muted)', lineHeight: 1.75 }}>
+                        <div style={{ marginTop: '6px', fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
                             {isCreatingNew
                                 ? '新建时可直接填写 API Key。'
-                                : '编辑已有配置时，留空会保留当前密钥；填写新值会替换当前密钥。'}
+                                : '编辑时留空会保留当前密钥，填写新值会替换。'}
                         </div>
                         {!isCreatingNew && formData.apiKeyConfigured && (
-                            <label htmlFor="clearProviderApiKey" style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '16px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                            <label htmlFor="clearProviderApiKey" style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                                 <input
                                     id="clearProviderApiKey"
                                     type="checkbox"
                                     checked={formData.clearApiKey}
                                     onChange={(e) => onFieldChange('clearApiKey', e.target.checked)}
                                     disabled={Boolean(formData.apiKey.trim())}
-                                    style={{ cursor: formData.apiKey.trim() ? 'not-allowed' : 'pointer', width: '20px', height: '20px' }}
+                                    style={{ cursor: formData.apiKey.trim() ? 'not-allowed' : 'pointer', width: '16px', height: '16px' }}
                                 />
                                 清除已保存的 API 密钥
                             </label>
@@ -161,7 +162,7 @@ export function ProviderForm({
                     </div>
 
                     <div>
-                        <label style={{ display: 'block', fontSize: '16px', marginBottom: '10px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                        <label style={{ display: 'block', fontSize: '14px', marginBottom: '6px', color: 'var(--text-secondary)', fontWeight: 600 }}>
                             API Base URL
                         </label>
                         <input
@@ -171,12 +172,12 @@ export function ProviderForm({
                             placeholder="https://api.example.com/v1"
                             style={{
                                 width: '100%',
-                                padding: '12px 14px',
+                                padding: '10px 12px',
                                 borderRadius: 'var(--radius-md)',
                                 background: 'var(--bg-secondary)',
                                 border: '1px solid var(--border-subtle)',
                                 color: 'var(--text-primary)',
-                                fontSize: '16px',
+                                fontSize: '14px',
                                 outline: 'none',
                                 transition: 'border-color 0.15s ease',
                             }}
@@ -186,7 +187,7 @@ export function ProviderForm({
                     </div>
 
                     <div>
-                        <label style={{ display: 'block', fontSize: '16px', marginBottom: '10px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                        <label style={{ display: 'block', fontSize: '14px', marginBottom: '6px', color: 'var(--text-secondary)', fontWeight: 600 }}>
                             默认 Max Tokens
                         </label>
                         <input
@@ -198,25 +199,25 @@ export function ProviderForm({
                             step={1}
                             style={{
                                 width: '100%',
-                                padding: '12px 14px',
+                                padding: '10px 12px',
                                 borderRadius: 'var(--radius-md)',
                                 background: 'var(--bg-secondary)',
                                 border: '1px solid var(--border-subtle)',
                                 color: 'var(--text-primary)',
-                                fontSize: '17px',
+                                fontSize: '14px',
                                 outline: 'none',
                                 transition: 'border-color 0.15s ease',
                             }}
                             onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent-indigo)'}
                             onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border-subtle)'}
                         />
-                        <div style={{ marginTop: '10px', fontSize: '16px', color: 'var(--text-muted)', lineHeight: 1.75 }}>
-                            作为该服务商的默认输出上限。当前系统默认最大输入按 128k 约定，默认最大输出为 64k；会话或角色单独设置了 max_tokens 时，会覆盖这里。
+                        <div style={{ marginTop: '6px', fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                            作为该服务商的默认输出上限。系统默认最大输入按 128k 约定，默认输出为 64k。
                         </div>
                     </div>
 
                     <div>
-                        <label style={{ display: 'block', fontSize: '16px', marginBottom: '10px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                        <label style={{ display: 'block', fontSize: '14px', marginBottom: '6px', color: 'var(--text-secondary)', fontWeight: 600 }}>
                             原始参数
                         </label>
                         <textarea
@@ -224,62 +225,62 @@ export function ProviderForm({
                             onChange={e => onFieldChange('customParametersText', e.target.value)}
                             placeholder={`{\n  "reasoning_effort": "medium"\n}`}
                             spellCheck={false}
-                            rows={7}
+                            rows={4}
                             style={{
                                 width: '100%',
-                                padding: '14px 16px',
+                                padding: '10px 12px',
                                 borderRadius: 'var(--radius-md)',
                                 background: 'var(--bg-secondary)',
                                 border: '1px solid var(--border-subtle)',
                                 color: 'var(--text-primary)',
-                                fontSize: '16px',
+                                fontSize: '13px',
                                 fontFamily: 'Consolas, "SFMono-Regular", Menlo, monospace',
                                 outline: 'none',
                                 resize: 'vertical',
-                                lineHeight: 1.65,
+                                lineHeight: 1.5,
                                 transition: 'border-color 0.15s ease',
-                                minHeight: '136px',
+                                minHeight: '90px',
                             }}
                             onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent-indigo)'}
                             onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border-subtle)'}
                         />
-                        <div style={{ marginTop: '10px', fontSize: '16px', color: 'var(--text-muted)', lineHeight: 1.75 }}>
-                            可填写 JSON 对象，或直接写键值行，例如 `"reasoning_effort": "medium",`。
+                        <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                            可填写 JSON 对象，或直接写键值行。
                         </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
                         <input
                             type="checkbox"
                             id="isDefaultToggle"
                             checked={formData.isDefault}
                             onChange={e => onFieldChange('isDefault', e.target.checked)}
-                            style={{ cursor: 'pointer', width: '20px', height: '20px' }}
+                            style={{ cursor: 'pointer', width: '16px', height: '16px' }}
                         />
-                        <label htmlFor="isDefaultToggle" style={{ fontSize: '16px', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 600 }}>
+                        <label htmlFor="isDefaultToggle" style={{ fontSize: '14px', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 600 }}>
                             设为全局默认服务商
                         </label>
                     </div>
                 </div>
 
-                <div style={{ borderTop: '1px solid var(--border-subtle)', margin: '10px 0' }} />
+                <div style={{ borderTop: '1px solid var(--border-subtle)', margin: '8px 0' }} />
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '22px', flex: 1 }}>
-                    <h4 style={{ fontSize: '21px', margin: 0, color: 'var(--text-primary)', fontWeight: 700 }}>关联模型</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <h4 style={{ fontSize: '16px', margin: 0, color: 'var(--text-primary)', fontWeight: 700 }}>关联模型</h4>
 
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                         {formData.models.map(mod => (
                             <div
                                 key={mod}
                                 style={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: '8px',
-                                    padding: '10px 14px',
+                                    gap: '6px',
+                                    padding: '6px 10px',
                                     background: 'var(--bg-secondary)',
                                     border: '1px solid var(--border-subtle)',
                                     borderRadius: 'var(--radius-full)',
-                                    fontSize: '16px',
+                                    fontSize: '13px',
                                     color: 'var(--text-primary)',
                                     fontWeight: 500,
                                 }}
@@ -295,9 +296,9 @@ export function ProviderForm({
                                         display: 'flex',
                                         alignItems: 'center',
                                         padding: '0',
-                                        fontSize: '18px',
-                                        width: '20px',
-                                        height: '20px',
+                                        fontSize: '16px',
+                                        width: '16px',
+                                        height: '16px',
                                         justifyContent: 'center',
                                         borderRadius: '50%',
                                         transition: 'all 0.15s ease',
@@ -311,7 +312,7 @@ export function ProviderForm({
                         ))}
                     </div>
 
-                    <div style={{ display: 'flex', gap: '12px', marginTop: 'auto' }}>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
                         <input
                             type="text"
                             value={newModelInput}
@@ -320,12 +321,12 @@ export function ProviderForm({
                             placeholder="输入模型标识 (例如 gpt-4o, claude-3-opus)"
                             style={{
                                 flex: 1,
-                                padding: '14px 16px',
+                                padding: '10px 12px',
                                 borderRadius: 'var(--radius-md)',
                                 background: 'var(--bg-secondary)',
                                 border: '1px solid var(--border-subtle)',
                                 color: 'var(--text-primary)',
-                                fontSize: '16px',
+                                fontSize: '14px',
                                 outline: 'none',
                                 transition: 'border-color 0.15s ease',
                             }}
@@ -335,13 +336,13 @@ export function ProviderForm({
                         <button
                             onClick={onAddModel}
                             style={{
-                                padding: '0 22px',
+                                padding: '0 18px',
                                 background: 'transparent',
                                 border: '1px solid var(--border-subtle)',
                                 color: 'var(--text-secondary)',
                                 borderRadius: 'var(--radius-md)',
                                 cursor: 'pointer',
-                                fontSize: '16px',
+                                fontSize: '14px',
                                 fontWeight: 600,
                                 transition: 'all 0.15s ease',
                             }}
@@ -361,7 +362,7 @@ export function ProviderForm({
             </div>
 
             <div style={{
-                padding: '18px 40px',
+                padding: '14px 24px',
                 borderTop: '1px solid var(--border-subtle)',
                 background: 'var(--bg-secondary)',
                 display: 'flex',
@@ -371,14 +372,14 @@ export function ProviderForm({
                 <button
                     onClick={onSave}
                     style={{
-                        padding: '12px 28px',
+                        padding: '10px 24px',
                         background: 'var(--text-primary)',
                         color: 'var(--bg-primary)',
                         border: 'none',
                         borderRadius: 'var(--radius-md)',
                         fontWeight: 600,
                         cursor: 'pointer',
-                        fontSize: '16px',
+                        fontSize: '14px',
                         transition: 'opacity 0.15s ease',
                     }}
                     onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}

@@ -20,6 +20,8 @@ type ExecutionTimelineDetailPaneProps = {
     onExport: () => void;
     onImport: () => void;
     onReplayCursorChange: (cursor: number) => void;
+    onSliderDragStart: () => void;
+    onSliderDragEnd: () => void;
 };
 
 export function ExecutionTimelineDetailPane({
@@ -41,6 +43,8 @@ export function ExecutionTimelineDetailPane({
     onExport,
     onImport,
     onReplayCursorChange,
+    onSliderDragStart,
+    onSliderDragEnd,
 }: ExecutionTimelineDetailPaneProps) {
     return (
         <div
@@ -104,11 +108,13 @@ export function ExecutionTimelineDetailPane({
                         onClick={onExitReplay}
                         style={{
                             ...pillStyle,
-                            color: 'var(--text-secondary)',
-                            background: 'var(--bg-tertiary)',
+                            color: '#fff',
+                            background: 'var(--accent-emerald)',
+                            fontWeight: 700,
+                            boxShadow: '0 0 8px rgba(16, 185, 129, 0.35)',
                         }}
                     >
-                        返回实时
+                        回到实时
                     </button>
                 )}
                 {currentSessionId && (
@@ -160,6 +166,9 @@ export function ExecutionTimelineDetailPane({
                         max={Math.max(0, runtimeEvents.length - 1)}
                         value={Math.max(0, replayCursor)}
                         onChange={(event) => onReplayCursorChange(Number(event.target.value))}
+                        onPointerDown={onSliderDragStart}
+                        onPointerUp={onSliderDragEnd}
+                        onPointerCancel={onSliderDragEnd}
                         style={{ width: '100%' }}
                     />
                 </div>

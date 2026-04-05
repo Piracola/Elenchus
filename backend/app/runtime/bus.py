@@ -126,7 +126,9 @@ class RuntimeBus:
             source=source,
             phase=phase,
         )
-        if self._repository is not None:
+        # Skip persistence for high-frequency events (speech_token, heartbeat)
+        # to avoid database write bottleneck during streaming
+        if self._repository is not None and event_type not in ("speech_token",):
             await self._repository.persist_runtime_event(event)
         await self._deliver(session_id, event)
         return event

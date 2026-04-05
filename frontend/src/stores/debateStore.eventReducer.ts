@@ -180,6 +180,8 @@ export function applyRuntimeEventPatch(
             break;
 
         case 'speech_token':
+            // 累积流式内容，供实时渲染使用
+            patch.streamingContent = (state.streamingContent ?? '') + (getPayloadString(payload, 'token') ?? '');
             break;
 
         case 'speech_cancel':

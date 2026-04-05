@@ -101,8 +101,8 @@ export function ScoreGrid({ judgeEntry, animated }: ScoreGridProps) {
                         display: 'flex',
                         flexDirection: 'column',
                         gap: '8px',
-                        background: 'linear-gradient(135deg, rgba(255, 149, 0, 0.14) 0%, rgba(255, 149, 0, 0.04) 100%)',
-                        border: '1px solid rgba(255, 149, 0, 0.18)',
+                        background: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-subtle)',
                         padding: '16px',
                         borderRadius: 'var(--radius-lg)',
                         boxShadow: 'var(--shadow-xs)',
@@ -124,8 +124,8 @@ export function ScoreGrid({ judgeEntry, animated }: ScoreGridProps) {
                             style={{
                                 padding: '4px 8px',
                                 borderRadius: 'var(--radius-full)',
-                                background: 'rgba(255, 149, 0, 0.12)',
-                                color: 'var(--color-judge)',
+                                background: 'var(--bg-tertiary)',
+                                color: 'var(--text-secondary)',
                                 fontWeight: 600,
                             }}
                         >

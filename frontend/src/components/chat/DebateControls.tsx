@@ -2,7 +2,7 @@
  * DebateControls - compact input bar to create, start, and stop debates.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAgentConfigs } from '../../hooks/useAgentConfigs';
 import { useConnectionViewState, useSessionViewState } from '../../hooks/useDebateViewState';
@@ -16,7 +16,16 @@ function ActiveSessionControls() {
     const sessionId = currentSession?.id || null;
     const { startDebate, stopDebate, sendIntervention } = useDebateWebSocket(sessionId);
     const [interventionText, setInterventionText] = useState('');
-    const [maxTurnsInput, setMaxTurnsInput] = useState('');
+    const [maxTurnsInput, setMaxTurnsInput] = useState(
+        currentSession?.max_turns != null ? String(currentSession.max_turns) : '',
+    );
+
+    // Sync with session changes (e.g., after creating a new session)
+    useEffect(() => {
+        if (currentSession?.max_turns != null) {
+            setMaxTurnsInput(String(currentSession.max_turns));
+        }
+    }, [currentSession?.max_turns, currentSession?.id]);
 
     const maxTurns = parseMaxTurnsInput(maxTurnsInput);
     const sessionIsRunning = isDebating;

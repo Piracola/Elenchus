@@ -19,6 +19,8 @@ from app.api.models import router as models_router
 from app.api.log import router as log_router
 from app.api.search import router as search_router
 from app.api.search import build_search_health_payload
+from app.api.searxng import router as searxng_router
+from app.api.session_control import router as session_control_router
 from app.db.database import init_db
 from app.dependencies import get_search_factory
 from app.services.log_service import setup_logging, get_logger
@@ -68,6 +70,8 @@ app.include_router(ws_router, prefix="/api")
 app.include_router(models_router, prefix="/api/models", tags=["models"])
 app.include_router(log_router, prefix="/api")
 app.include_router(search_router, prefix="/api")
+app.include_router(searxng_router, prefix="/api")
+app.include_router(session_control_router, prefix="/api")
 
 
 # ── Health / diagnostic endpoints ────────────────────────────────

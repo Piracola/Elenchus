@@ -3,6 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import RuntimeInspector from './RuntimeInspector';
 import {
     FLOATING_INSPECTOR_RESIZE_HANDLES,
+    getCollapsedFloatingInspectorSize,
     type FloatingInspectorInteraction,
     type FloatingInspectorRect,
     type FloatingInspectorResizeHandle,
@@ -31,6 +32,8 @@ export default function FloatingRuntimeInspector({
         return null;
     }
 
+    const collapsedSize = getCollapsedFloatingInspectorSize();
+
     void floatingInspectorInteractionRef;
 
     return (
@@ -39,18 +42,18 @@ export default function FloatingRuntimeInspector({
                 position: 'absolute',
                 left: `${floatingInspectorRect.x}px`,
                 top: `${floatingInspectorRect.y}px`,
-                zIndex: 26,
-                width: floatingInspectorExpanded ? `${floatingInspectorRect.width}px` : 'auto',
-                height: floatingInspectorExpanded ? `${floatingInspectorRect.height}px` : 'auto',
+                zIndex: 200,
+                width: floatingInspectorExpanded ? `${floatingInspectorRect.width}px` : `${collapsedSize.width}px`,
+                height: floatingInspectorExpanded ? `${floatingInspectorRect.height}px` : `${collapsedSize.height}px`,
                 pointerEvents: 'auto',
             }}
         >
             <div
                 style={{
                     position: 'relative',
-                    width: floatingInspectorExpanded ? '100%' : 'auto',
-                    height: floatingInspectorExpanded ? '100%' : 'auto',
-                    overflow: 'visible',
+                    width: '100%',
+                    height: '100%',
+                    overflow: floatingInspectorExpanded ? 'hidden' : 'visible',
                 }}
             >
                 <div

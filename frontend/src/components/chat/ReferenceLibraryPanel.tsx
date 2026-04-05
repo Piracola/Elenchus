@@ -31,7 +31,7 @@ export default function ReferenceLibraryPanel({
         : '参考资料';
 
     return (
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative', zIndex: 100 }}>
             <input
                 ref={inputRef}
                 type="file"
@@ -50,15 +50,9 @@ export default function ReferenceLibraryPanel({
                     alignItems: 'center',
                     gap: '6px',
                     padding: '7px 12px',
-                    background: isSophistryMode
-                        ? 'rgba(184, 137, 70, 0.14)'
-                        : 'var(--bg-tertiary)',
-                    color: isSophistryMode
-                        ? 'var(--mode-sophistry-accent)'
-                        : 'var(--text-secondary)',
-                    border: isSophistryMode
-                        ? '1px solid var(--mode-sophistry-border)'
-                        : '1px solid var(--border-subtle)',
+                    background: '#FFFFFF',
+                    color: '#1D1D1F',
+                    border: '1px solid var(--border-subtle)',
                     borderRadius: 'var(--radius-full)',
                     cursor: 'pointer',
                     fontSize: '12px',

@@ -107,17 +107,15 @@ export default function StatusBanner() {
             <button
                 onClick={() => setExpanded(true)}
                 style={{
-                    border: '1px solid var(--border-subtle)',
+                    border: 'none',
                     borderRadius: '999px',
-                    background: 'var(--bg-card)',
+                    background: 'transparent',
                     color: 'var(--text-secondary)',
-                    padding: '7px 10px',
+                    padding: '4px 8px',
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '7px',
+                    gap: '6px',
                     cursor: 'pointer',
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
-                    backdropFilter: 'blur(12px)',
                     flexShrink: 0,
                 }}
                 title="展开状态栏"
@@ -146,17 +144,9 @@ export default function StatusBanner() {
             exit={{ opacity: 0, scale: 0.9 }}
             transition={{ duration: 0.2 }}
             style={{
-                padding: '10px 12px',
-                background: 'var(--bg-card)',
-                borderRadius: 'var(--radius-xl)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                border: '1px solid var(--border-subtle)',
-                boxShadow: liveFocusedEvent
-                    ? '0 4px 20px rgba(99, 102, 241, 0.16)'
-                    : '0 4px 20px rgba(0,0,0,0.08)',
-                backdropFilter: 'blur(12px)',
                 flexShrink: 0,
                 maxWidth: '420px',
             }}

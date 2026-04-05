@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useRuntimeViewState } from '../../hooks/useDebateViewState';
+import { useRuntimeViewState, useRuntimeActions } from '../../hooks/useDebateViewState';
 import { getLiveGraphNodeLabel } from '../../utils/liveGraph';
 import ExecutionTimeline from './ExecutionTimeline';
 import LiveGraph from './LiveGraph';
@@ -44,6 +44,7 @@ export default function RuntimeInspector({
         replayEnabled,
         isDocumentVisible,
     } = useRuntimeViewState();
+    const { exitReplay } = useRuntimeActions();
     const [expanded, setExpanded] = useState(defaultExpanded);
     const [activeTab, setActiveTab] = useState<InspectorTab>('timeline');
     const isCollapsed = !expanded && !fillHeight;
@@ -67,6 +68,24 @@ export default function RuntimeInspector({
         }
         return '查看记忆写入与知识图谱';
     }, [activeTab, currentNode, debateMode, replayEnabled, runtimeEventCount]);
+
+    const headerIndicator = useMemo(() => {
+        if (!replayEnabled) return null;
+        return (
+            <span
+                style={{
+                    fontSize: '11px',
+                    color: '#fff',
+                    background: 'var(--accent-rose)',
+                    borderRadius: '999px',
+                    padding: '2px 8px',
+                    fontWeight: 700,
+                }}
+            >
+                回放中
+            </span>
+        );
+    }, [replayEnabled]);
 
     return (
         <div
@@ -129,6 +148,7 @@ export default function RuntimeInspector({
                             {TAB_LABELS[activeTab]}
                         </span>
                     )}
+                    {!isCollapsed && headerIndicator}
                 </span>
                 {!isCollapsed && (
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
@@ -201,6 +221,28 @@ export default function RuntimeInspector({
                             >
                                 {TAB_DESCRIPTIONS[activeTab]}
                             </span>
+
+                            {replayEnabled && (
+                                <button
+                                    onClick={() => {
+                                        exitReplay();
+                                    }}
+                                    style={{
+                                        border: 'none',
+                                        borderRadius: '999px',
+                                        padding: '6px 14px',
+                                        fontSize: '11px',
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                        color: '#fff',
+                                        background: 'var(--accent-emerald)',
+                                        boxShadow: '0 0 8px rgba(16, 185, 129, 0.35)',
+                                    }}
+                                >
+                                    回到实时
+                                </button>
+                            )}
+
                             <button
                                 onClick={() => setExpandedState(false)}
                                 style={{

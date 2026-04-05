@@ -165,4 +165,4 @@ Elenchus 的历史恢复与回放依赖两类持久化数据配合完成：
 - [architecture.md](./architecture.md)：解释系统分层、前后端职责、模式化运行链路与模块入口
 - [getting-started.md](./getting-started.md)：解释如何启动项目
 - [session-reference-library-implementation.md](./session-reference-library-implementation.md)：解释资料池当前实现
-- [archive/2026-03-17-audit-summary.md](./archive/2026-03-17-audit-summary.md)：保留架构收敛与历史审查背景，不作为当前运行时说明
+- 历史审查材料：已清理，不再作为独立文档维护
