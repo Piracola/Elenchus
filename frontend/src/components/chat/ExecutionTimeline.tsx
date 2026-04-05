@@ -72,7 +72,7 @@ export default function ExecutionTimeline({
         );
         // 同样过滤心跳事件
         return entries.filter(
-            (entry) => !(entry.event.payload && (entry.event.payload as any).heartbeat),
+            (entry) => !(entry.event.payload && typeof entry.event.payload === 'object' && 'heartbeat' in entry.event.payload),
         );
     }, [filter, indexedRuntimeEvents]);
 

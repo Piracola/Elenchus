@@ -27,7 +27,8 @@ export default function StreamingMessage() {
     const rafRef = useRef<number | null>(null);
     const isStreamingRef = useRef(false);
     const [renderedContent, setRenderedContent] = useState('');
-    const [isStreaming, setIsStreaming] = useState(false);
+    // isStreaming state tracked via isStreamingRef for performance
+    const [, setIsStreaming] = useState(false);
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const messageFontSize = useSettingsStore((state) => state.displaySettings.messageFontSize ?? 15);
     const messageFontSizes = useMemo(() => getMessageFontTokens(messageFontSize).message, [messageFontSize]);

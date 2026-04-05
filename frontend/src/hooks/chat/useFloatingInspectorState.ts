@@ -3,7 +3,6 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import {
     clampFloatingInspectorRect,
     createDefaultFloatingInspectorRect,
-    FLOATING_INSPECTOR_MIN_SIZE,
     getCollapsedFloatingInspectorSize,
     interactionCursor,
     parseStoredFloatingInspectorRect,

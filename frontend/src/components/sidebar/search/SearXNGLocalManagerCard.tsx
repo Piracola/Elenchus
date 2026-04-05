@@ -6,7 +6,7 @@ interface SearXNGLocalManagerCardProps {
 }
 
 export function SearXNGLocalManagerCard({ onSearXNGReady }: SearXNGLocalManagerCardProps) {
-    const { status, isLoading, isBusy, handleStart, handleStop, refreshStatus, fetchStatus } = useSearXNGLocalManager();
+    const { status, isBusy, handleStart, handleStop, refreshStatus, fetchStatus } = useSearXNGLocalManager();
 
     const handleStartAndRefresh = async () => {
         await handleStart();
