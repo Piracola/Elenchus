@@ -218,13 +218,13 @@ describe('历史记录加载性能测试', () => {
     describe('历史记录加载内存性能', () => {
         it('应在加载1000条记录后保持合理的内存占用', () => {
             const session = makeSessionWithHistory(1000);
-            
-            // @ts-ignore - 获取内存使用信息
+
+            // @ts-expect-error - 获取内存使用信息
             const memoryBefore = performance.memory?.usedJSHeapSize || 0;
-            
+
             useDebateStore.getState().setCurrentSession(session);
-            
-            // @ts-ignore
+
+            // @ts-expect-error - performance.memory 是非标准但浏览器支持的 API
             const memoryAfter = performance.memory?.usedJSHeapSize || 0;
             const memoryIncrease = memoryAfter - memoryBefore;
 

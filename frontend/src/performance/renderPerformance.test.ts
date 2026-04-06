@@ -233,7 +233,7 @@ describe('大量数据渲染性能测试', () => {
             const events = makeRuntimeeventBatch(5000);
 
             const startTime = performance.now();
-            const indexed = buildTimelineSearchIndex(events);
+            buildTimelineSearchIndex(events);
             const indexTime = performance.now() - startTime;
 
             expect(indexTime).toBeLessThan(300);
@@ -259,7 +259,7 @@ describe('大量数据渲染性能测试', () => {
             const pageTotal = computeTimelinePageTotal(filtered.length, 200);
             const requiredPages = requiredPageCountForIndex(filtered.length, 1500, 200);
             const tail = sliceTimelineTail(filtered, 200, 5);
-            const virtualWindow = computeVirtualTimelineWindow(tail.length, 3200, 360, 60, 8);
+            computeVirtualTimelineWindow(tail.length, 3200, 360, 60, 8);
             const calcTime = performance.now() - startTime;
 
             expect(calcTime).toBeLessThan(100);
@@ -344,9 +344,9 @@ describe('大量数据渲染性能测试', () => {
                 '',
                 '',
             );
-            
-            const indexed = buildTimelineSearchIndex(events);
-            
+
+            buildTimelineSearchIndex(events);
+
             const totalTime = performance.now() - startTime;
 
             expect(totalTime).toBeLessThan(2000);
