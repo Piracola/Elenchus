@@ -147,6 +147,8 @@ export default function HomeReferenceLibrary({
                 whileHover={{ y: -1 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setShowPopover((current) => !current)}
+                data-testid="home-reference-library-button"
+                aria-label={buttonLabel}
                 style={{
                     display: 'inline-flex',
                     alignItems: 'center',

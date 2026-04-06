@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import HomeReferenceLibrary, { type PendingReferenceDocument } from './HomeReferenceLibrary';
 
 describe('HomeReferenceLibrary', () => {
@@ -13,9 +13,17 @@ describe('HomeReferenceLibrary', () => {
         return new File(['test content'], name, { type: 'text/plain' });
     };
 
+    beforeEach(() => {
+        cleanup();
+    });
+
+    afterEach(() => {
+        cleanup();
+    });
+
     it('应该显示参考资料按钮', () => {
         render(<HomeReferenceLibrary {...mockProps} />);
-        const button = screen.getByText('参考资料');
+        const button = screen.getByRole('button', { name: /参考资料/ });
         expect(button).toBeInTheDocument();
     });
 
@@ -29,21 +37,21 @@ describe('HomeReferenceLibrary', () => {
             },
         ];
         render(<HomeReferenceLibrary {...mockProps} pendingDocuments={documents} />);
-        const button = screen.getByText('参考资料 1');
-        expect(button).toBeInTheDocument();
+        const button = screen.getByRole('button', { name: /参考资料/ });
+        expect(button).toHaveTextContent(/参考资料 1/);
     });
 
     it('点击按钮应该打开弹出窗口', () => {
         render(<HomeReferenceLibrary {...mockProps} />);
-        const button = screen.getByText('参考资料');
+        const button = screen.getByRole('button', { name: /参考资料/ });
         fireEvent.click(button);
-        const popover = screen.getByText('参考资料');
+        const popover = screen.getByRole('heading', { name: '参考资料' });
         expect(popover).toBeInTheDocument();
     });
 
     it('在诡辩模式下应该使用诡辩模式样式', () => {
         render(<HomeReferenceLibrary {...mockProps} isSophistryMode={true} />);
-        const button = screen.getByText('参考资料');
+        const button = screen.getByRole('button', { name: /参考资料/ });
         expect(button).toHaveStyle({ color: 'var(--mode-sophistry-accent)' });
     });
 });
