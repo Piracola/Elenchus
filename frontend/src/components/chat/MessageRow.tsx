@@ -161,7 +161,7 @@ function MessageRow({
                 display: 'flex',
                 alignItems: 'center',
                 gap: '10px',
-                padding: '12px 16px',
+                padding: '8px 16px 4px 16px',
                 background: 'var(--bg-card)',
             }}>
                 <motion.div
@@ -216,7 +216,7 @@ function MessageRow({
             </div>
 
             {/* 消息内容 */}
-            <div style={{ padding: '16px 20px' }}>
+            <div style={{ padding: '8px 20px 16px 20px' }}>
             {agentCollapsed ? (
                 <div data-agent-content="collapsed" style={{
                     color: 'var(--text-secondary)',
@@ -274,7 +274,7 @@ function MessageRow({
                 alignItems: 'center',
                 justifyContent: 'flex-end',
                 gap: '10px',
-                padding: '10px 16px',
+                padding: '8px 16px 4px 16px',
                 background: 'var(--bg-card)',
             }}>
                 <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
@@ -300,7 +300,7 @@ function MessageRow({
                 </motion.div>
             </div>
 
-            <div style={{ padding: '14px 16px' }}>
+            <div style={{ padding: '4px 16px 12px 16px' }}>
             <div style={messageContentWrapperStyle('12px')}>
                 <ThinkingBlock
                     content={judgeContent.thinking}
