@@ -6,6 +6,7 @@ import type { DialogueEntry } from '../../types';
 import { splitLeadingThinkingContent } from '../../utils/thinkingContent';
 import RoundInsights from './RoundInsights';
 import type { InsightSection } from './RoundInsights';
+import { AgentMetaPill } from './messageRow/AgentMetaPill';
 import { MessageMarkdown } from './messageRow/MarkdownRenderer';
 import { ScoreGrid } from './messageRow/ScoreGrid';
 import { markdownBodyStyle, messageContentWrapperStyle } from './messageRow/contentStyles';
@@ -142,32 +143,48 @@ function MessageRow({
     const judgeOnly = Boolean(judgeEntry && !agentEntry);
     const agentOnly = Boolean(agentEntry && !judgeEntry);
 
-    // 正方/反方头部：左侧色块 + 信息
+    // 正方/反方头部：左侧大色块 + Pill 标签
     const agentHeader = agentEntry ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
             <motion.div
                 {...(animated ? { whileHover: { scale: 1.05 } } : STATIC_MOTION_PROPS)}
                 style={{
-                    width: '32px',
-                    height: '32px',
+                    width: '44px',
+                    height: '44px',
                     background: badgeBg,
-                    borderRadius: 'var(--radius-sm)',
+                    borderRadius: 'var(--radius-md)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     color: badgeColor,
                     fontWeight: 700,
-                    fontSize: '14px',
+                    fontSize: '18px',
                     flexShrink: 0,
                 }}
             >
                 {agentVisual.badge}
             </motion.div>
-            <span style={{ fontSize: '13px', color: 'var(--text-muted)', flex: 1 }}>
-                {agentVisual.label}
-                {agentTurnLabel && ` · ${agentTurnLabel}`}
-                {agentModel && ` · ${agentModel}`}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, flexWrap: 'wrap' }}>
+                <AgentMetaPill
+                    label={agentVisual.label}
+                    color={badgeColor}
+                    background={badgeBg}
+                />
+                {agentTurnLabel && (
+                    <AgentMetaPill
+                        label={agentTurnLabel}
+                        color="var(--text-primary)"
+                        background="var(--bg-tertiary)"
+                    />
+                )}
+                {agentModel && (
+                    <AgentMetaPill
+                        label={agentModel}
+                        color="var(--text-muted)"
+                        background="transparent"
+                    />
+                )}
+            </div>
             {agentCollapsed && <span style={bodyHintStyle()}>{collapsedHint}</span>}
             <button
                 type="button"
@@ -181,25 +198,25 @@ function MessageRow({
         </div>
     ) : null;
 
-    // 裁判头部：右侧色块
+    // 裁判头部：右侧大色块 + Pill 标签
     const judgeHeader = judgeEntry ? (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px', marginBottom: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px', marginBottom: '10px' }}>
             <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
                 {judgeVisual.label}
             </span>
             <motion.div
                 {...(animated ? { whileHover: { scale: 1.05 } } : STATIC_MOTION_PROPS)}
                 style={{
-                    width: '32px',
-                    height: '32px',
+                    width: '44px',
+                    height: '44px',
                     background: 'rgba(251, 191, 36, 0.2)',
-                    borderRadius: 'var(--radius-sm)',
+                    borderRadius: 'var(--radius-md)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     color: '#d97706',
                     fontWeight: 700,
-                    fontSize: '14px',
+                    fontSize: '18px',
                     flexShrink: 0,
                 }}
             >
