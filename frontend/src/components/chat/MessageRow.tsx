@@ -150,19 +150,28 @@ function MessageRow({
                 ? { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.4 } }
                 : STATIC_MOTION_PROPS)}
             style={{
+                position: 'relative',
                 background: 'var(--bg-secondary)',
                 borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border-subtle)',
-                overflow: 'hidden',
+                overflow: 'visible',
             }}
         >
             {/* 头部栏：徽章 + Pill 标签 + 折叠按钮 */}
             <div style={{
+                position: 'absolute',
+                top: '0',
+                left: '0',
+                right: '0',
+                transform: 'translateY(-50%)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '10px',
-                padding: '8px 16px 14px 16px',
+                padding: '8px 16px',
                 background: 'var(--bg-card)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-subtle)',
+                zIndex: 1,
             }}>
                 <motion.div
                     {...(animated ? { whileHover: { scale: 1.05 } } : STATIC_MOTION_PROPS)}
@@ -216,7 +225,7 @@ function MessageRow({
             </div>
 
             {/* 消息内容 */}
-            <div style={{ padding: '2px 20px 16px 20px' }}>
+            <div style={{ padding: '20px' }}>
             {agentCollapsed ? (
                 <div data-agent-content="collapsed" style={{
                     color: 'var(--text-secondary)',
@@ -262,20 +271,28 @@ function MessageRow({
                 }
                 : STATIC_MOTION_PROPS)}
             style={{
+                position: 'relative',
                 background: 'var(--bg-secondary)',
                 borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border-subtle)',
-                overflow: 'hidden',
+                overflow: 'visible',
             }}
         >
             {/* 裁判头部栏 */}
             <div style={{
+                position: 'absolute',
+                top: '0',
+                right: '0',
+                transform: 'translateY(-50%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'flex-end',
                 gap: '10px',
-                padding: '8px 16px 10px 16px',
+                padding: '8px 16px',
                 background: 'var(--bg-card)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-subtle)',
+                zIndex: 1,
             }}>
                 <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
                     {judgeVisual.label}
@@ -300,7 +317,7 @@ function MessageRow({
                 </motion.div>
             </div>
 
-            <div style={{ padding: '0px 16px 12px 16px' }}>
+            <div style={{ padding: '16px' }}>
             <div style={messageContentWrapperStyle('12px')}>
                 <ThinkingBlock
                     content={judgeContent.thinking}
