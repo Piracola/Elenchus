@@ -32,6 +32,44 @@ TokenCallback = Callable[[str], Awaitable[None]]
 ProgressCallback = Callable[[float], Awaitable[None]]
 
 
+def _normalize_reasoning_content(response: AIMessage) -> AIMessage:
+    """
+    处理 response 中的 reasoning_content 字段，将其包装为前端期望的 <think> 标签格式。
+    """
+    raw_content = getattr(response, "content", "")
+    reasoning = getattr(response, "reasoning_content", None)
+
+    if reasoning and len(str(reasoning)) > 0:
+        reasoning_str = str(reasoning)
+        content_str = str(raw_content) if raw_content else ""
+
+        # 包装为前端期望的 <think> 标签格式
+        if content_str:
+            new_content = f"<think>{reasoning_str}</think>\n\n{content_str}"
+        else:
+            new_content = f"<think>{reasoning_str}</think>"
+
+        response.content = new_content
+
+        logger.debug(
+            "[Model Response] Extracted reasoning_content: reasoning_length=%d, content_length=%d, has_think_tags=%s",
+            len(reasoning_str),
+            len(content_str),
+            "<think" in content_str.lower(),
+        )
+    elif raw_content and len(str(raw_content)) > 0:
+        # 记录原始响应内容以便调试
+        content_str = str(raw_content)
+        logger.debug(
+            "[Model Response] content_length=%d has_think_tags=%s content_preview=%s",
+            len(content_str),
+            "<think" in content_str.lower(),
+            content_str[:200] if content_str else "",
+        )
+
+    return response
+
+
 async def invoke_chat_model(
     messages: Sequence[BaseMessage],
     *,
@@ -53,7 +91,7 @@ async def invoke_chat_model(
     """
     last_exception = None
     config = None
-    
+
     for attempt in range(max_retries + 1):
         try:
             config = await resolve_llm_config(override)
@@ -74,12 +112,16 @@ async def invoke_chat_model(
                     timeout_seconds=timeout_seconds,
                     heartbeat_interval_seconds=heartbeat_interval_seconds,
                 )
-            return await _run_with_heartbeat(
+            response = await _run_with_heartbeat(
                 lambda: llm.ainvoke(list(messages)),
                 on_progress=on_progress,
                 timeout_seconds=timeout_seconds,
                 heartbeat_interval_seconds=heartbeat_interval_seconds,
             )
+            # 处理 reasoning_content（如 gemma-4 等模型的思维链）
+            if isinstance(response, AIMessage):
+                return _normalize_reasoning_content(response)
+            return response
         except Exception as exc:
             last_exception = exc
             current_config = config if config is not None else await resolve_llm_config(override)
@@ -268,39 +310,7 @@ async def _invoke_chat_model_streaming(
         return AIMessage(content="")
 
     if isinstance(aggregated_chunk, AIMessage):
-        # 处理 reasoning_content 字段（如 doubao-seed 模型的思维链）
-        raw_content = getattr(aggregated_chunk, "content", "")
-        reasoning = getattr(aggregated_chunk, "reasoning_content", None)
-        
-        if reasoning and len(str(reasoning)) > 0:
-            reasoning_str = str(reasoning)
-            content_str = str(raw_content) if raw_content else ""
-            
-            # 包装为前端期望的 <think> 标签格式
-            if content_str:
-                new_content = f"<think>{reasoning_str}</think>\n\n{content_str}"
-            else:
-                new_content = f"<think>{reasoning_str}</think>"
-            
-            aggregated_chunk.content = new_content
-            
-            logger.debug(
-                "[Model Response] Extracted reasoning_content: reasoning_length=%d, content_length=%d, has_think_tags=%s",
-                len(reasoning_str),
-                len(content_str),
-                "<think" in content_str.lower(),
-            )
-        elif raw_content and len(str(raw_content)) > 0:
-            # 记录原始响应内容以便调试
-            content_str = str(raw_content)
-            logger.debug(
-                "[Model Response] content_length=%d has_think_tags=%s content_preview=%s",
-                len(content_str),
-                "<think" in content_str.lower(),
-                content_str[:200] if content_str else "",
-            )
-        
-        return aggregated_chunk
+        return _normalize_reasoning_content(aggregated_chunk)
 
     return AIMessage(
         content=extract_text_content(getattr(aggregated_chunk, "content", "")),
