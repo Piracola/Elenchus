@@ -261,6 +261,21 @@ export function ProviderForm({
                             设为全局默认服务商
                         </label>
                     </div>
+
+                    {formData.providerType === 'openai' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                            <input
+                                type="checkbox"
+                                id="enableThinkingToggle"
+                                checked={formData.enableThinking}
+                                onChange={e => onFieldChange('enableThinking', e.target.checked)}
+                                style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                            />
+                            <label htmlFor="enableThinkingToggle" style={{ fontSize: '14px', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 600 }}>
+                                启用思考模式（显示模型推理过程）
+                            </label>
+                        </div>
+                    )}
                 </div>
 
                 <div style={{ borderTop: '1px solid var(--border-subtle)', margin: '8px 0' }} />

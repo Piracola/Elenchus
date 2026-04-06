@@ -35,6 +35,7 @@ export interface ProviderFormData {
     customParametersText: string;
     models: string[];
     isDefault: boolean;
+    enableThinking: boolean;  // 新增：思考模式开关
 }
 
 export interface AgentConfigResult {

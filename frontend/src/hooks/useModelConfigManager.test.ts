@@ -40,6 +40,7 @@ function createFormData(overrides: Partial<ProviderFormData> = {}): ProviderForm
         customParametersText: '{"reasoning_effort":"medium"}',
         models: ['gpt-4o'],
         isDefault: false,
+        enableThinking: false,
         ...overrides,
     };
 }

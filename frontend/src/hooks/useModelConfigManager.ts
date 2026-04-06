@@ -16,6 +16,7 @@ function createEmptyFormData(): ProviderFormData {
         customParametersText: '',
         models: [],
         isDefault: false,
+        enableThinking: false,
     };
 }
 
@@ -32,12 +33,22 @@ function parseDefaultMaxTokensInput(input: string): number {
 }
 
 function buildSavePayload(formData: ProviderFormData): ModelConfigCreatePayload {
+    // 解析自定义参数
+    const customParams = parseCustomParametersInput(formData.customParametersText);
+    // 将 enable_thinking 合并到 custom_parameters 中
+    if (formData.enableThinking) {
+        customParams.enable_thinking = true;
+    } else {
+        // 如果未启用思考模式，从 custom_parameters 中移除 enable_thinking
+        delete customParams.enable_thinking;
+    }
+
     const payload: ModelConfigCreatePayload = {
         name: formData.name.trim(),
         provider_type: formData.providerType,
         api_base_url: formData.apiBaseUrl.trim() || null,
         default_max_tokens: parseDefaultMaxTokensInput(formData.defaultMaxTokens),
-        custom_parameters: parseCustomParametersInput(formData.customParametersText),
+        custom_parameters: customParams,
         models: formData.models,
         is_default: formData.isDefault,
     };
@@ -87,6 +98,14 @@ export function useModelConfigManager() {
     }, []);
 
     const fillForm = useCallback((provider: ModelConfig) => {
+        // 从 custom_parameters 中提取 enable_thinking
+        const customParams = provider.custom_parameters || {};
+        const enableThinking = Boolean(customParams.enable_thinking);
+        // 从 custom_parameters 中移除 enable_thinking，避免在原始参数文本中重复显示
+        const filteredCustomParams = Object.fromEntries(
+            Object.entries(customParams).filter(([key]) => key !== 'enable_thinking')
+        );
+
         setFormData({
             name: provider.name,
             providerType: provider.provider_type || 'openai',
@@ -95,9 +114,10 @@ export function useModelConfigManager() {
             clearApiKey: false,
             apiBaseUrl: provider.api_base_url || '',
             defaultMaxTokens: String(provider.default_max_tokens ?? 64000),
-            customParametersText: formatCustomParameters(provider.custom_parameters),
+            customParametersText: formatCustomParameters(filteredCustomParams),
             models: provider.models || [],
             isDefault: provider.is_default || false,
+            enableThinking,
         });
         setIsCreatingNew(false);
     }, []);

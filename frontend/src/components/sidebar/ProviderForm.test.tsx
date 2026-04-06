@@ -22,6 +22,7 @@ describe('ProviderForm', () => {
                     customParametersText: '',
                     models: ['gpt-4o'],
                     isDefault: false,
+                    enableThinking: false,
                 }}
                 isCreatingNew={false}
                 newModelInput=""
@@ -58,6 +59,7 @@ describe('ProviderForm', () => {
                     customParametersText: '',
                     models: ['gpt-4o'],
                     isDefault: false,
+                    enableThinking: false,
                 }}
                 isCreatingNew={false}
                 newModelInput=""

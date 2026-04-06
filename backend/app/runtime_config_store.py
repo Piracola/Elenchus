@@ -118,6 +118,13 @@ def _normalize_provider(provider: dict[str, Any]) -> dict[str, Any]:
     default_max_tokens = int(raw_default_max_tokens) if raw_default_max_tokens is not None else 64000
     if default_max_tokens < 1:
         default_max_tokens = 64000
+    
+    # 处理 custom_parameters，支持 enable_thinking 字段
+    custom_parameters = dict(provider.get("custom_parameters") or {})
+    # 如果顶层有 enable_thinking 字段，将其合并到 custom_parameters 中
+    if "enable_thinking" in provider:
+        custom_parameters["enable_thinking"] = bool(provider["enable_thinking"])
+    
     return {
         "id": str(provider.get("id", "") or ""),
         "name": str(provider.get("name", "") or "").strip(),
@@ -125,7 +132,7 @@ def _normalize_provider(provider: dict[str, Any]) -> dict[str, Any]:
         "api_key": str(provider.get("api_key", "") or ""),
         "api_base_url": str(provider.get("api_base_url", "") or "") or None,
         "default_max_tokens": default_max_tokens,
-        "custom_parameters": dict(provider.get("custom_parameters") or {}),
+        "custom_parameters": custom_parameters,
         "models": [str(model) for model in (provider.get("models") or []) if str(model)],
         "is_default": bool(provider.get("is_default", False)),
         "created_at": str(created_at),
