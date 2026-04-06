@@ -11,6 +11,7 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useDebateStore } from '../../stores/debateStore';
+import type { DialogueEntry } from '../../types';
 import { getAgentVisual, STATIC_MOTION_PROPS } from './messageRow/shared';
 import { messageContentWrapperStyle, markdownBodyStyle } from './messageRow/contentStyles';
 import { MessageMarkdown } from './messageRow/MarkdownRenderer';
@@ -92,7 +93,9 @@ export default function StreamingMessage() {
             role: streamingRole,
             agent_name: streamingRole === 'proposer' ? '正方' : streamingRole === 'opposer' ? '反方' : streamingRole,
             content: '',
-        });
+            citations: [],
+            timestamp: '',
+        } as DialogueEntry);
     }, [streamingRole]);
 
     const splitContent = useMemo(
