@@ -20,7 +20,7 @@ Elenchus 是一个用于多智能体辩论的平台，基于 `FastAPI + LangGrap
 
 前端启动后请在左下角配置自定义模型提供商。
 
-![Elenchus 界面预览](./docs/image-20260323104421211.png)
+![Elenchus 界面预览](./docs/2026-04-06_20-30-48.png)
 
 ## 示例辩论记录
 
