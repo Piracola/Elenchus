@@ -143,7 +143,7 @@ function MessageRow({
 
     // 头部行：徽章 + 标签 + 折叠按钮
     const agentHeader = agentEntry ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', paddingLeft: '4px', paddingRight: '4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', paddingLeft: '16px', paddingRight: '16px' }}>
             <motion.div
                 {...(animated ? { whileHover: { scale: 1.05 } } : STATIC_MOTION_PROPS)}
                 style={{
@@ -198,7 +198,7 @@ function MessageRow({
 
     // 裁判头部
     const judgeHeader = judgeEntry ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', paddingLeft: '4px', paddingRight: '4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', paddingLeft: '16px', paddingRight: '16px' }}>
             <motion.div
                 {...(animated ? { whileHover: { scale: 1.05 } } : STATIC_MOTION_PROPS)}
                 style={{
