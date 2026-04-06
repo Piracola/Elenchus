@@ -73,21 +73,9 @@ function sameDialogueContent(a: DialogueEntry, b: DialogueEntry): boolean {
 }
 
 export function appendDialogueWithDedupe(history: DialogueEntry[], entry: DialogueEntry): DialogueEntry[] {
-    if (entry.role === 'judge' && entry.turn !== undefined) {
-        const duplicatedJudge = history.some(
-            (item) =>
-                item.role === 'judge' &&
-                item.turn === entry.turn &&
-                (item.target_role ?? '') === (entry.target_role ?? '') &&
-                sameDialogueContent(item, entry),
-        );
-        if (duplicatedJudge) {
-            return history;
-        }
-    }
-
-    const lastEntry = history[history.length - 1];
-    if (lastEntry && sameDialogueContent(lastEntry, entry)) {
+    // 对所有消息进行全局去重，防止因事件重发、状态恢复等原因导致的重复
+    const isDuplicate = history.some((item) => sameDialogueContent(item, entry));
+    if (isDuplicate) {
         return history;
     }
 

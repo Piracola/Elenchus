@@ -299,29 +299,40 @@ function MessageRow({
                 </motion.div>
             </div>
 
-            <div style={{ padding: '0px 16px 12px 16px' }}>
-            <div style={messageContentWrapperStyle('12px')}>
-                <ThinkingBlock
-                    content={judgeContent.thinking}
-                    accentColor="#d97706"
-                    fontSize={judgeOnly ? messageFontSizes.judgeBody : messageFontSizes.judgeBodyCompact}
-                    textColor="var(--text-secondary)"
-                />
-                {judgeContent.response && (
-                    <div
-                        className="markdown-body"
-                        style={markdownBodyStyle(
-                            judgeOnly ? messageFontSizes.judgeBody : messageFontSizes.judgeBodyCompact,
-                            'var(--text-secondary)',
-                        )}
-                    >
-                        <MessageMarkdown text={judgeContent.response} />
-                    </div>
-                )}
-            </div>
+            {agentCollapsed ? (
+                <div style={{
+                    padding: '14px 16px',
+                    color: 'var(--text-muted)',
+                    fontSize: messageFontSizes.judgeBodyCompact,
+                    fontStyle: 'italic',
+                }}>
+                    裁判评分已折叠
+                </div>
+            ) : (
+                <div style={{ padding: '0px 16px 12px 16px' }}>
+                <div style={messageContentWrapperStyle('12px')}>
+                    <ThinkingBlock
+                        content={judgeContent.thinking}
+                        accentColor="#d97706"
+                        fontSize={judgeOnly ? messageFontSizes.judgeBody : messageFontSizes.judgeBodyCompact}
+                        textColor="var(--text-secondary)"
+                    />
+                    {judgeContent.response && (
+                        <div
+                            className="markdown-body"
+                            style={markdownBodyStyle(
+                                judgeOnly ? messageFontSizes.judgeBody : messageFontSizes.judgeBodyCompact,
+                                'var(--text-secondary)',
+                            )}
+                        >
+                            <MessageMarkdown text={judgeContent.response} />
+                        </div>
+                    )}
+                </div>
 
-            <ScoreGrid judgeEntry={judgeEntry} animated={animated} />
-            </div>
+                <ScoreGrid judgeEntry={judgeEntry} animated={animated} />
+                </div>
+            )}
         </motion.div>
     ) : null;
 
