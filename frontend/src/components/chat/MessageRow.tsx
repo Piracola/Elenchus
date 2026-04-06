@@ -186,8 +186,8 @@ function MessageRow({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, flexWrap: 'wrap' }}>
                     <AgentMetaPill
                         label={agentVisual.label}
-                        color={badgeColor}
-                        background={badgeBg}
+                        color="var(--text-primary)"
+                        background="var(--bg-tertiary)"
                     />
                     {agentTurnLabel && (
                         <AgentMetaPill
