@@ -66,8 +66,8 @@ function MessageRow({
 
     // 根据正方/反方设置颜色
     const isProposer = agentVisual.label === '正方' || agentEntry?.role === 'proposer';
-    const badgeColor = isProposer ? 'var(--color-proposer, #4ade80)' : 'var(--color-opposer, #f87171)';
-    const badgeBg = isProposer ? 'rgba(74, 222, 128, 0.2)' : 'rgba(248, 113, 113, 0.2)';
+    const badgeColor = '#fff';
+    const badgeBg = isProposer ? '#22c55e' : '#ef4444';
 
     if (systemEntry) {
         if (systemEntry.role === 'audience') {
