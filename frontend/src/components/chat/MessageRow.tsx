@@ -168,7 +168,7 @@ function MessageRow({
                     gap: '8px',
                     background: 'var(--bg-card)',
                     padding: '6px 8px 6px 6px',
-                    borderRadius: 'var(--radius-full)',
+                    borderRadius: 'var(--radius-md)',
                     boxShadow: 'var(--shadow-sm)',
                     border: '1px solid var(--border-subtle)',
                 }}
