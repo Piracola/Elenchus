@@ -162,7 +162,6 @@ function MessageRow({
                 alignItems: 'center',
                 gap: '10px',
                 padding: '12px 16px',
-                borderBottom: '1px solid var(--border-subtle)',
                 background: 'var(--bg-card)',
             }}>
                 <motion.div
@@ -276,7 +275,6 @@ function MessageRow({
                 justifyContent: 'flex-end',
                 gap: '10px',
                 padding: '10px 16px',
-                borderBottom: '1px solid var(--border-subtle)',
                 background: 'var(--bg-card)',
             }}>
                 <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
