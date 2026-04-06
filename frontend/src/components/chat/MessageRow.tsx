@@ -224,7 +224,7 @@ function MessageRow({
                     lineHeight: 1.7,
                     padding: '14px 16px',
                     borderRadius: 'var(--radius-lg)',
-                    border: `1px dashed ${badgeBg}`,
+                    border: `2px dashed ${badgeBg}`,
                 }}>
                     {collapsedHint}
                 </div>
