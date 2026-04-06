@@ -46,4 +46,5 @@ export interface AgentConfigResult {
     temperature?: number;
     max_input_tokens?: number;
     max_tokens?: number;
+    enable_thinking?: boolean;
 }

@@ -22,7 +22,6 @@ import {
     collapseButtonTitle,
     collapsedBodyStyle,
     formatCollapsedHint,
-    formatRoleLabel,
     formatTurnPill,
     getAgentVisual,
     getJudgeVisual,
@@ -41,6 +40,7 @@ export interface MessageRowProps {
     animated?: boolean;
     agentCollapsed?: boolean;
     onToggleAgentCollapsed?: () => void;
+    agentModel?: string;  // 本次发言使用的模型ID
 }
 
 function MessageRow({
@@ -54,6 +54,7 @@ function MessageRow({
     animated = false,
     agentCollapsed = false,
     onToggleAgentCollapsed,
+    agentModel,
 }: MessageRowProps) {
     const neutralColor = 'var(--color-neutral, #6b7280)';
     const rowFocused = highlightAgent || highlightJudge || highlightSystem;
@@ -68,12 +69,6 @@ function MessageRow({
     const agentTurnLabel = formatTurnPill(agentEntry?.turn);
     const collapsedHint = formatCollapsedHint(agentEntry);
     const metaBackground = agentMetaBackground(agentVisual.color);
-    const agentRoleLabel =
-        agentVisual.label === '正方' || agentEntry?.role === 'proposer'
-            ? '正方'
-            : agentVisual.label === '反方' || agentEntry?.role === 'opposer'
-                ? '反方'
-                : formatRoleLabel(agentEntry?.role);
 
     if (systemEntry) {
         if (systemEntry.role === 'audience') {
@@ -210,7 +205,11 @@ function MessageRow({
 
             <div style={bodyHeaderStyle()}>
                 <div style={bodyMetaGroupStyle()}>
-                    <AgentMetaPill label={agentVisual.label} color={agentVisual.color} background={metaBackground} />
+                    <AgentMetaPill
+                        label={agentVisual.label}
+                        color={agentVisual.color}
+                        background={metaBackground}
+                    />
                     {agentTurnLabel && (
                         <AgentMetaPill
                             label={agentTurnLabel}
@@ -218,7 +217,13 @@ function MessageRow({
                             background="var(--bg-tertiary)"
                         />
                     )}
-                    <AgentMetaPill label={agentRoleLabel} color={agentVisual.color} background={metaBackground} />
+                    {agentModel && (
+                        <AgentMetaPill
+                            label={`🤖 ${agentModel}`}
+                            color="var(--text-secondary)"
+                            background="var(--bg-tertiary)"
+                        />
+                    )}
                 </div>
                 <div style={bodyControlsStyle()}>
                     {agentCollapsed && <span style={bodyHintStyle()}>{collapsedHint}</span>}
@@ -452,6 +457,7 @@ function areEqual(previous: MessageRowProps, next: MessageRowProps): boolean {
         && previous.highlightSystem === next.highlightSystem
         && previous.animated === next.animated
         && previous.agentCollapsed === next.agentCollapsed
+        && previous.agentModel === next.agentModel
         && sectionsEqual(previous.insightSections, next.insightSections);
 }
 

@@ -221,10 +221,12 @@ function SessionCreator() {
         savedConfigs,
         selectedConfigIds,
         temperatureInputs,
+        enableThinking,
         showConfigManager,
         setShowConfigManager,
         handleConfigSelect,
         handleTemperatureChange,
+        handleThinkingToggle,
         buildAgentConfigs,
     } = useAgentConfigs();
 
@@ -244,10 +246,12 @@ function SessionCreator() {
                         savedConfigs={savedConfigs}
                         selectedConfigIds={selectedConfigIds}
                         temperatureInputs={temperatureInputs}
+                        enableThinking={enableThinking}
                         showConfigManager={showConfigManager}
                         setShowConfigManager={setShowConfigManager}
                         handleConfigSelect={handleConfigSelect}
                         handleTemperatureChange={handleTemperatureChange}
+                        handleThinkingToggle={handleThinkingToggle}
                     />
                 </div>
             )}

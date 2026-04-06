@@ -16,6 +16,15 @@ export function createEmptyAgentFieldMap(): Record<AgentRole, string> {
     };
 }
 
+export function createEmptyThinkingMap(): Record<AgentRole, boolean> {
+    return {
+        proposer: false,
+        opposer: false,
+        judge: false,
+        fact_checker: false,
+    };
+}
+
 export function parseAgentTemperatureInput(input: string): number | undefined {
     const trimmed = input.trim();
     if (!trimmed) {
@@ -49,6 +58,7 @@ export function buildAgentConfigsPayload(
     savedConfigs: ModelConfig[],
     selectedConfigIds: Record<string, string>,
     temperatureInputs: Record<string, string>,
+    enableThinkingInputs?: Record<string, boolean>,
 ): Record<string, AgentConfigResult> | undefined {
     const result: Record<string, AgentConfigResult> = {};
     const defaultProvider = savedConfigs.find(
@@ -58,8 +68,9 @@ export function buildAgentConfigsPayload(
     for (const role of AGENT_ROLES) {
         const selectedKey = selectedConfigIds[role] ?? '';
         const temperature = parseAgentTemperatureInput(temperatureInputs[role] ?? '');
+        const enableThinking = enableThinkingInputs?.[role] ?? false;
 
-        if (!selectedKey && temperature === undefined) {
+        if (!selectedKey && temperature === undefined && !enableThinking) {
             continue;
         }
 
@@ -85,6 +96,7 @@ export function buildAgentConfigsPayload(
             provider_id: configDef.id,
             api_base_url: configDef.api_base_url || undefined,
             ...(temperature !== undefined ? { temperature } : {}),
+            ...(enableThinking ? { enable_thinking: true } : {}),
             ...(configDef.custom_parameters && Object.keys(configDef.custom_parameters).length > 0
                 ? { custom_parameters: configDef.custom_parameters }
                 : {}),

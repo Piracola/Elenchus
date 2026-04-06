@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
 import type { ModelConfig } from '../types';
-import { buildAgentConfigsPayload, createEmptyAgentFieldMap, type AgentRole } from '../utils/agentConfigs';
+import { buildAgentConfigsPayload, createEmptyAgentFieldMap, createEmptyThinkingMap, type AgentRole } from '../utils/agentConfigs';
 
 export function useAgentConfigs() {
     const [savedConfigs, setSavedConfigs] = useState<ModelConfig[]>([]);
     const [selectedConfigIds, setSelectedConfigIds] = useState<Record<AgentRole, string>>(createEmptyAgentFieldMap);
     const [temperatureInputs, setTemperatureInputs] = useState<Record<AgentRole, string>>(createEmptyAgentFieldMap);
+    const [enableThinking, setEnableThinking] = useState<Record<AgentRole, boolean>>(createEmptyThinkingMap);
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [showConfigManager, setShowConfigManager] = useState(false);
     const hasLoadedRef = useRef(false);
@@ -38,20 +39,26 @@ export function useAgentConfigs() {
         setTemperatureInputs(prev => ({ ...prev, [agent]: value }));
     }, []);
 
+    const handleThinkingToggle = useCallback((agent: AgentRole, value: boolean) => {
+        setEnableThinking(prev => ({ ...prev, [agent]: value }));
+    }, []);
+
     const buildAgentConfigs = useCallback(() => {
-        return buildAgentConfigsPayload(savedConfigs, selectedConfigIds, temperatureInputs);
-    }, [savedConfigs, selectedConfigIds, temperatureInputs]);
+        return buildAgentConfigsPayload(savedConfigs, selectedConfigIds, temperatureInputs, enableThinking);
+    }, [savedConfigs, selectedConfigIds, temperatureInputs, enableThinking]);
 
     return {
         savedConfigs,
         selectedConfigIds,
         temperatureInputs,
+        enableThinking,
         showAdvanced,
         setShowAdvanced,
         showConfigManager,
         setShowConfigManager,
         handleConfigSelect,
         handleTemperatureChange,
+        handleThinkingToggle,
         buildAgentConfigs,
     };
 }

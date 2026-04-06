@@ -26,10 +26,12 @@ export default function DebaterSettingsModal({
         savedConfigs,
         selectedConfigIds,
         temperatureInputs,
+        enableThinking,
         showConfigManager,
         setShowConfigManager,
         handleConfigSelect,
         handleTemperatureChange,
+        handleThinkingToggle,
     } = useAgentConfigs();
 
     // 弹窗打开时关闭配置管理器
@@ -178,10 +180,12 @@ export default function DebaterSettingsModal({
                                     savedConfigs={savedConfigs}
                                     selectedConfigIds={selectedConfigIds}
                                     temperatureInputs={temperatureInputs}
+                                    enableThinking={enableThinking}
                                     showConfigManager={showConfigManager}
                                     setShowConfigManager={setShowConfigManager}
                                     handleConfigSelect={handleConfigSelect}
                                     handleTemperatureChange={handleTemperatureChange}
+                                    handleThinkingToggle={handleThinkingToggle}
                                 />
                             </div>
                         </motion.div>

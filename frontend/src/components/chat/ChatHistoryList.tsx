@@ -1,4 +1,6 @@
 import type { RefObject } from 'react';
+import { useMemo } from 'react';
+import { useConnectionViewState } from '../../hooks/useDebateViewState';
 import type { DialogueEntry } from '../../types';
 import MessageRow from './MessageRow';
 import RoundInsights from './RoundInsights';
@@ -44,6 +46,21 @@ export default function ChatHistoryList({
     consensusEntries,
     consensusFocused,
 }: ChatHistoryListProps) {
+    // Get agent_configs from current session to resolve model info
+    const { currentSession } = useConnectionViewState();
+    const agentConfigs = currentSession?.agent_configs || {};
+
+    // Build a model lookup map: role -> model name
+    const modelByRole = useMemo(() => {
+        const map: Record<string, string> = {};
+        for (const [role, config] of Object.entries(agentConfigs)) {
+            if (config?.model) {
+                map[role] = config.model;
+            }
+        }
+        return map;
+    }, [agentConfigs]);
+
     return (
         <div
             ref={scrollRef}
@@ -106,6 +123,7 @@ export default function ChatHistoryList({
                                 onToggleAgentCollapsed={viewModel.agentCollapseKey && currentSessionId
                                     ? () => toggleAgentMessageCollapsed(currentSessionId, viewModel.agentCollapseKey as string)
                                     : undefined}
+                                agentModel={viewModel.row.agent?.role ? modelByRole[viewModel.row.agent.role] : undefined}
                             />
                         </div>
                         {!!viewModel.jurySections.length && (

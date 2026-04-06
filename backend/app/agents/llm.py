@@ -70,6 +70,11 @@ async def resolve_llm_config(
     )
     max_tokens = int(override.get("max_tokens", default_max_tokens))
 
+    # 处理 enable_thinking：从 override 中提取并合并到 custom_parameters
+    enable_thinking = override.get("enable_thinking", False)
+    if enable_thinking:
+        custom_parameters["enable_thinking"] = True
+
     if not api_key:
         raise ValueError(
             "Model invocation blocked: the selected agent is missing an API key. "

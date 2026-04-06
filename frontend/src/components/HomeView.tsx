@@ -45,10 +45,12 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
         savedConfigs,
         selectedConfigIds,
         temperatureInputs,
+        enableThinking,
         showConfigManager,
         setShowConfigManager,
         handleConfigSelect,
         handleTemperatureChange,
+        handleThinkingToggle,
         buildAgentConfigs,
     } = useAgentConfigs();
 
@@ -313,10 +315,12 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                                     savedConfigs={savedConfigs}
                                     selectedConfigIds={selectedConfigIds}
                                     temperatureInputs={temperatureInputs}
+                                    enableThinking={enableThinking}
                                     showConfigManager={showConfigManager}
                                     setShowConfigManager={setShowConfigManager}
                                     handleConfigSelect={handleConfigSelect}
                                     handleTemperatureChange={handleTemperatureChange}
+                                    handleThinkingToggle={handleThinkingToggle}
                                 />
                             </motion.div>
                         )}

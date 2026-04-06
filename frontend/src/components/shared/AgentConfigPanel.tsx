@@ -34,16 +34,19 @@ interface AgentConfigPanelProps {
     savedConfigs: ModelConfig[];
     selectedConfigIds: Record<AgentRole, string>;
     temperatureInputs: Record<AgentRole, string>;
+    enableThinking?: Record<AgentRole, boolean>;
     showConfigManager: boolean;
     setShowConfigManager: (v: boolean) => void;
     handleConfigSelect: (agent: AgentRole, value: string) => void;
     handleTemperatureChange: (agent: AgentRole, value: string) => void;
+    handleThinkingToggle?: (agent: AgentRole, value: boolean) => void;
 }
 
 export default function AgentConfigPanel({
     savedConfigs, selectedConfigIds,
     temperatureInputs,
-    showConfigManager, setShowConfigManager, handleConfigSelect, handleTemperatureChange,
+    enableThinking,
+    showConfigManager, setShowConfigManager, handleConfigSelect, handleTemperatureChange, handleThinkingToggle,
 }: AgentConfigPanelProps) {
 
     const buildOptions = () => {
@@ -161,6 +164,32 @@ export default function AgentConfigPanel({
                                     }}
                                 />
                             </div>
+                            {handleThinkingToggle && (
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                }}>
+                                    <input
+                                        type="checkbox"
+                                        id={`thinking-${agent}`}
+                                        checked={enableThinking?.[agent] ?? false}
+                                        onChange={(event) => handleThinkingToggle(agent, event.target.checked)}
+                                        style={{ cursor: 'pointer', width: '14px', height: '14px' }}
+                                    />
+                                    <label
+                                        htmlFor={`thinking-${agent}`}
+                                        style={{
+                                            fontSize: '11px',
+                                            color: 'var(--text-secondary)',
+                                            cursor: 'pointer',
+                                            fontWeight: 500,
+                                        }}
+                                    >
+                                        深度思考
+                                    </label>
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
