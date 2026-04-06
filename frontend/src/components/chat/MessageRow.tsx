@@ -12,10 +12,7 @@ import { ScoreGrid } from './messageRow/ScoreGrid';
 import { markdownBodyStyle, messageContentWrapperStyle } from './messageRow/contentStyles';
 import {
     agentMetaBackground,
-    bodyControlsStyle,
-    bodyHeaderStyle,
     bodyHintStyle,
-    bodyMetaGroupStyle,
     collapseButtonLabel,
     collapseButtonStyle,
     collapseButtonSymbol,
@@ -160,6 +157,7 @@ function MessageRow({
                 marginTop: '20px',
             }}
         >
+            {/* 顶部标签区域：徽章 + 元信息标签 */}
             <div
                 style={{
                     position: 'absolute',
@@ -167,7 +165,12 @@ function MessageRow({
                     left: '24px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '10px',
+                    gap: '8px',
+                    background: 'var(--bg-card)',
+                    padding: '6px 8px 6px 6px',
+                    borderRadius: 'var(--radius-full)',
+                    boxShadow: 'var(--shadow-sm)',
+                    border: '1px solid var(--border-subtle)',
                 }}
             >
                 <motion.div
@@ -184,27 +187,12 @@ function MessageRow({
                         fontWeight: 700,
                         fontSize: '16px',
                         boxShadow: `0 6px 16px ${agentVisual.glowTint}`,
+                        flexShrink: 0,
                     }}
                 >
                     {agentVisual.badge}
                 </motion.div>
-                <span
-                    style={{
-                        fontSize: '13px',
-                        color: 'var(--text-secondary)',
-                        background: 'var(--bg-card)',
-                        padding: '6px 14px',
-                        borderRadius: 'var(--radius-full)',
-                        boxShadow: 'var(--shadow-xs)',
-                        fontWeight: 500,
-                    }}
-                >
-                    {agentVisual.label}
-                </span>
-            </div>
-
-            <div style={bodyHeaderStyle()}>
-                <div style={bodyMetaGroupStyle()}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                     <AgentMetaPill
                         label={agentVisual.label}
                         color={agentVisual.color}
@@ -219,24 +207,26 @@ function MessageRow({
                     )}
                     {agentModel && (
                         <AgentMetaPill
-                            label={`🤖 ${agentModel}`}
+                            label={agentModel}
                             color="var(--text-secondary)"
                             background="var(--bg-tertiary)"
                         />
                     )}
                 </div>
-                <div style={bodyControlsStyle()}>
-                    {agentCollapsed && <span style={bodyHintStyle()}>{collapsedHint}</span>}
-                    <button
-                        type="button"
-                        onClick={onToggleAgentCollapsed}
-                        style={collapseButtonStyle(agentCollapsed)}
-                        title={collapseButtonTitle(agentCollapsed)}
-                    >
-                        <span>{collapseButtonSymbol(agentCollapsed)}</span>
-                        <span>{collapseButtonLabel(agentCollapsed)}</span>
-                    </button>
-                </div>
+            </div>
+
+            {/* 折叠/展开控制按钮 */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px', marginBottom: '4px' }}>
+                {agentCollapsed && <span style={bodyHintStyle()}>{collapsedHint}</span>}
+                <button
+                    type="button"
+                    onClick={onToggleAgentCollapsed}
+                    style={collapseButtonStyle(agentCollapsed)}
+                    title={collapseButtonTitle(agentCollapsed)}
+                >
+                    <span>{collapseButtonSymbol(agentCollapsed)}</span>
+                    <span>{collapseButtonLabel(agentCollapsed)}</span>
+                </button>
             </div>
 
             {agentCollapsed ? (
