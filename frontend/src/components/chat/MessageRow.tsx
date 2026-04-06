@@ -219,12 +219,12 @@ function MessageRow({
             <div style={{ padding: '2px 20px 16px 20px' }}>
             {agentCollapsed ? (
                 <div data-agent-content="collapsed" style={{
-                    color: badgeColor,
+                    color: 'var(--text-secondary)',
                     fontSize: messageFontSizes.body,
                     lineHeight: 1.7,
                     padding: '14px 16px',
                     borderRadius: 'var(--radius-lg)',
-                    border: `1px dashed ${badgeColor}`,
+                    border: `1px dashed ${badgeBg}`,
                 }}>
                     {collapsedHint}
                 </div>
