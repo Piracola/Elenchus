@@ -12,6 +12,7 @@ from app.dependencies import (
     get_debate_runtime_service,
     get_runtime_bus,
 )
+from app.middleware.rate_limit import check_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,13 @@ async def debate_ws(websocket: WebSocket, session_id: str):
     if not _SESSION_ID_RE.match(session_id):
         await websocket.accept()
         await websocket.close(code=4001, reason="Invalid session_id format")
+        return
+
+    # Rate limit WebSocket connections
+    ip = websocket.client.host if websocket.client else "unknown"
+    if not check_rate_limit(ip, "ws_connect"):
+        await websocket.accept()
+        await websocket.close(code=4029, reason="Rate limited: too many connections")
         return
 
     await runtime_bus.connect(session_id, websocket)
@@ -57,6 +65,19 @@ async def debate_ws(websocket: WebSocket, session_id: str):
 
         while True:
             try:
+                # Rate limit messages
+                if not check_rate_limit(ip, "ws_message"):
+                    rate_limited_event = await runtime_bus.create_event(
+                        session_id=session_id,
+                        event_type="error",
+                        payload={"content": "Rate limited: please slow down."},
+                        source="ws.gateway",
+                        phase="error",
+                    )
+                    if not await runtime_bus.send(session_id, websocket, rate_limited_event):
+                        return
+                    continue
+
                 data = await websocket.receive_json()
             except WebSocketDisconnect:
                 break

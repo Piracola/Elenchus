@@ -3,12 +3,14 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../../api/client';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useDemoModeStore } from '../../stores/demoModeStore';
 import { useModelConfigManager } from '../../hooks/useModelConfigManager';
 import { SearchConfigTab } from './SearchConfigTab';
 import type { LogLevel } from '../../types';
 import { SettingsDisplayTab } from './settings/SettingsDisplayTab';
 import { SettingsLoggingTab } from './settings/SettingsLoggingTab';
 import { SettingsProvidersTab } from './settings/SettingsProvidersTab';
+import { DemoModelsList } from './settings/DemoModelsList';
 import { createSettingsFonts } from '../../config/settingsFonts';
 import { DEFAULT_SETTINGS_FONT_SIZE } from '../../config/display';
 
@@ -27,13 +29,16 @@ export default function SettingsPanel({
 }: Props) {
     const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
     const { logLevel, setLogLevel, displaySettings, setDisplaySettings } = useSettingsStore();
-    
+    const { demoMode, isAdmin } = useDemoModeStore();
+
     // Create fonts config based on user's settings font size
     const userSettingsFontSize = displaySettings.settingsFontSize ?? DEFAULT_SETTINGS_FONT_SIZE;
     const fonts = createSettingsFonts(userSettingsFontSize);
 
     // Use the extracted hook for provider management
     const modelConfig = useModelConfigManager();
+
+    const isInDemoMode = demoMode && !isAdmin;
 
     useEffect(() => {
         if (isOpen) {
@@ -235,10 +240,12 @@ export default function SettingsPanel({
                                 </motion.button>}
 
                                 {activeTab === 'providers' && (
-                                    <SettingsProvidersTab
-                                        modelConfig={modelConfig}
-                                        onClose={onClose}
-                                    />
+                                    isInDemoMode
+                                        ? <DemoModelsList />
+                                        : <SettingsProvidersTab
+                                            modelConfig={modelConfig}
+                                            onClose={onClose}
+                                        />
                                 )}
                                 {activeTab === 'display' && (
                                     <SettingsDisplayTab
@@ -252,7 +259,11 @@ export default function SettingsPanel({
                                         onLogLevelChange={handleLogLevelChange}
                                     />
                                 )}
-                                {activeTab === 'search' && <SearchConfigTab />}
+                                {activeTab === 'search' && (
+                                    isInDemoMode
+                                        ? <DemoModelsList />
+                                        : <SearchConfigTab />
+                                )}
                             </div>
                         </motion.div>
                     </motion.div>

@@ -7,12 +7,14 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
+from app.middleware.demo_guard import DemoGuardMiddleware
+from app.middleware.rate_limit import check_rate_limit
 from app.api.sessions import router as sessions_router
 from app.api.websocket import router as ws_router
 from app.api.models import router as models_router
@@ -21,6 +23,7 @@ from app.api.search import router as search_router
 from app.api.search import build_search_health_payload
 from app.api.searxng import router as searxng_router
 from app.api.session_control import router as session_control_router
+from app.api.admin import router as admin_router
 from app.db.database import init_db
 from app.dependencies import get_search_factory
 from app.services.log_service import setup_logging, get_logger
@@ -64,6 +67,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Demo guard middleware — blocks mutation endpoints when demo_mode is enabled
+app.add_middleware(DemoGuardMiddleware)
+
 # Register routers
 app.include_router(sessions_router, prefix="/api")
 app.include_router(ws_router, prefix="/api")
@@ -72,6 +78,19 @@ app.include_router(log_router, prefix="/api")
 app.include_router(search_router, prefix="/api")
 app.include_router(searxng_router, prefix="/api")
 app.include_router(session_control_router, prefix="/api")
+app.include_router(admin_router)
+
+
+# ── Mode query endpoint ───────────────────────────────────────────
+
+@app.get("/api/mode")
+async def get_mode(request: Request):
+    """Return demo mode status and allowed models."""
+    settings = get_settings()
+    return {
+        "demo_mode": settings.demo.enabled,
+        "demo_models": settings.demo.allowed_models,
+    }
 
 
 # ── Health / diagnostic endpoints ────────────────────────────────

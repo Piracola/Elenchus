@@ -17,6 +17,7 @@ import type {
     SearchProviderStatus,
     SessionDocumentResponse,
 } from '../types';
+import { useDemoModeStore } from '../stores/demoModeStore';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
 const INVALID_FILENAME_CHARACTERS = new Set(['<', '>', ':', '"', '/', '\\', '|', '?', '*']);
@@ -81,13 +82,23 @@ function buildTopicFilename(topic: string, extension: string): string {
     return `${base}.${suffix}`;
 }
 
+/** Build headers with admin token if demo mode admin is active. */
+function buildAuthHeaders(): Record<string, string> {
+    const { adminToken } = useDemoModeStore.getState();
+    if (adminToken) {
+        return { 'Authorization': `Bearer ${adminToken}` };
+    }
+    return {};
+}
+
 async function requestWithParser<T>(
     path: string,
     parser: (res: Response) => Promise<T>,
     init?: RequestInit,
 ): Promise<T> {
+    const authHeaders = buildAuthHeaders();
     const res = await fetch(`${BASE}${path}`, {
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         ...init,
     });
     if (!res.ok) {
@@ -108,7 +119,8 @@ async function requestText(path: string, init?: RequestInit): Promise<string> {
 }
 
 async function download(path: string, fallbackFilename: string): Promise<void> {
-    const res = await fetch(`${BASE}${path}`);
+    const authHeaders = buildAuthHeaders();
+    const res = await fetch(`${BASE}${path}`, { headers: authHeaders });
     if (!res.ok) {
         throw new Error(await readErrorMessage(res));
     }
@@ -141,11 +153,13 @@ export const api = {
             request(`/sessions/${id}`),
 
         uploadDocument: async (id: string, file: File): Promise<SessionDocumentResponse> => {
+            const authHeaders = buildAuthHeaders();
             const body = new FormData();
             body.append('file', file);
 
             const res = await fetch(`${BASE}/sessions/${id}/documents`, {
                 method: 'POST',
+                headers: authHeaders,
                 body,
             });
             if (!res.ok) {
@@ -155,7 +169,10 @@ export const api = {
         },
 
         deleteDocument: (id: string, documentId: string): Promise<void> =>
-            request(`/sessions/${id}/documents/${documentId}`, { method: 'DELETE' }),
+            request(`/sessions/${id}/documents/${documentId}`, {
+                method: 'DELETE',
+                headers: buildAuthHeaders(),
+            }),
 
         getReferenceLibrary: (id: string): Promise<ReferenceLibraryResponse> =>
             request(`/sessions/${id}/reference-library`),
@@ -173,7 +190,10 @@ export const api = {
         },
 
         delete: (id: string): Promise<void> =>
-            request(`/sessions/${id}`, { method: 'DELETE' }),
+            request(`/sessions/${id}`, {
+                method: 'DELETE',
+                headers: buildAuthHeaders(),
+            }),
 
         exportJson: (id: string, topic: string): Promise<void> => {
             return download(`/sessions/${id}/export?format=json`, buildTopicFilename(topic, 'json'));
@@ -204,16 +224,21 @@ export const api = {
             request('/models', {
                 method: 'POST',
                 body: JSON.stringify(payload),
+                headers: buildAuthHeaders(),
             }),
 
         update: (id: string, payload: Partial<ModelConfigCreatePayload>): Promise<ModelConfig> =>
             request(`/models/${id}`, {
                 method: 'PUT',
                 body: JSON.stringify(payload),
+                headers: buildAuthHeaders(),
             }),
 
         delete: (id: string): Promise<void> =>
-            request(`/models/${id}`, { method: 'DELETE' }),
+            request(`/models/${id}`, {
+                method: 'DELETE',
+                headers: buildAuthHeaders(),
+            }),
     },
 
     health: {
@@ -231,6 +256,7 @@ export const api = {
             request('/log/level', {
                 method: 'PUT',
                 body: JSON.stringify({ level }),
+                headers: buildAuthHeaders(),
             }),
 
         getLevels: (): Promise<{ levels: string[]; current: string }> =>
@@ -245,12 +271,14 @@ export const api = {
             request('/search/config', {
                 method: 'POST',
                 body: JSON.stringify({ provider }),
+                headers: buildAuthHeaders(),
             }),
 
         updateConfig: (payload: SearchConfigUpdatePayload): Promise<SearchConfig> =>
             request('/search/config', {
                 method: 'PUT',
                 body: JSON.stringify(payload),
+                headers: buildAuthHeaders(),
             }),
 
         getProviders: (): Promise<SearchProviderStatus[]> =>
@@ -272,11 +300,13 @@ export const api = {
         start: (): Promise<{ success: boolean; message: string }> =>
             request('/searxng/start', {
                 method: 'POST',
+                headers: buildAuthHeaders(),
             }),
 
         stop: (): Promise<{ success: boolean; message: string }> =>
             request('/searxng/stop', {
                 method: 'POST',
+                headers: buildAuthHeaders(),
             }),
     },
 };

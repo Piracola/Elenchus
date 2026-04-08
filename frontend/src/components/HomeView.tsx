@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentConfigs } from '../hooks/useAgentConfigs';
 import { useSessionCreate } from '../hooks/useSessionCreate';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useDemoModeStore } from '../stores/demoModeStore';
 import { getMessageFontTokens } from '../config/display';
 import type { DebateMode } from '../types';
 import {
@@ -11,7 +12,7 @@ import {
     parseMaxTurnsInput,
     parseTeamAgentsInput,
     parseTeamDiscussionRoundsInput,
-} from '../utils/debateSession';
+} from '../utils/agent/debateSession';
 import { HomeComposerCard } from './home/HomeComposerCard';
 import type { PendingReferenceDocument } from './home/HomeComposerCard';
 import { HomeModeSelector } from './home/HomeModeSelector';
@@ -21,7 +22,7 @@ import BrandIcon from './shared/BrandIcon';
 import SidebarExpandButton from './shared/SidebarExpandButton';
 import SophistryModeNotice from './shared/SophistryModeNotice';
 import { api } from '../api/client';
-import { toast } from '../utils/toast';
+import { toast } from '../utils/chat/toast';
 
 interface HomeViewProps {
     isSidebarCollapsed: boolean;
@@ -53,6 +54,8 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
         handleThinkingToggle,
         buildAgentConfigs,
     } = useAgentConfigs();
+    const { demoMode, isAdmin } = useDemoModeStore();
+    const isInDemo = demoMode && !isAdmin;
 
     const isSophistryMode = debateMode === 'sophistry_experiment';
     const { displaySettings } = useSettingsStore();
@@ -285,7 +288,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                     }}
                 >
                     <AnimatePresence initial={false}>
-                        {isSophistryMode && (
+                        {isSophistryMode && !isInDemo && (
                             <motion.div
                                 key="sophistry-notice"
                                 layout
@@ -301,7 +304,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                     </AnimatePresence>
 
                     <AnimatePresence initial={false}>
-                        {showAdvanced && (
+                        {showAdvanced && !isInDemo && (
                             <motion.div
                                 key="agent-config-panel"
                                 layout

@@ -47,6 +47,73 @@ Elenchus 是一个用于多智能体辩论的平台，基于 `FastAPI + LangGrap
 
 `search字段为搜索服务相关配置`
 
+## 公开演示部署（Demo Mode）
+
+本项目支持通过 `runtime/config.json` 中的 `demo` 配置项开启演示模式，适用于公开网站部署。
+
+### 演示模式特性
+
+- **游客权限**：可创建辩题、启动辩论、观看辩论，但无法修改模型、搜索等配置
+- **固定模型列表**：仅允许使用管理员预设的模型，游客不可见其他模型
+- **全局共享辩论**：所有游客看到相同的辩论列表，无用户隔离
+- **速率限制**：基于 IP 的防滥用限制（创建频率、WS 消息频率）
+- **管理员认证**：游客可通过账号密码认证进入完整模式，解锁所有配置修改权限
+
+### 启用方法
+
+在 `runtime/config.json` 中添加 `demo` 配置：
+
+```json
+{
+  "demo": {
+    "enabled": true,
+    "admin_username": "admin",
+    "admin_password_hash": "<SHA256 hash of your password>",
+    "allowed_models": ["gpt-4o-mini", "claude-sonnet-4-6"]
+  }
+}
+```
+
+### 生成管理员密码 Hash
+
+```bash
+python -c "import hashlib; print(hashlib.sha256('你的密码'.encode()).hexdigest())"
+```
+
+### 管理员登录
+
+演示模式开启后，页面顶部会显示「演示模式」横幅，点击右侧「管理员登录」按钮，输入用户名和密码即可进入完整模式。登录后页面右上角显示「管理员模式」标识，可一键退出。
+
+### Nginx 反向代理配置示例
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+}
+```
+
+**注意**：WebSocket 支持是必须的，请确保 Nginx 配置中包含 `Upgrade` 和 `Connection` 头转发。
+
+### 安全注意事项
+
+1. **管理员密码**：请使用强密码（建议 16 位以上），并妥善保管 `admin_password_hash`
+2. **HTTPS**：公开部署强烈建议配置 HTTPS，防止管理员 token 被中间人截获
+3. **防火墙**：建议使用防火墙限制后端 8001 端口直接访问，仅通过 Nginx 代理暴露
+4. **模型配额**：建议为预设模型配置合理的 `default_max_tokens`，防止单次请求消耗过多 token
+
 <details>
 <summary><b>SearXNG 搜索服务（可选）</b></summary>
 

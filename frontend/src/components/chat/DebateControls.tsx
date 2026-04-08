@@ -8,8 +8,9 @@ import { useAgentConfigs } from '../../hooks/useAgentConfigs';
 import { useConnectionViewState, useSessionViewState } from '../../hooks/useDebateViewState';
 import { useDebateWebSocket } from '../../hooks/useDebateWebSocket';
 import { useSessionCreate } from '../../hooks/useSessionCreate';
-import { DEFAULT_MAX_TURNS, parseMaxTurnsInput } from '../../utils/debateSession';
+import { DEFAULT_MAX_TURNS, parseMaxTurnsInput } from '../../utils/agent/debateSession';
 import AgentConfigPanel from '../shared/AgentConfigPanel';
+import { useDemoModeStore } from '../../stores/demoModeStore';
 
 function ActiveSessionControls() {
     const { isDebating, isConnected, currentSession } = useConnectionViewState();
@@ -229,6 +230,8 @@ function SessionCreator() {
         handleThinkingToggle,
         buildAgentConfigs,
     } = useAgentConfigs();
+    const { demoMode, isAdmin } = useDemoModeStore();
+    const isInDemo = demoMode && !isAdmin;
 
     const maxTurns = parseMaxTurnsInput(maxTurnsInput);
 
@@ -240,7 +243,7 @@ function SessionCreator() {
 
     return (
         <div style={{ position: 'relative', flexShrink: 0 }}>
-            {showAdvanced && (
+            {showAdvanced && !isInDemo && (
                 <div style={{ marginBottom: '10px' }}>
                     <AgentConfigPanel
                         savedConfigs={savedConfigs}

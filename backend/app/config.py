@@ -95,6 +95,18 @@ class LoggingSettings:
         self.backup_count: int = int(data.get("backup_count") or 7)
 
 
+class DemoSettings:
+    def __init__(self, data: dict[str, Any] | None = None):
+        data = data or {}
+        self.enabled: bool = bool(data.get("enabled", False))
+        self.admin_username: str = str(data.get("admin_username") or "admin")
+        self.admin_password_hash: str = str(data.get("admin_password_hash") or "")
+        self.allowed_models: list[str] = list(
+            data.get("allowed_models")
+            or ["gpt-4o-mini", "claude-sonnet-4-6-20250514", "gemini-2.5-flash"]
+        )
+
+
 class Settings:
     """Unified settings object backed by `runtime/config.json`."""
 
@@ -105,6 +117,7 @@ class Settings:
         self.env = EnvSettings(config.get("server"), search=self.search)
         self.auth = AuthSettings(config.get("auth"))
         self.logging = LoggingSettings(config.get("logging"))
+        self.demo = DemoSettings(config.get("demo"))
 
     @property
     def project_root(self) -> Path:
