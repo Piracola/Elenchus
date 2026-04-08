@@ -208,6 +208,28 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
         "backup_count": int(logging.get("backup_count") or base["logging"]["backup_count"]),
     }
 
+    # Preserve demo section (demo mode config)
+    demo = incoming.get("demo") if isinstance(incoming.get("demo"), dict) else {}
+    if demo:
+        allowed_models = demo.get("allowed_models")
+        if isinstance(allowed_models, list):
+            allowed_models = [str(m) for m in allowed_models if str(m).strip()]
+        else:
+            allowed_models = ["gpt-4o-mini", "claude-sonnet-4-6-20250514", "gemini-2.5-flash"]
+        base["demo"] = {
+            "enabled": bool(demo.get("enabled", False)),
+            "admin_username": str(demo.get("admin_username") or "admin"),
+            "admin_password_hash": str(demo.get("admin_password_hash") or ""),
+            "allowed_models": allowed_models,
+        }
+    else:
+        base["demo"] = {
+            "enabled": False,
+            "admin_username": "admin",
+            "admin_password_hash": "",
+            "allowed_models": ["gpt-4o-mini", "claude-sonnet-4-6-20250514", "gemini-2.5-flash"],
+        }
+
     providers = incoming.get("providers")
     if isinstance(providers, list):
         normalized_providers = [
