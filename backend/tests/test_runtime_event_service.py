@@ -26,18 +26,16 @@ def make_event(seq: int, session_id: str = "session123abc") -> dict[str, object]
 
 
 @pytest.mark.asyncio
-async def test_runtime_event_history_returns_latest_page_then_older_page(db_session):
+async def test_runtime_event_history_returns_latest_page_then_older_page():
     session = await session_service.create_session(
-        db_session,
         SessionCreate(topic="Runtime history paging"),
     )
     session_id = session["id"]
 
     for seq in range(1, 6):
-        await runtime_event_service.create_runtime_event(db_session, make_event(seq, session_id))
+        await runtime_event_service.create_runtime_event(make_event(seq, session_id))
 
     latest_page = await runtime_event_service.list_runtime_events(
-        db_session,
         session_id,
         limit=2,
     )
@@ -48,7 +46,6 @@ async def test_runtime_event_history_returns_latest_page_then_older_page(db_sess
     assert [event["seq"] for event in latest_page["events"]] == [4, 5]
 
     older_page = await runtime_event_service.list_runtime_events(
-        db_session,
         session_id,
         before_seq=latest_page["next_before_seq"],
         limit=2,
@@ -61,33 +58,31 @@ async def test_runtime_event_history_returns_latest_page_then_older_page(db_sess
 
 
 @pytest.mark.asyncio
-async def test_runtime_event_history_reports_latest_sequence(db_session):
+async def test_runtime_event_history_reports_latest_sequence():
     session = await session_service.create_session(
-        db_session,
         SessionCreate(topic="Runtime sequence"),
     )
     session_id = session["id"]
 
-    assert await runtime_event_service.get_latest_runtime_event_seq(db_session, session_id) == 0
+    assert await runtime_event_service.get_latest_runtime_event_seq(session_id) == 0
 
-    await runtime_event_service.create_runtime_event(db_session, make_event(7, session_id))
-    await runtime_event_service.create_runtime_event(db_session, make_event(8, session_id))
+    await runtime_event_service.create_runtime_event(make_event(7, session_id))
+    await runtime_event_service.create_runtime_event(make_event(8, session_id))
 
-    assert await runtime_event_service.get_latest_runtime_event_seq(db_session, session_id) == 8
+    assert await runtime_event_service.get_latest_runtime_event_seq(session_id) == 8
 
 
 @pytest.mark.asyncio
-async def test_runtime_event_history_can_return_full_persisted_list(db_session):
+async def test_runtime_event_history_can_return_full_persisted_list():
     session = await session_service.create_session(
-        db_session,
         SessionCreate(topic="Runtime full export"),
     )
     session_id = session["id"]
 
     for seq in range(1, 4):
-        await runtime_event_service.create_runtime_event(db_session, make_event(seq, session_id))
+        await runtime_event_service.create_runtime_event(make_event(seq, session_id))
 
-    events = await runtime_event_service.list_all_runtime_events(db_session, session_id)
+    events = await runtime_event_service.list_all_runtime_events(session_id)
 
     assert [event["seq"] for event in events] == [1, 2, 3]
     assert events[0]["event_id"] == "evt_1"
@@ -95,15 +90,14 @@ async def test_runtime_event_history_can_return_full_persisted_list(db_session):
 
 
 @pytest.mark.asyncio
-async def test_runtime_event_history_writes_jsonl_file(db_session):
+async def test_runtime_event_history_writes_jsonl_file():
     session = await session_service.create_session(
-        db_session,
         SessionCreate(topic="Runtime jsonl"),
     )
     session_id = session["id"]
 
-    await runtime_event_service.create_runtime_event(db_session, make_event(1, session_id))
-    await runtime_event_service.create_runtime_event(db_session, make_event(2, session_id))
+    await runtime_event_service.create_runtime_event(make_event(1, session_id))
+    await runtime_event_service.create_runtime_event(make_event(2, session_id))
 
     events_path = get_runtime_paths().sessions_dir / session_id / "events.jsonl"
     assert events_path.exists()

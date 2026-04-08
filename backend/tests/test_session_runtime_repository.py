@@ -7,13 +7,11 @@ from app.runtime.session_repository import SessionRuntimeRepository
 from app.services import session_service
 
 
-async def _create_session_with_snapshot(db_session, *, current_turn: int, snapshot: dict):
+async def _create_session_with_snapshot(*, current_turn: int, snapshot: dict):
     created = await session_service.create_session(
-        db_session,
         SessionCreate(topic="Resume normalization", max_turns=3),
     )
     updated = await session_service.update_session_state(
-        db_session,
         created["id"],
         current_turn=current_turn,
         status="in_progress",
@@ -24,9 +22,8 @@ async def _create_session_with_snapshot(db_session, *, current_turn: int, snapsh
 
 
 @pytest.mark.asyncio
-async def test_build_initial_state_rolls_back_incomplete_speaker_turn(db_session):
+async def test_build_initial_state_rolls_back_incomplete_speaker_turn():
     created = await _create_session_with_snapshot(
-        db_session,
         current_turn=1,
         snapshot={
             "dialogue_history": [
@@ -97,9 +94,8 @@ async def test_build_initial_state_rolls_back_incomplete_speaker_turn(db_session
 
 
 @pytest.mark.asyncio
-async def test_build_initial_state_clears_partial_judge_outputs_for_current_turn(db_session):
+async def test_build_initial_state_clears_partial_judge_outputs_for_current_turn():
     created = await _create_session_with_snapshot(
-        db_session,
         current_turn=1,
         snapshot={
             "dialogue_history": [
@@ -167,9 +163,8 @@ async def test_build_initial_state_clears_partial_judge_outputs_for_current_turn
 
 
 @pytest.mark.asyncio
-async def test_build_initial_state_preserves_completed_turn_at_advance_turn_boundary(db_session):
+async def test_build_initial_state_preserves_completed_turn_at_advance_turn_boundary():
     created = await _create_session_with_snapshot(
-        db_session,
         current_turn=1,
         snapshot={
             "dialogue_history": [
@@ -228,9 +223,8 @@ async def test_build_initial_state_preserves_completed_turn_at_advance_turn_boun
 
 
 @pytest.mark.asyncio
-async def test_build_initial_state_rolls_back_turn_scoped_mode_artifacts_and_discussions(db_session):
+async def test_build_initial_state_rolls_back_turn_scoped_mode_artifacts_and_discussions():
     created = await _create_session_with_snapshot(
-        db_session,
         current_turn=1,
         snapshot={
             "dialogue_history": [],

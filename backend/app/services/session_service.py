@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.db.models import _gen_id, _utcnow
+from app.db.db_utils import _gen_id, _utcnow
 from app.dependencies import get_agent_config_service
 from app.models.schemas import SessionCreate, SessionStatus
 from app.services.session_service_helpers import (
@@ -32,7 +32,7 @@ def sync_session_round_results(record: StoredSessionRecord) -> None:
     sync_session_round_results_files(record)
 
 
-async def create_session(_db: Any, body: SessionCreate) -> dict[str, Any]:
+async def create_session(body: SessionCreate) -> dict[str, Any]:
     """Create a new debate session in session.json storage."""
     now = _utcnow()
     agent_config_service = get_agent_config_service()
@@ -87,7 +87,6 @@ async def create_session(_db: Any, body: SessionCreate) -> dict[str, Any]:
 
 
 async def list_sessions(
-    _db: Any,
     offset: int = 0,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
@@ -107,12 +106,12 @@ async def list_sessions(
     ]
 
 
-async def count_sessions(_db: Any) -> int:
+async def count_sessions() -> int:
     """Return total session count for pagination."""
     return len(list_session_records())
 
 
-async def get_session(_db: Any, session_id: str) -> dict[str, Any] | None:
+async def get_session(session_id: str) -> dict[str, Any] | None:
     """Get a single session's full data."""
     record = read_session_record(session_id)
     if record is None:
@@ -120,13 +119,12 @@ async def get_session(_db: Any, session_id: str) -> dict[str, Any] | None:
     return serialize_session_record(record)
 
 
-async def get_session_record(_db: Any, session_id: str) -> StoredSessionRecord | None:
+async def get_session_record(session_id: str) -> StoredSessionRecord | None:
     """Get the raw stored record for internal use."""
     return read_session_record(session_id)
 
 
 async def update_session_state(
-    _db: Any,
     session_id: str,
     *,
     current_turn: int | None = None,
@@ -158,7 +156,7 @@ async def update_session_state(
     return serialize_session_record(record)
 
 
-async def delete_session(_db: Any, session_id: str) -> bool:
+async def delete_session(session_id: str) -> bool:
     """Delete a session."""
     record = read_session_record(session_id)
     if record is None:

@@ -72,7 +72,6 @@ class EnvSettings:
         self.searxng_api_key: str = search.searxng_api_key
         self.tavily_api_key: str = search.tavily_api_key
         self.tavily_api_url: str = search.tavily_api_url
-        self.database_url: str = str(data.get("database_url") or _RUNTIME_PATHS.default_database_file)
         self.host: str = str(data.get("host") or "0.0.0.0")
         self.port: int = int(data.get("port") or 8001)
         self.debug: bool = bool(data.get("debug", False))

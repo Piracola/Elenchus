@@ -18,7 +18,7 @@ class SessionRuntimeRepository:
     """Load and persist runtime state without exposing storage details."""
 
     async def get_session(self, session_id: str) -> dict[str, Any] | None:
-        return await session_service.get_session(None, session_id)
+        return await session_service.get_session(session_id)
 
     async def build_initial_state(
         self,
@@ -29,16 +29,16 @@ class SessionRuntimeRepository:
         max_turns: int = 5,
         agent_configs: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
-        record = await session_service.get_session_record(None, session_id)
+        record = await session_service.get_session_record(session_id)
         if record is not None:
             await ensure_builtin_mode_references(
                 session_id,
                 debate_mode=str(record.debate_mode or DebateMode.STANDARD.value),
                 mode_config=record.mode_config or {},
             )
-            record = await session_service.get_session_record(None, session_id)
+            record = await session_service.get_session_record(session_id)
 
-        session_data = await session_service.get_session(None, session_id)
+        session_data = await session_service.get_session(session_id)
 
         if session_data is None:
             return None
@@ -169,7 +169,6 @@ class SessionRuntimeRepository:
         }
 
         await session_service.update_session_state(
-            None,
             session_id,
             current_turn=state.get("current_turn", 0),
             status=state.get("status", "in_progress"),
@@ -209,10 +208,10 @@ class SessionRuntimeRepository:
         if not session_id:
             return
 
-        await runtime_event_service.create_runtime_event(None, event)
+        await runtime_event_service.create_runtime_event(event)
 
     async def get_latest_runtime_event_seq(self, session_id: str) -> int:
-        return await runtime_event_service.get_latest_runtime_event_seq(None, session_id)
+        return await runtime_event_service.get_latest_runtime_event_seq(session_id)
 
     async def load_runtime_events(
         self,
@@ -222,7 +221,6 @@ class SessionRuntimeRepository:
         limit: int = 200,
     ) -> dict[str, Any]:
         return await runtime_event_service.list_runtime_events(
-            None,
             session_id,
             before_seq=before_seq,
             limit=limit,

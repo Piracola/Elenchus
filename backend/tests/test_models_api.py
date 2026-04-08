@@ -5,9 +5,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
-def test_create_model_config_without_trailing_slash(
-    db_session,
-):
+def test_create_model_config_without_trailing_slash():
     client = TestClient(app)
     response = client.post(
         "/api/models",
@@ -31,9 +29,7 @@ def test_create_model_config_without_trailing_slash(
     assert data["custom_parameters"] == {"reasoning_effort": "medium"}
 
 
-def test_list_model_configs_without_trailing_slash(
-    db_session,
-):
+def test_list_model_configs_without_trailing_slash():
     client = TestClient(app)
     create_response = client.post(
         "/api/models",
@@ -60,9 +56,7 @@ def test_list_model_configs_without_trailing_slash(
     assert providers[0]["custom_parameters"] == {"reasoning_effort": "high"}
 
 
-def test_update_model_config_returns_secret_presence_only(
-    db_session,
-):
+def test_update_model_config_returns_secret_presence_only():
     client = TestClient(app)
     create_response = client.post(
         "/api/models",
@@ -90,9 +84,7 @@ def test_update_model_config_returns_secret_presence_only(
     assert "api_key" not in data
 
 
-def test_clear_model_config_api_key_returns_unconfigured_state(
-    db_session,
-):
+def test_clear_model_config_api_key_returns_unconfigured_state():
     client = TestClient(app)
     create_response = client.post(
         "/api/models",
@@ -124,9 +116,7 @@ def test_clear_model_config_api_key_returns_unconfigured_state(
     assert "api_key" not in list_response.json()[0]
 
 
-def test_update_model_config_rejects_duplicate_name(
-    db_session,
-):
+def test_update_model_config_rejects_duplicate_name():
     client = TestClient(app)
     first_response = client.post(
         "/api/models",

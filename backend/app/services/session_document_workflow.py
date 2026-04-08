@@ -7,7 +7,6 @@ from app.storage.session_files import StoredSessionRecord
 
 
 async def upload_and_process_session_document(
-    db: Any,
     *,
     session_record: StoredSessionRecord,
     filename: str,
@@ -15,14 +14,12 @@ async def upload_and_process_session_document(
     content: bytes,
 ) -> dict[str, Any]:
     document = await document_service.create_session_document(
-        db,
         session_record.id,
         filename=filename,
         mime_type=mime_type,
         content=content,
     )
     document_record = await document_service.get_session_document_record(
-        db,
         session_record.id,
         document["id"],
     )
@@ -30,8 +27,7 @@ async def upload_and_process_session_document(
         return document
 
     processed = await reference_library_service.preprocess_session_document(
-        db,
         session_record=session_record,
         document_record=document_record,
     )
-    return await document_service.get_session_document(db, session_record.id, document["id"]) or processed["document"]
+    return await document_service.get_session_document(session_record.id, document["id"]) or processed["document"]

@@ -29,7 +29,6 @@ def _record_to_dict(record: dict[str, Any]) -> dict[str, Any]:
 
 
 async def create_runtime_event(
-    _db: Any,
     event: dict[str, Any],
 ) -> dict[str, Any]:
     """Persist a single runtime event envelope to events.jsonl."""
@@ -38,18 +37,17 @@ async def create_runtime_event(
     return record
 
 
-async def get_latest_runtime_event_seq(_db: Any, session_id: str) -> int:
+async def get_latest_runtime_event_seq(session_id: str) -> int:
     """Return the max persisted sequence for a session, or 0 when empty."""
     return get_latest_runtime_event_seq_file(session_id)
 
 
-async def count_runtime_events(_db: Any, session_id: str) -> int:
+async def count_runtime_events(session_id: str) -> int:
     """Return total persisted runtime event count for a session."""
     return len(read_all_runtime_events(session_id))
 
 
 async def list_runtime_events(
-    _db: Any,
     session_id: str,
     *,
     before_seq: int | None = None,
@@ -71,13 +69,12 @@ async def list_runtime_events(
 
 
 async def list_all_runtime_events(
-    _db: Any,
     session_id: str,
 ) -> list[dict[str, Any]]:
     """Return the full persisted runtime history ordered by sequence ascending."""
     return [_record_to_dict(record) for record in read_all_runtime_events(session_id)]
 
 
-async def delete_runtime_events(_db: Any, session_id: str) -> None:
+async def delete_runtime_events(session_id: str) -> None:
     """Delete all persisted runtime events for a session."""
     delete_runtime_events_file(session_id)

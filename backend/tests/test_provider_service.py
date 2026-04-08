@@ -7,7 +7,7 @@ from app.services.provider_service import ProviderService
 
 
 @pytest.mark.asyncio
-async def test_update_config_preserves_existing_api_key_when_omitted(db_session):
+async def test_update_config_preserves_existing_api_key_when_omitted():
     service = ProviderService()
 
     created = await service.create_config(
@@ -35,7 +35,7 @@ async def test_update_config_preserves_existing_api_key_when_omitted(db_session)
 
 
 @pytest.mark.asyncio
-async def test_update_config_rejects_duplicate_name(db_session):
+async def test_update_config_rejects_duplicate_name():
     service = ProviderService()
 
     await service.create_config(
@@ -66,7 +66,7 @@ async def test_update_config_rejects_duplicate_name(db_session):
 
 
 @pytest.mark.asyncio
-async def test_delete_default_config_promotes_new_default(db_session):
+async def test_delete_default_config_promotes_new_default():
     service = ProviderService()
 
     first = await service.create_config(

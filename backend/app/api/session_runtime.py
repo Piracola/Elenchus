@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.database import get_db
 from app.models.schemas import RuntimeEventPageResponse
 from app.services import export_service, runtime_event_service, session_service
 
@@ -15,14 +13,12 @@ async def list_runtime_events(
     session_id: str,
     before_seq: int | None = Query(default=None, ge=1),
     limit: int = Query(default=200, ge=1, le=1000),
-    db: AsyncSession = Depends(get_db),
 ):
-    session_record = await session_service.get_session_record(db, session_id)
+    session_record = await session_service.get_session_record(session_id)
     if session_record is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
     data = await runtime_event_service.list_runtime_events(
-        db,
         session_id,
         before_seq=before_seq,
         limit=limit,
@@ -31,15 +27,12 @@ async def list_runtime_events(
 
 
 @router.get("/sessions/{session_id}/runtime-events/export")
-async def export_runtime_events_snapshot(
-    session_id: str,
-    db: AsyncSession = Depends(get_db),
-):
-    data = await session_service.get_session(db, session_id)
+async def export_runtime_events_snapshot(session_id: str):
+    data = await session_service.get_session(session_id)
     if data is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    events = await runtime_event_service.list_all_runtime_events(db, session_id)
+    events = await runtime_event_service.list_all_runtime_events(session_id)
     snapshot = export_service.export_runtime_events_snapshot(events)
     filename = export_service.build_export_filename(data, "runtime-events.json")
     return Response(

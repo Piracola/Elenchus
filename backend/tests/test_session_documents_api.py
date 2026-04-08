@@ -18,7 +18,7 @@ def _create_session(client: TestClient, topic: str = "Reference documents") -> s
     return response.json()["id"]
 
 
-def test_upload_session_document_and_fetch_detail(db_session):
+def test_upload_session_document_and_fetch_detail():
     client = TestClient(app)
     session_id = _create_session(client)
 
@@ -58,7 +58,7 @@ def test_upload_session_document_and_fetch_detail(db_session):
     )
 
 
-def test_list_and_delete_session_documents(db_session):
+def test_list_and_delete_session_documents():
     client = TestClient(app)
     session_id = _create_session(client, topic="List documents")
 
@@ -92,7 +92,7 @@ def test_list_and_delete_session_documents(db_session):
     assert missing_response.json() == {"detail": "Document not found"}
 
 
-def test_upload_document_rejects_unsupported_file_type(db_session):
+def test_upload_document_rejects_unsupported_file_type():
     client = TestClient(app)
     session_id = _create_session(client, topic="Unsupported document")
 
@@ -107,7 +107,7 @@ def test_upload_document_rejects_unsupported_file_type(db_session):
     }
 
 
-def test_upload_document_requires_existing_session(db_session):
+def test_upload_document_requires_existing_session():
     client = TestClient(app)
 
     response = client.post(
@@ -119,7 +119,7 @@ def test_upload_document_requires_existing_session(db_session):
     assert response.json() == {"detail": "Session not found"}
 
 
-def test_reference_library_endpoint_and_shared_knowledge_sync(db_session):
+def test_reference_library_endpoint_and_shared_knowledge_sync():
     client = TestClient(app)
     session_id = _create_session(client, topic="Reference sync")
 
@@ -170,7 +170,7 @@ def test_reference_library_endpoint_and_shared_knowledge_sync(db_session):
     assert session_after_delete.json()["shared_knowledge"] == []
 
 
-def test_upload_session_document_returns_failed_document_when_preprocess_errors(db_session, monkeypatch: pytest.MonkeyPatch):
+def test_upload_session_document_returns_failed_document_when_preprocess_errors(monkeypatch: pytest.MonkeyPatch):
     client = TestClient(app)
     session_id = _create_session(client, topic="Reference failure")
 
@@ -178,7 +178,7 @@ def test_upload_session_document_returns_failed_document_when_preprocess_errors(
         raise RuntimeError("preprocess exploded")
 
     monkeypatch.setattr(
-        "app.services.reference_library_workflow.preprocess_reference_document",
+        "app.services.reference.workflow.preprocess_reference_document",
         _raise_preprocess,
     )
 

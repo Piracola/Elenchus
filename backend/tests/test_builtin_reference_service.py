@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services import builtin_reference_service, session_service
 from app.services.builtin_reference_service import (
@@ -17,11 +16,8 @@ from app.storage.session_files import read_session_record
 
 
 @pytest.mark.asyncio
-async def test_ensure_builtin_mode_references_seeds_once_and_syncs_snapshot(
-    db_session: AsyncSession,
-):
+async def test_ensure_builtin_mode_references_seeds_once_and_syncs_snapshot():
     created = await session_service.create_session(
-        db_session,
         SessionCreate(
             topic="Built-in references",
             debate_mode="sophistry_experiment",

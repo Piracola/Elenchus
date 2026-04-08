@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from app.db.models import _gen_id, _utcnow
+from app.db.db_utils import _gen_id, _utcnow
 from app.storage.session_documents import (
     StoredSessionDocument,
     delete_document_record,
@@ -91,7 +91,6 @@ def _record_to_dict(record: StoredSessionDocument, *, include_content: bool) -> 
 
 
 async def create_session_document(
-    _db: Any,
     session_id: str,
     *,
     filename: str,
@@ -134,7 +133,6 @@ async def create_session_document(
 
 
 async def get_session_document_record(
-    _db: Any,
     session_id: str,
     document_id: str,
 ) -> StoredSessionDocument | None:
@@ -142,7 +140,7 @@ async def get_session_document_record(
     return read_document_record(session_id, document_id)
 
 
-async def list_session_documents(_db: Any, session_id: str) -> list[dict[str, Any]]:
+async def list_session_documents(session_id: str) -> list[dict[str, Any]]:
     """Return all stored documents for a session, newest first."""
     return [
         _record_to_dict(record, include_content=False)
@@ -151,7 +149,6 @@ async def list_session_documents(_db: Any, session_id: str) -> list[dict[str, An
 
 
 async def get_session_document(
-    _db: Any,
     session_id: str,
     document_id: str,
 ) -> dict[str, Any] | None:
@@ -163,7 +160,6 @@ async def get_session_document(
 
 
 async def delete_session_document(
-    _db: Any,
     session_id: str,
     document_id: str,
 ) -> bool:

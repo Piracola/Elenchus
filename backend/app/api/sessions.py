@@ -1,15 +1,13 @@
 """
-Session CRUD REST API backed by the async database layer.
+Session CRUD REST API backed by file-based session storage.
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.session_documents import router as session_documents_router
 from app.api.session_runtime import router as session_runtime_router
-from app.db.database import get_db
 from app.models.schemas import (
     ExportFormat,
     SessionCreate,
@@ -24,12 +22,9 @@ router.include_router(session_runtime_router)
 
 
 @router.post("/sessions", response_model=SessionResponse, status_code=201)
-async def create_session(
-    body: SessionCreate,
-    db: AsyncSession = Depends(get_db),
-):
+async def create_session(body: SessionCreate):
     """Create a new debate session."""
-    data = await session_service.create_session(db, body)
+    data = await session_service.create_session(body)
     return SessionResponse(**data)
 
 
@@ -37,33 +32,26 @@ async def create_session(
 async def list_sessions(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
 ):
     """List debate sessions with pagination."""
-    items = await session_service.list_sessions(db, offset=offset, limit=limit)
-    total = await session_service.count_sessions(db)
+    items = await session_service.list_sessions(offset=offset, limit=limit)
+    total = await session_service.count_sessions()
     return SessionListResponse(sessions=items, total=total)
 
 
 @router.get("/sessions/{session_id}", response_model=SessionResponse)
-async def get_session(
-    session_id: str,
-    db: AsyncSession = Depends(get_db),
-):
+async def get_session(session_id: str):
     """Get a single session's full data."""
-    data = await session_service.get_session(db, session_id)
+    data = await session_service.get_session(session_id)
     if data is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return SessionResponse(**data)
 
 
 @router.delete("/sessions/{session_id}", status_code=204)
-async def delete_session(
-    session_id: str,
-    db: AsyncSession = Depends(get_db),
-):
+async def delete_session(session_id: str):
     """Delete a session."""
-    deleted = await session_service.delete_session(db, session_id)
+    deleted = await session_service.delete_session(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
     return Response(status_code=204)
@@ -74,14 +62,13 @@ async def export_session(
     session_id: str,
     format: ExportFormat = Query(default=ExportFormat.JSON),
     categories: list[str] | None = Query(default=None),
-    db: AsyncSession = Depends(get_db),
 ):
     """
     Export full session data.
     - format=json returns a JSON file
     - format=markdown returns a markdown file
     """
-    data = await session_service.get_session(db, session_id)
+    data = await session_service.get_session(session_id)
     if data is None:
         raise HTTPException(status_code=404, detail="Session not found")
 

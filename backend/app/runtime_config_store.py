@@ -65,7 +65,6 @@ def _default_config() -> dict[str, Any]:
             "port": 8001,
             "debug": False,
             "cors_origins": list(_DEFAULT_CORS_ORIGINS),
-            "database_url": _sqlite_url(runtime_root / "elenchus.db"),
         },
         "auth": {
             "enabled": False,
@@ -151,10 +150,6 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
         "port": int(server.get("port") or base["server"]["port"]),
         "debug": bool(server.get("debug", base["server"]["debug"])),
         "cors_origins": _normalize_string_list(server.get("cors_origins"), base["server"]["cors_origins"]),
-        "database_url": _normalize_database_url(
-            str(server.get("database_url") or base["server"]["database_url"]),
-            runtime_root=runtime_root,
-        ),
     })
 
     auth = incoming.get("auth") if isinstance(incoming.get("auth"), dict) else {}

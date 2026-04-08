@@ -24,7 +24,6 @@ from app.api.search import build_search_health_payload
 from app.api.searxng import router as searxng_router
 from app.api.session_control import router as session_control_router
 from app.api.admin import router as admin_router
-from app.db.database import init_db
 from app.dependencies import get_search_factory
 from app.services.log_service import setup_logging, get_logger
 
@@ -37,8 +36,6 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     """Application startup / shutdown lifecycle."""
     logger.info("Elenchus starting up...")
-    await init_db()
-    logger.info("Database initialized.")
     yield
     # Cleanup search provider resources
     search_factory = get_search_factory()

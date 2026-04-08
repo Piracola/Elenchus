@@ -12,9 +12,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.database import get_db
 from app.dependencies import get_debate_runtime_service
 from app.models.schemas import SessionResponse
 from app.runtime.service import DebateRuntimeService
@@ -92,7 +90,6 @@ class LiveEventsResponse(BaseModel):
 @router.post("/{session_id}/start", response_model=SessionStartResponse)
 async def start_debate_session(
     session_id: str,
-    db: AsyncSession = Depends(get_db),
     runtime_service: DebateRuntimeService = Depends(get_debate_runtime_service),
 ):
     """
@@ -102,7 +99,7 @@ async def start_debate_session(
     Use GET /sessions/{id}/status to monitor progress.
     """
     # Verify session exists
-    session_data = await session_service.get_session(db, session_id)
+    session_data = await session_service.get_session(session_id)
     if session_data is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -184,7 +181,6 @@ async def intervene_in_debate(
 @router.get("/{session_id}/status", response_model=SessionStatusResponse)
 async def get_debate_status(
     session_id: str,
-    db: AsyncSession = Depends(get_db),
     runtime_service: DebateRuntimeService = Depends(get_debate_runtime_service),
 ):
     """
@@ -192,7 +188,7 @@ async def get_debate_status(
 
     Returns running state, current turn, and basic session info.
     """
-    session_data = await session_service.get_session(db, session_id)
+    session_data = await session_service.get_session(session_id)
     if session_data is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -214,7 +210,6 @@ async def get_live_events(
     session_id: str,
     after_seq: int = Query(default=0, ge=0, description="Return events with seq > this value"),
     limit: int = Query(default=50, ge=1, le=200, description="Maximum events to return"),
-    db: AsyncSession = Depends(get_db),
 ):
     """
     Poll for new runtime events from a debate session.
@@ -224,12 +219,12 @@ async def get_live_events(
     """
     from app.services import runtime_event_service
 
-    session_data = await session_service.get_session(db, session_id)
+    session_data = await session_service.get_session(session_id)
     if session_data is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
     # Get all events and filter client-side (since storage is file-based)
-    all_events_result = await runtime_event_service.list_all_runtime_events(None, session_id)
+    all_events_result = await runtime_event_service.list_all_runtime_events(session_id)
     all_events = all_events_result if isinstance(all_events_result, list) else []
 
     # Filter events with seq > after_seq
