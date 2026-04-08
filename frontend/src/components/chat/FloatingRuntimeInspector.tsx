@@ -7,7 +7,7 @@ import {
     type FloatingInspectorInteraction,
     type FloatingInspectorRect,
     type FloatingInspectorResizeHandle,
-} from '../../utils/floatingInspectorLayout';
+} from '../../utils/inspector/floatingInspectorLayout';
 
 type FloatingRuntimeInspectorProps = {
     floatingInspectorRect: FloatingInspectorRect | null;
@@ -33,6 +33,7 @@ export default function FloatingRuntimeInspector({
     }
 
     const collapsedSize = getCollapsedFloatingInspectorSize();
+    const isCollapsed = !floatingInspectorExpanded;
 
     void floatingInspectorInteractionRef;
 
@@ -42,7 +43,7 @@ export default function FloatingRuntimeInspector({
                 position: 'absolute',
                 left: `${floatingInspectorRect.x}px`,
                 top: `${floatingInspectorRect.y}px`,
-                zIndex: 200,
+                zIndex: 10000,
                 width: floatingInspectorExpanded ? `${floatingInspectorRect.width}px` : `${collapsedSize.width}px`,
                 height: floatingInspectorExpanded ? `${floatingInspectorRect.height}px` : `${collapsedSize.height}px`,
                 pointerEvents: 'auto',
