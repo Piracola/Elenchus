@@ -47,7 +47,8 @@ Elenchus 是一个用于多智能体辩论的平台，基于 `FastAPI + LangGrap
 
 `search字段为搜索服务相关配置`
 
-## 公开演示部署（Demo Mode）
+<details>
+<summary><b>公开演示部署（Demo Mode）</b></summary>
 
 本项目支持通过 `runtime/config.json` 中的 `demo` 配置项开启演示模式，适用于公开网站部署。
 
@@ -113,6 +114,8 @@ server {
 2. **HTTPS**：公开部署强烈建议配置 HTTPS，防止管理员 token 被中间人截获
 3. **防火墙**：建议使用防火墙限制后端 8001 端口直接访问，仅通过 Nginx 代理暴露
 4. **模型配额**：建议为预设模型配置合理的 `default_max_tokens`，防止单次请求消耗过多 token
+
+</details>
 
 <details>
 <summary><b>SearXNG 搜索服务（可选）</b></summary>
