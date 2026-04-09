@@ -17,7 +17,7 @@ from app.agents.runtime_progress import (
     MODEL_INVOCATION_TIMEOUT_SECONDS,
     build_status_heartbeat_callback,
 )
-from app.agents.safe_invoke import invoke_text_model, normalize_model_text
+from app.llm.invoke import invoke_text_model, normalize_model_text
 from app.constants import ROLE_LABELS, ROLE_NAMES
 
 logger = logging.getLogger(__name__)

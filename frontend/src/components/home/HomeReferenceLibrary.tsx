@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { BookOpenText, FileUp, X, FileText } from 'lucide-react';
 import { useCallback, useRef, useState, type ChangeEvent } from 'react';
-import { toast } from '../../utils/toast';
+import { toast } from '../../utils/chat/toast';
 
 export type PendingReferenceDocument = {
     file: File;

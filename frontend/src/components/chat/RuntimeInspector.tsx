@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useRuntimeViewState, useRuntimeActions } from '../../hooks/useDebateViewState';
-import { getLiveGraphNodeLabel } from '../../utils/liveGraph';
+import { getLiveGraphNodeLabel } from '../../utils/viz/liveGraph';
 import ExecutionTimeline from './ExecutionTimeline';
 import LiveGraph from './LiveGraph';
 import MemoryPanel from './MemoryPanel';

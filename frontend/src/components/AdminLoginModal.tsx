@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { adminApi, useDemoModeStore } from '../../stores/demoModeStore';
+import { adminApi, useDemoModeStore } from '../stores/demoModeStore';
 
 interface Props {
     isOpen: boolean;

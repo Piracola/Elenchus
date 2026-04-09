@@ -15,7 +15,7 @@ import {
     getLiveGraphDefinition,
     getLiveGraphNodeLabel,
     hasEdge,
-} from '../../utils/liveGraph';
+} from '../../utils/viz/liveGraph';
 
 const NODE_COLOR: Record<string, string> = {
     manage_context: 'var(--accent-indigo)',

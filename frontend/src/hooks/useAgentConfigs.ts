@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
 import type { ModelConfig } from '../types';
-import { buildAgentConfigsPayload, createEmptyAgentFieldMap, createEmptyThinkingMap, type AgentRole } from '../utils/agentConfigs';
+import { buildAgentConfigsPayload, createEmptyAgentFieldMap, createEmptyThinkingMap, type AgentRole } from '../utils/agent/agentConfigs';
 
 export function useAgentConfigs() {
     const [savedConfigs, setSavedConfigs] = useState<ModelConfig[]>([]);

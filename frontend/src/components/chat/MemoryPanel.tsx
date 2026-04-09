@@ -6,11 +6,11 @@
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useRuntimeActions, useRuntimeViewState } from '../../hooks/useDebateViewState';
-import { buildMemoryGraph } from '../../utils/memoryGraph';
+import { buildMemoryGraph } from '../../utils/inspector/memoryGraph';
 import {
     buildMemoryWriteViews,
     summarizeMemoryTypes,
-} from '../../utils/memoryView';
+} from '../../utils/inspector/memoryView';
 import { MemoryGraphSection } from './memoryPanel/MemoryGraphSection';
 import { MemoryTimelineSection } from './memoryPanel/MemoryTimelineSection';
 import { MemoryWriteList } from './memoryPanel/MemoryWriteList';

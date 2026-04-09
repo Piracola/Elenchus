@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../../api/client';
 import type { SearchConfig } from '../../../types';
-import { toast } from '../../../utils/toast';
+import { toast } from '../../../utils/chat/toast';
 import { useSearchConfigState } from './useSearchConfigState';
 
 vi.mock('../../../api/client', () => ({
@@ -16,7 +16,7 @@ vi.mock('../../../api/client', () => ({
     },
 }));
 
-vi.mock('../../../utils/toast', () => ({
+vi.mock('../../../utils/chat/toast', () => ({
     toast: vi.fn(),
 }));
 

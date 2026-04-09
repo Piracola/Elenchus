@@ -1,19 +1,10 @@
-from abc import ABC, abstractmethod
-from typing import Any
+"""
+Base provider client - RE-EXPORT for backward compatibility.
 
-from langchain_core.language_models import BaseChatModel
+This module has been moved to app.llm.providers.base. This file is kept as a
+backward-compat re-export and should not be used for new code.
+"""
 
-class BaseProviderClient(ABC):
-    """Base interface for an LLM provider client wrapper."""
-    
-    @abstractmethod
-    def create_client(
-        self, 
-        model: str, 
-        api_key: str | None = None, 
-        api_base_url: str | None = None,
-        custom_parameters: dict[str, Any] | None = None,
-        **kwargs: Any
-    ) -> BaseChatModel:
-        """Instantiate and return the specific Langchain BaseChatModel."""
-        pass
+from app.llm.providers.base import BaseProviderClient
+
+__all__ = ["BaseProviderClient"]

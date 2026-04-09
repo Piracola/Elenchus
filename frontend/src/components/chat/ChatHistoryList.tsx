@@ -5,9 +5,9 @@ import type { DialogueEntry } from '../../types';
 import MessageRow from './MessageRow';
 import RoundInsights from './RoundInsights';
 import StreamingMessage from './StreamingMessage';
-import type { VirtualVariableWindow } from '../../utils/virtualWindow';
-import type { TranscriptRowViewModel } from '../../utils/transcriptViewModel';
-import { isTranscriptAgentMessageCollapsed } from '../../utils/transcriptViewModel';
+import type { VirtualVariableWindow } from '../../utils/virtualization/virtualWindow';
+import type { TranscriptRowViewModel } from '../../utils/chat/transcriptViewModel';
+import { isTranscriptAgentMessageCollapsed } from '../../utils/chat/transcriptViewModel';
 
 type ChatHistoryListProps = {
     scrollRef: RefObject<HTMLDivElement | null>;

@@ -18,8 +18,8 @@ import {
     getSessionRuntimeFallback,
     sanitizeIncomingContent,
     sanitizeSession,
-} from '../utils/debateStoreHelpers';
-import { upsertSessionListItem } from '../utils/sessionList';
+} from '../utils/agent/debateStoreHelpers';
+import { upsertSessionListItem } from '../utils/session/sessionList';
 import {
     applyRuntimeEventPatch,
     createExitReplayPatch,

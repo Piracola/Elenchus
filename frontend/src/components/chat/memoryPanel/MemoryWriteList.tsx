@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import type { MemoryWriteView } from '../../../utils/memoryView';
+import type { MemoryWriteView } from '../../../utils/inspector/memoryView';
 import { typeColor } from './shared';
 
 type MemoryWriteListProps = {

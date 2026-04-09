@@ -43,7 +43,7 @@ def should_route_after_set_speaker(state: DebateGraphState) -> str:
 
 def should_route_after_speaker(state: DebateGraphState) -> str:
     participants = state.get("participants", ["proposer", "opposer"])
-    current_idx = int(state.get("current_speaker_index", 0) or 0)
+    current_idx = int(state.get("current_speaker_index", -1) if state.get("current_speaker_index") is not None else -1)
     if current_idx + 1 < len(participants):
         return "next_speaker"
     return "observer"

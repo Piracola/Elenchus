@@ -16,7 +16,7 @@ import { getAgentVisual, STATIC_MOTION_PROPS } from './messageRow/shared';
 import { messageContentWrapperStyle, markdownBodyStyle } from './messageRow/contentStyles';
 import { MessageMarkdown } from './messageRow/MarkdownRenderer';
 import { ThinkingBlock } from './messageRow/ThinkingBlock';
-import { splitLeadingThinkingContent } from '../../utils/thinkingContent';
+import { splitLeadingThinkingContent } from '../../utils/chat/thinkingContent';
 import { getMessageFontTokens } from '../../config/display';
 import { useSettingsStore } from '../../stores/settingsStore';
 

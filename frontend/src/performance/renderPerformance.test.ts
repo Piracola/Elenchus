@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { RuntimeEvent, Session, DialogueEntry } from '../types';
 import { useDebateStore } from '../stores/debateStore';
 import { makeRuntimeEvent } from '../test/runtimeEventFactory';
-import { buildTranscriptViewModel } from '../utils/transcriptViewModel';
+import { buildTranscriptViewModel } from '../utils/chat/transcriptViewModel';
 import {
     buildTimelineSearchIndex,
     computeTimelinePageTotal,
@@ -16,7 +16,7 @@ import {
     filterTimelineEvents,
     requiredPageCountForIndex,
     sliceTimelineTail,
-} from '../utils/timelineWindow';
+} from '../utils/timeline/timelineWindow';
 
 function makeDialogueEntry(index: number): DialogueEntry {
     const role = index % 2 === 0 ? 'proposer' : 'opposer';

@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
-import type { MemoryGraphModel } from '../../../utils/memoryGraph';
-import { MEMORY_TYPE_LABELS } from '../../../utils/memoryView';
+import type { MemoryGraphModel } from '../../../utils/inspector/memoryGraph';
+import { MEMORY_TYPE_LABELS } from '../../../utils/inspector/memoryView';
 import {
     GRAPH_WIDTH,
     PANEL_SECTION_STYLE,

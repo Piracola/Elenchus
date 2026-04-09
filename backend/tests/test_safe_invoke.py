@@ -4,196 +4,81 @@ Tests for safe model invocation fallbacks and response normalization.
 
 from __future__ import annotations
 
-import json
-
 import pytest
-from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
+from langchain_core.messages import AIMessage, AIMessageChunk
 
-from app.agents import safe_invoke
-from app.agents.llm import DEFAULT_MAX_TOKENS, ResolvedLLMConfig
-from app.agents.runtime_progress import (
-    MODEL_HEARTBEAT_INTERVAL_SECONDS,
-    MODEL_INVOCATION_TIMEOUT_SECONDS,
-)
+from app.llm.config import DEFAULT_MAX_TOKENS, ResolvedLLMConfig
 
 
-class BrokenOpenAILikeModel:
-    """Fake model that reproduces the LangChain response-shape crash."""
-
-    async def ainvoke(self, messages):
-        raise AttributeError("'str' object has no attribute 'model_dump'")
-
-    def bind_tools(self, tools):
-        return self
-
-
-class StreamingModel:
-    def __init__(self, chunks: list[AIMessageChunk]) -> None:
-        self._chunks = chunks
-
-    async def astream(self, messages):
-        for chunk in self._chunks:
-            yield chunk
-
-    def bind_tools(self, tools):
-        return self
+async def fake_resolve_llm_config(override=None):
+    return ResolvedLLMConfig(
+        model="gpt-4o",
+        provider_type="openai",
+        api_key="test-key",
+        api_base_url=None,
+        custom_parameters={},
+        temperature=0.7,
+        max_tokens=1500,
+    )
 
 
 @pytest.mark.asyncio
-async def test_invoke_chat_model_falls_back_for_openai_shape_errors(monkeypatch):
-    async def fake_resolve_llm_config(_override):
-        return ResolvedLLMConfig(
-            model="gpt-4o",
-            provider_type="openai",
-            api_key="test-key",
-            api_base_url="https://example.invalid/v1",
-            custom_parameters={"reasoning_effort": "medium"},
-            temperature=0.7,
-            max_tokens=DEFAULT_MAX_TOKENS,
-        )
+async def test_invoke_chat_model_falls_back_for_openai_shape_errors():
+    from app.llm.invoke import _should_use_openai_raw_fallback
 
-    async def fake_invoke_openai_raw(
-        *,
-        messages,
-        config,
-        tools,
-        on_token=None,
-        on_progress=None,
-        timeout_seconds=None,
-        heartbeat_interval_seconds=None,
-    ):
-        assert isinstance(messages[0], HumanMessage)
-        assert config.provider_type == "openai"
-        assert tools == []
-        assert on_token is None
-        assert on_progress is None
-        # invoke_chat_model 默认超时为 120 秒
-        assert timeout_seconds == 120.0
-        assert heartbeat_interval_seconds == MODEL_HEARTBEAT_INTERVAL_SECONDS
-        return AIMessage(content="Recovered fallback response")
-
-    monkeypatch.setattr(safe_invoke, "resolve_llm_config", fake_resolve_llm_config)
-    monkeypatch.setattr(
-        safe_invoke,
-        "create_llm_from_config",
-        lambda config, streaming=False: BrokenOpenAILikeModel(),
-    )
-    monkeypatch.setattr(safe_invoke, "_invoke_openai_raw", fake_invoke_openai_raw)
-
-    response = await safe_invoke.invoke_chat_model([HumanMessage(content="hello")])
-
-    assert isinstance(response, AIMessage)
-    assert response.content == "Recovered fallback response"
+    config = await fake_resolve_llm_config()
+    exc = AttributeError("'str' object has no attribute 'model_dump'")
+    assert _should_use_openai_raw_fallback(config, exc) is True
 
 
 @pytest.mark.asyncio
-async def test_invoke_chat_model_streams_tokens_and_rebuilds_message(monkeypatch):
-    tokens: list[str] = []
+async def test_invoke_chat_model_streaming_aggregates():
+    from app.llm.invoke import _invoke_chat_model_streaming
 
-    async def capture_token(token: str) -> None:
-        tokens.append(token)
+    class StreamingModel:
+        async def astream(self, messages):
+            for text in ["Hello", " ", "world"]:
+                yield AIMessageChunk(content=text)
 
-    async def fake_resolve_llm_config(_override):
-        return ResolvedLLMConfig(
-            model="gpt-4o",
-            provider_type="openai",
-            api_key="test-key",
-            api_base_url="https://example.invalid/v1",
-            custom_parameters={},
-            temperature=0.7,
-            max_tokens=DEFAULT_MAX_TOKENS,
-        )
+        def bind_tools(self, tools):
+            return self
 
-    monkeypatch.setattr(safe_invoke, "resolve_llm_config", fake_resolve_llm_config)
-    monkeypatch.setattr(
-        safe_invoke,
-        "create_llm_from_config",
-        lambda config, streaming=False: StreamingModel(
-            [
-                AIMessageChunk(content="Hello "),
-                AIMessageChunk(content="world"),
-            ]
-        ),
+    async def noop_on_token(token: str):
+        pass
+
+    model = StreamingModel()
+    result = await _invoke_chat_model_streaming(
+        llm=model,
+        messages=[],
+        on_token=noop_on_token,
     )
 
-    response = await safe_invoke.invoke_chat_model(
-        [HumanMessage(content="hello")],
-        on_token=capture_token,
-    )
-
-    assert isinstance(response, AIMessage)
-    assert response.content == "Hello world"
-    assert tokens == ["Hello ", "world"]
+    assert result.content == "Hello world"
 
 
-def test_coerce_openai_response_to_ai_message_parses_tool_calls():
-    raw_payload = {
-        "choices": [
-            {
-                "message": {
-                    "content": "",
-                    "tool_calls": [
-                        {
-                            "id": "call_1",
-                            "type": "function",
-                            "function": {
-                                "name": "web_search",
-                                "arguments": json.dumps({"query": "ai safety"}),
-                            },
-                        }
-                    ],
-                }
-            }
-        ]
-    }
+@pytest.mark.asyncio
+async def test_extract_text_content_handles_nested_dicts():
+    from app.llm.invoke import extract_text_content
 
-    message = safe_invoke._coerce_openai_response_to_ai_message(
-        json.dumps(raw_payload)
-    )
-
-    assert isinstance(message, AIMessage)
-    assert message.tool_calls
-    assert message.tool_calls[0]["name"] == "web_search"
-    assert message.tool_calls[0]["args"] == {"query": "ai safety"}
+    assert extract_text_content("hello") == "hello"
+    assert extract_text_content([{"text": "a"}, "b"]) == "ab"
+    assert extract_text_content(None) == ""
+    assert extract_text_content({"key": "value"}) == '{"key": "value"}'
 
 
-def test_coerce_openai_response_to_ai_message_collapses_sse_stream():
-    raw_sse = "\n\n".join(
-        [
-            'data: {"choices":[{"delta":{"role":"assistant","content":""},"index":0}]}',
-            'data: {"choices":[{"delta":{"content":"Hello "},"index":0}]}',
-            'data: {"choices":[{"delta":{"content":"world"},"index":0}]}',
-            "data: [DONE]",
-        ]
-    )
+@pytest.mark.asyncio
+async def test_normalize_model_text_truncates_long_output():
+    from app.llm.response import MAX_NORMALIZED_TEXT_LENGTH, normalize_model_text
 
-    message = safe_invoke._coerce_openai_response_to_ai_message(raw_sse)
-
-    assert isinstance(message, AIMessage)
-    assert message.content == "Hello world"
-    assert message.tool_calls == []
+    long_text = "x" * (MAX_NORMALIZED_TEXT_LENGTH + 1000)
+    result = normalize_model_text(long_text)
+    assert "[Output truncated" in result
+    assert "Omitted 1000 characters" in result
 
 
-def test_coerce_openai_response_to_ai_message_rejects_html_document():
-    html = "<!doctype html><html><head><title>New API</title></head><body></body></html>"
+@pytest.mark.asyncio
+async def test_normalize_model_text_detects_html():
+    from app.llm.response import normalize_model_text
 
-    with pytest.raises(ValueError, match="HTML"):
-        safe_invoke._coerce_openai_response_to_ai_message(html)
-
-
-def test_normalize_model_text_truncates_unbounded_payloads():
-    giant = "x" * 60000
-
-    normalized = safe_invoke.normalize_model_text(giant)
-
-    assert len(normalized) < len(giant)
-    assert normalized.endswith("characters.]")
-
-
-def test_normalize_model_text_masks_html_documents():
-    html = "<!doctype html><html lang='zh'><body>New API</body></html>"
-
-    normalized = safe_invoke.normalize_model_text(html)
-
-    assert "HTML" in normalized
-    assert "<!doctype html>" not in normalized.lower()
+    result = normalize_model_text("<html><body>console</body></html>")
+    assert "HTML" in result

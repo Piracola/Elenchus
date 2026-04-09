@@ -3,15 +3,13 @@ import { motion } from 'framer-motion';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { getMessageFontTokens } from '../../config/display';
 import type { DialogueEntry } from '../../types';
-import { splitLeadingThinkingContent } from '../../utils/thinkingContent';
+import { splitLeadingThinkingContent } from '../../utils/chat/thinkingContent';
 import RoundInsights from './RoundInsights';
 import type { InsightSection } from './RoundInsights';
-import { AgentMetaPill } from './messageRow/AgentMetaPill';
 import { MessageMarkdown } from './messageRow/MarkdownRenderer';
 import { ScoreGrid } from './messageRow/ScoreGrid';
 import { markdownBodyStyle, messageContentWrapperStyle } from './messageRow/contentStyles';
 import {
-    bodyHintStyle,
     collapseButtonLabel,
     collapseButtonStyle,
     collapseButtonSymbol,
@@ -143,67 +141,90 @@ function MessageRow({
     const judgeOnly = Boolean(judgeEntry && !agentEntry);
     const agentOnly = Boolean(agentEntry && !judgeEntry);
 
-    // 正方/反方消息卡片
+    // 正方/反方消息卡片（统一头部行样式）
     const agentCard = agentEntry ? (
         <motion.div
             {...(animated
                 ? { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.4 } }
                 : STATIC_MOTION_PROPS)}
             style={{
-                background: 'var(--bg-secondary)',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--border-subtle)',
-                overflow: 'hidden',
+                position: 'relative',
+                background: 'var(--bg-card)',
+                padding: '20px 28px 28px 28px',
+                borderRadius: 'var(--radius-xl)',
+                boxShadow: '0 2px 12px rgba(224, 224, 224, 0.5)',
             }}
         >
-            {/* 头部栏：徽章 + Pill 标签 + 折叠按钮 */}
-            <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '16px 16px 8px 16px',
-                background: 'var(--bg-card)',
-            }}>
+            {/* 统一头部行：头像 + 身份 + 轮数 + 模型 + 折叠按钮 居中对齐 */}
+            <div
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px',
+                    marginBottom: '12px',
+                }}
+            >
                 <motion.div
                     {...(animated ? { whileHover: { scale: 1.05 } } : STATIC_MOTION_PROPS)}
                     style={{
                         width: '36px',
                         height: '36px',
                         background: badgeBg,
-                        borderRadius: 'var(--radius-sm)',
+                        borderRadius: 'var(--radius-md)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         color: badgeColor,
                         fontWeight: 700,
-                        fontSize: '16px',
+                        fontSize: '15px',
+                        boxShadow: '0 2px 8px rgba(224, 224, 224, 0.6)',
                         flexShrink: 0,
                     }}
                 >
                     {agentVisual.badge}
                 </motion.div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, flexWrap: 'wrap' }}>
-                    <AgentMetaPill
-                        label={agentVisual.label}
-                        color="var(--text-primary)"
-                        background="var(--bg-tertiary)"
-                    />
-                    {agentTurnLabel && (
-                        <AgentMetaPill
-                            label={agentTurnLabel}
-                            color="var(--text-primary)"
-                            background="var(--bg-tertiary)"
-                        />
-                    )}
-                    {agentModel && (
-                        <AgentMetaPill
-                            label={agentModel}
-                            color="var(--text-muted)"
-                            background="transparent"
-                        />
-                    )}
-                </div>
-                {agentCollapsed && <span style={bodyHintStyle()}>{collapsedHint}</span>}
+                <span
+                    style={{
+                        fontSize: '13px',
+                        color: '#333333',
+                        border: '1px solid #CCCCCC',
+                        padding: '5px 12px',
+                        borderRadius: 'var(--radius-full)',
+                        fontWeight: 500,
+                        whiteSpace: 'nowrap',
+                    }}
+                >
+                    {agentVisual.label}
+                </span>
+                {agentTurnLabel && (
+                    <span
+                        style={{
+                            fontSize: '12px',
+                            color: 'var(--text-muted)',
+                            background: 'var(--bg-tertiary)',
+                            padding: '4px 10px',
+                            borderRadius: 'var(--radius-full)',
+                            whiteSpace: 'nowrap',
+                        }}
+                    >
+                        {agentTurnLabel}
+                    </span>
+                )}
+                {agentModel && (
+                    <span
+                        style={{
+                            fontSize: '11px',
+                            color: 'var(--text-muted)',
+                            background: 'var(--bg-tertiary)',
+                            padding: '3px 8px',
+                            borderRadius: 'var(--radius-full)',
+                            whiteSpace: 'nowrap',
+                        }}
+                    >
+                        {agentModel}
+                    </span>
+                )}
                 <button
                     type="button"
                     onClick={onToggleAgentCollapsed}
@@ -216,36 +237,36 @@ function MessageRow({
             </div>
 
             {/* 消息内容 */}
-            <div style={{ padding: '2px 20px 16px 20px' }}>
-            {agentCollapsed ? (
-                <div data-agent-content="collapsed" style={{
-                    color: 'var(--text-secondary)',
-                    fontSize: messageFontSizes.body,
-                    lineHeight: 1.7,
-                    padding: '14px 16px',
-                    borderRadius: 'var(--radius-lg)',
-                    border: `2px dashed ${badgeBg}`,
-                }}>
-                    {collapsedHint}
-                </div>
-            ) : (
-                <div data-agent-content="visible" style={messageContentWrapperStyle('16px')}>
-                    <ThinkingBlock
-                        content={agentContent.thinking}
-                        accentColor={badgeColor}
-                        fontSize={messageFontSizes.body}
-                        textColor="var(--text-primary)"
-                    />
-                    {agentContent.response && (
-                        <div
-                            className="markdown-body"
-                            style={markdownBodyStyle(messageFontSizes.body, 'var(--text-primary)')}
-                        >
-                            <MessageMarkdown text={agentContent.response} />
-                        </div>
-                    )}
-                </div>
-            )}
+            <div>
+                {agentCollapsed ? (
+                    <div data-agent-content="collapsed" style={{
+                        color: 'var(--text-secondary)',
+                        fontSize: messageFontSizes.body,
+                        lineHeight: 1.7,
+                        padding: '14px 16px',
+                        borderRadius: 'var(--radius-lg)',
+                        border: `2px dashed ${badgeBg}`,
+                    }}>
+                        {collapsedHint}
+                    </div>
+                ) : (
+                    <div data-agent-content="visible" style={messageContentWrapperStyle('16px')}>
+                        <ThinkingBlock
+                            content={agentContent.thinking}
+                            accentColor={badgeColor}
+                            fontSize={messageFontSizes.body}
+                            textColor="var(--text-primary)"
+                        />
+                        {agentContent.response && (
+                            <div
+                                className="markdown-body"
+                                style={markdownBodyStyle(messageFontSizes.body, 'var(--text-primary)')}
+                            >
+                                <MessageMarkdown text={agentContent.response} />
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </motion.div>
     ) : null;
@@ -265,38 +286,48 @@ function MessageRow({
                 borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border-subtle)',
                 overflow: 'hidden',
+                boxShadow: '0 2px 12px rgba(224, 224, 224, 0.5)',
             }}
         >
             {/* 裁判头部栏 */}
             <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'flex-end',
+                justifyContent: 'center',
                 gap: '10px',
-                padding: '14px 16px 6px 16px',
+                padding: '14px 16px 10px 16px',
                 background: 'var(--bg-card)',
             }}>
-                <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                    {judgeVisual.label}
-                </span>
                 <motion.div
                     {...(animated ? { whileHover: { scale: 1.05 } } : STATIC_MOTION_PROPS)}
                     style={{
-                        width: '32px',
-                        height: '32px',
-                        background: 'rgba(251, 191, 36, 0.2)',
-                        borderRadius: 'var(--radius-sm)',
+                        width: '36px',
+                        height: '36px',
+                        background: '#d97706',
+                        borderRadius: 'var(--radius-md)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: '#d97706',
+                        color: '#fff',
                         fontWeight: 700,
-                        fontSize: '14px',
+                        fontSize: '15px',
+                        boxShadow: '0 2px 8px rgba(224, 224, 224, 0.6)',
                         flexShrink: 0,
                     }}
                 >
                     {judgeVisual.badge}
                 </motion.div>
+                <span style={{
+                    fontSize: '13px',
+                    color: '#333333',
+                    border: '1px solid #CCCCCC',
+                    padding: '5px 12px',
+                    borderRadius: 'var(--radius-full)',
+                    fontWeight: 500,
+                    whiteSpace: 'nowrap',
+                }}>
+                    {judgeVisual.label}
+                </span>
             </div>
 
             {agentCollapsed ? (

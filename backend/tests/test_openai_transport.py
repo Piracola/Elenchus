@@ -6,8 +6,10 @@ import pytest
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 
-from app.agents.llm import ResolvedLLMConfig
-from app.agents import openai_transport
+from app.llm.config import ResolvedLLMConfig
+from app.llm import transport
+
+from openai import AsyncOpenAI
 
 
 @tool
@@ -29,7 +31,7 @@ def _config() -> ResolvedLLMConfig:
 
 
 def test_build_openai_chat_payload_includes_tools():
-    payload = openai_transport.build_openai_chat_payload(
+    payload = transport.build_openai_chat_payload(
         messages=[HumanMessage(content="hello")],
         config=_config(),
         tools=[echo_tool],
@@ -43,7 +45,7 @@ def test_build_openai_chat_payload_includes_tools():
 
 
 def test_build_openai_chat_payload_includes_custom_parameters():
-    payload = openai_transport.build_openai_chat_payload(
+    payload = transport.build_openai_chat_payload(
         messages=[HumanMessage(content="hello")],
         config=_config(),
     )
@@ -71,10 +73,10 @@ async def test_invoke_openai_chat_raw_rejects_html_response(monkeypatch):
         def close(self) -> None:
             return None
 
-    monkeypatch.setattr(openai_transport, "AsyncOpenAI", _FakeClient)
+    monkeypatch.setattr(transport, "AsyncOpenAI", _FakeClient)
 
     with pytest.raises(ValueError, match="HTML"):
-        await openai_transport.invoke_openai_chat_raw(
+        await transport.invoke_openai_chat_raw(
             messages=[HumanMessage(content="hello")],
             config=_config(),
         )

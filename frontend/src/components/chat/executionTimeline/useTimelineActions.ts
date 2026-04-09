@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react';
 import { api } from '../../../api/client';
 import { useRuntimeActions, useRuntimeViewState } from '../../../hooks/useDebateViewState';
-import { parseRuntimeEventsSnapshot, serializeRuntimeEventsSnapshot } from '../../../utils/replaySnapshot';
-import { toast } from '../../../utils/toast';
-import { TIMELINE_PAGE_SIZE } from '../../../utils/timelineWindow';
+import { parseRuntimeEventsSnapshot, serializeRuntimeEventsSnapshot } from '../../../utils/runtime/replaySnapshot';
+import { toast } from '../../../utils/chat/toast';
+import { TIMELINE_PAGE_SIZE } from '../../../utils/timeline/timelineWindow';
 
 export interface UseTimelineActionsReturn {
     historyLoading: boolean;

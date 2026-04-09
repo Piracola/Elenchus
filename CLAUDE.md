@@ -84,16 +84,25 @@ npm --prefix frontend run test:run
   - `session_defaults.py`: default config factories (team/jury/reasoning/mode)
   - `session_dialogue_helpers.py`: dialogue history cleaning, round extraction
   - `session_snapshot_normalizer.py`: snapshot normalization, incomplete round rollback
-- `backend/app/agents/` — LangGraph agents & LLM layer
+- `backend/app/agents/` — LangGraph agents & graph definitions
   - `graph.py`: standard debate graph
   - `sophistry_graph.py`: sophistry experiment graph
   - `debater.py`, `judge.py`, `team_discussion.py`, `jury_discussion.py`, `consensus.py`
   - `sophistry_debater.py`, `sophistry_observer.py`, `sophistry_prompt_loader.py`
-  - `llm.py`, `llm_router.py`, `openai_transport.py`, `safe_invoke.py`: unified LLM invocation
   - `context_builder.py`, `context_manager.py`, `reference_preprocessor.py`
-  - `skills/`: `search_tool.py`, `search_query_planner.py`, `search_result_filter.py`, `search_formatter.py`
-  - `providers/`: `base.py`, `clients.py` — provider client abstraction
   - `prompt_loader.py`: standard mode prompt loading
+- `backend/app/llm/` — LLM invocation infrastructure (new)
+  - `config.py`: provider config resolution, model factory
+  - `router.py`: LLMRouter for provider routing
+  - `providers/`: `base.py`, `clients.py` — provider client abstraction
+  - `invoke.py`: safe invocation with retry/heartbeat/streaming
+  - `transport.py`: raw OpenAI-compatible HTTP transport
+  - `response.py`: response normalization, SSE parsing, tool call parsing
+- `backend/app/tools/` — Agent tools (new, formerly agents/skills/)
+  - `search_tool.py`, `search_query_planner.py`, `search_result_filter.py`, `search_formatter.py`
+  - `metadata.py`: shared knowledge annotation
+  - `skills/`: backward-compat re-exports (deprecated, use `app.tools/`)
+  - `providers/`, `llm_router.py`, `safe_invoke.py`, `model_response.py`, `openai_transport.py`: backward-compat re-exports (deprecated, use `app.llm/`)
 - `backend/app/services/` — Business logic
   - `session_service.py` (+ helpers): file-backed session CRUD, snapshot cleaning, round materialization
   - `provider_service.py` (+ store/serializers): provider configs from `runtime/config.json`

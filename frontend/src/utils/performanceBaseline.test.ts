@@ -4,7 +4,7 @@ import type { RuntimeEvent } from '../types';
 import {
     parseRuntimeEventsSnapshot,
     serializeRuntimeEventsSnapshot,
-} from './replaySnapshot';
+} from './runtime/replaySnapshot';
 import {
     buildTimelineSearchIndex,
     computeTimelinePageTotal,
@@ -13,7 +13,7 @@ import {
     filterTimelineEvents,
     requiredPageCountForIndex,
     sliceTimelineTail,
-} from './timelineWindow';
+} from './timeline/timelineWindow';
 
 function makeEvent(index: number): RuntimeEvent {
     const speech = index % 2 === 0;

@@ -11,6 +11,7 @@ import { SettingsDisplayTab } from './settings/SettingsDisplayTab';
 import { SettingsLoggingTab } from './settings/SettingsLoggingTab';
 import { SettingsProvidersTab } from './settings/SettingsProvidersTab';
 import { DemoModelsList } from './settings/DemoModelsList';
+import { DemoFeatureNotice } from './settings/DemoFeatureNotice';
 import { createSettingsFonts } from '../../config/settingsFonts';
 import { DEFAULT_SETTINGS_FONT_SIZE } from '../../config/display';
 
@@ -248,16 +249,20 @@ export default function SettingsPanel({
                                         />
                                 )}
                                 {activeTab === 'display' && (
-                                    <SettingsDisplayTab
-                                        displaySettings={displaySettings}
-                                        setDisplaySettings={setDisplaySettings}
-                                    />
+                                    isInDemoMode
+                                        ? <DemoFeatureNotice feature="显示设置" />
+                                        : <SettingsDisplayTab
+                                            displaySettings={displaySettings}
+                                            setDisplaySettings={setDisplaySettings}
+                                        />
                                 )}
                                 {activeTab === 'logging' && (
-                                    <SettingsLoggingTab
-                                        logLevel={logLevel}
-                                        onLogLevelChange={handleLogLevelChange}
-                                    />
+                                    isInDemoMode
+                                        ? <DemoFeatureNotice feature="日志级别" />
+                                        : <SettingsLoggingTab
+                                            logLevel={logLevel}
+                                            onLogLevelChange={handleLogLevelChange}
+                                        />
                                 )}
                                 {activeTab === 'search' && (
                                     isInDemoMode

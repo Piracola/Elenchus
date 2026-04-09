@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Session, TurnScore } from '../types';
 import { makeRuntimeEvent } from '../test/runtimeEventFactory';
 import { useDebateStore } from './debateStore';
-import { repairKnownMojibakeText } from '../utils/textRepair';
+import { repairKnownMojibakeText } from '../utils/text/textRepair';
 
 function makeSession(): Session {
     return {

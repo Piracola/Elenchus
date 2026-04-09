@@ -1,4 +1,4 @@
-import type { MemoryType } from '../../../utils/memoryView';
+import type { MemoryType } from '../../../utils/inspector/memoryView';
 
 export const GRAPH_WIDTH = 960;
 export const GRAPH_HEIGHT = 278;

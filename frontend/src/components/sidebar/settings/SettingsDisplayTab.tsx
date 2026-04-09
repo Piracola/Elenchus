@@ -9,8 +9,8 @@ import {
     DEFAULT_SETTINGS_FONT_SIZE 
 } from '../../../config/display';
 import type { DisplaySettings } from '../../../types';
-import { resetStoredFloatingInspectorRect } from '../../../utils/floatingInspector';
-import { toast } from '../../../utils/toast';
+import { resetStoredFloatingInspectorRect } from '../../../utils/inspector/floatingInspector';
+import { toast } from '../../../utils/chat/toast';
 import { SettingsRadioCardGroup } from './SettingsRadioCardGroup';
 
 const MESSAGE_WIDTH_OPTIONS: { value: DisplaySettings['messageWidth']; label: string; description: string }[] = [

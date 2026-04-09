@@ -1,14 +1,14 @@
 import { ArrowRight, BookOpenText, ChevronDown, FileUp, FileText, Settings2, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useCallback, useRef, useState, type ChangeEvent } from 'react';
-import { toast } from '../../utils/toast';
+import { toast } from '../../utils/chat/toast';
 import {
     DEFAULT_MAX_TURNS,
     DEFAULT_JURY_AGENTS_PER_JURY,
     DEFAULT_JURY_DISCUSSION_ROUNDS,
     DEFAULT_TEAM_AGENTS_PER_TEAM,
     DEFAULT_TEAM_DISCUSSION_ROUNDS,
-} from '../../utils/debateSession';
+} from '../../utils/agent/debateSession';
 import type { HomeFontSizes } from './shared';
 
 export type PendingReferenceDocument = {

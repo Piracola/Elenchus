@@ -1,0 +1,132 @@
+import type { RuntimeEvent } from '../../types';
+import type { DialogueRow } from '../chat/groupDialogue';
+import { payloadNumber, payloadString } from './runtimeEventPayload';
+
+export interface RowFocusState {
+    agent: boolean;
+    judge: boolean;
+    system: boolean;
+}
+
+const EMPTY_FOCUS: RowFocusState = { agent: false, judge: false, system: false };
+
+export function getEventNode(event: RuntimeEvent | null): string | null {
+    if (!event) return null;
+
+    const payloadNode = payloadString(event, 'node');
+    if (payloadNode) return payloadNode;
+
+    const source = event.source;
+    const prefix = 'runtime.node.';
+    if (source.startsWith(prefix)) {
+        return source.slice(prefix.length) || null;
+    }
+
+    return null;
+}
+
+export function resolveRowFocus(row: DialogueRow, event: RuntimeEvent | null): RowFocusState {
+    if (!event) return EMPTY_FOCUS;
+
+    if (event.type === 'speech_end') {
+        if (row.agent?.timestamp && row.agent.timestamp === event.timestamp) {
+            return { agent: true, judge: false, system: false };
+        }
+        return EMPTY_FOCUS;
+    }
+
+    if (event.type === 'judge_score') {
+        if (row.judge?.timestamp && row.judge.timestamp === event.timestamp) {
+            return { agent: false, judge: true, system: false };
+        }
+
+        const role = payloadString(event, 'role');
+        const turn = payloadNumber(event, 'turn');
+        if (
+            row.judge &&
+            row.judge.role === 'judge' &&
+            (role ? row.judge.target_role === role : true) &&
+            (turn !== undefined ? row.judge.turn === turn : true)
+        ) {
+            return { agent: false, judge: true, system: false };
+        }
+        return EMPTY_FOCUS;
+    }
+
+    if (event.type === 'sophistry_round_report' || event.type === 'sophistry_final_report') {
+        const turn = payloadNumber(event, 'turn');
+        if (
+            row.judge &&
+            row.judge.role === event.type &&
+            (turn !== undefined ? row.judge.turn === turn : true)
+        ) {
+            return { agent: false, judge: true, system: false };
+        }
+        return EMPTY_FOCUS;
+    }
+
+    if (event.type === 'team_discussion' || event.type === 'team_summary') {
+        const turn = payloadNumber(event, 'turn');
+        const side = payloadString(event, 'team_side') ?? payloadString(event, 'source_role');
+        if (
+            row.agent &&
+            (turn !== undefined ? row.agent.turn === turn : true) &&
+            (side ? row.agent.role === side : true)
+        ) {
+            return { agent: true, judge: false, system: false };
+        }
+        return EMPTY_FOCUS;
+    }
+
+    if (event.type === 'audience_message') {
+        const audienceTimestamp = payloadString(event, 'timestamp') ?? event.timestamp;
+        if (
+            row.system &&
+            row.system.role === 'audience' &&
+            row.system.timestamp === audienceTimestamp
+        ) {
+            return { agent: false, judge: false, system: true };
+        }
+        return EMPTY_FOCUS;
+    }
+
+    if (event.type === 'error') {
+        if (row.system?.role === 'error' && row.system.timestamp === event.timestamp) {
+            return { agent: false, judge: false, system: true };
+        }
+        return EMPTY_FOCUS;
+    }
+
+    if (event.type === 'memory_write') {
+        const sourceTimestamp = payloadString(event, 'source_timestamp');
+        const sourceRole = payloadString(event, 'source_role');
+        if (!sourceTimestamp) {
+            return EMPTY_FOCUS;
+        }
+
+        if (
+            row.agent?.timestamp === sourceTimestamp &&
+            (sourceRole ? row.agent.role === sourceRole : true)
+        ) {
+            return { agent: true, judge: false, system: false };
+        }
+
+        if (
+            row.judge?.timestamp === sourceTimestamp &&
+            (sourceRole ? row.judge.role === sourceRole : true)
+        ) {
+            return { agent: false, judge: true, system: false };
+        }
+
+        if (
+            row.system?.timestamp === sourceTimestamp &&
+            (sourceRole ? row.system.role === sourceRole : true)
+        ) {
+            return { agent: false, judge: false, system: true };
+        }
+
+        return EMPTY_FOCUS;
+    }
+
+    return EMPTY_FOCUS;
+}

@@ -98,8 +98,12 @@ async function requestWithParser<T>(
 ): Promise<T> {
     const authHeaders = buildAuthHeaders();
     const res = await fetch(`${BASE}${path}`, {
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
         ...init,
+        headers: {
+            'Content-Type': 'application/json',
+            ...authHeaders,
+            ...(init?.headers || {}),
+        },
     });
     if (!res.ok) {
         throw new Error(await readErrorMessage(res));
@@ -130,10 +134,14 @@ async function download(path: string, fallbackFilename: string): Promise<void> {
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.download = getFilename(res.headers.get('Content-Disposition'), fallbackFilename);
+    anchor.style.display = 'none';
     document.body.appendChild(anchor);
     anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
+    // Delay cleanup to ensure the browser has started the download
+    setTimeout(() => {
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(url);
+    }, 100);
 }
 
 // ── Sessions ─────────────────────────────────────────────────────

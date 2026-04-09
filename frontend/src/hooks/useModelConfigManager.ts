@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 
 import { api } from '../api/client';
 import type { ModelConfig, ModelConfigCreatePayload, ProviderFormData } from '../types';
-import { formatCustomParameters, parseCustomParametersInput } from '../utils/customParameters';
+import { formatCustomParameters, parseCustomParametersInput } from '../utils/agent/customParameters';
 
 function createEmptyFormData(): ProviderFormData {
     return {

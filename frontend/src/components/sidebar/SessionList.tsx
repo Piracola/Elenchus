@@ -11,8 +11,8 @@ import {
 import SettingsPanel from './SettingsPanel';
 import BrandIcon from '../shared/BrandIcon';
 import type { SessionListItem } from '../../types';
-import { filterSessionsByQuery, getSessionModePresentation, mergeSessionPage } from '../../utils/sessionList';
-import { toast } from '../../utils/toast';
+import { filterSessionsByQuery, getSessionModePresentation, mergeSessionPage } from '../../utils/session/sessionList';
+import { toast } from '../../utils/chat/toast';
 
 interface SessionListProps {
     onCollapse: () => void;

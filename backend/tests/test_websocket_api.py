@@ -10,6 +10,12 @@ from fastapi import WebSocketDisconnect
 from app.api import websocket as websocket_api
 
 
+class _FakeClient:
+    """Fake WebSocket client info."""
+    def __init__(self, host: str = "127.0.0.1") -> None:
+        self.host = host
+
+
 class _FakeWebSocket:
     def __init__(self, messages: list[object]) -> None:
         self.accepted = False
@@ -18,6 +24,7 @@ class _FakeWebSocket:
         self.close_reason: str | None = None
         self.sent: list[dict[str, object]] = []
         self._messages = iter(messages)
+        self.client = _FakeClient()
 
     async def accept(self) -> None:
         self.accepted = True

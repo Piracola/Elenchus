@@ -15,8 +15,8 @@ import {
     sanitizeIncomingContent,
     sanitizeRuntimeEvent,
     shouldRecordRuntimeEvent,
-} from '../utils/debateStoreHelpers';
-import { clampReplayCursor, getVisibleRuntimeEvents } from '../utils/replay';
+} from '../utils/agent/debateStoreHelpers';
+import { clampReplayCursor, getVisibleRuntimeEvents } from '../utils/runtime/replay';
 import type { DebateState } from './debateStore';
 
 function createRecordedRuntimePatch(
@@ -179,9 +179,13 @@ export function applyRuntimeEventPatch(
             patch.streamingContent = '';
             break;
 
-        case 'speech_token':
-            // 不记录到 runtime history，实时渲染由 WebSocket 直接处理
+        case 'speech_token': {
+            const token = getPayloadString(payload, 'token') ?? '';
+            if (token) {
+                patch.streamingContent = state.streamingContent + token;
+            }
             break;
+        }
 
         case 'speech_cancel':
             patch.streamingRole = '';

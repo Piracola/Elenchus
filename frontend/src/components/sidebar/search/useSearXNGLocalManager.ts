@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { api } from '../../../api/client';
-import { toast } from '../../../utils/toast';
+import { toast } from '../../../utils/chat/toast';
 
 interface SearXNGStatus {
     docker_available: boolean;

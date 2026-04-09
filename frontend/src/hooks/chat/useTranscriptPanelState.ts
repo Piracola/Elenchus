@@ -3,8 +3,8 @@ import { useSessionViewState, useTranscriptActions, useTranscriptViewState } fro
 import {
     buildTranscriptViewModel,
     getTranscriptCollapseSummary,
-} from '../../utils/transcriptViewModel';
-import type { DialogueGroupingState } from '../../utils/groupDialogue';
+} from '../../utils/chat/transcriptViewModel';
+import type { DialogueGroupingState } from '../../utils/chat/groupDialogue';
 
 export function useTranscriptPanelState() {
     const {

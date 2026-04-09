@@ -25,12 +25,12 @@ from typing import TYPE_CHECKING
 
 # Use TYPE_CHECKING to avoid circular imports at runtime
 if TYPE_CHECKING:
-    from app.agents.llm_router import LLMRouter
+    from app.llm.router import LLMRouter
     from app.runtime.bus import RuntimeBus
     from app.runtime.service import DebateRuntimeService
     from app.search.factory import SearchProviderFactory
     from app.services.agent_config_service import AgentConfigService
-    from app.services.provider_service import ProviderService
+    from app.services.provider.service import ProviderService
     from app.services.intervention_manager import InterventionManager
 
 
@@ -53,7 +53,13 @@ def get_llm_router() -> "LLMRouter":
 
     The router maintains a registry of provider clients for LLM calls.
     """
-    from app.agents.llm_router import LLMRouter
+    from app.llm.providers.base import BaseProviderClient
+    from app.llm.providers.clients import (
+        OpenAIProviderClient,
+        AnthropicProviderClient,
+        GeminiProviderClient,
+    )
+    from app.llm.router import LLMRouter
     return LLMRouter()
 
 

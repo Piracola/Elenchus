@@ -11,11 +11,11 @@ import {
     type FloatingInspectorInteraction,
     type FloatingInspectorRect,
     type FloatingInspectorResizeHandle,
-} from '../../utils/floatingInspectorLayout';
+} from '../../utils/inspector/floatingInspectorLayout';
 import {
     FLOATING_INSPECTOR_RESET_EVENT,
     FLOATING_INSPECTOR_STORAGE_KEY,
-} from '../../utils/floatingInspector';
+} from '../../utils/inspector/floatingInspector';
 
 type UseFloatingInspectorStateArgs = {
     panelRef: RefObject<HTMLDivElement | null>;

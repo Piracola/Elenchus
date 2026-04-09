@@ -16,7 +16,7 @@ from app.agents.runtime_progress import (
     MODEL_INVOCATION_TIMEOUT_SECONDS,
     build_status_heartbeat_callback,
 )
-from app.agents.safe_invoke import (
+from app.llm.invoke import (
     extract_text_content,
     invoke_chat_model,
     normalize_model_text,

@@ -6,9 +6,9 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useRuntimeViewState } from '../../hooks/useDebateViewState';
-import { getEventNode } from '../../utils/eventFocus';
-import { getLiveGraphNodeLabel } from '../../utils/liveGraph';
-import { deriveRuntimeViewState } from '../../utils/replay';
+import { getEventNode } from '../../utils/runtime/eventFocus';
+import { getLiveGraphNodeLabel } from '../../utils/viz/liveGraph';
+import { deriveRuntimeViewState } from '../../utils/runtime/replay';
 
 const PHASE_LABELS: Record<string, string> = {
     idle: '空闲',

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { isElementNearBottom } from '../../utils/chatScroll';
+import { isElementNearBottom } from '../../utils/chat/chatScroll';
 
 type UseChatViewportMetricsArgs = {
     currentSessionId: string | null;

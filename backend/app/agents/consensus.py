@@ -10,13 +10,13 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from app.agents.prompt_loader import get_judge_prompt
+from app.agents.prompt_loader import get_consensus_prompt
 from app.agents.runtime_progress import (
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
     MODEL_INVOCATION_TIMEOUT_SECONDS,
     build_status_heartbeat_callback,
 )
-from app.agents.safe_invoke import invoke_text_model, normalize_model_text
+from app.llm.invoke import invoke_text_model, normalize_model_text
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ async def converge_consensus(state: dict[str, Any]) -> dict[str, Any]:
     if isinstance(override, dict):
         custom_prompt = str(override.get("custom_prompt", "") or "")
 
-    system_prompt = get_judge_prompt()
+    system_prompt = get_consensus_prompt()
     system_prompt += f"\n\n{_CONSENSUS_RULES}"
     if custom_prompt:
         system_prompt += f"\n\n## Custom Persona Instructions\n{custom_prompt}"

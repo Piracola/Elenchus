@@ -5,8 +5,8 @@ import {
     type MemoryGraphModel,
     type MemoryGraphNode,
     type MemoryGraphSourceNode,
-} from '../../../utils/memoryGraph';
-import { MEMORY_TYPE_LABELS } from '../../../utils/memoryView';
+} from '../../../utils/inspector/memoryGraph';
+import { MEMORY_TYPE_LABELS } from '../../../utils/inspector/memoryView';
 import {
     GRAPH_HEIGHT,
     GRAPH_WIDTH,

@@ -1,5 +1,5 @@
-import { getLiveGraphNodeLabel } from '../../../utils/liveGraph';
-import { getRuntimeEventGroup } from '../../../utils/runtimeEventDictionary';
+import { getLiveGraphNodeLabel } from '../../../utils/viz/liveGraph';
+import { getRuntimeEventGroup } from '../../../utils/runtime/runtimeEventDictionary';
 import type { RuntimeEvent } from '../../../types';
 
 export type TimelineFilter = 'all' | 'status' | 'speech' | 'judge' | 'tool' | 'memory' | 'system' | 'error';

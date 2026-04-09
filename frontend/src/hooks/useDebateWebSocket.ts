@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { useDebateStore } from '../stores/debateStore';
-import { normalizeRuntimeEvent } from '../utils/runtimeEvents';
+import { normalizeRuntimeEvent } from '../utils/runtime/runtimeEvents';
 
 const WS_BASE =
     import.meta.env.VITE_WS_URL ||

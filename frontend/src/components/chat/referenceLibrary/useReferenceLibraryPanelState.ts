@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'reac
 import { api } from '../../../api/client';
 import { useSessionActions } from '../../../hooks/useDebateViewState';
 import type { ReferenceLibraryResponse } from '../../../types';
-import { toast } from '../../../utils/toast';
+import { toast } from '../../../utils/chat/toast';
 import { EMPTY_LIBRARY, getErrorMessage } from './shared';
 
 type UseReferenceLibraryPanelStateOptions = {

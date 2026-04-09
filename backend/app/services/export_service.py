@@ -1,9 +1,21 @@
-from __future__ import annotations
+"""Export service facade — RE-EXPORT for backward compatibility."""
 
-from .export_filename_service import build_content_disposition, build_export_filename
-from .export_json_service import export_json
-from .export_markdown_service import export_markdown, normalize_markdown_export_categories
-from .export_runtime_service import (
+from app.services.export import (
+    build_content_disposition,
+    build_export_filename,
     compute_runtime_events_checksum,
+    export_json,
+    export_markdown,
     export_runtime_events_snapshot,
+    normalize_markdown_export_categories,
 )
+
+__all__ = [
+    "build_content_disposition",
+    "build_export_filename",
+    "export_json",
+    "export_markdown",
+    "normalize_markdown_export_categories",
+    "compute_runtime_events_checksum",
+    "export_runtime_events_snapshot",
+]

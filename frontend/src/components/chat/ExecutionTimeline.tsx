@@ -1,16 +1,16 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useRuntimeActions, useRuntimeViewState } from '../../hooks/useDebateViewState';
-import { getEventNode } from '../../utils/eventFocus';
-import { getLiveGraphNodeLabel } from '../../utils/liveGraph';
+import { getEventNode } from '../../utils/runtime/eventFocus';
+import { getLiveGraphNodeLabel } from '../../utils/viz/liveGraph';
 import {
     buildTimelineSearchIndex,
     computeTimelinePageTotal,
     filterIndexedTimelineEvents,
     sliceTimelineTail,
     TIMELINE_PAGE_SIZE,
-} from '../../utils/timelineWindow';
-import { getRuntimeEventGroup } from '../../utils/runtimeEventDictionary';
+} from '../../utils/timeline/timelineWindow';
+import { getRuntimeEventGroup } from '../../utils/runtime/runtimeEventDictionary';
 import { ExecutionTimelineDetailPane } from './executionTimeline/ExecutionTimelineDetailPane';
 import { ExecutionTimelineListPane } from './executionTimeline/ExecutionTimelineListPane';
 import type { ExecutionTimelineProps, TimelineFilter } from './executionTimeline/shared';
@@ -22,7 +22,7 @@ export default function ExecutionTimeline({
     fillHeight = false,
 }: ExecutionTimelineProps) {
     const {
-        runtimeEvents,
+        runtimeEvents: latestRuntimeEvents,
         currentSessionId,
         currentTopic,
         debateMode,
@@ -31,6 +31,15 @@ export default function ExecutionTimeline({
         focusedRuntimeEventId,
         hasOlderRuntimeEvents,
     } = useRuntimeViewState();
+
+    // 使用 ref 稳定 runtimeEvents 引用，避免拖动滑块时 store 更新导致的不必要重渲染
+    // 只有当 runtimeEvents 数组引用真正变化时才更新
+    const runtimeEventsRef = useRef(latestRuntimeEvents);
+    if (runtimeEventsRef.current !== latestRuntimeEvents) {
+        runtimeEventsRef.current = latestRuntimeEvents;
+    }
+    const runtimeEvents = runtimeEventsRef.current;
+
     const {
         setFocusedRuntimeEventId,
         setReplayEnabled,
@@ -133,22 +142,38 @@ export default function ExecutionTimeline({
         }
     }, [filteredEvents, focusedRuntimeEventId, replayEnabled, selectedEventId]);
 
+    // 使用 ref 缓存上一次的值，避免依赖变化导致的重新执行
+    const prevReplayCursorRef = useRef(replayCursor);
+    const prevRuntimeEventsLengthRef = useRef(runtimeEvents.length);
+
     useEffect(() => {
         // 拖动滑块时不同步选中事件，避免闪烁
         if (!replayEnabled || isDraggingSlider) return;
         if (replayCursor < 0 || replayCursor >= runtimeEvents.length) return;
 
         const cursorEventId = runtimeEvents[replayCursor].event_id;
-        if (selectedEventId !== cursorEventId) setSelectedEventId(cursorEventId);
-        if (focusedRuntimeEventId !== cursorEventId) setFocusedRuntimeEventId(cursorEventId);
+
+        // 只有当真正需要变化时才更新，避免无限循环
+        const needUpdateSelected = selectedEventId !== cursorEventId;
+        const needUpdateFocused = focusedRuntimeEventId !== cursorEventId;
+
+        if (needUpdateSelected) {
+            setSelectedEventId(cursorEventId);
+        }
+        if (needUpdateFocused) {
+            setFocusedRuntimeEventId(cursorEventId);
+        }
+
+        // 更新 ref
+        prevReplayCursorRef.current = replayCursor;
+        prevRuntimeEventsLengthRef.current = runtimeEvents.length;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
-        focusedRuntimeEventId,
-        isDraggingSlider,
+        // 精简依赖项，避免循环更新
         replayCursor,
         replayEnabled,
-        runtimeEvents,
-        selectedEventId,
-        setFocusedRuntimeEventId,
+        isDraggingSlider,
+        runtimeEvents.length,
     ]);
 
     // 退出回放时，选中最新事件

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.agents.safe_invoke import normalize_model_text
+from app.llm.invoke import normalize_model_text
 from app.text_repair import repair_text_tree
 
 

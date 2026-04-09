@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from app.agents.safe_invoke import normalize_model_text
+from app.llm.invoke import normalize_model_text
 from app.models.schemas import DebateMode
 from app.text_repair import repair_text_tree
 

@@ -23,8 +23,8 @@ from app.db.database import Base
 from app.dependencies import clear_dependency_cache
 from app.runtime_paths import get_runtime_paths
 
-# Import models so Base.metadata includes every table before create_all.
-from app.db import models as _models  # noqa: F401
+# Import db utils (formerly models) for utility functions.
+from app.db import db_utils as _models  # noqa: F401
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 

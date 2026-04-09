@@ -26,8 +26,8 @@ from app.agents.judge import judge_score
 from app.agents.jury_discussion import jury_discuss
 from app.agents.team_discussion import team_discuss
 from app.agents.context_manager import compress_context
-from app.agents.skills import get_all_skills
-from app.agents.skills.metadata import get_tool_shared_knowledge_type
+from app.tools import get_all_skills
+from app.tools.metadata import get_tool_shared_knowledge_type
 from app.models.state import DialogueEntryDict, SharedKnowledgeEntry
 
 logger = logging.getLogger(__name__)

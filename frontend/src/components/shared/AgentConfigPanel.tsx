@@ -12,7 +12,7 @@ import {
     AGENT_ROLES,
     DEFAULT_AGENT_TEMPERATURE,
     type AgentRole,
-} from '../../utils/agentConfigs';
+} from '../../utils/agent/agentConfigs';
 
 export type { AgentConfigResult } from '../../types';
 

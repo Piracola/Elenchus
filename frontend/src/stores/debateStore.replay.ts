@@ -3,9 +3,35 @@ import {
     computeLastEventSeq,
     getSessionRuntimeFallback,
     normalizeRuntimeEvents,
-} from '../utils/debateStoreHelpers';
-import { clampReplayCursor, deriveRuntimeViewState, getVisibleRuntimeEvents } from '../utils/replay';
+} from '../utils/agent/debateStoreHelpers';
+import { clampReplayCursor, deriveRuntimeViewState, getVisibleRuntimeEvents } from '../utils/runtime/replay';
 import type { DebateState } from './debateStore';
+
+// Cache for visible runtime events to maintain reference equality
+const visibleEventsCache = new WeakMap<
+    RuntimeEvent[],
+    Map<number, RuntimeEvent[]>
+>();
+
+function getCachedVisibleEvents(
+    events: RuntimeEvent[],
+    cursor: number,
+): RuntimeEvent[] {
+    let cursorMap = visibleEventsCache.get(events);
+    if (!cursorMap) {
+        cursorMap = new Map();
+        visibleEventsCache.set(events, cursorMap);
+    }
+
+    const cached = cursorMap.get(cursor);
+    if (cached) {
+        return cached;
+    }
+
+    const result = events.slice(0, cursor + 1);
+    cursorMap.set(cursor, result);
+    return result;
+}
 
 export function createFocusedRuntimeEventPatch(
     state: DebateState,
@@ -28,7 +54,7 @@ export function createFocusedRuntimeEventPatch(
     return {
         focusedRuntimeEventId: eventId,
         replayCursor,
-        visibleRuntimeEvents: getVisibleRuntimeEvents(state.runtimeEvents, true, replayCursor),
+        visibleRuntimeEvents: getCachedVisibleEvents(state.runtimeEvents, replayCursor),
     };
 }
 
@@ -65,7 +91,7 @@ export function createReplayEnabledPatch(
     return {
         replayEnabled: true,
         replayCursor,
-        visibleRuntimeEvents: getVisibleRuntimeEvents(state.runtimeEvents, true, replayCursor),
+        visibleRuntimeEvents: getCachedVisibleEvents(state.runtimeEvents, replayCursor),
         focusedRuntimeEventId:
             replayCursor >= 0 ? state.runtimeEvents[replayCursor].event_id : null,
     };
@@ -79,7 +105,7 @@ export function createReplayCursorPatch(
     return {
         replayEnabled: true,
         replayCursor,
-        visibleRuntimeEvents: getVisibleRuntimeEvents(state.runtimeEvents, true, replayCursor),
+        visibleRuntimeEvents: getCachedVisibleEvents(state.runtimeEvents, replayCursor),
         focusedRuntimeEventId:
             replayCursor >= 0 ? state.runtimeEvents[replayCursor].event_id : null,
     };
@@ -99,7 +125,7 @@ export function createReplayStepPatch(
     return {
         replayEnabled: true,
         replayCursor,
-        visibleRuntimeEvents: getVisibleRuntimeEvents(state.runtimeEvents, true, replayCursor),
+        visibleRuntimeEvents: getCachedVisibleEvents(state.runtimeEvents, replayCursor),
         focusedRuntimeEventId:
             replayCursor >= 0 ? state.runtimeEvents[replayCursor].event_id : null,
     };

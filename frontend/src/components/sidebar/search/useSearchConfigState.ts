@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { api } from '../../../api/client';
 import type { SearchConfig, SearchProviderStatus, SearchProviderType } from '../../../types';
-import { toast } from '../../../utils/toast';
+import { toast } from '../../../utils/chat/toast';
 import { PROVIDER_INFO } from './searchConfigShared';
 
 export function useSearchConfigState() {

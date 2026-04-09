@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { ToastType } from '../utils/toast';
+import type { ToastType } from '../utils/chat/toast';
 
 interface Toast {
     id: string;

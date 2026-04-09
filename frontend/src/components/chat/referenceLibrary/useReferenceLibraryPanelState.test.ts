@@ -2,7 +2,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../../api/client';
-import { toast } from '../../../utils/toast';
+import { toast } from '../../../utils/chat/toast';
 import { useReferenceLibraryPanelState } from './useReferenceLibraryPanelState';
 
 const mockSetCurrentSession = vi.fn();
@@ -18,7 +18,7 @@ vi.mock('../../../api/client', () => ({
     },
 }));
 
-vi.mock('../../../utils/toast', () => ({
+vi.mock('../../../utils/chat/toast', () => ({
     toast: vi.fn(),
 }));
 

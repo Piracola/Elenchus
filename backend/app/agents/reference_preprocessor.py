@@ -10,7 +10,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from app.agents.safe_invoke import invoke_text_model, normalize_model_text
+from app.llm.invoke import invoke_text_model, normalize_model_text
 
 logger = logging.getLogger(__name__)
 

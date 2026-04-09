@@ -1,15 +1,10 @@
-from typing import Sequence
+"""
+Skills/tools registry - RE-EXPORT for backward compatibility.
 
-from langchain_core.tools import BaseTool
+This module has been moved to app.tools. This file is kept as a
+backward-compat re-export and should not be used for new code.
+"""
 
-from app.agents.skills.search_tool import web_search
+from app.tools import get_all_skills, web_search
 
-# Registry mapping skill names to their LangChain Tool instances
-_SKILL_REGISTRY = {
-    "web_search": web_search,
-}
-
-
-def get_all_skills() -> Sequence[BaseTool]:
-    """Retrieve all available skills as LangChain tools."""
-    return list(_SKILL_REGISTRY.values())
+__all__ = ["get_all_skills", "web_search"]

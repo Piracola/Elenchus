@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { resolveHistoryRowStart, revealFocusedHistoryRow } from '../../utils/chatHistoryWindow';
-import { computeVariableVirtualWindow } from '../../utils/virtualWindow';
-import type { TranscriptViewModel } from '../../utils/transcriptViewModel';
+import { resolveHistoryRowStart, revealFocusedHistoryRow } from '../../utils/chat/chatHistoryWindow';
+import { computeVariableVirtualWindow } from '../../utils/virtualization/virtualWindow';
+import type { TranscriptViewModel } from '../../utils/chat/transcriptViewModel';
 
 const INITIAL_HISTORY_ROW_WINDOW = 120;
 const HISTORY_ROW_BATCH_SIZE = 80;
