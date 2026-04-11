@@ -31,9 +31,9 @@ export function useAgentConfigs() {
         }
     }, [showConfigManager, loadConfigs]);
 
-    const handleConfigSelect = (agent: AgentRole, configId: string) => {
+    const handleConfigSelect = useCallback((agent: AgentRole, configId: string) => {
         setSelectedConfigIds(prev => ({ ...prev, [agent]: configId }));
-    };
+    }, []);
 
     const handleTemperatureChange = useCallback((agent: AgentRole, value: string) => {
         setTemperatureInputs(prev => ({ ...prev, [agent]: value }));

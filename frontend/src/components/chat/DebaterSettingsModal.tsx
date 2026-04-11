@@ -4,11 +4,13 @@
  * 用户可以通过"管理配置"添加新配置，下次创建辩论时生效
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, AlertCircle } from 'lucide-react';
 import { useAgentConfigs } from '../../hooks/useAgentConfigs';
+import { useSessionViewState } from '../../hooks/useDebateViewState';
+import { AGENT_ROLES } from '../../utils/agent/agentConfigs';
 import AgentConfigPanel from '../shared/AgentConfigPanel';
 
 interface DebaterSettingsModalProps {
@@ -33,6 +35,48 @@ export default function DebaterSettingsModal({
         handleTemperatureChange,
         handleThinkingToggle,
     } = useAgentConfigs();
+    const { currentSession } = useSessionViewState();
+    const hasInitializedFromSessionRef = useRef(false);
+
+    // Sync session agent_configs into the panel's local state when modal opens.
+    // The home screen passes agent configs when creating a session; we read them
+    // back here so the in-debate settings panel reflects what was actually used.
+    const initializeFromSession = useCallback(() => {
+        const agentConfigs = currentSession?.agent_configs;
+        if (!agentConfigs || Object.keys(agentConfigs).length === 0) return;
+        if (savedConfigs.length === 0) return;
+
+        for (const role of AGENT_ROLES) {
+            const cfg = agentConfigs[role];
+            if (!cfg) continue;
+
+            // Build "providerId::model" key for selectedConfigIds
+            const providerId = cfg.provider_id ?? '';
+            const model = cfg.model ?? '';
+            if (providerId || model) {
+                const key = providerId && model ? `${providerId}::${model}` : providerId || model;
+                handleConfigSelect(role, key);
+            }
+
+            // Sync temperature
+            if (cfg.temperature !== undefined) {
+                handleTemperatureChange(role, String(cfg.temperature));
+            }
+
+            // enable_thinking is NOT in the session's AgentConfig type, so we
+            // cannot sync it back from the session. It remains at its default.
+        }
+    }, [currentSession, savedConfigs, handleConfigSelect, handleTemperatureChange]);
+
+    useEffect(() => {
+        if (isOpen && savedConfigs.length > 0 && !hasInitializedFromSessionRef.current) {
+            hasInitializedFromSessionRef.current = true;
+            initializeFromSession();
+        }
+        if (!isOpen) {
+            hasInitializedFromSessionRef.current = false;
+        }
+    }, [isOpen, savedConfigs.length, initializeFromSession]);
 
     // 弹窗打开时关闭配置管理器
     useEffect(() => {

@@ -98,6 +98,10 @@ export default function StreamingMessage() {
         } as DialogueEntry);
     }, [streamingRole]);
 
+    // Determine badge color like MessageRow does
+    const isProposer = agentVisual?.label === '正方' || streamingRole === 'proposer';
+    const badgeBg = isProposer ? '#22c55e' : '#ef4444';
+
     const splitContent = useMemo(
         () => splitLeadingThinkingContent(renderedContent),
         [renderedContent],
@@ -130,118 +134,119 @@ export default function StreamingMessage() {
             ref={scrollRef}
             style={{
                 display: 'flex',
-                flexDirection: 'column',
+                flexDirection: 'row',
                 width: '100%',
-                gap: '14px',
-                marginBottom: '32px',
-                borderRadius: 'var(--radius-xl)',
+                gap: '20px',
+                marginBottom: '24px',
             }}
         >
-            <motion.div
-                {...STATIC_MOTION_PROPS}
-                style={{
-                    position: 'relative',
-                    background: 'var(--bg-card)',
-                    padding: '28px',
-                    borderRadius: 'var(--radius-xl)',
-                    boxShadow: `var(--shadow-sm), 0 4px 20px ${agentVisual.cardTint}`,
-                    marginTop: '20px',
-                }}
-            >
-                {/* Floating avatar badge */}
-                <div
+            <div style={{ flex: '6 1 0', display: 'flex', flexDirection: 'column' }}>
+                <motion.div
+                    {...STATIC_MOTION_PROPS}
                     style={{
-                        position: 'absolute',
-                        top: '-16px',
-                        left: '24px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
+                        position: 'relative',
+                        background: 'var(--bg-card)',
+                        padding: '20px 28px 28px 28px',
+                        borderRadius: 'var(--radius-xl)',
+                        boxShadow: '0 2px 12px rgba(224, 224, 224, 0.5)',
                     }}
                 >
+                    {/* 统一头部行：头像 + 身份 + 流式指示器 居中对齐 */}
                     <div
                         style={{
-                            width: '40px',
-                            height: '40px',
-                            background: agentVisual.color,
-                            borderRadius: 'var(--radius-md)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: '#fff',
-                            fontWeight: 700,
-                            fontSize: '16px',
-                            boxShadow: `0 6px 16px ${agentVisual.glowTint}`,
+                            gap: '10px',
+                            marginBottom: '12px',
                         }}
                     >
-                        {agentVisual.badge}
-                    </div>
-                    <span
-                        style={{
-                            fontSize: '13px',
-                            color: 'var(--text-secondary)',
-                            background: 'var(--bg-card)',
-                            padding: '6px 14px',
-                            borderRadius: 'var(--radius-full)',
-                            boxShadow: 'var(--shadow-xs)',
-                            fontWeight: 500,
-                        }}
-                    >
-                        {agentVisual.label}
-                    </span>
-
-                    {/* Streaming indicator dot */}
-                    <span
-                        style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            fontSize: '11px',
-                            color: 'var(--accent-emerald)',
-                            fontWeight: 600,
-                        }}
-                    >
-                        <span
-                            style={{
-                                width: '6px',
-                                height: '6px',
-                                borderRadius: '50%',
-                                background: 'var(--accent-emerald)',
-                                animation: 'pulse 1s ease-in-out infinite',
-                            }}
-                        />
-                        正在发言...
-                    </span>
-                </div>
-
-                {/* Content body */}
-                <div style={messageContentWrapperStyle('16px')}>
-                    <ThinkingBlock
-                        content={splitContent.thinking}
-                        accentColor={agentVisual.color}
-                        fontSize={messageFontSizes.body}
-                        textColor="var(--text-primary)"
-                    />
-                    {splitContent.response && (
                         <div
-                            className="markdown-body"
-                            style={markdownBodyStyle(messageFontSizes.body, 'var(--text-primary)')}
-                        >
-                            <MessageMarkdown text={splitContent.response} />
-                        </div>
-                    )}
-                    {!splitContent.response && !splitContent.thinking && (
-                        <span
                             style={{
-                                fontSize: messageFontSizes.body,
-                                color: 'var(--text-muted)',
+                                width: '36px',
+                                height: '36px',
+                                background: badgeBg,
+                                borderRadius: 'var(--radius-md)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#fff',
+                                fontWeight: 700,
+                                fontSize: '15px',
+                                boxShadow: '0 2px 8px rgba(224, 224, 224, 0.6)',
+                                flexShrink: 0,
                             }}
                         >
+                            {agentVisual.badge}
+                        </div>
+                        <span
+                            style={{
+                                fontSize: '13px',
+                                color: '#333333',
+                                border: '1px solid #CCCCCC',
+                                padding: '5px 12px',
+                                borderRadius: 'var(--radius-full)',
+                                fontWeight: 500,
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {agentVisual.label}
+                        </span>
+
+                        {/* Streaming indicator dot */}
+                        <span
+                            style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '11px',
+                                color: 'var(--accent-emerald)',
+                                fontWeight: 600,
+                            }}
+                        >
+                            <span
+                                style={{
+                                    width: '6px',
+                                    height: '6px',
+                                    borderRadius: '50%',
+                                    background: 'var(--accent-emerald)',
+                                    animation: 'pulse 1s ease-in-out infinite',
+                                }}
+                            />
                             正在发言...
                         </span>
-                    )}
-                </div>
-            </motion.div>
+                    </div>
+
+                    {/* Content body */}
+                    <div style={messageContentWrapperStyle('16px')}>
+                        <ThinkingBlock
+                            content={splitContent.thinking}
+                            accentColor="#fff"
+                            fontSize={messageFontSizes.body}
+                            textColor="var(--text-primary)"
+                        />
+                        {splitContent.response && (
+                            <div
+                                className="markdown-body"
+                                style={markdownBodyStyle(messageFontSizes.body, 'var(--text-primary)')}
+                            >
+                                <MessageMarkdown text={splitContent.response} />
+                            </div>
+                        )}
+                        {!splitContent.response && !splitContent.thinking && (
+                            <span
+                                style={{
+                                    fontSize: messageFontSizes.body,
+                                    color: 'var(--text-muted)',
+                                }}
+                            >
+                                正在发言...
+                            </span>
+                        )}
+                    </div>
+                </motion.div>
+            </div>
+            <div style={{ flex: '4 1 0' }} />
         </div>
     );
 }
