@@ -65,6 +65,7 @@ export interface AgentConfig {
     provider_id?: string;
     api_base_url?: string;
     temperature?: number;
+    enable_thinking?: boolean;
 }
 
 export interface Session {

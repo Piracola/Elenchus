@@ -317,22 +317,30 @@ def should_prepare_jury_discussion(state: DebateGraphState) -> str:
     return "judge"
 
 
-def should_execute_tools(state: DebateGraphState) -> str:
-    """Check if the debater emitted a tool call."""
+def _has_pending_tool_calls(state: DebateGraphState) -> bool:
+    """Check if the debater emitted a tool call that needs execution."""
     messages = state.get("messages", [])
     if messages:
         last_message = messages[-1]
         if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-            return "tools"
-    
-    # Determine what to do next based on speaker index
+            return True
+    return False
+
+
+def _get_next_speaker_route(state: DebateGraphState) -> str:
+    """Determine the next route after a debater finishes (no tool calls pending)."""
     participants = state.get("participants", ["proposer", "opposer"])
     current_idx = state.get("current_speaker_index", 0)
-    
     if current_idx + 1 < len(participants):
         return "next_speaker"
-    else:
-        return should_prepare_jury_discussion(state)
+    return should_prepare_jury_discussion(state)
+
+
+def should_execute_tools(state: DebateGraphState) -> str:
+    """Route after debater speaks: execute tools if pending, otherwise advance speakers."""
+    if _has_pending_tool_calls(state):
+        return "tools"
+    return _get_next_speaker_route(state)
 
 def should_continue(state: DebateGraphState) -> str:
     """After advancing turn, decide whether to continue or end."""

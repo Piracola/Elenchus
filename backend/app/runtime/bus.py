@@ -31,6 +31,8 @@ class RuntimeBus:
         self._seq_by_session: dict[str, int] = {}
         self._active: dict[str, list[WebSocket]] = {}
         self._lock = asyncio.Lock()
+        # Per-session locks for sequence number generation to reduce contention
+        self._session_locks: dict[str, asyncio.Lock] = {}
 
     async def connect(self, session_id: str, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -52,6 +54,8 @@ class RuntimeBus:
             removed = True
         if not connections:
             self._active.pop(session_id, None)
+            # Clean up per-session lock when no connections remain
+            self._session_locks.pop(session_id, None)
         if removed:
             logger.info("WS disconnected: session=%s", session_id)
 
@@ -81,8 +85,19 @@ class RuntimeBus:
             return False
 
     async def broadcast(self, session_id: str, message: dict[str, Any]) -> None:
-        for websocket in list(self._active.get(session_id, [])):
-            await self.send(session_id, websocket, message)
+        """Broadcast message to all active WebSocket connections in parallel."""
+        websockets = list(self._active.get(session_id, []))
+        if not websockets:
+            return
+        results = await asyncio.gather(
+            *[self.send(session_id, ws, message) for ws in websockets],
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, Exception):
+                logger.warning(
+                    "Broadcast send error for session %s: %s", session_id, result
+                )
 
     def get_connections(self, session_id: str) -> list[WebSocket]:
         return self._active.get(session_id, [])
@@ -139,8 +154,14 @@ class RuntimeBus:
             return
         await self.broadcast(session_id, event)
 
+    def _get_session_lock(self, session_id: str) -> asyncio.Lock:
+        """Get or create a per-session lock to reduce contention."""
+        if session_id not in self._session_locks:
+            self._session_locks[session_id] = asyncio.Lock()
+        return self._session_locks[session_id]
+
     async def _next_sequence(self, session_id: str) -> int:
-        async with self._lock:
+        async with self._get_session_lock(session_id):
             if session_id not in self._seq_by_session and self._repository is not None:
                 latest_seq = await self._repository.get_latest_runtime_event_seq(session_id)
                 self._seq_by_session[session_id] = latest_seq

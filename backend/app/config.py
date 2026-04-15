@@ -2,6 +2,7 @@
 Configuration loader for Elenchus.
 
 Reads runtime settings from a single `runtime/config.json` source.
+Uses Pydantic BaseModel for automatic validation and type safety.
 """
 
 from __future__ import annotations
@@ -9,6 +10,8 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 from app.runtime_config_store import (
     DEFAULT_SEARXNG_BASE_URL,
@@ -23,100 +26,188 @@ _RUNTIME_PATHS = prepare_runtime_environment()
 _PROJECT_ROOT = _RUNTIME_PATHS.runtime_root
 
 
-class SearchConfig:
+class SearchConfig(BaseModel):
     """Search provider configuration."""
 
-    def __init__(self, data: dict[str, Any] | None = None):
+    provider: str = "duckduckgo"
+    max_results_per_query: int = 5
+    searxng_base_url: str = DEFAULT_SEARXNG_BASE_URL
+    searxng_api_key: str = ""
+    tavily_api_url: str = DEFAULT_TAVILY_API_URL
+    tavily_api_key: str = ""
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None = None) -> SearchConfig:
         data = data or {}
-        self.provider: str = str(data.get("provider") or "duckduckgo")
-        self.max_results_per_query: int = int(data.get("max_results_per_query") or 5)
         searxng = data.get("searxng") if isinstance(data.get("searxng"), dict) else {}
         tavily = data.get("tavily") if isinstance(data.get("tavily"), dict) else {}
-        self.searxng_base_url: str = str(searxng.get("base_url") or DEFAULT_SEARXNG_BASE_URL)
-        self.searxng_api_key: str = str(searxng.get("api_key") or "")
-        self.tavily_api_url: str = str(tavily.get("api_url") or DEFAULT_TAVILY_API_URL)
-        self.tavily_api_key: str = str(tavily.get("api_key") or "")
-
-
-class ContextWindowConfig:
-    def __init__(self, data: dict[str, Any] | None = None):
-        data = data or {}
-        self.recent_turns_to_keep: int = int(data.get("recent_turns_to_keep") or 3)
-        self.enable_summary_compression: bool = bool(
-            data.get("enable_summary_compression", True)
+        return cls(
+            provider=str(data.get("provider") or "duckduckgo"),
+            max_results_per_query=int(data.get("max_results_per_query") or 5),
+            searxng_base_url=str(searxng.get("base_url") or DEFAULT_SEARXNG_BASE_URL),
+            searxng_api_key=str(searxng.get("api_key") or ""),
+            tavily_api_url=str(tavily.get("api_url") or DEFAULT_TAVILY_API_URL),
+            tavily_api_key=str(tavily.get("api_key") or ""),
         )
 
 
-class DebateConfig:
-    def __init__(self, data: dict[str, Any] | None = None):
+class ContextWindowConfig(BaseModel):
+    recent_turns_to_keep: int = 3
+    enable_summary_compression: bool = True
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None = None) -> ContextWindowConfig:
         data = data or {}
-        self.default_max_turns: int = int(data.get("default_max_turns") or 5)
-        self.default_max_tokens: int = int(data.get("default_max_tokens") or 64000)
-        if self.default_max_tokens < 1:
-            self.default_max_tokens = 64000
-        self.context_window = ContextWindowConfig(data.get("context_window"))
+        return cls(
+            recent_turns_to_keep=int(data.get("recent_turns_to_keep") or 3),
+            enable_summary_compression=bool(data.get("enable_summary_compression", True)),
+        )
 
 
-class EnvSettings:
+class DebateConfig(BaseModel):
+    default_max_turns: int = 5
+    default_max_tokens: int = 64000
+    context_window: ContextWindowConfig = Field(default_factory=ContextWindowConfig)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None = None) -> DebateConfig:
+        data = data or {}
+        max_tokens = int(data.get("default_max_tokens") or 64000)
+        if max_tokens < 1:
+            max_tokens = 64000
+        return cls(
+            default_max_turns=int(data.get("default_max_turns") or 5),
+            default_max_tokens=max_tokens,
+            context_window=ContextWindowConfig.from_dict(data.get("context_window")),
+        )
+
+
+class EnvSettings(BaseModel):
     """Compatibility wrapper for runtime values historically read from `.env`."""
 
-    def __init__(self, data: dict[str, Any] | None = None, *, search: SearchConfig):
+    searxng_base_url: str = DEFAULT_SEARXNG_BASE_URL
+    searxng_api_key: str = ""
+    tavily_api_key: str = ""
+    tavily_api_url: str = DEFAULT_TAVILY_API_URL
+    host: str = "0.0.0.0"
+    port: int = 8001
+    debug: bool = False
+    cors_origins: str = ""
+
+    @classmethod
+    def from_dict(
+        cls, data: dict[str, Any] | None = None, *, search: SearchConfig
+    ) -> EnvSettings:
         data = data or {}
         cors_origins = data.get("cors_origins")
         if isinstance(cors_origins, list):
-            cors_origin_text = ",".join(str(item).strip() for item in cors_origins if str(item).strip())
+            cors_origin_text = ",".join(
+                str(item).strip() for item in cors_origins if str(item).strip()
+            )
         else:
             cors_origin_text = str(cors_origins or "")
 
-        self.searxng_base_url: str = search.searxng_base_url
-        self.searxng_api_key: str = search.searxng_api_key
-        self.tavily_api_key: str = search.tavily_api_key
-        self.tavily_api_url: str = search.tavily_api_url
-        self.host: str = str(data.get("host") or "0.0.0.0")
-        self.port: int = int(data.get("port") or 8001)
-        self.debug: bool = bool(data.get("debug", False))
-        self.cors_origins: str = cors_origin_text
-
-
-class AuthSettings:
-    def __init__(self, data: dict[str, Any] | None = None):
-        data = data or {}
-        self.enabled: bool = bool(data.get("enabled", False))
-        self.jwt_secret_key: str = str(data.get("jwt_secret_key") or "change-me-in-production")
-        self.jwt_expire_minutes: int = int(data.get("jwt_expire_minutes") or 10080)
-
-
-class LoggingSettings:
-    def __init__(self, data: dict[str, Any] | None = None):
-        data = data or {}
-        self.level: str = str(data.get("level") or "INFO").upper()
-        self.log_dir: str = str(data.get("log_dir") or "logs")
-        self.backup_count: int = int(data.get("backup_count") or 7)
-
-
-class DemoSettings:
-    def __init__(self, data: dict[str, Any] | None = None):
-        data = data or {}
-        self.enabled: bool = bool(data.get("enabled", False))
-        self.admin_username: str = str(data.get("admin_username") or "admin")
-        self.admin_password_hash: str = str(data.get("admin_password_hash") or "")
-        self.allowed_models: list[str] = list(
-            data.get("allowed_models")
-            or ["gpt-4o-mini", "claude-sonnet-4-6-20250514", "gemini-2.5-flash"]
+        return cls(
+            searxng_base_url=search.searxng_base_url,
+            searxng_api_key=search.searxng_api_key,
+            tavily_api_key=search.tavily_api_key,
+            tavily_api_url=search.tavily_api_url,
+            host=str(data.get("host") or "0.0.0.0"),
+            port=int(data.get("port") or 8001),
+            debug=bool(data.get("debug", False)),
+            cors_origins=cors_origin_text,
         )
 
 
-class Settings:
+class AuthSettings(BaseModel):
+    enabled: bool = False
+    jwt_secret_key: str = "change-me-in-production"
+    jwt_expire_minutes: int = 10080
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None = None) -> AuthSettings:
+        data = data or {}
+        key = str(data.get("jwt_secret_key") or "change-me-in-production")
+        if key == "change-me-in-production":
+            import logging
+            logging.getLogger(__name__).warning(
+                "JWT secret key is set to the default value 'change-me-in-production'. "
+                "Please update it in runtime/config.json for production use."
+            )
+        return cls(
+            enabled=bool(data.get("enabled", False)),
+            jwt_secret_key=key,
+            jwt_expire_minutes=int(data.get("jwt_expire_minutes") or 10080),
+        )
+
+
+class LoggingSettings(BaseModel):
+    level: str = "INFO"
+    log_dir: str = "logs"
+    backup_count: int = 7
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None = None) -> LoggingSettings:
+        data = data or {}
+        return cls(
+            level=str(data.get("level") or "INFO").upper(),
+            log_dir=str(data.get("log_dir") or "logs"),
+            backup_count=int(data.get("backup_count") or 7),
+        )
+
+
+class DemoSettings(BaseModel):
+    enabled: bool = False
+    admin_username: str = "admin"
+    admin_password_hash: str = ""
+    allowed_models: list[str] = Field(
+        default_factory=lambda: ["gpt-4o-mini", "claude-sonnet-4-6-20250514", "gemini-2.5-flash"]
+    )
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None = None) -> DemoSettings:
+        data = data or {}
+        return cls(
+            enabled=bool(data.get("enabled", False)),
+            admin_username=str(data.get("admin_username") or "admin"),
+            admin_password_hash=str(data.get("admin_password_hash") or ""),
+            allowed_models=list(
+                data.get("allowed_models")
+                or ["gpt-4o-mini", "claude-sonnet-4-6-20250514", "gemini-2.5-flash"]
+            ),
+        )
+
+
+class Settings(BaseModel):
     """Unified settings object backed by `runtime/config.json`."""
 
-    def __init__(self) -> None:
-        config = load_runtime_config()
-        self.search = SearchConfig(config.get("search"))
-        self.debate = DebateConfig(config.get("debate"))
-        self.env = EnvSettings(config.get("server"), search=self.search)
-        self.auth = AuthSettings(config.get("auth"))
-        self.logging = LoggingSettings(config.get("logging"))
-        self.demo = DemoSettings(config.get("demo"))
+    search: SearchConfig = Field(default_factory=SearchConfig)
+    debate: DebateConfig = Field(default_factory=DebateConfig)
+    env: EnvSettings = Field(default_factory=EnvSettings)
+    auth: AuthSettings = Field(default_factory=AuthSettings)
+    logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    demo: DemoSettings = Field(default_factory=DemoSettings)
+
+    def __init__(self, **data: Any) -> None:
+        # If called directly (not from Pydantic parse), load from config file
+        if not data:
+            config = load_runtime_config()
+            search = SearchConfig.from_dict(config.get("search"))
+            debate = DebateConfig.from_dict(config.get("debate"))
+            env = EnvSettings.from_dict(config.get("server"), search=search)
+            auth = AuthSettings.from_dict(config.get("auth"))
+            logging_cfg = LoggingSettings.from_dict(config.get("logging"))
+            demo = DemoSettings.from_dict(config.get("demo"))
+            super().__init__(
+                search=search,
+                debate=debate,
+                env=env,
+                auth=auth,
+                logging=logging_cfg,
+                demo=demo,
+            )
+        else:
+            super().__init__(**data)
 
     @property
     def project_root(self) -> Path:

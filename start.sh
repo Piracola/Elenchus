@@ -23,19 +23,15 @@ for arg in "$@"; do
     case $arg in
         --skip-install)
             SKIP_INSTALL=true
-            shift
             ;;
         --backend-only)
             BACKEND_ONLY=true
-            shift
             ;;
         --frontend-only)
             FRONTEND_ONLY=true
-            shift
             ;;
         --skip-searxng)
             SKIP_SEARXNG=true
-            shift
             ;;
     esac
 done
@@ -47,27 +43,6 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
 RESET='\033[0m'
-
-SKIP_INSTALL=false
-BACKEND_ONLY=false
-FRONTEND_ONLY=false
-
-for arg in "$@"; do
-    case $arg in
-        --skip-install)
-            SKIP_INSTALL=true
-            shift
-            ;;
-        --backend-only)
-            BACKEND_ONLY=true
-            shift
-            ;;
-        --frontend-only)
-            FRONTEND_ONLY=true
-            shift
-            ;;
-    esac
-done
 
 print_header() {
     echo ""
@@ -134,6 +109,53 @@ version_ge() {
     [[ $result -eq 0 || $result -eq 1 ]]
 }
 
+# Dependency fingerprint helpers (mirrors start.ps1 logic)
+get_dependency_fingerprint() {
+    local result=""
+    for path in "$@"; do
+        if [[ ! -f "$path" ]]; then
+            result+="missing::$path"$'\n'
+            continue
+        fi
+        local size=$(stat -f%z "$path" 2>/dev/null || stat -c%s "$path" 2>/dev/null || echo "0")
+        local hash=$(shasum -a 256 "$path" | awk '{print $1}')
+        result+="$path|$size|$hash"$'\n'
+    done
+    echo -n "$result"
+}
+
+test_dependency_refresh_needed() {
+    local state_file="$1"
+    shift
+    if [[ ! -f "$state_file" ]]; then
+        return 0  # needs refresh
+    fi
+    local saved=$(cat "$state_file")
+    local current=$(get_dependency_fingerprint "$@")
+    [[ "$saved" != "$current" ]]
+}
+
+save_dependency_fingerprint() {
+    local state_file="$1"
+    shift
+    local state_dir=$(dirname "$state_file")
+    mkdir -p "$state_dir" 2>/dev/null || true
+    get_dependency_fingerprint "$@" > "$state_file"
+}
+
+# Environment check cache helpers
+test_env_cache_valid() {
+    local cache_file="$1"
+    if [[ ! -f "$cache_file" ]]; then
+        return 1
+    fi
+    # Cache valid for 24 hours
+    local cache_mtime=$(stat -f%m "$cache_file" 2>/dev/null || stat -c%Y "$cache_file" 2>/dev/null || echo 0)
+    local now=$(date +%s)
+    local age=$(( now - cache_mtime ))
+    [[ $age -lt 86400 ]]
+}
+
 clear
 echo ""
 echo -e "${BOLD}${CYAN}   __                                         ${RESET}"
@@ -143,7 +165,7 @@ echo -e "${BOLD}${CYAN}/ /_//  __/\__ \ (_| | |_| |  __/ | | | (_|  __/${RESET}"
 echo -e "${BOLD}${CYAN},___/ \___||___/\__, |\__,_|\___|_| |_|\___\___|${RESET}"
 echo -e "${BOLD}${CYAN}                  |_|${RESET}"
 echo ""
-echo -e "${BOLD}   AI Debate Framework - One-Click Start Script${RESET}"
+echo -e "${BOLD}   AI Debate Framework - One-Click Start${RESET}"
 echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -151,6 +173,14 @@ BACKEND_DIR="$SCRIPT_DIR/backend"
 FRONTEND_DIR="$SCRIPT_DIR/frontend"
 VENV_DIR="$BACKEND_DIR/venv"
 RUNTIME_DIR="$SCRIPT_DIR/runtime"
+INSTALL_STATE_DIR="$RUNTIME_DIR/.install-state"
+
+BACKEND_STATE_FILE="$INSTALL_STATE_DIR/backend.txt"
+FRONTEND_STATE_FILE="$INSTALL_STATE_DIR/frontend.txt"
+ENV_CACHE_FILE="$INSTALL_STATE_DIR/env-check.txt"
+
+BACKEND_DEPS=("$BACKEND_DIR/requirements.txt")
+FRONTEND_DEPS=("$FRONTEND_DIR/package.json" "$FRONTEND_DIR/package-lock.json")
 
 PIDS=()
 
@@ -162,7 +192,7 @@ cleanup() {
             kill "$pid" 2>/dev/null || true
         fi
     done
-    
+
     # Stop SearXNG if it was started
     if [[ "$SEARXNG_STARTED" == "true" ]]; then
         print_info "Stopping SearXNG container..."
@@ -170,7 +200,7 @@ cleanup() {
             "$SCRIPT_DIR/scripts/start_searxng.sh" stop 2>/dev/null || true
         fi
     fi
-    
+
     print_success "Services stopped"
     exit 0
 }
@@ -179,104 +209,100 @@ trap cleanup SIGINT SIGTERM
 
 # SearXNG functions
 test_docker_installed() {
-    if command -v docker &> /dev/null; then
-        return 0
-    else
-        return 1
-    fi
+    command -v docker &> /dev/null
 }
 
 test_searxng_healthy() {
-    if curl -s -m 2 "http://localhost:8080/healthz" &> /dev/null; then
-        return 0
-    else
-        return 1
-    fi
+    curl -s -m 2 "http://localhost:8080/healthz" &> /dev/null
 }
 
-start_searxng_if_needed() {
+start_searxng_background() {
     if [[ "$SKIP_SEARXNG" == true ]]; then
         print_info "Skipping SearXNG startup (user requested)"
-        return 1
+        return
     fi
 
     if ! test_docker_installed; then
         print_warning "Docker not installed - SearXNG will be unavailable"
         print_info "Install Docker: https://docs.docker.com/engine/install/"
-        return 1
+        return
     fi
 
     if test_searxng_healthy; then
         print_success "SearXNG is already running and healthy"
-        return 0
+        return
     fi
 
-    print_info "Starting SearXNG service..."
-    
     local searxng_script="$SCRIPT_DIR/scripts/start_searxng.sh"
     if [[ ! -f "$searxng_script" ]]; then
         print_warning "SearXNG management script not found"
-        return 1
+        return
     fi
 
-    if "$searxng_script" start; then
-        print_success "SearXNG started successfully"
-        SEARXNG_STARTED=true
-        return 0
-    else
-        print_warning "Failed to start SearXNG"
-        return 1
-    fi
+    print_info "Starting SearXNG service in background..."
+    "$searxng_script" start &
+    SEARXNG_STARTED=true
 }
 
-print_header "Step 1/5: Environment Check"
+# ── Step 1: Environment Check (cached) ──
+
+print_header "Step 1/4: Environment Check"
 
 CHECKS_PASSED=true
 
-echo "Checking Python..."
-if check_command python3; then
-    PY_VERSION=$(get_python_version)
-    if version_ge "$PY_VERSION" "3.10.0"; then
-        print_success "Python $PY_VERSION installed"
-    else
-        print_error "Python version too low ($PY_VERSION), requires 3.10+"
-        CHECKS_PASSED=false
-    fi
+if test_env_cache_valid "$ENV_CACHE_FILE"; then
+    print_success "Environment check passed (cached)"
 else
-    print_error "Python3 not found, please install Python 3.10+"
-    CHECKS_PASSED=false
-fi
-
-if [[ "$FRONTEND_ONLY" != true ]]; then
-    echo "Checking pip..."
-    if check_command pip3 || check_command pip; then
-        print_success "pip installed"
-    else
-        print_error "pip not found"
-        CHECKS_PASSED=false
-    fi
-fi
-
-if [[ "$BACKEND_ONLY" != true ]]; then
-    echo "Checking Node.js..."
-    if check_command node; then
-        NODE_VERSION=$(get_node_version)
-        if version_ge "$NODE_VERSION" "18.0.0"; then
-            print_success "Node.js $NODE_VERSION installed"
+    if [[ "$FRONTEND_ONLY" != true ]]; then
+        echo "Checking Python..."
+        if check_command python3; then
+            PY_VERSION=$(get_python_version)
+            if version_ge "$PY_VERSION" "3.10.0"; then
+                print_success "Python $PY_VERSION installed"
+            else
+                print_error "Python version too low ($PY_VERSION), requires 3.10+"
+                CHECKS_PASSED=false
+            fi
         else
-            print_warning "Node.js version low ($NODE_VERSION), recommend 18.0+"
+            print_error "Python3 not found, please install Python 3.10+"
+            CHECKS_PASSED=false
         fi
-    else
-        print_error "Node.js not found, please install Node.js 18+"
-        CHECKS_PASSED=false
+
+        echo "Checking pip..."
+        if check_command pip3 || check_command pip; then
+            print_success "pip installed"
+        else
+            print_error "pip not found"
+            CHECKS_PASSED=false
+        fi
     fi
 
-    echo "Checking npm..."
-    if check_command npm; then
-        print_success "npm installed"
-    else
-        print_error "npm not found"
-        CHECKS_PASSED=false
+    if [[ "$BACKEND_ONLY" != true ]]; then
+        echo "Checking Node.js..."
+        if check_command node; then
+            NODE_VERSION=$(get_node_version)
+            if version_ge "$NODE_VERSION" "18.0.0"; then
+                print_success "Node.js $NODE_VERSION installed"
+            else
+                print_warning "Node.js version low ($NODE_VERSION), recommend 18.0+"
+            fi
+        else
+            print_error "Node.js not found, please install Node.js 18+"
+            CHECKS_PASSED=false
+        fi
+
+        echo "Checking npm..."
+        if check_command npm; then
+            print_success "npm installed"
+        else
+            print_error "npm not found"
+            CHECKS_PASSED=false
+        fi
+    fi
+
+    if [[ "$CHECKS_PASSED" == true ]]; then
+        mkdir -p "$INSTALL_STATE_DIR" 2>/dev/null || true
+        echo "passed" > "$ENV_CACHE_FILE"
     fi
 fi
 
@@ -300,8 +326,10 @@ if [[ "$CHECKS_PASSED" != true ]]; then
     exit 1
 fi
 
+# ── Step 2: Backend Setup ──
+
 if [[ "$FRONTEND_ONLY" != true ]]; then
-    print_header "Step 2/5: Backend Setup"
+    print_header "Step 2/4: Backend Setup"
 
     cd "$BACKEND_DIR"
 
@@ -317,64 +345,61 @@ if [[ "$FRONTEND_ONLY" != true ]]; then
     source "$VENV_DIR/bin/activate"
 
     if [[ "$SKIP_INSTALL" != true ]]; then
-        print_info "Installing backend dependencies..."
-        pip install -r requirements.txt --quiet 2>/dev/null || true
-        print_success "Backend dependencies installed"
+        if test_dependency_refresh_needed "$BACKEND_STATE_FILE" "${BACKEND_DEPS[@]}"; then
+            print_info "Installing backend dependencies..."
+            pip install -r requirements.txt --quiet 2>/dev/null || true
+            save_dependency_fingerprint "$BACKEND_STATE_FILE" "${BACKEND_DEPS[@]}"
+            print_success "Backend dependencies installed"
+        else
+            print_success "Backend dependencies are up to date"
+        fi
     else
+        print_info "Skipping dependency installation"
+    fi
+
+    print_info "Runtime configuration is loaded from $RUNTIME_DIR/config.json"
+
+    cd "$SCRIPT_DIR"
+fi
+
+# ── Step 3: Frontend Setup ──
+
+if [[ "$BACKEND_ONLY" != true ]]; then
+    print_header "Step 3/4: Frontend Setup"
+
+    cd "$FRONTEND_DIR"
+
+    if [[ "$SKIP_INSTALL" != true ]]; then
+        if [[ ! -d "node_modules" ]] || test_dependency_refresh_needed "$FRONTEND_STATE_FILE" "${FRONTEND_DEPS[@]}"; then
+            print_info "Installing frontend dependencies..."
+            npm install --silent 2>/dev/null || true
+            save_dependency_fingerprint "$FRONTEND_STATE_FILE" "${FRONTEND_DEPS[@]}"
+            print_success "Frontend dependencies installed"
+        else
+            print_success "Frontend dependencies are up to date"
+        fi
+    else
+        if [[ ! -d "node_modules" ]]; then
+            print_error "Frontend dependencies are missing. Run once without --skip-install."
+            exit 1
+        fi
         print_info "Skipping dependency installation"
     fi
 
     cd "$SCRIPT_DIR"
 fi
 
-if [[ "$BACKEND_ONLY" != true ]]; then
-    print_header "Step 3/5: Frontend Setup"
+# ── Step 4: Starting Services ──
 
-    cd "$FRONTEND_DIR"
+print_header "Step 4/4: Starting Services"
 
-    if [[ ! -d "node_modules" ]] || [[ "$SKIP_INSTALL" != true ]]; then
-        if [[ "$SKIP_INSTALL" != true ]]; then
-            print_info "Installing frontend dependencies..."
-            npm install --silent 2>/dev/null || true
-            print_success "Frontend dependencies installed"
-        else
-            print_info "Skipping dependency installation"
-        fi
-    else
-        print_success "node_modules already exists"
-    fi
-
-    cd "$SCRIPT_DIR"
-fi
-
-print_header "Step 4/5: Installing Process Manager"
-
-cd "$SCRIPT_DIR"
-
-if [[ ! -d "node_modules" ]]; then
-    print_info "Installing concurrently for unified process management..."
-    npm install --silent 2>/dev/null || true
-    print_success "Process manager installed"
-else
-    print_success "Process manager already installed"
-fi
-
-# SearXNG Setup
+# Start SearXNG in background (non-blocking)
+SEARXNG_STARTED=false
 if [[ "$FRONTEND_ONLY" != true && "$BACKEND_ONLY" != true ]]; then
-    print_header "Step 5/6: SearXNG Search Service"
-
-    SEARXNG_STARTED=false
-    
-    if start_searxng_if_needed; then
-        print_success "SearXNG is ready at http://localhost:8080"
-    else
-        print_warning "SearXNG not available - using DuckDuckGo as default search provider"
-    fi
+    start_searxng_background
 fi
 
 BACKEND_PORT=8001
-
-print_header "Step 6/6: Starting Services"
 
 echo ""
 echo -e "${BOLD}${GREEN}  Elenchus Starting...${RESET}"
@@ -402,16 +427,8 @@ echo ""
 if [[ "$BACKEND_ONLY" != true ]]; then
     echo "VITE_BACKEND_PORT=$BACKEND_PORT" > "$FRONTEND_DIR/.env"
     print_success "Frontend .env configured with port $BACKEND_PORT"
-    print_info "Opening browser..."
-    sleep 5
-    if [[ "$(uname)" == "Darwin" ]]; then
-        open "http://localhost:5173" 2>/dev/null || true
-    elif [[ "$(uname)" == "Linux" ]]; then
-        xdg-open "http://localhost:5173" 2>/dev/null || true
-    fi
 fi
 
-echo ""
 echo -e "  ${CYAN}Press Ctrl+C to stop all services${RESET}"
 echo ""
 

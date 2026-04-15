@@ -166,7 +166,7 @@ def _build_judge_instruction(
 
 
 def _parse_score_response(text: str) -> TurnScore | None:
-    """Parse a judge response into a TurnScore."""
+    """Parse a judge response into a TurnScore with progressive fallback."""
     cleaned = _strip_code_fences(text)
     candidates: list[str] = []
     if cleaned:
@@ -195,11 +195,65 @@ def _parse_score_response(text: str) -> TurnScore | None:
         except (json.JSONDecodeError, ValidationError) as exc:
             last_error = exc
 
+    # Final fallback: try lenient extraction of key-value pairs
+    for candidate in candidates:
+        try:
+            extracted = _lenient_extract_score(candidate)
+            if extracted is not None:
+                logger.info("Score parse succeeded after lenient extraction")
+                return extracted
+        except (json.JSONDecodeError, ValidationError) as exc:
+            last_error = exc
+
     if last_error is None:
         logger.warning("Score parse failed - raw: %s", cleaned[:300])
     else:
         logger.warning("Score parse failed: %s - raw: %s", last_error, cleaned[:300])
     return None
+
+
+def _lenient_extract_score(text: str) -> TurnScore | None:
+    """
+    Last-resort parser that extracts dimension scores and overall_comment
+    using regex when standard JSON parsing fails entirely.
+    """
+    import re as _re
+
+    dim_pattern = _re.compile(
+        r'"(\w+)"\s*:\s*\{[^}]*"score"\s*:\s*(\d+)[^}]*"rationale"\s*:\s*"([^"]*)"',
+        _re.DOTALL,
+    )
+    overall_pattern = _re.compile(
+        r'"overall_comment"\s*:\s*"([^"]*)"', _re.DOTALL
+    )
+
+    dimensions: dict[str, Any] = {}
+    for match in dim_pattern.finditer(text):
+        dim_name = match.group(1)
+        if dim_name in _SCORE_DIMS:
+            dimensions[dim_name] = {
+                "score": int(match.group(2)),
+                "rationale": match.group(3),
+            }
+
+    overall_match = overall_pattern.search(text)
+    if overall_match:
+        dimensions["overall_comment"] = overall_match.group(1)
+
+    # Only return if we found at least the core dimensions
+    found_dims = set(dimensions.keys()) & set(_SCORE_DIMS)
+    if len(found_dims) < len(_SCORE_DIMS):
+        return None
+
+    # Fill missing dimensions with neutral defaults
+    for dim in _SCORE_DIMS:
+        if dim not in dimensions:
+            dimensions[dim] = {"score": 5, "rationale": "宽松解析回退分"}
+
+    if "overall_comment" not in dimensions:
+        dimensions["overall_comment"] = "宽松解析回退评语。"
+
+    return TurnScore(**dimensions)
 
 
 def _default_scores() -> dict[str, Any]:

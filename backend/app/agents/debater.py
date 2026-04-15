@@ -13,7 +13,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph.message import RemoveMessage
 
 from app.agents.context_builder import build_context_for_agent
-from app.agents.prompt_loader import get_debater_system_prompt
+from app.agents.prompt_loader import get_debater_system_prompt, load_prompt
 from app.agents.runtime_progress import (
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
     MODEL_INVOCATION_TIMEOUT_SECONDS,
@@ -30,8 +30,14 @@ from app.constants import ROLE_NAMES
 
 logger = logging.getLogger(__name__)
 
-_TOOL_RULES = """
-## Tool Rules
+
+def _get_tool_rules() -> str:
+    """Load tool rules from external prompt file, with fallback to defaults."""
+    rules = load_prompt("tool_rules.md")
+    return rules.strip() if rules else _DEFAULT_TOOL_RULES
+
+
+_DEFAULT_TOOL_RULES = """## Tool Rules
 - Reply in Chinese.
 - Use `web_search` only to verify a concrete fact, statistic, date, policy, law, or case.
 - Never search for the whole prompt, role instructions, or text like "You are ...", "opening statement", or "turn X of Y".
@@ -152,7 +158,7 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
     )
 
     system_prompt = get_debater_system_prompt(role)
-    system_prompt += f"\n\n{_TOOL_RULES}"
+    system_prompt += f"\n\n{_get_tool_rules()}"
     if custom_prompt:
         system_prompt += f"\n\n## Custom Persona Instructions\n{custom_prompt}"
 

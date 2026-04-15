@@ -273,67 +273,41 @@ class DebateOrchestrator:
             await self._repository.persist_state(session_id, final_state)
             raise
         except Exception as exc:
-            user_facing_error = format_runtime_error_message(exc)
-            logger.error(
-                "Debate failed: session=%s error=%s",
-                session_id,
-                exc,
-                exc_info=True,
-            )
-            final_state["status"] = "error"
-            final_state["error"] = user_facing_error
-            final_state["interrupted_at"] = datetime.now(timezone.utc).isoformat()
-            final_state["last_progress_at"] = final_state["interrupted_at"]
-            if last_node:
-                final_state["last_executed_node"] = last_node
-            final_state["last_status_message"] = user_facing_error
-
-            dialogue_history = final_state.get("dialogue_history")
-            if not isinstance(dialogue_history, list):
-                dialogue_history = []
-                final_state["dialogue_history"] = dialogue_history
-
-            dialogue_history.append(
-                {
-                    "role": "error",
-                    "content": f"系统运行出错：{user_facing_error}",
-                    "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-                    "agent_name": "系统",
-                    "citations": [],
-                }
-            )
-            final_state["recent_dialogue_history"] = dialogue_history
-
-            await self._repository.persist_state(session_id, final_state)
-            await self._events.emit_runtime_event(
-                session_id=session_id,
-                event_type="error",
-                payload={"content": f"辩论出错：{user_facing_error}"},
-                source="runtime.orchestrator",
-                phase="error",
+            final_state = await self._handle_debate_error(
+                session_id, final_state, exc, last_node=last_node
             )
 
         return final_state
 
-    async def _finalize_startup_error(
+    async def _handle_debate_error(
         self,
         session_id: str,
-        final_state: dict[str, Any],
+        state: dict[str, Any],
         exc: Exception,
+        last_node: str = "",
     ) -> dict[str, Any]:
+        """Common error handler for both startup and runtime errors."""
         user_facing_error = format_runtime_error_message(exc)
         logger.error(
-            "Debate failed before streaming started: session=%s error=%s",
+            "Debate failed: session=%s error=%s",
             session_id,
             exc,
             exc_info=True,
         )
-        final_state["status"] = "error"
-        final_state["error"] = user_facing_error
-        final_state["interrupted_at"] = datetime.now(timezone.utc).isoformat()
-        final_state["last_progress_at"] = final_state["interrupted_at"]
-        final_state["last_status_message"] = user_facing_error
-        final_state["dialogue_history"] = [
+        state["status"] = "error"
+        state["error"] = user_facing_error
+        state["interrupted_at"] = datetime.now(timezone.utc).isoformat()
+        state["last_progress_at"] = state["interrupted_at"]
+        if last_node:
+            state["last_executed_node"] = last_node
+        state["last_status_message"] = user_facing_error
+
+        dialogue_history = state.get("dialogue_history")
+        if not isinstance(dialogue_history, list):
+            dialogue_history = []
+            state["dialogue_history"] = dialogue_history
+
+        dialogue_history.append(
             {
                 "role": "error",
                 "content": f"系统运行出错：{user_facing_error}",
@@ -341,10 +315,10 @@ class DebateOrchestrator:
                 "agent_name": "系统",
                 "citations": [],
             }
-        ]
-        final_state["recent_dialogue_history"] = final_state["dialogue_history"]
+        )
+        state["recent_dialogue_history"] = dialogue_history
 
-        await self._repository.persist_state(session_id, final_state)
+        await self._repository.persist_state(session_id, state)
         await self._events.emit_runtime_event(
             session_id=session_id,
             event_type="error",
@@ -352,4 +326,13 @@ class DebateOrchestrator:
             source="runtime.orchestrator",
             phase="error",
         )
-        return final_state
+        return state
+
+    async def _finalize_startup_error(
+        self,
+        session_id: str,
+        final_state: dict[str, Any],
+        exc: Exception,
+    ) -> dict[str, Any]:
+        """Handle errors that occur before the debate engine starts streaming."""
+        return await self._handle_debate_error(session_id, final_state, exc)

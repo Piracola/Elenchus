@@ -4,14 +4,10 @@
   "private": true,
   "description": "Elenchus AI Debate Framework",
   "scripts": {
-    "dev": "npm run kill:backend && npm run dev:stack",
-    "dev:stack": "concurrently -n backend,frontend -c \"blue,green\" --kill-others-on-fail --handle-input \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "node scripts/run-stack.cjs",
+    "dev:stack": "node scripts/run-stack.cjs",
     "dev:backend": "node scripts/run-backend-dev.cjs",
     "dev:frontend": "node scripts/run-frontend-dev.cjs",
     "kill:backend": "node scripts/kill-backend-port.cjs"
-  },
-  "devDependencies": {
-    "concurrently": "^9.1.2",
-    "kill-port": "^2.0.1"
   }
 }

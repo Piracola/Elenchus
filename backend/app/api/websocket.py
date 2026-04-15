@@ -22,6 +22,35 @@ _SESSION_ID_RE = re.compile(r"^[0-9a-f]{12}$")
 _VALID_ACTIONS = {"start", "stop", "ping", "intervene"}
 
 
+def _get_client_ip(websocket: WebSocket) -> str:
+    """Extract client IP, preferring X-Forwarded-For header for reverse proxy support."""
+    forwarded = websocket.headers.get("x-forwarded-for")
+    if forwarded:
+        # X-Forwarded-For may contain multiple IPs; the first is the original client
+        return forwarded.split(",")[0].strip()
+    real_ip = websocket.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip()
+    return websocket.client.host if websocket.client else "unknown"
+
+
+async def _send_error_event(
+    runtime_bus: "RuntimeBus",
+    session_id: str,
+    websocket: WebSocket,
+    content: str,
+) -> bool:
+    """Create and send an error event; return True if send succeeded."""
+    event = await runtime_bus.create_event(
+        session_id=session_id,
+        event_type="error",
+        payload={"content": content},
+        source="ws.gateway",
+        phase="error",
+    )
+    return await runtime_bus.send(session_id, websocket, event)
+
+
 @router.websocket("/ws/{session_id}")
 async def debate_ws(websocket: WebSocket, session_id: str):
     """Connect to a debate session and stream debate events in real time."""
@@ -34,7 +63,7 @@ async def debate_ws(websocket: WebSocket, session_id: str):
         return
 
     # Rate limit WebSocket connections
-    ip = websocket.client.host if websocket.client else "unknown"
+    ip = _get_client_ip(websocket)
     if not check_rate_limit(ip, "ws_connect"):
         await websocket.accept()
         await websocket.close(code=4029, reason="Rate limited: too many connections")
@@ -67,14 +96,9 @@ async def debate_ws(websocket: WebSocket, session_id: str):
             try:
                 # Rate limit messages
                 if not check_rate_limit(ip, "ws_message"):
-                    rate_limited_event = await runtime_bus.create_event(
-                        session_id=session_id,
-                        event_type="error",
-                        payload={"content": "Rate limited: please slow down."},
-                        source="ws.gateway",
-                        phase="error",
-                    )
-                    if not await runtime_bus.send(session_id, websocket, rate_limited_event):
+                    if not await _send_error_event(
+                        runtime_bus, session_id, websocket, "Rate limited: please slow down."
+                    ):
                         return
                     continue
 
@@ -82,41 +106,29 @@ async def debate_ws(websocket: WebSocket, session_id: str):
             except WebSocketDisconnect:
                 break
             except Exception:
-                invalid_json_event = await runtime_bus.create_event(
-                    session_id=session_id,
-                    event_type="error",
-                    payload={"content": "Invalid JSON message."},
-                    source="ws.gateway",
-                    phase="error",
-                )
-                if not await runtime_bus.send(session_id, websocket, invalid_json_event):
+                if not await _send_error_event(
+                    runtime_bus, session_id, websocket, "Invalid JSON message."
+                ):
                     return
                 continue
 
             action = data.get("action") if isinstance(data, dict) else None
             if action not in _VALID_ACTIONS:
-                invalid_action_event = await runtime_bus.create_event(
-                    session_id=session_id,
-                    event_type="error",
-                    payload={"content": f"Unknown or missing action: {action}"},
-                    source="ws.gateway",
-                    phase="error",
-                )
-                if not await runtime_bus.send(session_id, websocket, invalid_action_event):
+                if not await _send_error_event(
+                    runtime_bus, session_id, websocket, f"Unknown or missing action: {action}"
+                ):
                     return
                 continue
 
             if action == "start":
                 result = await runtime_service.start_session(session_id)
                 if not result.started:
-                    start_failed_event = await runtime_bus.create_event(
-                        session_id=session_id,
-                        event_type="error",
-                        payload={"content": result.message or "Failed to start session."},
-                        source="ws.gateway",
-                        phase="error",
-                    )
-                    if not await runtime_bus.send(session_id, websocket, start_failed_event):
+                    if not await _send_error_event(
+                        runtime_bus,
+                        session_id,
+                        websocket,
+                        result.message or "Failed to start session.",
+                    ):
                         return
                     continue
 

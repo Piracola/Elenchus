@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef } from 'react';
+import { api } from '../api/client';
 import { useDebateStore } from '../stores/debateStore';
 import { normalizeRuntimeEvent } from '../utils/runtime/runtimeEvents';
 
@@ -134,8 +135,7 @@ export function useDebateWebSocket(sessionId: string | null) {
     }, [sessionId]);
 
     const startDebate = useCallback(
-        (topic: string, participants: string[], maxTurns: number) => {
-            if (ws.current?.readyState !== WebSocket.OPEN) return;
+        async (topic: string, participants: string[], maxTurns: number) => {
             const store = getStore();
             store.exitReplay();
             store.setFocusedRuntimeEventId(null);
@@ -149,21 +149,37 @@ export function useDebateWebSocket(sessionId: string | null) {
                 });
             }
             store.setDebating(true);
-            getStore().setPhase('initializing', '辩论准备中...');
-            ws.current.send(
-                JSON.stringify({
-                    action: 'start',
+            store.setPhase('initializing', '辩论准备中...');
+
+            // Use REST API to start debate for detailed error reporting
+            try {
+                const sessionId = store.currentSession?.id;
+                if (!sessionId) return;
+                await api.sessions.startDebate(sessionId, {
                     topic,
                     participants,
                     max_turns: maxTurns,
-                }),
-            );
+                });
+            } catch (err) {
+                // REST API reported detailed error — update store and emit error
+                const errorMessage = err instanceof Error ? err.message : 'Failed to start debate';
+                store.setPhase('error', errorMessage);
+                store.setDebating(false);
+            }
         },
         [],
     );
 
-    const stopDebate = useCallback(() => {
-        ws.current?.send(JSON.stringify({ action: 'stop' }));
+    const stopDebate = useCallback(async () => {
+        const sessionId = getStore().currentSession?.id;
+        if (sessionId) {
+            try {
+                await api.sessions.stopDebate(sessionId);
+            } catch {
+                // Fallback to WebSocket stop
+                ws.current?.send(JSON.stringify({ action: 'stop' }));
+            }
+        }
         getStore().setDebating(false);
         getStore().setPhase('idle', '');
     }, []);

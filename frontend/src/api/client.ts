@@ -203,6 +203,20 @@ export const api = {
                 headers: buildAuthHeaders(),
             }),
 
+        startDebate: (
+            id: string,
+            options?: { topic?: string; participants?: string[]; max_turns?: number },
+        ): Promise<{ started: boolean; message?: string; session_id: string }> =>
+            request(`/sessions/${id}/start`, {
+                method: 'POST',
+                body: JSON.stringify(options ?? {}),
+            }),
+
+        stopDebate: (id: string): Promise<{ stopped: boolean; session_id: string }> =>
+            request(`/sessions/${id}/stop`, {
+                method: 'POST',
+            }),
+
         exportJson: (id: string, topic: string): Promise<void> => {
             return download(`/sessions/${id}/export?format=json`, buildTopicFilename(topic, 'json'));
         },

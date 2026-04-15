@@ -63,10 +63,12 @@ export default function DebaterSettingsModal({
                 handleTemperatureChange(role, String(cfg.temperature));
             }
 
-            // enable_thinking is NOT in the session's AgentConfig type, so we
-            // cannot sync it back from the session. It remains at its default.
+            // Sync enable_thinking back from session
+            if (cfg.enable_thinking !== undefined) {
+                handleThinkingToggle(role, cfg.enable_thinking);
+            }
         }
-    }, [currentSession, savedConfigs, handleConfigSelect, handleTemperatureChange]);
+    }, [currentSession, savedConfigs, handleConfigSelect, handleTemperatureChange, handleThinkingToggle]);
 
     useEffect(() => {
         if (isOpen && savedConfigs.length > 0 && !hasInitializedFromSessionRef.current) {

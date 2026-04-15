@@ -267,6 +267,46 @@ function Start-DelayedBrowser {
         -WindowStyle Hidden | Out-Null
 }
 
+function Test-EnvCacheValid {
+    param(
+        [string]$CacheFile
+    )
+
+    if (-not (Test-Path $CacheFile)) {
+        return $false
+    }
+
+    $cacheTime = (Get-Item $CacheFile).LastWriteTime
+    $age = (Get-Date) - $cacheTime
+    # Cache valid for 24 hours
+    return $age.TotalHours -lt 24
+}
+
+function Get-CachedEnvCheck {
+    param(
+        [string]$CacheFile
+    )
+
+    if (Test-EnvCacheValid -CacheFile $CacheFile) {
+        return (Get-Content $CacheFile -Raw -ErrorAction SilentlyContinue)
+    }
+    return $null
+}
+
+function Save-EnvCache {
+    param(
+        [string]$CacheFile,
+        [string]$Content
+    )
+
+    $stateDir = Split-Path -Parent $CacheFile
+    if ($stateDir -and -not (Test-Path $stateDir)) {
+        New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
+    }
+
+    Set-Content -Path $CacheFile -Value $Content -NoNewline
+}
+
 function Test-DockerInstalled {
     try {
         $null = docker --version 2>$null
@@ -285,56 +325,34 @@ function Test-SearXNGHealthy {
     }
 }
 
-function Start-SearXNGIfNeeded {
+function Start-SearXNGInBackground {
     if ($SkipSearXNG) {
         Print-Info "Skipping SearXNG startup (user requested)"
-        return $true
+        return
     }
 
     if (-not (Test-DockerInstalled)) {
         Print-Warn "Docker not installed - SearXNG will be unavailable"
-        Print-Info "Install Docker Desktop: https://www.docker.com/products/docker-desktop/"
-        return $false
+        return
     }
 
     if (Test-SearXNGHealthy) {
         Print-OK "SearXNG is already running and healthy"
-        return $true
+        return
     }
 
-    Print-Info "Starting SearXNG service..."
-    
     $searxngScript = Join-Path $RootDir "scripts\start_searxng.ps1"
     if (-not (Test-Path $searxngScript)) {
         Print-Warn "SearXNG management script not found"
-        return $false
+        return
     }
 
-    try {
-        & $searxngScript start
-        if ($LASTEXITCODE -eq 0) {
-            Print-OK "SearXNG started successfully"
-            return $true
-        } else {
-            Print-Warn "Failed to start SearXNG (exit code: $LASTEXITCODE)"
-            return $false
-        }
-    } catch {
-        Print-Warn "Failed to start SearXNG: $_"
-        return $false
-    }
-}
+    Print-Info "Starting SearXNG service in background..."
 
-function Stop-SearXNGGracefully {
-    Print-Info "Stopping SearXNG container..."
-    $searxngScript = Join-Path $RootDir "scripts\start_searxng.ps1"
-    if (Test-Path $searxngScript) {
-        try {
-            & $searxngScript stop 2>$null
-        } catch {
-            # Ignore errors during shutdown
-        }
-    }
+    # Launch SearXNG in a background PowerShell process
+    Start-Process -FilePath "powershell.exe" `
+        -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $searxngScript, "start" `
+        -WindowStyle Hidden | Out-Null
 }
 
 Clear-Host
@@ -346,7 +364,7 @@ Write-Host $BOLD$CYAN"/ /_//  __/\__ \ (_| | |_| |  __/ | | | (_|  __/"$RESET
 Write-Host $BOLD$CYAN",___/ \___||___/\__, |\__,_|\___|_| |_|\___\___|"$RESET
 Write-Host $BOLD$CYAN"                  |_|"$RESET
 Write-Host ""
-Write-Host $BOLD"   AI Debate Framework - One-Click Start Script"$RESET
+Write-Host $BOLD"   AI Debate Framework - One-Click Start"$RESET
 Write-Host ""
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -360,7 +378,7 @@ $InstallStateDir = Join-Path $RuntimeDir ".install-state"
 $BackendPython = Join-Path $VenvDir "Scripts\python.exe"
 $BackendStateFile = Join-Path $InstallStateDir "backend.txt"
 $FrontendStateFile = Join-Path $InstallStateDir "frontend.txt"
-$RootStateFile = Join-Path $InstallStateDir "root.txt"
+$EnvCacheFile = Join-Path $InstallStateDir "env-check.txt"
 $BackendDependencyFiles = @(
     (Join-Path $BackendDir "requirements.txt")
 )
@@ -368,62 +386,78 @@ $FrontendDependencyFiles = @(
     (Join-Path $FrontendDir "package.json"),
     (Join-Path $FrontendDir "package-lock.json")
 )
-$RootDependencyFiles = @(
-    (Join-Path $RootDir "package.json"),
-    (Join-Path $RootDir "package-lock.json")
-)
+
+# ── Step 1: Environment Check (cached) ──
 
 Write-Host ""
 Write-Host $CYAN"========================================"$RESET
-Write-Host $BOLD"Step 1/5: Environment Check"$RESET
+Write-Host $BOLD"Step 1/4: Environment Check"$RESET
 Write-Host $CYAN"========================================"$RESET
 Write-Host ""
 
 $checksPassed = $true
 $PythonRuntime = $null
 
-if (-not $FrontendOnly) {
-    Write-Host "Checking Python..."
-    $PythonRuntime = Resolve-PythonRuntime -PreferredPaths @($BackendPython)
-    if ($PythonRuntime) {
-        Print-OK "Python $($PythonRuntime.Version) installed"
-    } else {
-        Print-Err "Python not found or unusable, please install Python 3.10+"
-        $checksPassed = $false
+$cachedEnv = Get-CachedEnvCheck -CacheFile $EnvCacheFile
+
+if ($null -ne $cachedEnv) {
+    Print-OK "Environment check passed (cached)"
+    # Still need PythonRuntime for backend setup
+    if (-not $FrontendOnly) {
+        $PythonRuntime = Resolve-PythonRuntime -PreferredPaths @($BackendPython)
+        if (-not $PythonRuntime) {
+            Print-Err "Python not found or unusable, please install Python 3.10+"
+            $checksPassed = $false
+        }
+    }
+} else {
+    if (-not $FrontendOnly) {
+        Write-Host "Checking Python..."
+        $PythonRuntime = Resolve-PythonRuntime -PreferredPaths @($BackendPython)
+        if ($PythonRuntime) {
+            Print-OK "Python $($PythonRuntime.Version) installed"
+        } else {
+            Print-Err "Python not found or unusable, please install Python 3.10+"
+            $checksPassed = $false
+        }
+
+        Write-Host "Checking pip..."
+        if ($PythonRuntime) {
+            $pipVersionResult = Invoke-CommandCapture -FilePath $PythonRuntime.FilePath -Arguments ($PythonRuntime.Arguments + @("-m", "pip", "--version"))
+        } else {
+            $pipVersionResult = $null
+        }
+
+        if ($pipVersionResult -and $pipVersionResult.Success -and -not [string]::IsNullOrWhiteSpace($pipVersionResult.Text)) {
+            Print-OK "pip installed"
+        } else {
+            Print-Err "pip not found"
+            $checksPassed = $false
+        }
     }
 
-    Write-Host "Checking pip..."
-    if ($PythonRuntime) {
-        $pipVersionResult = Invoke-CommandCapture -FilePath $PythonRuntime.FilePath -Arguments ($PythonRuntime.Arguments + @("-m", "pip", "--version"))
-    } else {
-        $pipVersionResult = $null
+    if (-not $BackendOnly) {
+        Write-Host "Checking Node.js..."
+        $nodeInfo = Get-ExecutableVersion -CommandName "node" -PrefixToTrim "v"
+        if ($nodeInfo) {
+            Print-OK "Node.js $($nodeInfo.Version) installed"
+        } else {
+            Print-Err "Node.js not found or unusable, please install Node.js 18+"
+            $checksPassed = $false
+        }
+
+        Write-Host "Checking npm..."
+        $npmInfo = Get-ExecutableVersion -CommandName "npm"
+        if ($npmInfo) {
+            Print-OK "npm installed"
+        } else {
+            Print-Err "npm not found"
+            $checksPassed = $false
+        }
     }
 
-    if ($pipVersionResult -and $pipVersionResult.Success -and -not [string]::IsNullOrWhiteSpace($pipVersionResult.Text)) {
-        Print-OK "pip installed"
-    } else {
-        Print-Err "pip not found"
-        $checksPassed = $false
-    }
-}
-
-if (-not $BackendOnly) {
-    Write-Host "Checking Node.js..."
-    $nodeInfo = Get-ExecutableVersion -CommandName "node" -PrefixToTrim "v"
-    if ($nodeInfo) {
-        Print-OK "Node.js $($nodeInfo.Version) installed"
-    } else {
-        Print-Err "Node.js not found or unusable, please install Node.js 18+"
-        $checksPassed = $false
-    }
-
-    Write-Host "Checking npm..."
-    $npmInfo = Get-ExecutableVersion -CommandName "npm"
-    if ($npmInfo) {
-        Print-OK "npm installed"
-    } else {
-        Print-Err "npm not found"
-        $checksPassed = $false
+    if ($checksPassed) {
+        Save-EnvCache -CacheFile $EnvCacheFile -Content "passed"
     }
 }
 
@@ -437,10 +471,12 @@ if (-not $checksPassed) {
     exit 1
 }
 
+# ── Step 2: Backend Setup ──
+
 if (-not $FrontendOnly) {
     Write-Host ""
     Write-Host $CYAN"========================================"$RESET
-    Write-Host $BOLD"Step 2/5: Backend Setup"$RESET
+    Write-Host $BOLD"Step 2/4: Backend Setup"$RESET
     Write-Host $CYAN"========================================"$RESET
     Write-Host ""
 
@@ -489,10 +525,12 @@ if (-not $FrontendOnly) {
     Pop-Location
 }
 
+# ── Step 3: Frontend Setup ──
+
 if (-not $BackendOnly) {
     Write-Host ""
     Write-Host $CYAN"========================================"$RESET
-    Write-Host $BOLD"Step 3/5: Frontend Setup"$RESET
+    Write-Host $BOLD"Step 3/4: Frontend Setup"$RESET
     Write-Host $CYAN"========================================"$RESET
     Write-Host ""
 
@@ -532,135 +570,24 @@ if (-not $BackendOnly) {
     Pop-Location
 }
 
-if (-not $BackendOnly -and -not $FrontendOnly) {
-    Write-Host ""
-    Write-Host $CYAN"========================================"$RESET
-    Write-Host $BOLD"Step 4/5: Installing Process Manager"$RESET
-    Write-Host $CYAN"========================================"$RESET
-    Write-Host ""
+# ── Step 4: Starting Services ──
 
-    Push-Location $RootDir
+Write-Host ""
+Write-Host $CYAN"========================================"$RESET
+Write-Host $BOLD"Step 4/4: Starting Services"$RESET
+Write-Host $CYAN"========================================"$RESET
+Write-Host ""
 
-    $rootModulesDir = Join-Path $RootDir "node_modules"
-    $rootInstallNeeded = (-not (Test-Path $rootModulesDir)) -or (Test-DependencyRefreshNeeded -StateFile $RootStateFile -DependencyFiles $RootDependencyFiles)
-
-    if ($rootInstallNeeded) {
-        if ($SkipInstall) {
-            if (-not (Test-Path $rootModulesDir)) {
-                Print-Err "Process manager dependencies are missing. Run once without -SkipInstall."
-                exit 1
-            }
-
-            Print-Warn "Root dependency files changed, but installation was skipped"
-        } else {
-            Print-Info "Installing concurrently for unified process management..."
-            npm install --silent 2>$null
-            if ($LASTEXITCODE -ne 0) {
-                Print-Err "Process manager installation failed"
-                exit $LASTEXITCODE
-            }
-
-            Save-DependencyFingerprint -StateFile $RootStateFile -DependencyFiles $RootDependencyFiles
-            Print-OK "Process manager installed"
-        }
-    } else {
-        Print-OK "Process manager already installed"
-    }
-
-    Pop-Location
-}
-
+# Start SearXNG in background (non-blocking)
 if (-not $FrontendOnly -and -not $BackendOnly) {
-    Write-Host ""
-    Write-Host $CYAN"========================================"$RESET
-    Write-Host $BOLD"Step 5/6: SearXNG Search Service"$RESET
-    Write-Host $CYAN"========================================"$RESET
-    Write-Host ""
-
-    $searxngHealthy = Start-SearXNGIfNeeded
-
-    if ($searxngHealthy) {
-        Print-OK "SearXNG is ready at http://localhost:8080"
-    } else {
-        Print-Warn "SearXNG not available - using DuckDuckGo as default search provider"
-    }
+    Start-SearXNGInBackground
 }
-
-Write-Host ""
-Write-Host $CYAN"========================================"$RESET
-Write-Host $BOLD"Step 6/6: Starting Services"$RESET
-Write-Host $CYAN"========================================"$RESET
-Write-Host ""
-
-Push-Location $RootDir
 
 $BackendPort = 8001
-$localKillPort = Join-Path $RootDir "node_modules\.bin\kill-port.cmd"
-
-if (-not $FrontendOnly) {
-    Print-Info "Checking port 8001..."
-
-    $portToUse = 8001
-    $maxPortAttempts = 10
-
-    for ($portAttempt = 0; $portAttempt -lt $maxPortAttempts; $portAttempt++) {
-        $currentPort = 8001 + $portAttempt
-        $portCheck = netstat -ano 2>$null | Select-String ":$currentPort\s"
-
-        if (-not $portCheck) {
-            $portToUse = $currentPort
-            break
-        }
-
-        if ($portAttempt -eq 0) {
-            Print-Info "Port 8001 is in use, trying to free it..."
-
-            for ($attempt = 0; $attempt -lt 3; $attempt++) {
-                try {
-                    Get-NetTCPConnection -LocalPort $currentPort -ErrorAction SilentlyContinue | ForEach-Object {
-                        Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue
-                    }
-                } catch {}
-
-                Start-Sleep -Seconds 1
-
-                $portCheck = netstat -ano 2>$null | Select-String ":$currentPort\s"
-                if (-not $portCheck) {
-                    $portToUse = $currentPort
-                    break
-                }
-
-                if (Test-Path $localKillPort) {
-                    Print-Info "Using local kill-port to free port $currentPort..."
-                    & $localKillPort $currentPort 2>$null
-                    Start-Sleep -Seconds 2
-
-                    $portCheck = netstat -ano 2>$null | Select-String ":$currentPort\s"
-                    if (-not $portCheck) {
-                        $portToUse = $currentPort
-                        break
-                    }
-                }
-            }
-
-            if (-not $portCheck) {
-                break
-            }
-        }
-    }
-
-    if ($portToUse -ne 8001) {
-        Print-Warn "Port 8001 unavailable, using port $portToUse"
-    }
-
-    $BackendPort = $portToUse
-    $env:ELENCHUS_BACKEND_PORT = "$BackendPort"
-}
+$env:ELENCHUS_BACKEND_PORT = "$BackendPort"
 
 if (-not $BackendOnly) {
-    if (-not $FrontendOnly -or -not $env:VITE_BACKEND_PORT) {
-        $env:VITE_BACKEND_PORT = if ($FrontendOnly) { "8001" } else { "$BackendPort" }
-    }
+    $env:VITE_BACKEND_PORT = "$BackendPort"
 }
 
 Write-Host ""
@@ -688,6 +615,8 @@ Write-Host ""
 
 Write-Host "  "$CYAN"Press Ctrl+C to stop all services"$RESET
 Write-Host ""
+
+Push-Location $RootDir
 
 if ($BackendOnly) {
     npm run dev:backend
