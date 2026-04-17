@@ -19,11 +19,12 @@ class OpenAIProviderClient(BaseProviderClient):
         custom_parameters: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> BaseChatModel:
+        merged_kwargs = {**(custom_parameters or {}), **kwargs}
         client = ChatOpenAI(
             model=model,
             api_key=api_key,
             base_url=api_base_url,
-            **kwargs,
+            **merged_kwargs,
         )
         return client
 
@@ -39,11 +40,12 @@ class AnthropicProviderClient(BaseProviderClient):
         custom_parameters: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> BaseChatModel:
+        merged_kwargs = {**(custom_parameters or {}), **kwargs}
         client = ChatAnthropic(
             model=model,
             api_key=api_key,
             base_url=api_base_url,
-            **kwargs,
+            **merged_kwargs,
         )
         return client
 
@@ -59,10 +61,11 @@ class GeminiProviderClient(BaseProviderClient):
         custom_parameters: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> BaseChatModel:
+        merged_kwargs = {**(custom_parameters or {}), **kwargs}
         client = ChatGoogleGenerativeAI(
             model=model,
             api_key=api_key,
             base_url=api_base_url,
-            **kwargs,
+            **merged_kwargs,
         )
         return client

@@ -110,6 +110,14 @@ async def invoke_openai_chat_raw_streaming(
             if on_token is not None:
                 for choice in getattr(chunk, "choices", []) or []:
                     delta = getattr(choice, "delta", None)
+                    if delta is None:
+                        continue
+
+                    # Emit reasoning tokens if present (deep-thinking models)
+                    reasoning = getattr(delta, "reasoning_content", None)
+                    if isinstance(reasoning, str) and reasoning:
+                        await on_token(reasoning)
+
                     content = getattr(delta, "content", None)
                     if content is None:
                         continue

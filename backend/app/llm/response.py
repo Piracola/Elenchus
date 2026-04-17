@@ -18,6 +18,17 @@ _HTML_GUARD_MESSAGE = (
 )
 
 
+def _normalize_reasoning_content_to_text(text: str | None, reasoning: str | None) -> str:
+    """Wrap reasoning_content into \u003cthink\u003e tags for frontend parsing."""
+    if reasoning and len(str(reasoning)) > 0:
+        reasoning_str = str(reasoning)
+        content_str = str(text) if text else ""
+        if content_str:
+            return f"\u003cthink\u003e{reasoning_str}\u003c/think\u003e\n\n{content_str}"
+        return f"\u003cthink\u003e{reasoning_str}\u003c/think\u003e"
+    return str(text) if text else ""
+
+
 def extract_text_content(value: Any) -> str:
     """Normalize the different content shapes returned by chat providers."""
     if isinstance(value, str):
@@ -159,6 +170,9 @@ def _coerce_openai_response_to_ai_message(raw_text: str) -> AIMessage:
     content = extract_text_content(
         message_payload.get("content", payload.get("output_text", raw_text))
     )
+    reasoning = message_payload.get("reasoning_content")
+    if reasoning:
+        content = _normalize_reasoning_content_to_text(content, reasoning)
     tool_calls = _parse_tool_calls(message_payload.get("tool_calls"))
 
     return AIMessage(content=content, tool_calls=tool_calls)
@@ -167,6 +181,7 @@ def _coerce_openai_response_to_ai_message(raw_text: str) -> AIMessage:
 def _coerce_openai_sse_to_ai_message(raw_text: str) -> AIMessage:
     """Collapse SSE-style OpenAI chunks into one final AIMessage."""
     content_parts: list[str] = []
+    reasoning_parts: list[str] = []
     tool_call_buffers: dict[str, dict[str, Any]] = {}
 
     for raw_line in raw_text.splitlines():
@@ -200,6 +215,11 @@ def _coerce_openai_sse_to_ai_message(raw_text: str) -> AIMessage:
             if not isinstance(delta, dict):
                 delta = {}
 
+            # Accumulate reasoning_content if present (deep-thinking models)
+            reasoning_piece = delta.get("reasoning_content")
+            if isinstance(reasoning_piece, str) and reasoning_piece:
+                reasoning_parts.append(reasoning_piece)
+
             content_piece = delta.get("content")
             if content_piece is not None:
                 if isinstance(content_piece, str):
@@ -227,7 +247,12 @@ def _coerce_openai_sse_to_ai_message(raw_text: str) -> AIMessage:
             )
         )
 
-    content = "".join(content_parts).strip()
+    raw_content = "".join(content_parts).strip()
+    raw_reasoning = "".join(reasoning_parts).strip()
+
+    # Wrap reasoning into <think> tags so the frontend can display it
+    content = _normalize_reasoning_content_to_text(raw_content, raw_reasoning)
+
     if not content and not tool_calls:
         return AIMessage(content="[Malformed provider streaming response omitted]")
 

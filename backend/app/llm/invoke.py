@@ -284,8 +284,16 @@ async def _invoke_chat_model_streaming(
     on_token: TokenCallback,
 ) -> AIMessage:
     aggregated_chunk: Any | None = None
+    reasoning_parts: list[str] = []
 
     async for chunk in llm.astream(list(messages)):
+        # Extract reasoning content if present (e.g. deep-thinking models)
+        reasoning_piece = _extract_stream_chunk_text(
+            getattr(chunk, "reasoning_content", "")
+        )
+        if reasoning_piece:
+            reasoning_parts.append(reasoning_piece)
+
         text_piece = _extract_stream_chunk_text(getattr(chunk, "content", ""))
         if text_piece:
             await on_token(text_piece)
@@ -303,6 +311,13 @@ async def _invoke_chat_model_streaming(
 
     if aggregated_chunk is None:
         return AIMessage(content="")
+
+    # LangChain chunk addition drops custom attributes like reasoning_content,
+    # so we must restore the accumulated reasoning text before normalization.
+    if reasoning_parts:
+        object.__setattr__(
+            aggregated_chunk, "reasoning_content", "".join(reasoning_parts)
+        )
 
     if isinstance(aggregated_chunk, AIMessage):
         return _normalize_reasoning_content(aggregated_chunk)
