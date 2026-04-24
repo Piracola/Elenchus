@@ -19,12 +19,25 @@ class OpenAIProviderClient(BaseProviderClient):
         custom_parameters: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> BaseChatModel:
-        merged_kwargs = {**(custom_parameters or {}), **kwargs}
+        # Separate LangChain-known kwargs from custom HTTP body params.
+        # Custom params (e.g. enable_thinking for Qwen) go into model_kwargs
+        # so they reach the HTTP request body.
+        langchain_known_keys = {
+            "temperature", "max_tokens", "streaming", "top_p",
+            "timeout", "max_retries", "model_name",
+        }
+        custom = custom_parameters or {}
+        langchain_kwargs = {k: v for k, v in kwargs.items() if k in langchain_known_keys}
+        model_kwargs = {
+            k: v for k, v in {**custom, **kwargs}.items()
+            if k not in langchain_known_keys
+        }
         client = ChatOpenAI(
             model=model,
             api_key=api_key,
             base_url=api_base_url,
-            **merged_kwargs,
+            model_kwargs=model_kwargs if model_kwargs else None,
+            **langchain_kwargs,
         )
         return client
 
@@ -40,12 +53,22 @@ class AnthropicProviderClient(BaseProviderClient):
         custom_parameters: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> BaseChatModel:
-        merged_kwargs = {**(custom_parameters or {}), **kwargs}
+        langchain_known_keys = {
+            "temperature", "max_tokens", "streaming", "top_p",
+            "timeout", "max_retries", "model_name",
+        }
+        custom = custom_parameters or {}
+        langchain_kwargs = {k: v for k, v in kwargs.items() if k in langchain_known_keys}
+        model_kwargs = {
+            k: v for k, v in {**custom, **kwargs}.items()
+            if k not in langchain_known_keys
+        }
         client = ChatAnthropic(
             model=model,
             api_key=api_key,
             base_url=api_base_url,
-            **merged_kwargs,
+            model_kwargs=model_kwargs if model_kwargs else None,
+            **langchain_kwargs,
         )
         return client
 
@@ -61,11 +84,21 @@ class GeminiProviderClient(BaseProviderClient):
         custom_parameters: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> BaseChatModel:
-        merged_kwargs = {**(custom_parameters or {}), **kwargs}
+        langchain_known_keys = {
+            "temperature", "max_tokens", "streaming", "top_p",
+            "timeout", "max_retries", "model_name",
+        }
+        custom = custom_parameters or {}
+        langchain_kwargs = {k: v for k, v in kwargs.items() if k in langchain_known_keys}
+        model_kwargs = {
+            k: v for k, v in {**custom, **kwargs}.items()
+            if k not in langchain_known_keys
+        }
         client = ChatGoogleGenerativeAI(
             model=model,
             api_key=api_key,
             base_url=api_base_url,
-            **merged_kwargs,
+            model_kwargs=model_kwargs if model_kwargs else None,
+            **langchain_kwargs,
         )
         return client
