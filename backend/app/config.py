@@ -93,6 +93,7 @@ class EnvSettings(BaseModel):
     port: int = 8001
     debug: bool = False
     cors_origins: str = ""
+    database_url: str = ""
 
     @classmethod
     def from_dict(
@@ -116,6 +117,7 @@ class EnvSettings(BaseModel):
             port=int(data.get("port") or 8001),
             debug=bool(data.get("debug", False)),
             cors_origins=cors_origin_text,
+            database_url=str(data.get("database_url") or ""),
         )
 
 
@@ -126,13 +128,17 @@ class AuthSettings(BaseModel):
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None = None) -> AuthSettings:
+        import logging
+        import os
+
         data = data or {}
-        key = str(data.get("jwt_secret_key") or "change-me-in-production")
-        if key == "change-me-in-production":
-            import logging
+        env_key = os.environ.get("ELENCHUS_JWT_SECRET_KEY", "").strip()
+        config_key = str(data.get("jwt_secret_key") or "")
+        key = env_key or config_key or "change-me-in-production"
+        if not env_key and key == "change-me-in-production":
             logging.getLogger(__name__).warning(
-                "JWT secret key is set to the default value 'change-me-in-production'. "
-                "Please update it in runtime/config.json for production use."
+                "JWT secret key is set to the default value. "
+                "Set ELENCHUS_JWT_SECRET_KEY environment variable for production use."
             )
         return cls(
             enabled=bool(data.get("enabled", False)),

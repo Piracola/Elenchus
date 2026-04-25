@@ -3,16 +3,22 @@ Admin authentication for demo mode.
 
 Provides token-based authentication that allows admin users to bypass
 demo mode restrictions. Uses HMAC-based tokens stored in memory.
+Password hashing uses bcrypt with fallback to legacy SHA-256.
 """
 
 from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import secrets
 import time
 
+import bcrypt
+
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 # In-memory store of valid tokens with expiry
 _valid_tokens: dict[str, float] = {}
@@ -74,15 +80,27 @@ def _sign_token(raw: str, secret: str) -> str:
     return f"{raw}.{signature}"
 
 
+def _is_legacy_sha256(stored_hash: str) -> bool:
+    """Detect whether stored hash is the old SHA-256 format (64 hex chars)."""
+    return len(stored_hash) == 64 and all(c in "0123456789abcdef" for c in stored_hash.lower())
+
+
 def _verify_password(password: str, stored_hash: str) -> bool:
-    """Verify password against stored hash (SHA-256)."""
-    computed = hashlib.sha256(password.encode()).hexdigest()
-    return hmac.compare_digest(computed, stored_hash)
+    """Verify password against stored hash (bcrypt or legacy SHA-256)."""
+    if not stored_hash:
+        return False
+    if _is_legacy_sha256(stored_hash):
+        computed = hashlib.sha256(password.encode()).hexdigest()
+        return hmac.compare_digest(computed, stored_hash)
+    try:
+        return bcrypt.checkpw(password.encode(), stored_hash.encode())
+    except Exception:
+        return False
 
 
 def hash_password(password: str) -> str:
-    """Hash a password for storage in config."""
-    return hashlib.sha256(password.encode()).hexdigest()
+    """Hash a password using bcrypt."""
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 def _cleanup_expired() -> None:

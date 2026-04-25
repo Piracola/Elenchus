@@ -23,3 +23,6 @@ ddgs>=6.0.0
 
 # Provider key encryption
 cryptography>=42.0.0
+
+# Password hashing
+bcrypt>=4.0.0

@@ -22,6 +22,23 @@ router = APIRouter(prefix="/searxng", tags=["searxng"])
 
 SEARXNG_URL = "http://localhost:8080"
 
+_ALLOWED_PROJECT_ROOTS: set[Path] | None = None
+
+
+def _get_allowed_roots() -> set[Path]:
+    global _ALLOWED_PROJECT_ROOTS
+    if _ALLOWED_PROJECT_ROOTS is not None:
+        return _ALLOWED_PROJECT_ROOTS
+    current = Path(__file__).resolve().parent
+    roots: set[Path] = set()
+    for parent in current.parents:
+        if (parent / "searxng" / "docker-compose.yml").exists():
+            roots.add(parent.resolve())
+        if (parent / "docker-compose.yml").exists():
+            roots.add(parent.resolve())
+    _ALLOWED_PROJECT_ROOTS = roots
+    return roots
+
 
 def _find_project_root() -> Path | None:
     """Find the project root directory."""
@@ -45,12 +62,24 @@ def _run_docker_compose_command(args: list[str], timeout: int = 30) -> tuple[boo
     if not root:
         return False, "Project root not found"
 
+    # Security: ensure root is within allowed paths
+    resolved_root = root.resolve()
+    allowed = _get_allowed_roots()
+    if resolved_root not in allowed:
+        return False, "Invalid project root"
+
     docker_compose_file = root / "searxng" / "docker-compose.yml"
     if not docker_compose_file.exists():
         docker_compose_file = root / "docker-compose.yml"
-    
+
     if not docker_compose_file.exists():
         return False, "docker-compose.yml not found"
+
+    # Security: validate compose file is inside project root
+    try:
+        docker_compose_file.resolve().relative_to(resolved_root)
+    except ValueError:
+        return False, "Invalid docker-compose file path"
 
     try:
         cmd = ["docker", "compose", "-f", str(docker_compose_file)] + args

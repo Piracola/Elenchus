@@ -16,7 +16,7 @@ function App() {
   const { currentSession } = useSessionViewState();
   const { toasts, removeToast } = useToastState();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const { demoMode, isAdmin, initialized, fetchModeStatus, adminToken, setAdminToken, setIsAdmin } = useDemoModeStore();
+  const { demoMode, isAdmin, initialized, fetchModeStatus, setIsAdmin } = useDemoModeStore();
   const [showAdminLogin, setShowAdminLogin] = useState(false);
 
   useEffect(() => {
@@ -36,15 +36,12 @@ function App() {
   const bannerColor = isAdmin ? 'var(--color-green-600)' : 'var(--color-amber-600)';
 
   const handleAdminLogout = async () => {
-    if (adminToken) {
-      try {
-        await fetch('/api/admin/logout', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${adminToken}` },
-        });
-      } catch { /* ignore */ }
-    }
-    setAdminToken(null);
+    try {
+      await fetch('/api/admin/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch { /* ignore */ }
     setIsAdmin(false);
     window.location.reload();
   };

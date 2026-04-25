@@ -3,7 +3,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 
+from app.audit import log_audit
 from app.dependencies import get_debate_runtime_service
+from app.middleware.auth import require_auth
 from app.models.schemas import RuntimeEventPageResponse
 from app.runtime.service import DebateRuntimeService
 from app.services import export_service, runtime_event_service, session_service
@@ -63,6 +65,7 @@ async def start_debate_session(
         status_code = 409 if "already running" in (result.message or "") else 422
         raise HTTPException(status_code=status_code, detail=result.message)
 
+    log_audit("session_start", session_id=session_id)
     return StartDebateResponse(
         started=True,
         session_id=session_id,

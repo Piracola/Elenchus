@@ -139,6 +139,24 @@ def _normalize_provider(provider: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _decrypt_provider_keys(providers: list[dict[str, Any]] | None) -> None:
+    from app.crypto import decrypt_value
+    if not providers:
+        return
+    for p in providers:
+        if isinstance(p, dict) and p.get("api_key"):
+            p["api_key"] = decrypt_value(str(p["api_key"]))
+
+
+def _encrypt_provider_keys(providers: list[dict[str, Any]] | None) -> None:
+    from app.crypto import encrypt_value
+    if not providers:
+        return
+    for p in providers:
+        if isinstance(p, dict) and p.get("api_key"):
+            p["api_key"] = encrypt_value(str(p["api_key"]))
+
+
 def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
     runtime_root = get_runtime_paths().runtime_root
     base = _default_config()
@@ -237,6 +255,7 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
         if normalized_providers:
             if not any(provider_item.get("is_default") for provider_item in normalized_providers):
                 normalized_providers[0]["is_default"] = True
+            _decrypt_provider_keys(normalized_providers)
             base["providers"] = normalized_providers
 
     schema_version = incoming.get("schema_version")
@@ -295,7 +314,10 @@ def update_runtime_config(mutator) -> dict[str, Any]:
         current = _current_or_initial_runtime_config()
         updated = mutator(deepcopy(current))
         normalized = normalize_runtime_config(updated if isinstance(updated, dict) else current)
+        _encrypt_provider_keys(normalized.get("providers"))
         _write_json_atomic(get_runtime_paths().config_json_file, normalized)
+        # Return decrypted copy for in-memory use
+        _decrypt_provider_keys(normalized.get("providers"))
     return deepcopy(normalized)
 
 

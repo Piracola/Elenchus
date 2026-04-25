@@ -51,8 +51,7 @@ class DemoGuardMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Admin token bypass
-        auth_header = request.headers.get("authorization", "")
-        token = _extract_token_from_header(auth_header) or request.query_params.get("admin_token")
+        token = _extract_token_from_request(request) or request.query_params.get("admin_token")
         if token and is_valid_admin_token(token):
             return await call_next(request)
 
@@ -78,6 +77,15 @@ def _extract_token_from_header(header: str) -> str | None:
     if header.startswith("Bearer "):
         return header[7:].strip()
     return None
+
+
+def _extract_token_from_request(request: Request) -> str | None:
+    """Extract admin token from Authorization header or httpOnly cookie."""
+    auth_header = request.headers.get("authorization", "")
+    token = _extract_token_from_header(auth_header)
+    if not token:
+        token = request.cookies.get("elenchus_admin_token")
+    return token
 
 
 def _is_path_allowed(path: str, method: str) -> bool:

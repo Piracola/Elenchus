@@ -48,10 +48,10 @@ export default function ChatHistoryList({
 }: ChatHistoryListProps) {
     // Get agent_configs from current session to resolve model info
     const { currentSession } = useConnectionViewState();
-    const agentConfigs = currentSession?.agent_configs || {};
 
     // Build a model lookup map: role -> model name
     const modelByRole = useMemo(() => {
+        const agentConfigs = currentSession?.agent_configs || {};
         const map: Record<string, string> = {};
         for (const [role, config] of Object.entries(agentConfigs)) {
             if (config?.model) {
@@ -59,7 +59,7 @@ export default function ChatHistoryList({
             }
         }
         return map;
-    }, [agentConfigs]);
+    }, [currentSession?.agent_configs]);
 
     return (
         <div

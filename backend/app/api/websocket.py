@@ -8,10 +8,12 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from app.config import get_settings
 from app.dependencies import (
     get_debate_runtime_service,
     get_runtime_bus,
 )
+from app.middleware.admin_auth import is_valid_admin_token
 from app.middleware.rate_limit import check_rate_limit
 
 logger = logging.getLogger(__name__)
@@ -52,6 +54,17 @@ async def _send_error_event(
 
 
 @router.websocket("/ws/{session_id}")
+def _get_ws_token(websocket: WebSocket) -> str | None:
+    """Extract auth token from WebSocket query params or headers."""
+    token = websocket.query_params.get("token")
+    if token:
+        return token
+    auth_header = websocket.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        return auth_header[7:].strip()
+    return None
+
+
 async def debate_ws(websocket: WebSocket, session_id: str):
     """Connect to a debate session and stream debate events in real time."""
     runtime_bus = get_runtime_bus()
@@ -61,6 +74,15 @@ async def debate_ws(websocket: WebSocket, session_id: str):
         await websocket.accept()
         await websocket.close(code=4001, reason="Invalid session_id format")
         return
+
+    # Auth check when global auth is enabled
+    settings = get_settings()
+    if settings.auth.enabled:
+        token = _get_ws_token(websocket)
+        if not token or not is_valid_admin_token(token):
+            await websocket.accept()
+            await websocket.close(code=4003, reason="Authentication required")
+            return
 
     # Rate limit WebSocket connections
     ip = _get_client_ip(websocket)

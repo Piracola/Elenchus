@@ -33,8 +33,6 @@ export default function FloatingRuntimeInspector({
     }
 
     const collapsedSize = getCollapsedFloatingInspectorSize();
-    const isCollapsed = !floatingInspectorExpanded;
-
     void floatingInspectorInteractionRef;
 
     return (

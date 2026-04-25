@@ -17,7 +17,7 @@ export default function AdminLoginModal({ isOpen, onClose }: Props) {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    const { setAdminToken, setIsAdmin } = useDemoModeStore();
+    const { setIsAdmin } = useDemoModeStore();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -28,7 +28,6 @@ export default function AdminLoginModal({ isOpen, onClose }: Props) {
         setLoading(false);
 
         if (result) {
-            setAdminToken(result.token);
             setIsAdmin(true);
             onClose();
             // Reload to apply admin privileges

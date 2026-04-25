@@ -24,8 +24,38 @@ export default function ExportMenu({
   onExport,
 }: ExportMenuProps) {
   const [open, setOpen] = useState(false);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    opacity: 0,
+    pointerEvents: 'none',
+  });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Compute dropdown position when opened
+  useEffect(() => {
+    if (!open) return;
+    if (!triggerRef.current) {
+      setDropdownStyle({
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        opacity: 0,
+        pointerEvents: 'none',
+      });
+      return;
+    }
+    const rect = triggerRef.current.getBoundingClientRect();
+    setDropdownStyle({
+      position: 'fixed',
+      top: rect.bottom + 8,
+      left: rect.left,
+      minWidth: 240,
+      zIndex: 9999,
+    });
+  }, [open]);
 
   // 点击外部关闭
   useEffect(() => {
@@ -71,27 +101,6 @@ export default function ExportMenu({
     },
     [onExport],
   );
-
-  // 计算下拉菜单位置
-  const getDropdownStyle = (): React.CSSProperties => {
-    if (!triggerRef.current) {
-      return {
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        opacity: 0,
-        pointerEvents: 'none',
-      };
-    }
-    const rect = triggerRef.current.getBoundingClientRect();
-    return {
-      position: 'fixed',
-      top: rect.bottom + 8,
-      left: rect.left,
-      minWidth: 240,
-      zIndex: 9999,
-    };
-  };
 
   return (
     <>
@@ -142,7 +151,7 @@ export default function ExportMenu({
           <div
             ref={dropdownRef}
             style={{
-              ...getDropdownStyle(),
+              ...dropdownStyle,
               padding: '14px',
               borderRadius: 'var(--radius-xl)',
               background: 'var(--bg-card)',

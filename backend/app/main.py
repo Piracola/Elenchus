@@ -14,7 +14,9 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.middleware.demo_guard import DemoGuardMiddleware
-from app.middleware.rate_limit import check_rate_limit
+from app.middleware.auth import AuthMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware
+from app.middleware.body_limit import BodySizeLimitMiddleware
 from app.api.sessions import router as sessions_router
 from app.api.websocket import router as ws_router
 from app.api.models import router as models_router
@@ -55,14 +57,23 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Security headers
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Body size limit
+app.add_middleware(BodySizeLimitMiddleware)
+
 # CORS — configurable via CORS_ORIGINS env var
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in settings.env.cors_origins.split(",") if o.strip()],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+# Global auth middleware — enforces authentication when auth.enabled is true
+app.add_middleware(AuthMiddleware)
 
 # Demo guard middleware — blocks mutation endpoints when demo_mode is enabled
 app.add_middleware(DemoGuardMiddleware)

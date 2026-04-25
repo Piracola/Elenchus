@@ -4,8 +4,10 @@ Log settings API endpoints.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from app.audit import log_audit
+from app.middleware.auth import require_auth
 from app.services.log_service import get_log_manager, LogLevel
 
 router = APIRouter(prefix="/log", tags=["log"])
@@ -19,12 +21,13 @@ async def get_log_level():
 
 
 @router.put("/level")
-async def set_log_level(data: dict):
+async def set_log_level(data: dict, _auth: bool = Depends(require_auth)):
     """Set log level dynamically."""
     level_str = data.get("level", "INFO").upper()
     new_level = LogLevel.from_string(level_str)
     manager = get_log_manager()
     manager.set_level(new_level)
+    log_audit("log_level_change", payload={"level": level_str})
     return {"level": new_level.to_string()}
 
 

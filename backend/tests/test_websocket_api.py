@@ -16,6 +16,15 @@ class _FakeClient:
         self.host = host
 
 
+class _FakeHeaders:
+    """Minimal dict-like headers for _get_client_ip."""
+    def __init__(self, data: dict[str, str] | None = None) -> None:
+        self._data = {k.lower(): v for k, v in (data or {}).items()}
+
+    def get(self, key: str, default: str | None = None) -> str | None:
+        return self._data.get(key.lower(), default)
+
+
 class _FakeWebSocket:
     def __init__(self, messages: list[object]) -> None:
         self.accepted = False
@@ -25,6 +34,7 @@ class _FakeWebSocket:
         self.sent: list[dict[str, object]] = []
         self._messages = iter(messages)
         self.client = _FakeClient()
+        self.headers = _FakeHeaders()
 
     async def accept(self) -> None:
         self.accepted = True

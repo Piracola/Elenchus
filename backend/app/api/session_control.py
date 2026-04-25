@@ -13,7 +13,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from app.audit import log_audit
 from app.dependencies import get_debate_runtime_service
+from app.middleware.auth import require_auth
 from app.models.schemas import SessionResponse
 from app.runtime.service import DebateRuntimeService
 from app.services import session_service
@@ -91,6 +93,7 @@ class LiveEventsResponse(BaseModel):
 async def start_debate_session(
     session_id: str,
     runtime_service: DebateRuntimeService = Depends(get_debate_runtime_service),
+    _auth: bool = Depends(require_auth),
 ):
     """
     Start a debate session.
@@ -122,6 +125,7 @@ async def start_debate_session(
 async def stop_debate_session(
     session_id: str,
     runtime_service: DebateRuntimeService = Depends(get_debate_runtime_service),
+    _auth: bool = Depends(require_auth),
 ):
     """
     Stop a running debate session.
@@ -151,6 +155,7 @@ async def intervene_in_debate(
     session_id: str,
     request: InterventionRequest,
     runtime_service: DebateRuntimeService = Depends(get_debate_runtime_service),
+    _auth: bool = Depends(require_auth),
 ):
     """
     Intervene in a running debate session.

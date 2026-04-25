@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from app.config import get_settings
 from app.middleware.admin_auth import hash_password, is_valid_admin_token, login, logout
 from app.middleware.rate_limit import check_rate_limit
+from app.audit import log_audit
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -37,9 +38,23 @@ async def admin_login(req: AdminLoginRequest, request: Request):
 
     token = login(req.username, req.password)
     if not token:
+        log_audit("admin_login_failed", ip=ip, user=req.username)
         raise HTTPException(status_code=401, detail="Invalid admin credentials")
 
-    return AdminLoginResponse(token=token)
+    log_audit("admin_login_success", ip=ip, user=req.username)
+
+    response = AdminLoginResponse(token=token)
+    from fastapi.responses import JSONResponse
+    json_response = JSONResponse(content=response.model_dump())
+    json_response.set_cookie(
+        key="elenchus_admin_token",
+        value=token,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=24 * 3600,
+    )
+    return json_response
 
 
 @router.post("/logout")
@@ -48,11 +63,16 @@ async def admin_logout(request: Request):
     auth_header = request.headers.get("authorization", "")
     token = _extract_token(auth_header)
     if not token:
-        token = request.query_params.get("admin_token")
+        token = request.cookies.get("elenchus_admin_token") or request.query_params.get("admin_token")
 
+    ip = request.client.host if request.client else "unknown"
     if token:
         logout(token)
-    return {"status": "ok"}
+        log_audit("admin_logout", ip=ip)
+
+    json_response = JSONResponse(content={"status": "ok"})
+    json_response.delete_cookie(key="elenchus_admin_token")
+    return json_response
 
 
 @router.get("/status", response_model=AdminStatusResponse)
@@ -60,7 +80,7 @@ async def admin_status(request: Request):
     """Check demo mode status and admin authentication state."""
     settings = get_settings()
     auth_header = request.headers.get("authorization", "")
-    token = _extract_token(auth_header) or request.query_params.get("admin_token")
+    token = _extract_token(auth_header) or request.cookies.get("elenchus_admin_token") or request.query_params.get("admin_token")
 
     return AdminStatusResponse(
         demo_mode=settings.demo.enabled,
@@ -73,7 +93,7 @@ async def admin_status(request: Request):
 async def set_admin_password(request: Request):
     """Update the admin password (requires current admin access)."""
     auth_header = request.headers.get("authorization", "")
-    token = _extract_token(auth_header) or request.query_params.get("admin_token")
+    token = _extract_token(auth_header) or request.cookies.get("elenchus_admin_token") or request.query_params.get("admin_token")
     if not token or not is_valid_admin_token(token):
         raise HTTPException(status_code=403, detail="Admin access required")
 
@@ -85,7 +105,11 @@ async def set_admin_password(request: Request):
     hashed = hash_password(new_password)
     settings = get_settings()
     settings.demo.admin_password_hash = hashed
-    # Note: this only updates the in-memory settings. To persist, update runtime/config.json manually.
+    from app.runtime_config_store import update_runtime_config
+    update_runtime_config(lambda cfg: cfg.update({"demo": {**cfg.get("demo", {}), "admin_password_hash": hashed}}))
+
+    ip = request.client.host if request.client else "unknown"
+    log_audit("admin_set_password", ip=ip)
     return {"status": "ok"}
 
 

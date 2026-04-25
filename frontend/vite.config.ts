@@ -31,6 +31,7 @@ export default defineConfig(({ mode }) => {
       react(),
     ],
     build: {
+      sourcemap: false,
       rollupOptions: {
         output: {
           manualChunks,

@@ -5,8 +5,10 @@ Search configuration API routes.
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.audit import log_audit
 from app.config import get_search_provider_settings_snapshot, persist_search_settings
 from app.dependencies import get_search_factory
+from app.middleware.auth import require_auth
 from app.search.factory import SearchProviderFactory
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -100,12 +102,14 @@ async def get_search_config(
 async def update_search_config(
     request: UpdateProviderRequest,
     factory: SearchProviderFactory = Depends(get_search_factory),
+    _auth: bool = Depends(require_auth),
 ):
     """Update current search engine."""
 
     success = factory.set_provider(request.provider)
     if not success:
         raise HTTPException(status_code=400, detail=f"Invalid provider: {request.provider}")
+    log_audit("search_config_update", payload={"provider": request.provider})
     return {"status": "ok", "provider": request.provider}
 
 
@@ -113,6 +117,7 @@ async def update_search_config(
 async def update_search_settings(
     request: UpdateSearchSettingsRequest,
     factory: SearchProviderFactory = Depends(get_search_factory),
+    _auth: bool = Depends(require_auth),
 ):
     """Update runtime-editable provider settings and rebuild the provider factory."""
 
@@ -126,6 +131,7 @@ async def update_search_settings(
         tavily_api_url=request.provider_settings.tavily.api_url,
     )
     await factory.reload()
+    log_audit("search_settings_update")
     return await _build_search_config_response(factory)
 
 

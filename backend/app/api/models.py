@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List
 
+from app.audit import log_audit
 from app.dependencies import get_provider_service
+from app.middleware.auth import require_auth
 from app.services.provider_service import ProviderService
 from app.services.demo_model_service import get_demo_models
 from app.config import get_settings
@@ -57,11 +59,14 @@ def _demo_to_config(m: dict) -> dict:
 @router.post("", response_model=ModelConfigResponse)
 async def create_model_config(
     config_in: ModelConfigCreate,
-    service: ProviderService = Depends(get_provider_service)
+    service: ProviderService = Depends(get_provider_service),
+    _auth: bool = Depends(require_auth),
 ):
     """Create a new model configuration."""
     try:
-        return await service.create_config(config_in)
+        result = await service.create_config(config_in)
+        log_audit("model_config_create", payload={"name": config_in.name})
+        return result
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -72,7 +77,8 @@ async def create_model_config(
 async def update_model_config(
     config_id: str,
     config_in: ModelConfigUpdate,
-    service: ProviderService = Depends(get_provider_service)
+    service: ProviderService = Depends(get_provider_service),
+    _auth: bool = Depends(require_auth),
 ):
     """Update a model configuration."""
     try:
@@ -84,14 +90,17 @@ async def update_model_config(
         )
     if not updated:
         raise HTTPException(status_code=404, detail="Model configuration not found")
+    log_audit("model_config_update", payload={"config_id": config_id})
     return updated
 
 @router.delete("/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_model_config(
     config_id: str,
-    service: ProviderService = Depends(get_provider_service)
+    service: ProviderService = Depends(get_provider_service),
+    _auth: bool = Depends(require_auth),
 ):
     """Delete a model configuration."""
     deleted = await service.delete_config(config_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Model configuration not found")
+    log_audit("model_config_delete", payload={"config_id": config_id})
