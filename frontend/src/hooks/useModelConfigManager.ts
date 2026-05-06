@@ -32,6 +32,10 @@ function parseDefaultMaxTokensInput(input: string): number {
     return Math.floor(parsed);
 }
 
+function normalizeModelList(models: string[]): string[] {
+    return Array.from(new Set(models.map((model) => model.trim()).filter(Boolean)));
+}
+
 function buildSavePayload(formData: ProviderFormData): ModelConfigCreatePayload {
     // 解析自定义参数
     const customParams = parseCustomParametersInput(formData.customParametersText);
@@ -49,7 +53,7 @@ function buildSavePayload(formData: ProviderFormData): ModelConfigCreatePayload 
         api_base_url: formData.apiBaseUrl.trim() || null,
         default_max_tokens: parseDefaultMaxTokensInput(formData.defaultMaxTokens),
         custom_parameters: customParams,
-        models: formData.models,
+        models: normalizeModelList(formData.models),
         is_default: formData.isDefault,
     };
 
@@ -169,6 +173,10 @@ export function useModelConfigManager() {
     const handleSave = useCallback(async () => {
         if (!formData.name.trim()) {
             alert('提供商名称为必填项。');
+            return;
+        }
+        if (normalizeModelList(formData.models).length === 0) {
+            alert('请至少添加一个模型标识。');
             return;
         }
 

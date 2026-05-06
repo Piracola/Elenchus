@@ -113,6 +113,9 @@ describe('useModelConfigManager', () => {
             result.current.updateFormField('customParametersText', '{invalid json');
         });
         await act(async () => {
+            result.current.updateFormField('models', ['gpt-4o']);
+        });
+        await act(async () => {
             await result.current.handleSave();
         });
 
@@ -161,5 +164,11 @@ describe('buildSavePayload', () => {
             models: ['gpt-4o'],
             is_default: false,
         });
+    });
+
+    it('normalizes model names before saving', () => {
+        expect(buildSavePayload(createFormData({
+            models: ['gpt-4o', ' gpt-4o ', '', 'claude-sonnet-4'],
+        })).models).toEqual(['gpt-4o', 'claude-sonnet-4']);
     });
 });
