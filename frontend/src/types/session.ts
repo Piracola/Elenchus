@@ -66,6 +66,11 @@ export interface AgentConfig {
     api_base_url?: string;
     temperature?: number;
     enable_thinking?: boolean;
+    persona_id?: string;
+    persona_name?: string;
+    persona_filename?: string;
+    custom_name?: string;
+    custom_prompt?: string;
 }
 
 export interface Session {

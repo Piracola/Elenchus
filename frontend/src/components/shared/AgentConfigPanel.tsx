@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 import { Settings2 } from 'lucide-react';
 import CustomSelect from './CustomSelect';
 import SettingsPanel from '../sidebar/SettingsPanel';
-import type { ModelConfig } from '../../types';
+import type { AgentPersonaSummary, ModelConfig } from '../../types';
 import {
     AGENT_ROLES,
     DEFAULT_AGENT_TEMPERATURE,
@@ -32,21 +32,24 @@ const AGENT_ICONS: Record<string, string> = {
 
 interface AgentConfigPanelProps {
     savedConfigs: ModelConfig[];
+    agentPersonas?: AgentPersonaSummary[];
     selectedConfigIds: Record<AgentRole, string>;
+    selectedPersonaIds?: Record<AgentRole, string>;
     temperatureInputs: Record<AgentRole, string>;
     enableThinking?: Record<AgentRole, boolean>;
     showConfigManager: boolean;
     setShowConfigManager: (v: boolean) => void;
     handleConfigSelect: (agent: AgentRole, value: string) => void;
+    handlePersonaSelect?: (agent: AgentRole, value: string) => void;
     handleTemperatureChange: (agent: AgentRole, value: string) => void;
     handleThinkingToggle?: (agent: AgentRole, value: boolean) => void;
 }
 
 export default function AgentConfigPanel({
-    savedConfigs, selectedConfigIds,
+    savedConfigs, agentPersonas = [], selectedConfigIds, selectedPersonaIds,
     temperatureInputs,
     enableThinking,
-    showConfigManager, setShowConfigManager, handleConfigSelect, handleTemperatureChange, handleThinkingToggle,
+    showConfigManager, setShowConfigManager, handleConfigSelect, handlePersonaSelect, handleTemperatureChange, handleThinkingToggle,
 }: AgentConfigPanelProps) {
 
     const buildOptions = () => {
@@ -63,6 +66,18 @@ export default function AgentConfigPanel({
     };
 
     const options = buildOptions();
+    const buildPersonaOptions = (agent: AgentRole) => {
+        const personaOptions = [{ value: '', label: '默认人设' }];
+        agentPersonas
+            .filter((persona) => persona.roles.length === 0 || persona.roles.includes(agent))
+            .forEach((persona) => {
+                personaOptions.push({
+                    value: persona.id,
+                    label: persona.name,
+                });
+            });
+        return personaOptions;
+    };
 
     return (
         <>
@@ -130,6 +145,14 @@ export default function AgentConfigPanel({
                                 onChange={(value) => handleConfigSelect(agent, value)}
                                 size="sm"
                             />
+                            {handlePersonaSelect && (
+                                <CustomSelect
+                                    value={selectedPersonaIds?.[agent] ?? ''}
+                                    options={buildPersonaOptions(agent)}
+                                    onChange={(value) => handlePersonaSelect(agent, value)}
+                                    size="sm"
+                                />
+                            )}
                             <div style={{
                                 display: 'flex',
                                 alignItems: 'center',
@@ -198,7 +221,7 @@ export default function AgentConfigPanel({
                     fontSize: '11px',
                     color: 'var(--text-muted)',
                 }}>
-                    Temperature range: 0-2. Leave blank to use the default value ({DEFAULT_AGENT_TEMPERATURE}).
+                    Temperature range: 0-2. Leave blank to use the default value ({DEFAULT_AGENT_TEMPERATURE}). Persona files live in runtime/agent_personas.
                 </div>
             </motion.div>
             <SettingsPanel

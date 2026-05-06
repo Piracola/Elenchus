@@ -220,12 +220,15 @@ function SessionCreator() {
         showAdvanced,
         setShowAdvanced,
         savedConfigs,
+        agentPersonas,
         selectedConfigIds,
+        selectedPersonaIds,
         temperatureInputs,
         enableThinking,
         showConfigManager,
         setShowConfigManager,
         handleConfigSelect,
+        handlePersonaSelect,
         handleTemperatureChange,
         handleThinkingToggle,
         buildAgentConfigs,
@@ -247,12 +250,15 @@ function SessionCreator() {
                 <div style={{ marginBottom: '10px' }}>
                     <AgentConfigPanel
                         savedConfigs={savedConfigs}
+                        agentPersonas={agentPersonas}
                         selectedConfigIds={selectedConfigIds}
+                        selectedPersonaIds={selectedPersonaIds}
                         temperatureInputs={temperatureInputs}
                         enableThinking={enableThinking}
                         showConfigManager={showConfigManager}
                         setShowConfigManager={setShowConfigManager}
                         handleConfigSelect={handleConfigSelect}
+                        handlePersonaSelect={handlePersonaSelect}
                         handleTemperatureChange={handleTemperatureChange}
                         handleThinkingToggle={handleThinkingToggle}
                     />

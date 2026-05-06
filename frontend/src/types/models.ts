@@ -39,12 +39,30 @@ export interface ProviderFormData {
 }
 
 export interface AgentConfigResult {
-    model: string;
-    provider_type: string;
-    provider_id: string;
+    model?: string;
+    provider_type?: string;
+    provider_id?: string;
     api_base_url?: string;
     temperature?: number;
     max_input_tokens?: number;
     max_tokens?: number;
     enable_thinking?: boolean;
+    custom_parameters?: Record<string, unknown>;
+    persona_id?: string;
+    persona_name?: string;
+    persona_filename?: string;
+    custom_name?: string;
+    custom_prompt?: string;
+}
+
+export interface AgentPersonaSummary {
+    id: string;
+    name: string;
+    description: string;
+    roles: string[];
+    filename: string;
+}
+
+export interface AgentPersonaDetail extends AgentPersonaSummary {
+    content: string;
 }

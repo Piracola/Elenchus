@@ -4,11 +4,12 @@ Request and response schemas for the REST API.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ExportFormat(str, Enum):
@@ -73,6 +74,71 @@ class SophistryModeConfig(BaseModel):
     artifact_detail_level: str = Field(default="full")
 
 
+class AgentPersonaSummary(BaseModel):
+    """Lightweight metadata for a file-backed agent persona."""
+
+    id: str
+    name: str
+    description: str = ""
+    roles: list[str] = Field(default_factory=list)
+    filename: str
+
+
+class AgentPersonaDetail(AgentPersonaSummary):
+    """Full persona detail including the prompt content."""
+
+    content: str
+
+
+def _blank_to_none(value: Any) -> Any:
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
+
+
+def _normalize_default_max_tokens(value: Any) -> int:
+    if value is None:
+        return 64000
+    if isinstance(value, str) and not value.strip():
+        return 64000
+    try:
+        parsed_float = float(value)
+    except (TypeError, ValueError):
+        return 64000
+    if not parsed_float.is_integer():
+        return 64000
+    parsed = int(parsed_float)
+    return parsed if parsed > 0 else 64000
+
+
+def _normalize_models(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        parts = value.replace("\n", ",").split(",")
+        return [part.strip() for part in parts if part.strip()]
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return []
+
+
+def _normalize_custom_parameters(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return {}
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
 class SessionCreate(BaseModel):
     """Payload to create a new debate session."""
 
@@ -99,28 +165,102 @@ class SessionCreate(BaseModel):
 class ModelConfigCreate(BaseModel):
     """Payload to create a reusable provider configuration."""
 
-    name: str = Field(..., min_length=1, max_length=100)
+    name: str
     provider_type: str = Field(default="openai", description="Protocol: openai, anthropic, or gemini")
-    api_key: str | None = Field(default=None, max_length=255)
-    api_base_url: str | None = Field(default=None, max_length=255)
-    default_max_tokens: int = Field(default=64000, ge=1, le=200000)
+    api_key: str | None = None
+    api_base_url: str | None = None
+    default_max_tokens: int = Field(default=64000)
     custom_parameters: dict[str, Any] = Field(default_factory=dict)
     models: list[str] = Field(default_factory=list)
     is_default: bool = Field(default=False)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _normalize_name(cls, value: Any) -> str:
+        return str(value or "").strip()
+
+    @field_validator("provider_type", mode="before")
+    @classmethod
+    def _normalize_provider_type(cls, value: Any) -> str:
+        provider_type = str(value or "").strip().lower()
+        return provider_type or "openai"
+
+    @field_validator("api_key", "api_base_url", mode="before")
+    @classmethod
+    def _normalize_optional_text(cls, value: Any) -> Any:
+        value = _blank_to_none(value)
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("default_max_tokens", mode="before")
+    @classmethod
+    def _normalize_tokens(cls, value: Any) -> int:
+        return _normalize_default_max_tokens(value)
+
+    @field_validator("custom_parameters", mode="before")
+    @classmethod
+    def _normalize_params(cls, value: Any) -> dict[str, Any]:
+        return _normalize_custom_parameters(value)
+
+    @field_validator("models", mode="before")
+    @classmethod
+    def _normalize_model_list(cls, value: Any) -> list[str]:
+        return _normalize_models(value)
 
 
 class ModelConfigUpdate(BaseModel):
     """Payload to update an existing provider configuration."""
 
-    name: str | None = Field(default=None, min_length=1, max_length=100)
+    name: str | None = None
     provider_type: str | None = Field(default=None)
-    api_key: str | None = Field(default=None, max_length=255)
+    api_key: str | None = None
     clear_api_key: bool | None = Field(default=None)
-    api_base_url: str | None = Field(default=None, max_length=255)
-    default_max_tokens: int | None = Field(default=None, ge=1, le=200000)
+    api_base_url: str | None = None
+    default_max_tokens: int | None = None
     custom_parameters: dict[str, Any] | None = Field(default=None)
     models: list[str] | None = Field(default=None)
     is_default: bool | None = Field(default=None)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _normalize_name(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        return str(value).strip()
+
+    @field_validator("provider_type", mode="before")
+    @classmethod
+    def _normalize_provider_type(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        provider_type = str(value or "").strip().lower()
+        return provider_type or None
+
+    @field_validator("api_key", "api_base_url", mode="before")
+    @classmethod
+    def _normalize_optional_text(cls, value: Any) -> Any:
+        value = _blank_to_none(value)
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("default_max_tokens", mode="before")
+    @classmethod
+    def _normalize_tokens(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        return _normalize_default_max_tokens(value)
+
+    @field_validator("custom_parameters", mode="before")
+    @classmethod
+    def _normalize_params(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        return _normalize_custom_parameters(value)
+
+    @field_validator("models", mode="before")
+    @classmethod
+    def _normalize_model_list(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        return _normalize_models(value)
 
 
 class SessionResponse(BaseModel):

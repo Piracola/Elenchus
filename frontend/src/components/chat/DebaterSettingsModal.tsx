@@ -26,12 +26,15 @@ export default function DebaterSettingsModal({
 }: DebaterSettingsModalProps) {
     const {
         savedConfigs,
+        agentPersonas,
         selectedConfigIds,
+        selectedPersonaIds,
         temperatureInputs,
         enableThinking,
         showConfigManager,
         setShowConfigManager,
         handleConfigSelect,
+        handlePersonaSelect,
         handleTemperatureChange,
         handleThinkingToggle,
     } = useAgentConfigs();
@@ -67,8 +70,12 @@ export default function DebaterSettingsModal({
             if (cfg.enable_thinking !== undefined) {
                 handleThinkingToggle(role, cfg.enable_thinking);
             }
+
+            if (cfg.persona_id) {
+                handlePersonaSelect(role, cfg.persona_id);
+            }
         }
-    }, [currentSession, savedConfigs, handleConfigSelect, handleTemperatureChange, handleThinkingToggle]);
+    }, [currentSession, savedConfigs, handleConfigSelect, handleTemperatureChange, handleThinkingToggle, handlePersonaSelect]);
 
     useEffect(() => {
         if (isOpen && savedConfigs.length > 0 && !hasInitializedFromSessionRef.current) {
@@ -224,12 +231,15 @@ export default function DebaterSettingsModal({
                                 {/* 模型配置面板 */}
                                 <AgentConfigPanel
                                     savedConfigs={savedConfigs}
+                                    agentPersonas={agentPersonas}
                                     selectedConfigIds={selectedConfigIds}
+                                    selectedPersonaIds={selectedPersonaIds}
                                     temperatureInputs={temperatureInputs}
                                     enableThinking={enableThinking}
                                     showConfigManager={showConfigManager}
                                     setShowConfigManager={setShowConfigManager}
                                     handleConfigSelect={handleConfigSelect}
+                                    handlePersonaSelect={handlePersonaSelect}
                                     handleTemperatureChange={handleTemperatureChange}
                                     handleThinkingToggle={handleThinkingToggle}
                                 />

@@ -26,6 +26,7 @@ from app.api.search import build_search_health_payload
 from app.api.searxng import router as searxng_router
 from app.api.session_control import router as session_control_router
 from app.api.admin import router as admin_router
+from app.api.agent_personas import router as agent_personas_router
 from app.dependencies import get_search_factory
 from app.services.log_service import setup_logging, get_logger
 
@@ -87,6 +88,7 @@ app.include_router(search_router, prefix="/api")
 app.include_router(searxng_router, prefix="/api")
 app.include_router(session_control_router, prefix="/api")
 app.include_router(admin_router)
+app.include_router(agent_personas_router, prefix="/api")
 
 
 # ── Mode query endpoint ───────────────────────────────────────────

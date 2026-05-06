@@ -44,12 +44,15 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
         showAdvanced,
         setShowAdvanced,
         savedConfigs,
+        agentPersonas,
         selectedConfigIds,
+        selectedPersonaIds,
         temperatureInputs,
         enableThinking,
         showConfigManager,
         setShowConfigManager,
         handleConfigSelect,
+        handlePersonaSelect,
         handleTemperatureChange,
         handleThinkingToggle,
         buildAgentConfigs,
@@ -316,12 +319,15 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                             >
                                 <AgentConfigPanel
                                     savedConfigs={savedConfigs}
+                                    agentPersonas={agentPersonas}
                                     selectedConfigIds={selectedConfigIds}
+                                    selectedPersonaIds={selectedPersonaIds}
                                     temperatureInputs={temperatureInputs}
                                     enableThinking={enableThinking}
                                     showConfigManager={showConfigManager}
                                     setShowConfigManager={setShowConfigManager}
                                     handleConfigSelect={handleConfigSelect}
+                                    handlePersonaSelect={handlePersonaSelect}
                                     handleTemperatureChange={handleTemperatureChange}
                                     handleThinkingToggle={handleThinkingToggle}
                                 />

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List
+from datetime import datetime, timezone
 
 from app.audit import log_audit
 from app.dependencies import get_provider_service
@@ -43,17 +44,22 @@ def _is_valid_admin(token: str) -> bool:
 
 
 def _demo_to_config(m: dict) -> dict:
+    now = datetime.now(timezone.utc)
     return {
         "id": m.get("id", m.get("model")),
         "name": m.get("name", m.get("model")),
         "provider_type": m.get("provider_type", "openai"),
         "models": m.get("models", [m.get("model")]),
         "api_base_url": m.get("api_base_url", ""),
-        "api_key_masked": False,
+        "api_key_configured": False,
         "default_max_tokens": m.get("default_max_tokens", 64000),
-        "enable_thinking": m.get("enable_thinking", False),
-        "custom_params": m.get("custom_params", {}),
+        "custom_parameters": {
+            **(m.get("custom_parameters") or m.get("custom_params") or {}),
+            **({"enable_thinking": True} if m.get("enable_thinking") else {}),
+        },
         "is_default": False,
+        "created_at": m.get("created_at", now),
+        "updated_at": m.get("updated_at", now),
     }
 
 @router.post("", response_model=ModelConfigResponse)

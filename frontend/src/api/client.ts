@@ -12,6 +12,8 @@ import type {
     SessionCreatePayload,
     ModelConfig,
     ModelConfigCreatePayload,
+    AgentPersonaDetail,
+    AgentPersonaSummary,
     LogLevel,
     MarkdownExportCategory,
     ReferenceLibraryResponse,
@@ -247,6 +249,14 @@ export const api = {
             request(`/models/${id}`, {
                 method: 'DELETE',
             }),
+    },
+
+    agentPersonas: {
+        list: (): Promise<AgentPersonaSummary[]> =>
+            request('/agent-personas'),
+
+        get: (id: string): Promise<AgentPersonaDetail> =>
+            request(`/agent-personas/${encodeURIComponent(id)}`),
     },
 
     health: {

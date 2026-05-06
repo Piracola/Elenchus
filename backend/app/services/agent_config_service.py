@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.dependencies import get_provider_service
+from app.services.agent_persona_service import AgentPersonaService
 
 
 @dataclass(frozen=True)
@@ -22,8 +23,13 @@ class ResolvedProviderSelection:
 class AgentConfigService:
     """Normalize stored agent configs and resolve runtime provider credentials."""
 
-    def __init__(self, provider_service: Any | None = None) -> None:
+    def __init__(
+        self,
+        provider_service: Any | None = None,
+        persona_service: AgentPersonaService | None = None,
+    ) -> None:
         self._provider_service = provider_service or get_provider_service()
+        self._persona_service = persona_service or AgentPersonaService()
 
     async def build_session_agent_configs(
         self,
@@ -36,7 +42,10 @@ class AgentConfigService:
         normalized: dict[str, dict[str, Any]] = {}
 
         for role, config in requested.items():
-            normalized[role] = self._normalize_for_storage(config, providers_by_id)
+            normalized[role] = self._normalize_for_storage(
+                self._merge_persona_config(config),
+                providers_by_id,
+            )
 
         roles_needed = set(participants + ["judge", "fact_checker"])
         if default_provider:
@@ -50,6 +59,24 @@ class AgentConfigService:
                 )
 
         return normalized
+
+    def _merge_persona_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        persona_id = str(config.get("persona_id") or "").strip()
+        if not persona_id:
+            return config
+
+        snapshot = self._persona_service.build_config_snapshot(persona_id)
+        if snapshot is None:
+            merged = dict(config)
+            merged.pop("persona_id", None)
+            return merged
+
+        return {
+            **config,
+            **snapshot,
+            "custom_name": config.get("custom_name") or snapshot.get("custom_name"),
+            "custom_prompt": config.get("custom_prompt") or snapshot.get("custom_prompt"),
+        }
 
     async def resolve_provider_selection(
         self,

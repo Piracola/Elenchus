@@ -84,6 +84,45 @@ def test_update_model_config_returns_secret_presence_only():
     assert "api_key" not in data
 
 
+def test_update_model_config_accepts_settings_form_payload_shape():
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/models",
+        json={
+            "name": "settings-provider",
+            "provider_type": "openai",
+            "api_key": "sk-old",
+            "api_base_url": "https://example.com/v1",
+            "custom_parameters": {},
+            "models": ["gpt-4o"],
+            "is_default": False,
+        },
+    )
+    assert create_response.status_code == 200
+    provider_id = create_response.json()["id"]
+
+    update_response = client.put(
+        f"/api/models/{provider_id}",
+        json={
+            "name": "settings-provider",
+            "provider_type": "openai",
+            "api_base_url": "",
+            "default_max_tokens": "64000",
+            "custom_parameters": {"enable_thinking": True},
+            "models": ["gpt-4o", " gpt-4.1 "],
+            "is_default": True,
+        },
+    )
+
+    assert update_response.status_code == 200
+    data = update_response.json()
+    assert data["api_base_url"] is None
+    assert data["default_max_tokens"] == 64000
+    assert data["custom_parameters"] == {"enable_thinking": True}
+    assert data["models"] == ["gpt-4o", "gpt-4.1"]
+    assert data["api_key_configured"] is True
+
+
 def test_clear_model_config_api_key_returns_unconfigured_state():
     client = TestClient(app)
     create_response = client.post(

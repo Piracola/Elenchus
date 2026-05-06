@@ -49,7 +49,9 @@ class AuthRequired:
         )
 
 
-require_auth = AuthRequired()
+def require_auth(request: Request) -> bool:
+    """FastAPI dependency wrapper with an explicit request parameter."""
+    return AuthRequired()(request)
 
 
 class AuthMiddleware(BaseHTTPMiddleware):

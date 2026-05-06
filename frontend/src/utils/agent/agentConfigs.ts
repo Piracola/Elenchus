@@ -59,6 +59,7 @@ export function buildAgentConfigsPayload(
     selectedConfigIds: Record<string, string>,
     temperatureInputs: Record<string, string>,
     enableThinkingInputs?: Record<string, boolean>,
+    selectedPersonaIds?: Record<string, string>,
 ): Record<string, AgentConfigResult> | undefined {
     const result: Record<string, AgentConfigResult> = {};
     const defaultProvider = savedConfigs.find(
@@ -69,8 +70,9 @@ export function buildAgentConfigsPayload(
         const selectedKey = selectedConfigIds[role] ?? '';
         const temperature = parseAgentTemperatureInput(temperatureInputs[role] ?? '');
         const enableThinking = enableThinkingInputs?.[role] ?? false;
+        const personaId = selectedPersonaIds?.[role]?.trim() ?? '';
 
-        if (!selectedKey && temperature === undefined && !enableThinking) {
+        if (!selectedKey && temperature === undefined && !enableThinking && !personaId) {
             continue;
         }
 
@@ -86,18 +88,21 @@ export function buildAgentConfigsPayload(
             model = defaultProvider?.models?.[0] ?? '';
         }
 
-        if (!configDef || !model) {
+        if ((!configDef || !model) && !personaId) {
             continue;
         }
 
         result[role] = {
-            model,
-            provider_type: configDef.provider_type,
-            provider_id: configDef.id,
-            api_base_url: configDef.api_base_url || undefined,
+            ...(model ? { model } : {}),
+            ...(configDef ? {
+                provider_type: configDef.provider_type,
+                provider_id: configDef.id,
+                api_base_url: configDef.api_base_url || undefined,
+            } : {}),
             ...(temperature !== undefined ? { temperature } : {}),
             ...(enableThinking ? { enable_thinking: true } : {}),
-            ...(configDef.custom_parameters && Object.keys(configDef.custom_parameters).length > 0
+            ...(personaId ? { persona_id: personaId } : {}),
+            ...(configDef?.custom_parameters && Object.keys(configDef.custom_parameters).length > 0
                 ? { custom_parameters: configDef.custom_parameters }
                 : {}),
         };
