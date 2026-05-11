@@ -16,6 +16,11 @@ from app.llm.response import (
     extract_text_content as _extract_text_content,
     normalize_model_text as _normalize_model_text,
 )
+from app.llm.request_params import (
+    UNSUPPORTED_PROVIDER_PARAMS_METADATA_KEY,
+    build_unsupported_provider_param_notice,
+    split_non_openai_langchain_kwargs,
+)
 from app.llm.transport import (
     invoke_openai_chat_raw,
     invoke_openai_chat_raw_streaming,
@@ -65,6 +70,31 @@ def _normalize_reasoning_content(response: AIMessage) -> AIMessage:
     return response
 
 
+def _attach_llm_request_metadata(
+    response: AIMessage,
+    config: ResolvedLLMConfig | None,
+    llm_kwargs: dict[str, Any] | None,
+) -> AIMessage:
+    """Expose provider parameter warnings on successful model responses."""
+    notice = None
+    if config is not None and llm_kwargs is not None and config.provider_type != "openai":
+        _, dropped_keys = split_non_openai_langchain_kwargs(
+            provider_type=config.provider_type,
+            custom_parameters=config.custom_parameters,
+            kwargs=llm_kwargs,
+        )
+        notice = build_unsupported_provider_param_notice(
+            provider_type=config.provider_type,
+            dropped_keys=dropped_keys,
+        )
+    if isinstance(notice, dict) and notice:
+        response.response_metadata.setdefault(
+            UNSUPPORTED_PROVIDER_PARAMS_METADATA_KEY,
+            notice,
+        )
+    return response
+
+
 async def invoke_chat_model(
     messages: Sequence[BaseMessage],
     *,
@@ -90,7 +120,13 @@ async def invoke_chat_model(
     for attempt in range(max_retries + 1):
         try:
             config = await resolve_llm_config(override)
-            llm = create_llm_from_config(config, streaming=on_token is not None)
+            streaming = on_token is not None
+            llm = create_llm_from_config(config, streaming=streaming)
+            llm_kwargs = {
+                "temperature": config.temperature,
+                "max_tokens": config.max_tokens,
+                "streaming": streaming,
+            }
             bound_tools = list(tools or [])
 
             if bound_tools:
@@ -100,6 +136,8 @@ async def invoke_chat_model(
                 return await _run_with_heartbeat(
                     lambda: _invoke_chat_model_streaming(
                         llm=llm,
+                        config=config,
+                        llm_kwargs=llm_kwargs,
                         messages=list(messages),
                         on_token=on_token,
                     ),
@@ -115,7 +153,11 @@ async def invoke_chat_model(
             )
             # 处理 reasoning_content（如 gemma-4 等模型的思维链）
             if isinstance(response, AIMessage):
-                return _normalize_reasoning_content(response)
+                return _attach_llm_request_metadata(
+                    _normalize_reasoning_content(response),
+                    config,
+                    llm_kwargs,
+                )
             return response
         except Exception as exc:
             last_exception = exc
@@ -280,6 +322,8 @@ async def _invoke_openai_raw(
 async def _invoke_chat_model_streaming(
     *,
     llm: Any,
+    config: ResolvedLLMConfig | None = None,
+    llm_kwargs: dict[str, Any] | None = None,
     messages: Sequence[BaseMessage],
     on_token: TokenCallback,
 ) -> AIMessage:
@@ -320,12 +364,17 @@ async def _invoke_chat_model_streaming(
         )
 
     if isinstance(aggregated_chunk, AIMessage):
-        return _normalize_reasoning_content(aggregated_chunk)
+        return _attach_llm_request_metadata(
+            _normalize_reasoning_content(aggregated_chunk),
+            config,
+            llm_kwargs,
+        )
 
-    return AIMessage(
+    response = AIMessage(
         content=extract_text_content(getattr(aggregated_chunk, "content", "")),
         tool_calls=list(getattr(aggregated_chunk, "tool_calls", []) or []),
     )
+    return _attach_llm_request_metadata(response, config, llm_kwargs)
 
 
 def _extract_stream_chunk_text(value: Any) -> str:

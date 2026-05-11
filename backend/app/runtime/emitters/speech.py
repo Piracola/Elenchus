@@ -93,16 +93,20 @@ async def emit_speech(
                 turn=latest.get("turn"),
                 node_name=speech_node,
             )
+        payload = {
+            "role": latest.get("role", ""),
+            "agent_name": latest.get("agent_name", ""),
+            "content": latest.get("content", ""),
+            "citations": latest.get("citations", []),
+            "turn": latest.get("turn"),
+        }
+        metadata = latest.get("metadata")
+        if isinstance(metadata, dict) and metadata:
+            payload["metadata"] = metadata
         await emit_runtime_event(
             session_id=session_id,
             event_type="speech_end",
-            payload={
-                "role": latest.get("role", ""),
-                "agent_name": latest.get("agent_name", ""),
-                "content": latest.get("content", ""),
-                "citations": latest.get("citations", []),
-                "turn": latest.get("turn"),
-            },
+            payload=payload,
             source=f"runtime.node.{speech_node}",
             phase="speaking",
         )

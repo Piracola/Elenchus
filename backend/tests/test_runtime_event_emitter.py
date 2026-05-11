@@ -216,6 +216,13 @@ async def test_emit_speech_skips_duplicate_start_when_tokens_already_streamed():
                     "content": "实时输出完成",
                     "turn": 0,
                     "citations": [],
+                    "metadata": {
+                        "unsupported_request_parameters": {
+                            "provider": "anthropic",
+                            "unsupported_parameters": ["enable_thinking"],
+                            "message": "anthropic provider ignored unsupported request parameters: enable_thinking",
+                        }
+                    },
                 }
             ],
         },
@@ -224,6 +231,39 @@ async def test_emit_speech_skips_duplicate_start_when_tokens_already_streamed():
 
     assert count == 1
     assert [event["type"] for event in bus.events] == ["speech_end"]
+    assert bus.events[0]["payload"]["metadata"] == {
+        "unsupported_request_parameters": {
+            "provider": "anthropic",
+            "unsupported_parameters": ["enable_thinking"],
+            "message": "anthropic provider ignored unsupported request parameters: enable_thinking",
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_emit_speech_omits_empty_metadata_payload():
+    bus = _FakeRuntimeBus()
+    emitter = RuntimeEventEmitter(runtime_bus=bus)
+
+    await emitter.emit_speech(
+        "session-1",
+        {
+            "dialogue_history": [
+                {
+                    "role": "proposer",
+                    "agent_name": "正方",
+                    "content": "普通发言",
+                    "turn": 0,
+                    "citations": [],
+                    "metadata": {},
+                }
+            ],
+        },
+        0,
+    )
+
+    assert [event["type"] for event in bus.events] == ["speech_start", "speech_end"]
+    assert "metadata" not in bus.events[1]["payload"]
 
 
 @pytest.mark.asyncio

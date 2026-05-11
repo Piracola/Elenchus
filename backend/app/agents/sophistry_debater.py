@@ -21,10 +21,27 @@ from app.llm.invoke import (
     invoke_chat_model,
     normalize_model_text,
 )
+from app.llm.request_params import UNSUPPORTED_PROVIDER_PARAMS_METADATA_KEY
 from app.agents.sophistry_prompt_loader import get_sophistry_debater_system_prompt
 from app.constants import ROLE_NAMES
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_user_visible_response_metadata(response: Any) -> dict[str, Any]:
+    response_metadata = getattr(response, "response_metadata", None)
+    if not isinstance(response_metadata, dict):
+        return {}
+
+    unsupported_notice = response_metadata.get(
+        UNSUPPORTED_PROVIDER_PARAMS_METADATA_KEY
+    )
+    if not isinstance(unsupported_notice, dict) or not unsupported_notice:
+        return {}
+
+    return {
+        UNSUPPORTED_PROVIDER_PARAMS_METADATA_KEY: unsupported_notice,
+    }
 
 
 def _strip_urls(text: str) -> str:
@@ -167,6 +184,9 @@ async def sophistry_debater_speak(state: dict[str, Any]) -> dict[str, Any]:
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "turn": current_turn,
     }
+    metadata = _extract_user_visible_response_metadata(response)
+    if metadata:
+        entry["metadata"] = metadata
 
     logger.info(
         "Sophistry debater [%s] finished speech - %d chars",

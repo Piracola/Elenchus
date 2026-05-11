@@ -54,6 +54,49 @@ def test_build_openai_chat_payload_includes_custom_parameters():
     assert payload["temperature"] == 0.7
 
 
+def test_build_openai_chat_payload_routes_unknown_params_to_extra_body():
+    config = ResolvedLLMConfig(
+        model="qwen3",
+        provider_type="openai",
+        api_key="test-key",
+        api_base_url="https://example.invalid/v1",
+        custom_parameters={"enable_thinking": True, "top_p": 0.9},
+        temperature=0.7,
+        max_tokens=1500,
+    )
+
+    payload = transport.build_openai_chat_payload(
+        messages=[HumanMessage(content="hello")],
+        config=config,
+    )
+
+    assert "enable_thinking" not in payload
+    assert payload["extra_body"] == {"enable_thinking": True}
+    assert payload["top_p"] == 0.9
+
+
+def test_build_openai_chat_payload_runtime_values_win_over_custom_parameters():
+    config = ResolvedLLMConfig(
+        model="qwen3",
+        provider_type="openai",
+        api_key="test-key",
+        api_base_url="https://example.invalid/v1",
+        custom_parameters={"max_tokens": 9999, "temperature": 2, "stream": True},
+        temperature=0.7,
+        max_tokens=1500,
+    )
+
+    payload = transport.build_openai_chat_payload(
+        messages=[HumanMessage(content="hello")],
+        config=config,
+        stream=False,
+    )
+
+    assert payload["temperature"] == 0.7
+    assert payload["max_tokens"] == 1500
+    assert payload["stream"] is False
+
+
 @pytest.mark.asyncio
 async def test_invoke_openai_chat_raw_rejects_html_response(monkeypatch):
     class _FakeRawResponse:

@@ -18,6 +18,7 @@ from app.llm.response import (
     _looks_like_html_document,
     _provider_html_response_error,
 )
+from app.llm.request_params import split_openai_params
 
 TokenCallback = Callable[[str], Awaitable[None]]
 
@@ -30,10 +31,11 @@ def build_openai_chat_payload(
     stream: bool = False,
 ) -> dict[str, Any]:
     """Build the OpenAI-compatible chat completions payload."""
+    known_params, extra_body = split_openai_params(config.custom_parameters)
     payload: dict[str, Any] = {
         "model": config.model,
         "messages": [_convert_message_to_dict(message) for message in messages],
-        **config.custom_parameters,
+        **known_params,
         "temperature": config.temperature,
         "max_tokens": config.max_tokens,
         "stream": stream,
@@ -42,6 +44,9 @@ def build_openai_chat_payload(
     if tools:
         payload["tools"] = [convert_to_openai_tool(tool) for tool in tools]
         payload["tool_choice"] = "auto"
+
+    if extra_body:
+        payload["extra_body"] = extra_body
 
     return payload
 

@@ -36,6 +36,7 @@ from app.llm.invoke import (
     invoke_chat_model,
     _extract_stream_chunk_text,
 )
+from app.llm.request_params import UNSUPPORTED_PROVIDER_PARAMS_METADATA_KEY
 from app.llm.transport import build_openai_chat_payload, invoke_openai_chat_raw_streaming
 from app.llm.response import _coerce_openai_sse_to_ai_message
 
@@ -64,10 +65,10 @@ def test_normalize_reasoning_content_no_op_without_reasoning():
     print("[PASS] _normalize_reasoning_content no-op when no reasoning_content")
 
 
-# ── Test 2: build_openai_chat_payload includes enable_thinking ──
+# ── Test 2: build_openai_chat_payload routes enable_thinking safely ──
 
 def test_payload_includes_custom_parameters():
-    """custom_parameters (including enable_thinking) must be in the HTTP payload."""
+    """Custom OpenAI-compatible params must be routed through extra_body."""
     config = ResolvedLLMConfig(
         model="gpt-4o",
         provider_type="openai",
@@ -81,19 +82,19 @@ def test_payload_includes_custom_parameters():
         messages=[HumanMessage(content="Hello")],
         config=config,
     )
-    assert payload.get("enable_thinking") is True
+    assert "enable_thinking" not in payload
+    assert payload.get("extra_body", {}).get("enable_thinking") is True
     assert payload.get("top_p") == 0.9
-    print("[PASS] build_openai_chat_payload includes custom_parameters")
+    print("[PASS] build_openai_chat_payload routes custom parameters safely")
 
 
-# ── Test 3: Provider clients route custom params into model_kwargs ──
+# ── Test 3: Provider clients route custom params safely ──
 
 @pytest.mark.asyncio
-async def test_provider_clients_route_custom_params_to_model_kwargs():
+async def test_provider_clients_route_custom_params_safely():
     """
-    enable_thinking (and other custom HTTP params) must be routed into
-    model_kwargs so LangChain forwards them in the request body, while
-    known params (temperature, max_tokens, streaming) stay at top level.
+    enable_thinking must not leak to SDK top-level kwargs. For OpenAI-compatible
+    providers it goes into extra_body; for non-OpenAI providers it is dropped.
     """
     from app.llm.providers.clients import (
         OpenAIProviderClient,
@@ -116,10 +117,11 @@ async def test_provider_clients_route_custom_params_to_model_kwargs():
         assert "enable_thinking" not in call_kwargs, (
             "enable_thinking should be inside model_kwargs, not top-level"
         )
-        mk = call_kwargs.get("model_kwargs")
-        assert mk and mk.get("enable_thinking") is True, (
-            f"enable_thinking must be in model_kwargs. Got: {call_kwargs}"
+        extra_body = call_kwargs.get("extra_body")
+        assert extra_body and extra_body.get("enable_thinking") is True, (
+            f"enable_thinking must be in extra_body. Got: {call_kwargs}"
         )
+        assert "model_kwargs" not in call_kwargs
         assert call_kwargs.get("temperature") == 0.7
         assert call_kwargs.get("max_tokens") == 4096
         print(f"[PASS] OpenAIProviderClient routes correctly: {call_kwargs}")
@@ -133,10 +135,10 @@ async def test_provider_clients_route_custom_params_to_model_kwargs():
             custom_parameters={"enable_thinking": True},
         )
         call_kwargs = mock_anthropic.call_args.kwargs
-        mk = call_kwargs.get("model_kwargs")
-        assert mk and mk.get("enable_thinking") is True, (
-            f"Anthropic: enable_thinking must be in model_kwargs. Got: {call_kwargs}"
+        assert "enable_thinking" not in call_kwargs, (
+            f"Anthropic: enable_thinking must not be passed through. Got: {call_kwargs}"
         )
+        assert "model_kwargs" not in call_kwargs
         print(f"[PASS] AnthropicProviderClient routes correctly: {call_kwargs}")
 
     # Gemini
@@ -148,13 +150,13 @@ async def test_provider_clients_route_custom_params_to_model_kwargs():
             custom_parameters={"enable_thinking": True},
         )
         call_kwargs = mock_gemini.call_args.kwargs
-        mk = call_kwargs.get("model_kwargs")
-        assert mk and mk.get("enable_thinking") is True, (
-            f"Gemini: enable_thinking must be in model_kwargs. Got: {call_kwargs}"
+        assert "enable_thinking" not in call_kwargs, (
+            f"Gemini: enable_thinking must not be passed through. Got: {call_kwargs}"
         )
+        assert "model_kwargs" not in call_kwargs
         print(f"[PASS] GeminiProviderClient routes correctly: {call_kwargs}")
 
-    print("[PASS] All provider clients route custom params into model_kwargs")
+    print("[PASS] All provider clients route custom params safely")
 
 
 # ── Test 4: Streaming token extraction ignores reasoning_content ──
@@ -190,6 +192,16 @@ async def test_streaming_ignores_reasoning_content():
 
     result = await _invoke_chat_model_streaming(
         llm=mock_llm,
+        config=ResolvedLLMConfig(
+            model="gpt-4o",
+            provider_type="openai",
+            api_key="sk-test",
+            api_base_url=None,
+            custom_parameters={},
+            temperature=0.7,
+            max_tokens=4096,
+        ),
+        llm_kwargs={"temperature": 0.7, "max_tokens": 4096, "streaming": True},
         messages=[HumanMessage(content="What is the meaning?")],
         on_token=capture_token,
     )
@@ -203,6 +215,39 @@ async def test_streaming_ignores_reasoning_content():
     )
     print(f"[PASS] Final result contains <think> tags: {repr(result.content[:80])}...")
     print("[PASS] Streaming now preserves reasoning_content in final AIMessage")
+
+
+@pytest.mark.asyncio
+async def test_invoke_chat_model_exposes_unsupported_non_openai_params():
+    """Non-OpenAI providers should expose dropped request params in response metadata."""
+    class MockAnthropicModel:
+        async def ainvoke(self, messages):
+            return AIMessage(content="visible answer")
+
+        def bind_tools(self, tools):
+            return self
+
+    with patch("app.llm.invoke.create_llm_from_config", return_value=MockAnthropicModel()):
+        with patch("app.llm.invoke.resolve_llm_config") as mock_resolve:
+            mock_resolve.return_value = ResolvedLLMConfig(
+                model="claude-3-5-sonnet",
+                provider_type="anthropic",
+                api_key="sk-test",
+                api_base_url=None,
+                custom_parameters={"enable_thinking": True, "top_p": 0.8},
+                temperature=0.4,
+                max_tokens=2048,
+            )
+            result = await invoke_chat_model(
+                [HumanMessage(content="hello")],
+                max_retries=0,
+            )
+
+    assert result.response_metadata[UNSUPPORTED_PROVIDER_PARAMS_METADATA_KEY] == {
+        "provider": "anthropic",
+        "unsupported_parameters": ["enable_thinking"],
+        "message": "anthropic provider ignored unsupported request parameters: enable_thinking",
+    }
 
 
 # ── Test 5: Raw fallback path does not normalize reasoning_content ──
@@ -309,10 +354,10 @@ def print_fix_summary():
     print("=" * 70)
     print("""
 1. [FIXED] backend/app/llm/providers/clients.py
-   - OpenAIProviderClient, AnthropicProviderClient, GeminiProviderClient
-     now separate known LangChain params (temperature, max_tokens, streaming)
-     from custom HTTP params. Custom params like enable_thinking are routed
-     into model_kwargs so LangChain forwards them in the request body.
+   - OpenAIProviderClient routes custom OpenAI-compatible params like
+     enable_thinking through extra_body so they do not hit SDK top-level kwargs.
+   - AnthropicProviderClient and GeminiProviderClient drop incompatible
+     OpenAI-style custom flags instead of forwarding them blindly.
 
 2. [FIXED] backend/app/llm/invoke.py
    - _invoke_chat_model_streaming() now extracts reasoning_content from each
@@ -342,7 +387,7 @@ if __name__ == "__main__":
     test_normalize_reasoning_content_wraps_think_tags()
     test_normalize_reasoning_content_no_op_without_reasoning()
     test_payload_includes_custom_parameters()
-    asyncio.run(test_provider_clients_route_custom_params_to_model_kwargs())
+    asyncio.run(test_provider_clients_route_custom_params_safely())
     asyncio.run(test_streaming_ignores_reasoning_content())
     test_raw_fallback_missing_reasoning_normalization()
     asyncio.run(test_debater_flow_no_think_tags_emitted())
