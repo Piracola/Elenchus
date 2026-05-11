@@ -1,8 +1,7 @@
 import { memo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import type { DialogueEntry } from '../../types';
+import { MarkdownRenderer } from './messageRow/MarkdownRenderer';
 
 export type InsightSection = {
     key: string;
@@ -181,9 +180,7 @@ function RoundInsights({ sections }: RoundInsightsProps) {
                                                     lineHeight: 1.7,
                                                 }}
                                             >
-                                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                                    {entry.content || ''}
-                                                </ReactMarkdown>
+                                                <MarkdownRenderer text={entry.content || ''} />
                                             </div>
                                         </div>
                                     );

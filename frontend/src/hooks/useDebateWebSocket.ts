@@ -5,7 +5,7 @@
  * useDebateStore.getState() to avoid stale closures.
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { api } from '../api/client';
 import { useDebateStore } from '../stores/debateStore';
 import { normalizeRuntimeEvent } from '../utils/runtime/runtimeEvents';
@@ -31,6 +31,27 @@ export function useDebateWebSocket(sessionId: string | null) {
     const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
     const isMounted = useRef(true);
+    const activeGeneration = useRef(0);
+    const requestedSessionId = useRef<string | null>(sessionId);
+
+    requestedSessionId.current = sessionId;
+
+    useEffect(() => {
+        isMounted.current = true;
+
+        return () => {
+            isMounted.current = false;
+            activeGeneration.current++;
+            if (reconnectTimer.current) {
+                clearTimeout(reconnectTimer.current);
+                reconnectTimer.current = null;
+            }
+            if (pingTimer.current) {
+                clearInterval(pingTimer.current);
+                pingTimer.current = null;
+            }
+        };
+    }, []);
 
     useEffect(() => {
         if (typeof document === 'undefined') {
@@ -51,23 +72,63 @@ export function useDebateWebSocket(sessionId: string | null) {
         };
     }, []);
 
-    useEffect(() => {
-        if (!sessionId) return;
-        isMounted.current = true;
+    useLayoutEffect(() => {
+        const generation = activeGeneration.current + 1;
+        activeGeneration.current = generation;
+
+        const clearReconnectTimer = () => {
+            if (reconnectTimer.current) {
+                clearTimeout(reconnectTimer.current);
+                reconnectTimer.current = null;
+            }
+        };
+
+        const clearPingTimer = () => {
+            if (pingTimer.current) {
+                clearInterval(pingTimer.current);
+                pingTimer.current = null;
+            }
+        };
+
+        clearReconnectTimer();
+        clearPingTimer();
+
+        if (!sessionId) {
+            ws.current = null;
+            reconnectAttempt.current = 0;
+            getStore().setConnected(false);
+            return () => {
+                if (activeGeneration.current === generation) {
+                    activeGeneration.current++;
+                }
+            };
+        }
 
         const url = `${WS_BASE}/ws/${sessionId}`;
-        const socket = new WebSocket(url);
-        ws.current = socket;
+        const isActiveSession = () => {
+            if (!isMounted.current || activeGeneration.current !== generation) {
+                return false;
+            }
+            if (requestedSessionId.current !== sessionId) {
+                return false;
+            }
+            const currentStoreSessionId = getStore().currentSession?.id ?? null;
+            return currentStoreSessionId === sessionId;
+        };
+        const isCurrentConnection = (sock?: WebSocket | null) =>
+            isActiveSession() &&
+            (!sock || ws.current === sock);
 
         const scheduleReconnect = () => {
-            if (!isMounted.current) return;
+            if (!isCurrentConnection()) return;
             const delay =
                 RECONNECT_DELAYS[
                     Math.min(reconnectAttempt.current, RECONNECT_DELAYS.length - 1)
                 ];
             reconnectAttempt.current++;
+            clearReconnectTimer();
             reconnectTimer.current = setTimeout(() => {
-                if (isMounted.current && sessionId) {
+                if (isCurrentConnection()) {
                     const newSocket = new WebSocket(url);
                     ws.current = newSocket;
                     setupSocket(newSocket);
@@ -77,22 +138,32 @@ export function useDebateWebSocket(sessionId: string | null) {
 
         const setupSocket = (sock: WebSocket) => {
             sock.onopen = () => {
-                if (!isMounted.current) return;
+                if (!isCurrentConnection(sock)) return;
                 reconnectAttempt.current = 0;
                 getStore().setConnected(true);
-                if (pingTimer.current) clearInterval(pingTimer.current);
-                pingTimer.current = setInterval(() => {
+                clearPingTimer();
+                const pingInterval = setInterval(() => {
+                    if (!isCurrentConnection(sock)) {
+                        clearInterval(pingInterval);
+                        if (pingTimer.current === pingInterval) {
+                            pingTimer.current = null;
+                        }
+                        return;
+                    }
                     if (sock.readyState === WebSocket.OPEN) {
                         sock.send(JSON.stringify({ action: 'ping' }));
-                    } else if (pingTimer.current) {
-                        clearInterval(pingTimer.current);
-                        pingTimer.current = null;
+                    } else {
+                        clearInterval(pingInterval);
+                        if (pingTimer.current === pingInterval) {
+                            pingTimer.current = null;
+                        }
                     }
                 }, 20000);
+                pingTimer.current = pingInterval;
             };
 
             sock.onmessage = (evt) => {
-                if (!isMounted.current) return;
+                if (!isCurrentConnection(sock)) return;
                 try {
                     const parsed = JSON.parse(evt.data);
                     const event = normalizeRuntimeEvent(parsed);
@@ -113,7 +184,11 @@ export function useDebateWebSocket(sessionId: string | null) {
             };
 
             sock.onclose = () => {
-                if (!isMounted.current) return;
+                if (!isCurrentConnection(sock)) return;
+                if (ws.current === sock) {
+                    ws.current = null;
+                }
+                clearPingTimer();
                 getStore().setConnected(false);
                 scheduleReconnect();
             };
@@ -123,13 +198,20 @@ export function useDebateWebSocket(sessionId: string | null) {
             };
         };
 
+        const socket = new WebSocket(url);
+        ws.current = socket;
         setupSocket(socket);
 
         return () => {
-            isMounted.current = false;
-            if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-            if (pingTimer.current) clearInterval(pingTimer.current);
-            ws.current?.close();
+            if (activeGeneration.current === generation) {
+                activeGeneration.current++;
+            }
+            clearReconnectTimer();
+            clearPingTimer();
+            const activeSocket = ws.current;
+            ws.current = null;
+            activeSocket?.close();
+            reconnectAttempt.current = 0;
             getStore().setConnected(false);
         };
     }, [sessionId]);
@@ -137,13 +219,14 @@ export function useDebateWebSocket(sessionId: string | null) {
     const startDebate = useCallback(
         async (topic: string, participants: string[], maxTurns: number) => {
             const store = getStore();
+            const previousSession = store.currentSession;
             store.exitReplay();
             store.setFocusedRuntimeEventId(null);
-            if (store.currentSession) {
+            if (previousSession) {
                 store.setCurrentSession({
-                    ...store.currentSession,
+                    ...previousSession,
                     topic,
-                    participants: participants.length ? participants : store.currentSession.participants,
+                    participants: participants.length ? participants : previousSession.participants,
                     max_turns: maxTurns,
                     status: 'in_progress',
                 });
@@ -163,6 +246,10 @@ export function useDebateWebSocket(sessionId: string | null) {
             } catch (err) {
                 // REST API reported detailed error — update store and emit error
                 const errorMessage = err instanceof Error ? err.message : 'Failed to start debate';
+                const activeStore = getStore();
+                if (previousSession && activeStore.currentSession?.id === previousSession.id) {
+                    activeStore.setCurrentSession(previousSession);
+                }
                 store.setPhase('error', errorMessage);
                 store.setDebating(false);
             }
@@ -177,7 +264,13 @@ export function useDebateWebSocket(sessionId: string | null) {
                 await api.sessions.stopDebate(sessionId);
             } catch {
                 // Fallback to WebSocket stop
-                ws.current?.send(JSON.stringify({ action: 'stop' }));
+                if (ws.current?.readyState === WebSocket.OPEN) {
+                    try {
+                        ws.current.send(JSON.stringify({ action: 'stop' }));
+                    } catch {
+                        // Ignore transport errors here and still reset local UI state.
+                    }
+                }
             }
         }
         getStore().setDebating(false);

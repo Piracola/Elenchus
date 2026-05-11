@@ -36,12 +36,23 @@ export interface ModeArtifact {
     created_at?: string;
 }
 
+export interface UnsupportedRequestParametersNotice {
+    provider: string;
+    unsupported_parameters: string[];
+    message: string;
+}
+
+export interface DialogueEntryMetadata {
+    unsupported_request_parameters?: UnsupportedRequestParametersNotice;
+}
+
 export interface DialogueEntry {
     role: string;
     agent_name: string;
     content: string;
     citations: string[];
     timestamp: string;
+    metadata?: DialogueEntryMetadata;
     event_id?: string;
     turn?: number;
     source_turn?: number;

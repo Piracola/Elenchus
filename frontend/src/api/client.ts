@@ -30,6 +30,23 @@ import type {
 const BASE = import.meta.env.VITE_API_URL || '/api';
 const INVALID_FILENAME_CHARACTERS = new Set(['<', '>', ':', '"', '/', '\\', '|', '?', '*']);
 
+function getApiBase(): string {
+    if (/^https?:\/\//i.test(BASE)) {
+        return BASE.replace(/\/+$/, '');
+    }
+
+    if (typeof window !== 'undefined' && window.location?.origin) {
+        return new URL(BASE, window.location.origin).toString().replace(/\/+$/, '');
+    }
+
+    return BASE.replace(/\/+$/, '');
+}
+
+function buildApiUrl(path: string): string {
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    return `${getApiBase()}${normalizedPath}`;
+}
+
 async function readErrorMessage(res: Response): Promise<string> {
     const text = await res.text();
     let message = `API ${res.status}`;
@@ -95,7 +112,7 @@ async function requestWithParser<T>(
     parser: (res: Response) => Promise<T>,
     init?: RequestInit,
 ): Promise<T> {
-    const res = await fetch(`${BASE}${path}`, {
+    const res = await fetch(buildApiUrl(path), {
         credentials: 'include',
         ...init,
         headers: {
@@ -121,7 +138,7 @@ async function requestText(path: string, init?: RequestInit): Promise<string> {
 }
 
 async function download(path: string, fallbackFilename: string): Promise<void> {
-    const res = await fetch(`${BASE}${path}`, { credentials: 'include' });
+    const res = await fetch(buildApiUrl(path), { credentials: 'include' });
     if (!res.ok) {
         throw new Error(await readErrorMessage(res));
     }
@@ -161,7 +178,7 @@ export const api = {
             const body = new FormData();
             body.append('file', file);
 
-            const res = await fetch(`${BASE}/sessions/${id}/documents`, {
+            const res = await fetch(buildApiUrl(`/sessions/${id}/documents`), {
                 method: 'POST',
                 credentials: 'include',
                 body,

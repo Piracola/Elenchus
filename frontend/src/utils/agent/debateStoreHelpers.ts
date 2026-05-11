@@ -50,9 +50,50 @@ function sameCitations(a: string[] = [], b: string[] = []): boolean {
     return a.every((item, index) => item === b[index]);
 }
 
+export function normalizeDialogueEntryMetadata(
+    metadata: DialogueEntry['metadata'] | null | undefined,
+): DialogueEntry['metadata'] | undefined {
+    if (!metadata || typeof metadata !== 'object') {
+        return undefined;
+    }
+
+    const repaired = repairTextTree(metadata) as Record<string, unknown>;
+    const unsupportedRaw = repaired.unsupported_request_parameters;
+    if (!unsupportedRaw || typeof unsupportedRaw !== 'object') {
+        return undefined;
+    }
+
+    const provider = repairKnownMojibakeText(
+        typeof unsupportedRaw.provider === 'string' ? unsupportedRaw.provider : '',
+    );
+    const unsupportedParameters = Array.isArray(unsupportedRaw.unsupported_parameters)
+        ? unsupportedRaw.unsupported_parameters
+            .filter((item): item is string => typeof item === 'string')
+            .map((item) => repairKnownMojibakeText(item))
+            .filter(Boolean)
+        : [];
+    const message = repairKnownMojibakeText(
+        typeof unsupportedRaw.message === 'string' ? unsupportedRaw.message : '',
+    );
+
+    if (!provider && unsupportedParameters.length === 0 && !message) {
+        return undefined;
+    }
+
+    return {
+        unsupported_request_parameters: {
+            provider,
+            unsupported_parameters: unsupportedParameters,
+            message,
+        },
+    };
+}
+
 function sameDialogueContent(a: DialogueEntry, b: DialogueEntry): boolean {
     const aScores = JSON.stringify(a.scores ?? null);
     const bScores = JSON.stringify(b.scores ?? null);
+    const aMetadata = JSON.stringify(normalizeDialogueEntryMetadata(a.metadata) ?? null);
+    const bMetadata = JSON.stringify(normalizeDialogueEntryMetadata(b.metadata) ?? null);
     return (
         a.role === b.role &&
         (a.turn ?? -1) === (b.turn ?? -1) &&
@@ -68,7 +109,8 @@ function sameDialogueContent(a: DialogueEntry, b: DialogueEntry): boolean {
         a.agent_name === b.agent_name &&
         a.content === b.content &&
         sameCitations(a.citations, b.citations) &&
-        aScores === bScores
+        aScores === bScores &&
+        aMetadata === bMetadata
     );
 }
 
@@ -130,6 +172,7 @@ export function sanitizeDialogueEntry(entry: DialogueEntry): DialogueEntry {
         ...entry,
         content: sanitizeIncomingContent(entry.content),
         agent_name: repairKnownMojibakeText(entry.agent_name),
+        metadata: normalizeDialogueEntryMetadata(entry.metadata),
     };
 }
 

@@ -22,6 +22,31 @@ import {
 } from './messageRow/shared';
 import { ThinkingBlock } from './messageRow/ThinkingBlock';
 
+function renderUnsupportedParamsNotice(entry?: DialogueEntry | null) {
+    const message = entry?.metadata?.unsupported_request_parameters?.message;
+    if (!message) {
+        return null;
+    }
+
+    return (
+        <div
+            style={{
+                marginBottom: '12px',
+                padding: '10px 12px',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid rgba(217, 119, 6, 0.28)',
+                background: 'rgba(245, 158, 11, 0.12)',
+                color: '#92400e',
+                fontSize: '12px',
+                lineHeight: 1.55,
+            }}
+        >
+            <strong style={{ fontWeight: 700 }}>参数提示：</strong>
+            {message}
+        </div>
+    );
+}
+
 export interface MessageRowProps {
     agentEntry?: DialogueEntry | null;
     judgeEntry?: DialogueEntry | null;
@@ -238,6 +263,7 @@ function MessageRow({
 
             {/* 消息内容 */}
             <div>
+                {renderUnsupportedParamsNotice(agentEntry)}
                 {agentCollapsed ? (
                     <div data-agent-content="collapsed" style={{
                         color: 'var(--text-secondary)',

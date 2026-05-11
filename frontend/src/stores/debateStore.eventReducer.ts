@@ -12,6 +12,7 @@ import {
     getPayloadNumber,
     getPayloadString,
     MAX_RUNTIME_EVENTS,
+    normalizeDialogueEntryMetadata,
     sanitizeIncomingContent,
     sanitizeRuntimeEvent,
     shouldRecordRuntimeEvent,
@@ -31,13 +32,11 @@ function createRecordedRuntimePatch(
         return patch;
     }
 
-    // Push instead of spread-copy to avoid O(n) array duplication
-    const runtimeEvents = state.runtimeEvents;
-    runtimeEvents.push(event);
-    const didTrim = runtimeEvents.length > MAX_RUNTIME_EVENTS;
+    const nextRuntimeEvents = state.runtimeEvents.concat(event);
+    const didTrim = nextRuntimeEvents.length > MAX_RUNTIME_EVENTS;
     const trimmedEvents = didTrim
-        ? runtimeEvents.slice(-MAX_RUNTIME_EVENTS)
-        : runtimeEvents;
+        ? nextRuntimeEvents.slice(-MAX_RUNTIME_EVENTS)
+        : nextRuntimeEvents;
     const nextReplayCursor = state.replayEnabled
         ? clampReplayCursor(state.replayCursor, trimmedEvents.length)
         : clampReplayCursor(trimmedEvents.length - 1, trimmedEvents.length);
@@ -65,6 +64,13 @@ function createRecordedRuntimePatch(
     }
 
     return patch;
+}
+
+function cloneNestedValue<T>(value: T): T {
+    if (typeof structuredClone === 'function') {
+        return structuredClone(value);
+    }
+    return JSON.parse(JSON.stringify(value)) as T;
 }
 
 // ── Event handler map (strategy pattern) ────────────────────────
@@ -181,7 +187,7 @@ function handleSpeechToken(
     state: DebateState,
     payload: Record<string, unknown>,
 ): Partial<DebateState> {
-    const token = getPayloadString(payload, 'token') ?? '';
+    const token = sanitizeIncomingContent(getPayloadString(payload, 'token')) ?? '';
     return token ? { streamingContent: state.streamingContent + token } : {};
 }
 
@@ -202,6 +208,11 @@ function handleSpeechEnd(
         agent_name: getPayloadString(payload, 'agent_name') ?? getPayloadString(payload, 'role') ?? '',
         content: sanitizeIncomingContent(getPayloadString(payload, 'content')),
         citations: getPayloadCitations(payload),
+        metadata: normalizeDialogueEntryMetadata(
+            typeof payload.metadata === 'object' && payload.metadata !== null
+                ? (payload.metadata as DialogueEntry['metadata'])
+                : undefined,
+        ),
         timestamp: event.timestamp || new Date().toISOString(),
         event_id: event.event_id,
         turn: getPayloadNumber(payload, 'turn'),
@@ -247,13 +258,13 @@ function handleSophistryReport(
             entry,
         ),
         mode_artifacts: artifact
-            ? appendModeArtifact(state.currentSession.mode_artifacts ?? [], artifact)
+            ? appendModeArtifact(state.currentSession.mode_artifacts ?? [], cloneNestedValue(artifact))
             : (state.currentSession.mode_artifacts ?? []),
         current_mode_report: event.type === 'sophistry_round_report'
-            ? (artifact ?? state.currentSession.current_mode_report ?? null)
+            ? (artifact ? cloneNestedValue(artifact) : state.currentSession.current_mode_report ?? null)
             : (state.currentSession.current_mode_report ?? null),
         final_mode_report: event.type === 'sophistry_final_report'
-            ? (artifact ?? state.currentSession.final_mode_report ?? null)
+            ? (artifact ? cloneNestedValue(artifact) : state.currentSession.final_mode_report ?? null)
             : (state.currentSession.final_mode_report ?? null),
     };
     return patch;
@@ -317,7 +328,7 @@ function handleJudgeScore(
             ...state.currentSession,
             current_scores: {
                 ...state.currentSession.current_scores,
-                [role]: scores,
+                [role]: cloneNestedValue(scores),
             },
             dialogue_history: appendDialogueWithDedupe(
                 state.currentSession.dialogue_history,
@@ -341,7 +352,7 @@ function handleTurnComplete(
             current_turn: turn ?? state.currentSession.current_turn,
             cumulative_scores:
                 typeof cumulativeRaw === 'object' && cumulativeRaw !== null
-                    ? (cumulativeRaw as Record<string, Record<string, number[]>>)
+                    ? cloneNestedValue(cumulativeRaw as Record<string, Record<string, number[]>>)
                     : state.currentSession.cumulative_scores,
         },
     };
@@ -367,11 +378,11 @@ function handleDebateComplete(
             current_turn: totalTurns,
             cumulative_scores:
                 typeof finalScoresRaw === 'object' && finalScoresRaw !== null
-                    ? (finalScoresRaw as Record<string, Record<string, number[]>>)
+                    ? cloneNestedValue(finalScoresRaw as Record<string, Record<string, number[]>>)
                     : state.currentSession.cumulative_scores,
             final_mode_report:
                 typeof finalReportRaw === 'object' && finalReportRaw !== null
-                    ? (finalReportRaw as Record<string, unknown>)
+                    ? cloneNestedValue(finalReportRaw as Record<string, unknown>)
                     : (state.currentSession.final_mode_report ?? null),
         },
     };

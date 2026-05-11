@@ -477,7 +477,7 @@ describe('debateStore replay state', () => {
         expect(state.visibleRuntimeEvents.map((event) => event.type)).toEqual(['speech_start', 'speech_cancel']);
     });
 
-    it('keeps speech tokens out of runtime history without mutating visible dialogue state', () => {
+    it('keeps speech tokens out of runtime history while preserving live streaming content', () => {
         const store = useDebateStore.getState();
 
         store.applyRuntimeEvent(
@@ -501,7 +501,7 @@ describe('debateStore replay state', () => {
 
         const state = useDebateStore.getState();
         expect(state.streamingRole).toBe('proposer');
-        expect(state.streamingContent).toBe('');
+        expect(state.streamingContent).toBe('partial');
         expect(state.currentSession?.dialogue_history).toEqual([]);
         expect(state.runtimeEvents.map((event) => event.type)).toEqual(['speech_start']);
         expect(state.visibleRuntimeEvents.map((event) => event.type)).toEqual(['speech_start']);
@@ -529,6 +529,7 @@ describe('debateStore replay state', () => {
                 payload: { token: 'partial' },
             }),
         );
+        const beforeEnd = useDebateStore.getState();
         store.applyRuntimeEvent(
             makeRuntimeEvent({
                 event_id: 'evt_stream_end',
@@ -546,6 +547,8 @@ describe('debateStore replay state', () => {
         );
 
         const state = useDebateStore.getState();
+        expect(state.runtimeEvents).not.toBe(beforeEnd.runtimeEvents);
+        expect(state.visibleRuntimeEvents).not.toBe(beforeEnd.visibleRuntimeEvents);
         expect(state.streamingRole).toBe('');
         expect(state.streamingContent).toBe('');
         expect(state.currentSession?.dialogue_history).toHaveLength(1);
@@ -560,6 +563,182 @@ describe('debateStore replay state', () => {
         expect(state.runtimeEvents.map((event) => event.type)).toEqual(['speech_start', 'speech_end']);
         expect(state.visibleRuntimeEvents.map((event) => event.type)).toEqual(['speech_start', 'speech_end']);
         expect(state.lastEventSeq).toBe(3);
+    });
+
+    it('does not duplicate a restored speech entry when a replayed speech_end carries empty metadata', () => {
+        const store = useDebateStore.getState();
+        store.setCurrentSession({
+            ...makeSession(),
+            dialogue_history: [
+                {
+                    role: 'proposer',
+                    agent_name: '正方',
+                    content: 'complete speech',
+                    citations: ['source-1'],
+                    timestamp: '2026-03-17T00:00:01+00:00',
+                    turn: 0,
+                },
+            ],
+        });
+
+        store.applyRuntimeEvent(
+            makeRuntimeEvent({
+                event_id: 'evt_stream_end_dedupe',
+                session_id: 'session_1',
+                seq: 3,
+                type: 'speech_end',
+                payload: {
+                    role: 'proposer',
+                    agent_name: '正方',
+                    content: 'complete speech',
+                    citations: ['source-1'],
+                    metadata: {},
+                    turn: 0,
+                },
+            }),
+        );
+
+        const state = useDebateStore.getState();
+        expect(state.currentSession?.dialogue_history).toHaveLength(1);
+        expect(state.currentSession?.dialogue_history[0]?.metadata).toBeUndefined();
+    });
+
+    it('keeps speech_start visible while token updates stay invisible until speech_end finalizes the turn', () => {
+        const store = useDebateStore.getState();
+
+        store.applyRuntimeEvent(
+            makeRuntimeEvent({
+                event_id: 'evt_stream_start_visible',
+                session_id: 'session_1',
+                seq: 1,
+                type: 'speech_start',
+                payload: { role: 'opposer' },
+            }),
+        );
+        store.applyRuntimeEvent(
+            makeRuntimeEvent({
+                event_id: 'evt_stream_token_hidden',
+                session_id: 'session_1',
+                seq: 2,
+                type: 'speech_token',
+                payload: { token: 'still hidden' },
+            }),
+        );
+
+        let state = useDebateStore.getState();
+        expect(state.streamingRole).toBe('opposer');
+        expect(state.streamingContent).toBe('still hidden');
+        expect(state.runtimeEvents.map((event) => event.event_id)).toEqual(['evt_stream_start_visible']);
+        expect(state.visibleRuntimeEvents.map((event) => event.event_id)).toEqual(['evt_stream_start_visible']);
+        expect(state.currentSession?.dialogue_history).toEqual([]);
+
+        store.applyRuntimeEvent(
+            makeRuntimeEvent({
+                event_id: 'evt_stream_end_visible',
+                session_id: 'session_1',
+                seq: 3,
+                type: 'speech_end',
+                payload: {
+                    role: 'opposer',
+                    content: 'final visible speech',
+                },
+            }),
+        );
+
+        state = useDebateStore.getState();
+        expect(state.streamingRole).toBe('');
+        expect(state.streamingContent).toBe('');
+        expect(state.runtimeEvents.map((event) => event.event_id)).toEqual([
+            'evt_stream_start_visible',
+            'evt_stream_end_visible',
+        ]);
+        expect(state.visibleRuntimeEvents.map((event) => event.event_id)).toEqual([
+            'evt_stream_start_visible',
+            'evt_stream_end_visible',
+        ]);
+        expect(state.currentSession?.dialogue_history.at(-1)).toMatchObject({
+            role: 'opposer',
+            content: 'final visible speech',
+            event_id: 'evt_stream_end_visible',
+        });
+    });
+
+    it('does not mutate previously captured runtime event arrays when appending a new event', () => {
+        const store = useDebateStore.getState();
+
+        store.applyRuntimeEvent(
+            makeRuntimeEvent({
+                event_id: 'evt_before_1',
+                session_id: 'session_1',
+                seq: 1,
+                type: 'status',
+                payload: { content: 'first' },
+            }),
+        );
+
+        const beforeAppend = useDebateStore.getState();
+        const previousRuntimeEvents = beforeAppend.runtimeEvents;
+        const previousVisibleRuntimeEvents = beforeAppend.visibleRuntimeEvents;
+
+        store.applyRuntimeEvent(
+            makeRuntimeEvent({
+                event_id: 'evt_before_2',
+                session_id: 'session_1',
+                seq: 2,
+                type: 'status',
+                payload: { content: 'second' },
+            }),
+        );
+
+        const state = useDebateStore.getState();
+        expect(previousRuntimeEvents).toHaveLength(1);
+        expect(previousRuntimeEvents.map((event) => event.event_id)).toEqual(['evt_before_1']);
+        expect(previousVisibleRuntimeEvents).toHaveLength(1);
+        expect(previousVisibleRuntimeEvents.map((event) => event.event_id)).toEqual(['evt_before_1']);
+        expect(state.runtimeEvents).not.toBe(previousRuntimeEvents);
+        expect(state.visibleRuntimeEvents).not.toBe(previousVisibleRuntimeEvents);
+        expect(state.runtimeEvents.map((event) => event.event_id)).toEqual(['evt_before_1', 'evt_before_2']);
+        expect(state.visibleRuntimeEvents.map((event) => event.event_id)).toEqual(['evt_before_1', 'evt_before_2']);
+    });
+
+    it('copies nested runtime payload objects so later state changes do not alias older snapshots', () => {
+        const store = useDebateStore.getState();
+        const finalScores = {
+            proposer: {
+                logical_rigor: [8],
+            },
+        };
+
+        store.applyRuntimeEvent(
+            makeRuntimeEvent({
+                event_id: 'evt_nested_1',
+                session_id: 'session_1',
+                seq: 1,
+                type: 'turn_complete',
+                payload: {
+                    turn: 1,
+                    cumulative_scores: finalScores,
+                },
+            }),
+        );
+
+        const beforeMutation = useDebateStore.getState();
+        const previousScores = beforeMutation.currentSession?.cumulative_scores;
+        expect(previousScores).toEqual(finalScores);
+
+        finalScores.proposer.logical_rigor.push(9);
+
+        const afterMutation = useDebateStore.getState();
+        expect(previousScores).toEqual({
+            proposer: {
+                logical_rigor: [8],
+            },
+        });
+        expect(afterMutation.currentSession?.cumulative_scores).toEqual({
+            proposer: {
+                logical_rigor: [8],
+            },
+        });
     });
 
     it('filters speech tokens out when hydrating runtime history', () => {

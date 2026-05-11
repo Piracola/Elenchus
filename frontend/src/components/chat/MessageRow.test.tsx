@@ -95,4 +95,28 @@ describe('MessageRow', () => {
         expect(markup).toContain('Detected a false dichotomy.');
         expect(markup).not.toContain('裁判评分表');
     });
+
+    it('renders unsupported non-OpenAI parameter notices inline with the agent message', () => {
+        render(
+            <MessageRow
+                agentEntry={makeEntry({
+                    metadata: {
+                        unsupported_request_parameters: {
+                            provider: 'anthropic',
+                            unsupported_parameters: ['enable_thinking'],
+                            message:
+                                'anthropic provider ignored unsupported request parameters: enable_thinking',
+                        },
+                    },
+                })}
+            />,
+        );
+
+        expect(screen.getByText('参数提示：', { exact: false })).toBeInTheDocument();
+        expect(
+            screen.getByText(
+                'anthropic provider ignored unsupported request parameters: enable_thinking',
+            ),
+        ).toBeInTheDocument();
+    });
 });
