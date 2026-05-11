@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    AGENT_PERSONA_ROLES,
+    agentRoleSupportsPersona,
     buildAgentConfigsPayload,
     DEFAULT_AGENT_TEMPERATURE,
     parseAgentTemperatureInput,
@@ -114,5 +116,13 @@ describe('agentConfigs utils', () => {
         expect(payload?.opposer?.persona_id).toBe('persona-opposer');
         expect(payload?.judge?.persona_id).toBeUndefined();
         expect(payload?.fact_checker?.persona_id).toBeUndefined();
+    });
+
+    it('only marks proposer and opposer as persona-capable roles', () => {
+        expect(AGENT_PERSONA_ROLES).toEqual(['proposer', 'opposer']);
+        expect(agentRoleSupportsPersona('proposer')).toBe(true);
+        expect(agentRoleSupportsPersona('opposer')).toBe(true);
+        expect(agentRoleSupportsPersona('judge')).toBe(false);
+        expect(agentRoleSupportsPersona('fact_checker')).toBe(false);
     });
 });

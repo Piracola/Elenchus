@@ -2,6 +2,8 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { api } from '../api/client';
+import { toast } from '../utils/chat/toast';
 import HomeView from './HomeView';
 
 let animationFrameQueue: Array<{ id: number; callback: FrameRequestCallback }> = [];
@@ -12,6 +14,7 @@ const demoModeState = {
 };
 let mockOffsetTop = 240;
 let nowTime = 10_000;
+let createSessionMock: ReturnType<typeof vi.fn>;
 
 function flushAnimationFrames() {
     const queuedFrames = [...animationFrameQueue];
@@ -93,7 +96,7 @@ vi.mock('../hooks/useSessionCreate', () => ({
     useSessionCreate: () => ({
         isCreating: false,
         error: '',
-        createSession: vi.fn(),
+        createSession: createSessionMock,
         clearError: vi.fn(),
     }),
 }));
@@ -170,13 +173,17 @@ vi.mock('./home/HomeComposerCard', () => ({
         onTopicChange,
         onShowAdvancedChange,
         onDocumentsChange,
+        pendingDocuments,
         showAdvanced,
+        onCreateDebate,
     }: {
         topic: string;
         onTopicChange: (value: string) => void;
         onShowAdvancedChange: (value: boolean) => void;
         onDocumentsChange: (documents: Array<{ id: string; name: string; size: number; file: File }>) => void;
+        pendingDocuments: Array<{ id: string; name: string; size: number; file: File }>;
         showAdvanced: boolean;
+        onCreateDebate: () => void;
     }) => (
         <div>
             <input
@@ -196,10 +203,26 @@ vi.mock('./home/HomeComposerCard', () => ({
                         size: 12,
                         file: new File(['hello'], 'note.md', { type: 'text/markdown' }),
                     },
+                    {
+                        id: 'doc-2',
+                        name: 'failed.md',
+                        size: 18,
+                        file: new File(['fail'], 'failed.md', { type: 'text/markdown' }),
+                    },
                 ])}
             >
                 Add document
             </button>
+            <button
+                type="button"
+                onClick={onCreateDebate}
+            >
+                Create debate
+            </button>
+            <div data-testid="pending-document-count">{pendingDocuments.length}</div>
+            <div data-testid="pending-document-names">
+                {pendingDocuments.map((document) => document.name).join(',')}
+            </div>
         </div>
     ),
 }));
@@ -211,6 +234,7 @@ describe('HomeView auto scroll', () => {
         nextAnimationFrameId = 1;
         mockOffsetTop = 240;
         nowTime = 10_000;
+        createSessionMock = vi.fn().mockResolvedValue('session-created');
 
         Object.defineProperty(window, 'requestAnimationFrame', {
             configurable: true,
@@ -419,5 +443,45 @@ describe('HomeView auto scroll', () => {
         });
 
         expect(HTMLElement.prototype.scrollTo).not.toHaveBeenCalled();
+    });
+
+    it('keeps failed reference uploads pending after creating a debate', async () => {
+        const uploadDocumentMock = vi.mocked(api.sessions.uploadDocument);
+        uploadDocumentMock.mockImplementation(async (_sessionId, file) => {
+            if (file.name === 'failed.md') {
+                throw new Error('upload failed');
+            }
+        });
+
+        render(<HomeView isSidebarCollapsed={false} onExpandSidebar={() => {}} />);
+
+        fireEvent.change(screen.getByLabelText('topic'), {
+            target: { value: 'Topic with references' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Add document' }));
+
+        expect(uploadDocumentMock).not.toHaveBeenCalled();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Create debate' }));
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(createSessionMock).toHaveBeenCalledTimes(1);
+        expect(uploadDocumentMock).toHaveBeenCalledTimes(2);
+        expect(uploadDocumentMock).toHaveBeenNthCalledWith(
+            1,
+            'session-created',
+            expect.objectContaining({ name: 'note.md' }),
+        );
+        expect(uploadDocumentMock).toHaveBeenNthCalledWith(
+            2,
+            'session-created',
+            expect.objectContaining({ name: 'failed.md' }),
+        );
+        expect(vi.mocked(toast)).toHaveBeenCalledWith('成功上传 1 个参考资料，1 个失败', 'success');
+        expect(screen.getByTestId('pending-document-count')).toHaveTextContent('1');
+        expect(screen.getByTestId('pending-document-names')).toHaveTextContent('failed.md');
     });
 });

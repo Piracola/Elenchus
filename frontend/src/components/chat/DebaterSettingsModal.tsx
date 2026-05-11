@@ -1,7 +1,6 @@
 /**
- * DebaterSettingsModal - 辩论中查看模型设置的弹窗
- * 注意：运行中的辩论无法动态切换模型，此弹窗主要用于查看当前配置
- * 用户可以通过"管理配置"添加新配置，下次创建辩论时生效
+ * DebaterSettingsModal - 辩论中查看当前会话实际使用配置的弹窗
+ * 注意：运行中的辩论无法动态切换模型，此弹窗保持只读。
  */
 
 import { useEffect, useRef, useCallback } from 'react';
@@ -37,6 +36,7 @@ export default function DebaterSettingsModal({
         handlePersonaSelect,
         handleTemperatureChange,
         handleThinkingToggle,
+        reload,
         isLoading: agentConfigsLoading,
         error: agentConfigsError,
     } = useAgentConfigs();
@@ -157,14 +157,14 @@ export default function DebaterSettingsModal({
                                         fontWeight: 700,
                                         color: 'var(--text-primary)',
                                     }}>
-                                        辩手模型设置
+                                        本次会话模型配置
                                     </h2>
                                     <p style={{
                                         margin: 0,
                                         fontSize: '13px',
                                         color: 'var(--text-muted)',
                                     }}>
-                                        查看和管理各辩手的模型配置
+                                        查看当前会话实际使用的模型、人设与温度参数
                                     </p>
                                 </div>
                                 <motion.button
@@ -216,7 +216,7 @@ export default function DebaterSettingsModal({
                                             fontWeight: 600,
                                             color: '#f59e0b',
                                         }}>
-                                            当前辩论进行中
+                                            当前辩论参数不可在此处热更新
                                         </p>
                                         <p style={{
                                             margin: 0,
@@ -224,8 +224,7 @@ export default function DebaterSettingsModal({
                                             color: 'var(--text-secondary)',
                                             lineHeight: 1.6,
                                         }}>
-                                            此处修改的配置仅对<b>后续新生成</b>的辩手发言生效（如下一轮辩论）。
-                                            已生成的历史发言不会自动更改。如需完全应用新配置，建议停止当前辩论并创建新会话。
+                                            这里展示的是本次会话已经采用的参数快照。若要调整后续新会话的默认配置，请打开“管理配置”后返回首页重新创建辩论。
                                         </p>
                                     </div>
                                 </div>
@@ -270,7 +269,33 @@ export default function DebaterSettingsModal({
                                     handlePersonaSelect={handlePersonaSelect}
                                     handleTemperatureChange={handleTemperatureChange}
                                     handleThinkingToggle={handleThinkingToggle}
+                                    readOnly
+                                    manageButtonLabel="管理配置并刷新"
                                 />
+                                <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'flex-end',
+                                    gap: '8px',
+                                }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            void reload();
+                                        }}
+                                        style={{
+                                            border: '1px solid var(--border-subtle)',
+                                            background: 'var(--bg-card)',
+                                            color: 'var(--text-secondary)',
+                                            borderRadius: 'var(--radius-md)',
+                                            padding: '8px 12px',
+                                            cursor: 'pointer',
+                                            fontSize: '12px',
+                                            fontWeight: 600,
+                                        }}
+                                    >
+                                        重新读取当前配置
+                                    </button>
+                                </div>
                             </div>
                         </motion.div>
                     </motion.div>

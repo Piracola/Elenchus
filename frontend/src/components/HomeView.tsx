@@ -214,6 +214,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
             if (sessionId && pendingDocuments.length > 0) {
                 let successCount = 0;
                 let failCount = 0;
+                const failedDocuments: PendingReferenceDocument[] = [];
                 
                 for (const doc of pendingDocuments) {
                     try {
@@ -222,6 +223,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                     } catch (error) {
                         console.error(`上传参考资料失败: ${doc.name}`, error);
                         failCount++;
+                        failedDocuments.push(doc);
                     }
                 }
                 
@@ -229,11 +231,10 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                     toast(`成功上传 ${successCount} 个参考资料${failCount > 0 ? `，${failCount} 个失败` : ''}`, 
                         'success');
                 } else if (failCount > 0) {
-                    toast('参考资料上传失败，但辩论已创建', 'error');
+                    toast('参考资料上传失败，但辩论已创建；失败文件已保留，可直接重试', 'error');
                 }
                 
-                // 清空待上传文档列表
-                setPendingDocuments([]);
+                setPendingDocuments(failedDocuments);
             }
         } catch (error) {
             console.error('创建辩论失败:', error);

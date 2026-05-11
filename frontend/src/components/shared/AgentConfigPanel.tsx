@@ -11,6 +11,7 @@ import type { AgentPersonaSummary, ModelConfig } from '../../types';
 import {
     AGENT_ROLES,
     DEFAULT_AGENT_TEMPERATURE,
+    agentRoleSupportsPersona,
     type AgentRole,
 } from '../../utils/agent/agentConfigs';
 
@@ -43,6 +44,8 @@ interface AgentConfigPanelProps {
     handlePersonaSelect?: (agent: AgentRole, value: string) => void;
     handleTemperatureChange: (agent: AgentRole, value: string) => void;
     handleThinkingToggle?: (agent: AgentRole, value: boolean) => void;
+    readOnly?: boolean;
+    manageButtonLabel?: string;
 }
 
 export default function AgentConfigPanel({
@@ -50,6 +53,8 @@ export default function AgentConfigPanel({
     temperatureInputs,
     enableThinking,
     showConfigManager, setShowConfigManager, handleConfigSelect, handlePersonaSelect, handleTemperatureChange, handleThinkingToggle,
+    readOnly = false,
+    manageButtonLabel = '管理配置',
 }: AgentConfigPanelProps) {
 
     const buildOptions = () => {
@@ -120,7 +125,7 @@ export default function AgentConfigPanel({
                             fontWeight: 500,
                         }}
                     >
-                        管理配置
+                        {manageButtonLabel}
                     </button>
                 </div>
                 <div className="agent-config-panel__grid">
@@ -153,14 +158,16 @@ export default function AgentConfigPanel({
                                 onChange={(value) => handleConfigSelect(agent, value)}
                                 size="sm"
                                 width="100%"
+                                disabled={readOnly}
                             />
-                            {handlePersonaSelect && (
+                            {handlePersonaSelect && agentRoleSupportsPersona(agent) && (
                                 <CustomSelect
                                     value={selectedPersonaIds?.[agent] ?? ''}
                                     options={buildPersonaOptions(agent)}
                                     onChange={(value) => handlePersonaSelect(agent, value)}
                                     size="sm"
                                     width="100%"
+                                    disabled={readOnly}
                                 />
                             )}
                             <div style={{
@@ -204,16 +211,18 @@ export default function AgentConfigPanel({
                                         min={0}
                                         max={2}
                                         step={0.1}
+                                        disabled={readOnly}
                                         style={{
                                             width: '100%',
                                             minWidth: 0,
                                             padding: '8px 0',
                                             border: 'none',
                                             background: 'transparent',
-                                            color: 'var(--text-primary)',
+                                            color: readOnly ? 'var(--text-secondary)' : 'var(--text-primary)',
                                             fontSize: '12px',
                                             outline: 'none',
                                             boxSizing: 'border-box',
+                                            cursor: readOnly ? 'not-allowed' : 'text',
                                         }}
                                     />
                                 </div>
@@ -234,10 +243,11 @@ export default function AgentConfigPanel({
                                             color: (enableThinking?.[agent] ?? false)
                                                 ? 'var(--accent-indigo)'
                                                 : 'var(--text-secondary)',
-                                            cursor: 'pointer',
+                                            cursor: readOnly ? 'not-allowed' : 'pointer',
                                             fontWeight: 500,
                                             fontSize: '11px',
                                             whiteSpace: 'nowrap',
+                                            opacity: readOnly ? 0.7 : 1,
                                         }}
                                     >
                                         <input
@@ -245,6 +255,7 @@ export default function AgentConfigPanel({
                                             id={`thinking-${agent}`}
                                             checked={enableThinking?.[agent] ?? false}
                                             onChange={(event) => handleThinkingToggle(agent, event.target.checked)}
+                                            disabled={readOnly}
                                             style={{ cursor: 'pointer', width: '14px', height: '14px', margin: 0 }}
                                         />
                                         <Brain size={12} />
@@ -261,7 +272,9 @@ export default function AgentConfigPanel({
                     color: 'var(--text-muted)',
                     lineHeight: 1.6,
                 }}>
-                    Temperature 范围为 0-2。留空时使用默认值（{DEFAULT_AGENT_TEMPERATURE}）。人设文件位于 `runtime/agent_personas`。
+                    {readOnly
+                        ? '当前面板为只读视图，用于核对本次会话实际使用的参数。'
+                        : `Temperature 范围为 0-2。留空时使用默认值（${DEFAULT_AGENT_TEMPERATURE}）。人设文件位于 runtime/agent_personas。`}
                 </div>
             </motion.div>
             <SettingsPanel

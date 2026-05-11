@@ -226,6 +226,24 @@ export default function ExecutionTimeline({
         }
     };
 
+    useEffect(() => {
+        if (!isDraggingSlider) {
+            return;
+        }
+
+        const handleWindowPointerRelease = () => {
+            handleSliderDragEnd();
+        };
+
+        window.addEventListener('pointerup', handleWindowPointerRelease);
+        window.addEventListener('pointercancel', handleWindowPointerRelease);
+
+        return () => {
+            window.removeEventListener('pointerup', handleWindowPointerRelease);
+            window.removeEventListener('pointercancel', handleWindowPointerRelease);
+        };
+    }, [isDraggingSlider, replayCursor, replayEnabled, runtimeEvents]);
+
     const replayProgress = replayEnabled
         ? `回放 ${Math.max(0, replayCursor + 1)} / ${runtimeEvents.length}`
         : `实时 ${runtimeEvents.length}`;
