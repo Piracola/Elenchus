@@ -10,12 +10,20 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from app.audit import log_audit
+from app.config import get_settings
 from app.dependencies import get_debate_runtime_service
 from app.middleware.auth import require_auth
+from app.middleware.demo_guard import (
+    DEMO_MODE_ADMIN_REQUIRED_MESSAGE,
+    extract_admin_token_from_request,
+    get_demo_http_capability,
+    is_demo_guest_capability,
+)
+from app.middleware.admin_auth import is_valid_admin_token
 from app.models.schemas import SessionResponse
 from app.runtime.service import DebateRuntimeService
 from app.services import session_service
@@ -23,6 +31,32 @@ from app.services import session_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sessions", tags=["session-control"])
+
+
+def require_demo_admin(request: Request, capability: str) -> bool:
+    """
+    Enforce demo-mode admin access when a capability is not guest-accessible.
+
+    This keeps the demo-mode guest/admin policy co-located with the shared
+    capability table while still letting auth middleware/dependencies apply
+    additional restrictions when configured.
+    """
+    settings = get_settings()
+    if not settings.demo.enabled:
+        return True
+    token = extract_admin_token_from_request(request)
+    if token and is_valid_admin_token(token):
+        return True
+    if is_demo_guest_capability(capability):
+        return True
+    raise HTTPException(status_code=403, detail=DEMO_MODE_ADMIN_REQUIRED_MESSAGE)
+
+
+def require_demo_http_capability(request: Request) -> bool:
+    capability = get_demo_http_capability(request.url.path, request.method)
+    if capability is None:
+        return True
+    return require_demo_admin(request, capability)
 
 
 class InterventionRequest(BaseModel):
@@ -49,7 +83,7 @@ class SessionStartResponse(BaseModel):
     success: bool
     session_id: str
     message: str
-    session: SessionResponse | None = None
+    session: dict[str, Any] | None = None
 
 
 class SessionStopResponse(BaseModel):
@@ -93,6 +127,7 @@ class LiveEventsResponse(BaseModel):
 async def start_debate_session(
     session_id: str,
     runtime_service: DebateRuntimeService = Depends(get_debate_runtime_service),
+    _demo: bool = Depends(require_demo_http_capability),
     _auth: bool = Depends(require_auth),
 ):
     """
@@ -117,7 +152,7 @@ async def start_debate_session(
         success=True,
         session_id=session_id,
         message="Debate session started successfully",
-        session=SessionResponse(**session_data),
+        session=session_data,
     )
 
 
@@ -125,6 +160,7 @@ async def start_debate_session(
 async def stop_debate_session(
     session_id: str,
     runtime_service: DebateRuntimeService = Depends(get_debate_runtime_service),
+    _demo: bool = Depends(require_demo_http_capability),
     _auth: bool = Depends(require_auth),
 ):
     """
@@ -155,6 +191,7 @@ async def intervene_in_debate(
     session_id: str,
     request: InterventionRequest,
     runtime_service: DebateRuntimeService = Depends(get_debate_runtime_service),
+    _demo: bool = Depends(require_demo_http_capability),
     _auth: bool = Depends(require_auth),
 ):
     """
@@ -187,6 +224,7 @@ async def intervene_in_debate(
 async def get_debate_status(
     session_id: str,
     runtime_service: DebateRuntimeService = Depends(get_debate_runtime_service),
+    _demo: bool = Depends(require_demo_http_capability),
 ):
     """
     Get the current status of a debate session.
@@ -215,6 +253,7 @@ async def get_live_events(
     session_id: str,
     after_seq: int = Query(default=0, ge=0, description="Return events with seq > this value"),
     limit: int = Query(default=50, ge=1, le=200, description="Maximum events to return"),
+    _demo: bool = Depends(require_demo_http_capability),
 ):
     """
     Poll for new runtime events from a debate session.

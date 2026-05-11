@@ -65,6 +65,7 @@ def _default_config() -> dict[str, Any]:
             "port": 8001,
             "debug": False,
             "cors_origins": list(_DEFAULT_CORS_ORIGINS),
+            "database_url": _normalize_database_url("", runtime_root=runtime_root),
         },
         "auth": {
             "enabled": False,
@@ -96,6 +97,10 @@ def _default_config() -> dict[str, Any]:
             "level": "INFO",
             "log_dir": "logs",
             "backup_count": 7,
+        },
+        "rate_limit": {
+            "backend": "auto",
+            "fallback_to_memory": True,
         },
     }
 
@@ -168,6 +173,10 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
         "port": int(server.get("port") or base["server"]["port"]),
         "debug": bool(server.get("debug", base["server"]["debug"])),
         "cors_origins": _normalize_string_list(server.get("cors_origins"), base["server"]["cors_origins"]),
+        "database_url": _normalize_database_url(
+            str(server.get("database_url") or ""),
+            runtime_root=runtime_root,
+        ),
     })
 
     auth = incoming.get("auth") if isinstance(incoming.get("auth"), dict) else {}
@@ -219,6 +228,17 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
         "level": str(logging.get("level") or base["logging"]["level"]).upper(),
         "log_dir": str(logging.get("log_dir") or base["logging"]["log_dir"]),
         "backup_count": int(logging.get("backup_count") or base["logging"]["backup_count"]),
+    }
+
+    rate_limit = incoming.get("rate_limit") if isinstance(incoming.get("rate_limit"), dict) else {}
+    backend = str(rate_limit.get("backend") or base["rate_limit"]["backend"]).strip().lower()
+    if backend not in {"auto", "memory", "sqlite"}:
+        backend = base["rate_limit"]["backend"]
+    base["rate_limit"] = {
+        "backend": backend,
+        "fallback_to_memory": bool(
+            rate_limit.get("fallback_to_memory", base["rate_limit"]["fallback_to_memory"])
+        ),
     }
 
     # Preserve demo section (demo mode config)

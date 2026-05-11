@@ -14,7 +14,14 @@ from app.dependencies import (
     get_runtime_bus,
 )
 from app.middleware.admin_auth import is_valid_admin_token
-from app.middleware.rate_limit import check_rate_limit
+from app.middleware.demo_guard import (
+    DEMO_MODE_ADMIN_REQUIRED_MESSAGE,
+    extract_admin_token_from_request,
+    extract_bearer_token,
+    get_demo_websocket_action_capability,
+    is_demo_guest_capability,
+)
+from app.middleware.rate_limit import consume_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -41,54 +48,71 @@ async def _send_error_event(
     session_id: str,
     websocket: WebSocket,
     content: str,
+    *,
+    rate_limit: dict[str, int] | None = None,
 ) -> bool:
     """Create and send an error event; return True if send succeeded."""
+    payload = {"content": content}
+    if rate_limit is not None:
+        payload["rate_limit"] = rate_limit
     event = await runtime_bus.create_event(
         session_id=session_id,
         event_type="error",
-        payload={"content": content},
+        payload=payload,
         source="ws.gateway",
         phase="error",
     )
     return await runtime_bus.send(session_id, websocket, event)
 
 
-@router.websocket("/ws/{session_id}")
 def _get_ws_token(websocket: WebSocket) -> str | None:
     """Extract auth token from WebSocket query params or headers."""
-    token = websocket.query_params.get("token")
+    token = websocket.query_params.get("token") or websocket.query_params.get("admin_token")
     if token:
         return token
     auth_header = websocket.headers.get("authorization", "")
-    if auth_header.startswith("Bearer "):
-        return auth_header[7:].strip()
-    return None
+    extracted = extract_bearer_token(auth_header)
+    if extracted:
+        return extracted
+    return extract_admin_token_from_request(websocket)
 
 
+@router.websocket("/ws/{session_id}")
 async def debate_ws(websocket: WebSocket, session_id: str):
     """Connect to a debate session and stream debate events in real time."""
     runtime_bus = get_runtime_bus()
     runtime_service = get_debate_runtime_service()
+    settings = get_settings()
 
     if not _SESSION_ID_RE.match(session_id):
         await websocket.accept()
         await websocket.close(code=4001, reason="Invalid session_id format")
         return
 
-    # Auth check when global auth is enabled
-    settings = get_settings()
-    if settings.auth.enabled:
-        token = _get_ws_token(websocket)
-        if not token or not is_valid_admin_token(token):
-            await websocket.accept()
-            await websocket.close(code=4003, reason="Authentication required")
-            return
+    token = _get_ws_token(websocket)
+    is_admin = bool(token and is_valid_admin_token(token))
+
+    # Demo mode has an explicit guest/admin access table for websocket usage.
+    if settings.demo.enabled and not (is_admin or is_demo_guest_capability("websocket.connect")):
+        await websocket.accept()
+        await websocket.close(code=4003, reason=DEMO_MODE_ADMIN_REQUIRED_MESSAGE)
+        return
+
+    # Global auth remains an additional tightening layer when enabled.
+    if settings.auth.enabled and not is_admin:
+        await websocket.accept()
+        await websocket.close(code=4003, reason="Authentication required")
+        return
 
     # Rate limit WebSocket connections
     ip = _get_client_ip(websocket)
-    if not check_rate_limit(ip, "ws_connect"):
+    connect_decision = consume_rate_limit(ip, "ws_connect")
+    if not connect_decision.allowed:
         await websocket.accept()
-        await websocket.close(code=4029, reason="Rate limited: too many connections")
+        await websocket.close(
+            code=4029,
+            reason=f"Rate limited: too many connections. Retry after {connect_decision.retry_after}s.",
+        )
         return
 
     await runtime_bus.connect(session_id, websocket)
@@ -117,9 +141,20 @@ async def debate_ws(websocket: WebSocket, session_id: str):
         while True:
             try:
                 # Rate limit messages
-                if not check_rate_limit(ip, "ws_message"):
+                message_decision = consume_rate_limit(ip, "ws_message")
+                if not message_decision.allowed:
+                    try:
+                        await websocket.receive_json()
+                    except WebSocketDisconnect:
+                        break
+                    except Exception:
+                        pass
                     if not await _send_error_event(
-                        runtime_bus, session_id, websocket, "Rate limited: please slow down."
+                        runtime_bus,
+                        session_id,
+                        websocket,
+                        "Rate limited: please slow down.",
+                        rate_limit=message_decision.as_metadata(),
                     ):
                         return
                     continue
@@ -141,6 +176,18 @@ async def debate_ws(websocket: WebSocket, session_id: str):
                 ):
                     return
                 continue
+
+            if settings.demo.enabled and not is_admin:
+                capability = get_demo_websocket_action_capability(action)
+                if capability is None or not is_demo_guest_capability(capability):
+                    if not await _send_error_event(
+                        runtime_bus,
+                        session_id,
+                        websocket,
+                        DEMO_MODE_ADMIN_REQUIRED_MESSAGE,
+                    ):
+                        return
+                    continue
 
             if action == "start":
                 result = await runtime_service.start_session(session_id)

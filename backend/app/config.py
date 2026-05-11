@@ -7,6 +7,7 @@ Uses Pydantic BaseModel for automatic validation and type safety.
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -184,6 +185,33 @@ class DemoSettings(BaseModel):
         )
 
 
+class RateLimitSettings(BaseModel):
+    backend: str = "auto"
+    fallback_to_memory: bool = True
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None = None) -> RateLimitSettings:
+        data = data or {}
+        backend = str(
+            os.environ.get("ELENCHUS_RATE_LIMIT_BACKEND")
+            or data.get("backend")
+            or "auto"
+        ).strip().lower()
+        if backend not in {"auto", "memory", "sqlite"}:
+            backend = "auto"
+
+        raw_fallback = os.environ.get("ELENCHUS_RATE_LIMIT_FALLBACK_TO_MEMORY")
+        if raw_fallback is None:
+            fallback_to_memory = bool(data.get("fallback_to_memory", True))
+        else:
+            fallback_to_memory = raw_fallback.strip().lower() not in {"0", "false", "no", "off"}
+
+        return cls(
+            backend=backend,
+            fallback_to_memory=fallback_to_memory,
+        )
+
+
 class Settings(BaseModel):
     """Unified settings object backed by `runtime/config.json`."""
 
@@ -193,6 +221,7 @@ class Settings(BaseModel):
     auth: AuthSettings = Field(default_factory=AuthSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     demo: DemoSettings = Field(default_factory=DemoSettings)
+    rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
 
     def __init__(self, **data: Any) -> None:
         # If called directly (not from Pydantic parse), load from config file
@@ -204,6 +233,7 @@ class Settings(BaseModel):
             auth = AuthSettings.from_dict(config.get("auth"))
             logging_cfg = LoggingSettings.from_dict(config.get("logging"))
             demo = DemoSettings.from_dict(config.get("demo"))
+            rate_limit = RateLimitSettings.from_dict(config.get("rate_limit"))
             super().__init__(
                 search=search,
                 debate=debate,
@@ -211,6 +241,7 @@ class Settings(BaseModel):
                 auth=auth,
                 logging=logging_cfg,
                 demo=demo,
+                rate_limit=rate_limit,
             )
         else:
             super().__init__(**data)

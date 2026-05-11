@@ -80,13 +80,15 @@ app.add_middleware(AuthMiddleware)
 app.add_middleware(DemoGuardMiddleware)
 
 # Register routers
+# session_control_router must come before sessions_router so its start/stop handlers
+# take precedence over the legacy session_runtime handlers with the same paths.
+app.include_router(session_control_router, prefix="/api")
 app.include_router(sessions_router, prefix="/api")
 app.include_router(ws_router, prefix="/api")
 app.include_router(models_router, prefix="/api/models", tags=["models"])
 app.include_router(log_router, prefix="/api")
 app.include_router(search_router, prefix="/api")
 app.include_router(searxng_router, prefix="/api")
-app.include_router(session_control_router, prefix="/api")
 app.include_router(admin_router)
 app.include_router(agent_personas_router, prefix="/api")
 

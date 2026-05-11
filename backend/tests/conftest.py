@@ -21,6 +21,7 @@ from app.config import get_settings
 from app.db import database as db_module
 from app.db.database import Base
 from app.dependencies import clear_dependency_cache
+from app.middleware.rate_limit import reset_rate_limit_store
 from app.runtime_paths import get_runtime_paths
 
 # Import db utils (formerly models) for utility functions.
@@ -45,6 +46,7 @@ def runtime_dir(monkeypatch):
     monkeypatch.setenv("ELENCHUS_RUNTIME_DIR", str(runtime_root))
     get_runtime_paths.cache_clear()
     get_settings.cache_clear()
+    reset_rate_limit_store()
     clear_dependency_cache()
     try:
         yield runtime_root
@@ -52,6 +54,7 @@ def runtime_dir(monkeypatch):
         clear_dependency_cache()
         get_settings.cache_clear()
         get_runtime_paths.cache_clear()
+        reset_rate_limit_store()
         shutil.rmtree(runtime_root, ignore_errors=True)
 
 

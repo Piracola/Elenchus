@@ -2,13 +2,16 @@
 Admin authentication API routes for demo mode.
 """
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.config import get_settings
 from app.middleware.admin_auth import hash_password, is_valid_admin_token, login, logout
-from app.middleware.rate_limit import check_rate_limit
 from app.audit import log_audit
+from app.middleware.rate_limit import consume_rate_limit
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -29,12 +32,27 @@ class AdminStatusResponse(BaseModel):
     password_set: bool
 
 
+def _rate_limit_payload(detail: str, decision: Any) -> dict[str, Any]:
+    return {
+        "detail": detail,
+        "rate_limit": decision.as_metadata(),
+    }
+
+
 @router.post("/login", response_model=AdminLoginResponse)
 async def admin_login(req: AdminLoginRequest, request: Request):
     """Authenticate as admin to bypass demo restrictions."""
     ip = request.client.host if request.client else "unknown"
-    if not check_rate_limit(ip, "admin_login"):
-        raise HTTPException(status_code=429, detail="Too many login attempts. Please try again later.")
+    decision = consume_rate_limit(ip, "admin_login")
+    if not decision.allowed:
+        return JSONResponse(
+            status_code=429,
+            content=_rate_limit_payload(
+                "Too many login attempts. Please try again later.",
+                decision,
+            ),
+            headers=decision.as_headers(),
+        )
 
     token = login(req.username, req.password)
     if not token:
@@ -44,7 +62,6 @@ async def admin_login(req: AdminLoginRequest, request: Request):
     log_audit("admin_login_success", ip=ip, user=req.username)
 
     response = AdminLoginResponse(token=token)
-    from fastapi.responses import JSONResponse
     json_response = JSONResponse(content=response.model_dump())
     json_response.set_cookie(
         key="elenchus_admin_token",

@@ -29,7 +29,7 @@ class StartDebateResponse(BaseModel):
     session_id: str
 
 
-@router.post("/sessions/{session_id}/start", response_model=StartDebateResponse)
+@router.post("/sessions/{session_id}/start", response_model=StartDebateResponse, include_in_schema=False)
 async def start_debate_session(
     session_id: str,
     body: StartDebateRequest | None = None,
@@ -72,7 +72,7 @@ async def start_debate_session(
     )
 
 
-@router.post("/sessions/{session_id}/stop")
+@router.post("/sessions/{session_id}/stop", include_in_schema=False)
 async def stop_debate_session(
     session_id: str,
     runtime_service: DebateRuntimeService = Depends(get_debate_runtime_service),
@@ -118,3 +118,12 @@ async def export_runtime_events_snapshot(session_id: str):
             "Content-Disposition": export_service.build_content_disposition(filename)
         },
     )
+
+
+__all__ = [
+    "router",
+    "start_debate_session",
+    "stop_debate_session",
+    "list_runtime_events",
+    "export_runtime_events_snapshot",
+]
