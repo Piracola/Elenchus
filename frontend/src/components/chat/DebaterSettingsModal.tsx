@@ -37,6 +37,8 @@ export default function DebaterSettingsModal({
         handlePersonaSelect,
         handleTemperatureChange,
         handleThinkingToggle,
+        isLoading: agentConfigsLoading,
+        error: agentConfigsError,
     } = useAgentConfigs();
     const { currentSession } = useSessionViewState();
     const hasInitializedFromSessionRef = useRef(false);
@@ -227,6 +229,32 @@ export default function DebaterSettingsModal({
                                         </p>
                                     </div>
                                 </div>
+
+                                {agentConfigsLoading && (
+                                    <div style={{
+                                        padding: '10px 12px',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid var(--border-subtle)',
+                                        background: 'var(--bg-card)',
+                                        color: 'var(--text-muted)',
+                                        fontSize: '12px',
+                                    }}>
+                                        正在加载配置...
+                                    </div>
+                                )}
+
+                                {agentConfigsError && (
+                                    <div style={{
+                                        padding: '10px 12px',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid rgba(239, 68, 68, 0.25)',
+                                        background: 'rgba(239, 68, 68, 0.08)',
+                                        color: 'var(--text-secondary)',
+                                        fontSize: '12px',
+                                    }}>
+                                        {agentConfigsError}
+                                    </div>
+                                )}
 
                                 {/* 模型配置面板 */}
                                 <AgentConfigPanel

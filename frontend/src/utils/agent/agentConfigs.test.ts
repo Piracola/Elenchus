@@ -85,4 +85,34 @@ describe('agentConfigs utils', () => {
             },
         });
     });
+
+    it('only keeps persona ids for proposer and opposer roles', () => {
+        const payload = buildAgentConfigsPayload(
+            [baseProvider],
+            {
+                proposer: '',
+                opposer: '',
+                judge: '',
+                fact_checker: '',
+            },
+            {
+                proposer: '',
+                opposer: '',
+                judge: '',
+                fact_checker: '',
+            },
+            undefined,
+            {
+                proposer: 'persona-proposer',
+                opposer: 'persona-opposer',
+                judge: 'persona-judge',
+                fact_checker: 'persona-fact-checker',
+            },
+        );
+
+        expect(payload?.proposer?.persona_id).toBe('persona-proposer');
+        expect(payload?.opposer?.persona_id).toBe('persona-opposer');
+        expect(payload?.judge?.persona_id).toBeUndefined();
+        expect(payload?.fact_checker?.persona_id).toBeUndefined();
+    });
 });

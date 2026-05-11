@@ -4,7 +4,7 @@
  */
 
 import { motion } from 'framer-motion';
-import { Settings2 } from 'lucide-react';
+import { Brain, Settings2, Thermometer } from 'lucide-react';
 import CustomSelect from './CustomSelect';
 import SettingsPanel from '../sidebar/SettingsPanel';
 import type { AgentPersonaSummary, ModelConfig } from '../../types';
@@ -82,12 +82,14 @@ export default function AgentConfigPanel({
     return (
         <>
             <motion.div
+                className="agent-config-panel"
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
                 style={{
                     width: '100%',
+                    overflow: 'visible',
                     padding: '16px',
                     background: 'var(--bg-card)',
                     border: '1px solid var(--border-subtle)',
@@ -121,13 +123,18 @@ export default function AgentConfigPanel({
                         管理配置
                     </button>
                 </div>
-                <div style={{ 
-                    display: 'grid', 
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', 
-                    gap: '12px' 
-                }}>
+                <div className="agent-config-panel__grid">
                     {AGENT_ROLES.map(agent => (
-                        <div key={agent} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div key={agent} className="agent-config-panel__card" style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                            minWidth: 0,
+                            padding: '12px',
+                            background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-subtle)',
+                            borderRadius: 'var(--radius-md)',
+                        }}>
                             <div style={{ 
                                 fontSize: '11px', 
                                 fontWeight: 600, 
@@ -135,6 +142,7 @@ export default function AgentConfigPanel({
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '4px',
+                                minWidth: 0,
                             }}>
                                 <span style={{ fontSize: '10px' }}>{AGENT_ICONS[agent]}</span>
                                 {AGENT_LABELS[agent]}
@@ -144,6 +152,7 @@ export default function AgentConfigPanel({
                                 options={options}
                                 onChange={(value) => handleConfigSelect(agent, value)}
                                 size="sm"
+                                width="100%"
                             />
                             {handlePersonaSelect && (
                                 <CustomSelect
@@ -151,68 +160,98 @@ export default function AgentConfigPanel({
                                     options={buildPersonaOptions(agent)}
                                     onChange={(value) => handlePersonaSelect(agent, value)}
                                     size="sm"
+                                    width="100%"
                                 />
                             )}
                             <div style={{
-                                display: 'flex',
-                                alignItems: 'center',
+                                display: 'grid',
+                                gridTemplateColumns: handleThinkingToggle
+                                    ? 'minmax(0, 1fr) auto'
+                                    : 'minmax(0, 1fr)',
+                                alignItems: 'stretch',
                                 gap: '8px',
+                                minWidth: 0,
                             }}>
-                                <span style={{
-                                    minWidth: '28px',
-                                    fontSize: '11px',
-                                    color: 'var(--text-muted)',
-                                    fontWeight: 600,
-                                }}>
-                                    Temp
-                                </span>
-                                <input
-                                    type="number"
-                                    value={temperatureInputs[agent]}
-                                    onChange={(event) => handleTemperatureChange(agent, event.target.value)}
-                                    placeholder={String(DEFAULT_AGENT_TEMPERATURE)}
-                                    min={0}
-                                    max={2}
-                                    step={0.1}
-                                    style={{
-                                        width: '100%',
-                                        padding: '8px 10px',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: '1px solid var(--border-subtle)',
-                                        background: 'var(--bg-secondary)',
-                                        color: 'var(--text-primary)',
-                                        fontSize: '12px',
-                                        outline: 'none',
-                                        boxSizing: 'border-box',
-                                    }}
-                                />
-                            </div>
-                            {handleThinkingToggle && (
                                 <div style={{
-                                    display: 'flex',
+                                    display: 'grid',
+                                    gridTemplateColumns: 'auto minmax(0, 1fr)',
                                     alignItems: 'center',
                                     gap: '8px',
+                                    minWidth: 0,
+                                    padding: '0 10px',
+                                    borderRadius: 'var(--radius-md)',
+                                    border: '1px solid var(--border-subtle)',
+                                    background: 'var(--bg-card)',
                                 }}>
+                                    <span style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        minWidth: '42px',
+                                        fontSize: '11px',
+                                        color: 'var(--text-muted)',
+                                        fontWeight: 600,
+                                        whiteSpace: 'nowrap',
+                                    }}>
+                                        <Thermometer size={12} />
+                                        Temp
+                                    </span>
                                     <input
-                                        type="checkbox"
-                                        id={`thinking-${agent}`}
-                                        checked={enableThinking?.[agent] ?? false}
-                                        onChange={(event) => handleThinkingToggle(agent, event.target.checked)}
-                                        style={{ cursor: 'pointer', width: '14px', height: '14px' }}
+                                        type="number"
+                                        value={temperatureInputs[agent]}
+                                        onChange={(event) => handleTemperatureChange(agent, event.target.value)}
+                                        placeholder={String(DEFAULT_AGENT_TEMPERATURE)}
+                                        min={0}
+                                        max={2}
+                                        step={0.1}
+                                        style={{
+                                            width: '100%',
+                                            minWidth: 0,
+                                            padding: '8px 0',
+                                            border: 'none',
+                                            background: 'transparent',
+                                            color: 'var(--text-primary)',
+                                            fontSize: '12px',
+                                            outline: 'none',
+                                            boxSizing: 'border-box',
+                                        }}
                                     />
+                                </div>
+                                {handleThinkingToggle && (
                                     <label
                                         htmlFor={`thinking-${agent}`}
                                         style={{
-                                            fontSize: '11px',
-                                            color: 'var(--text-secondary)',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            minWidth: 0,
+                                            padding: '0 12px',
+                                            borderRadius: 'var(--radius-md)',
+                                            border: '1px solid var(--border-subtle)',
+                                            background: (enableThinking?.[agent] ?? false)
+                                                ? 'rgba(99, 102, 241, 0.08)'
+                                                : 'var(--bg-card)',
+                                            color: (enableThinking?.[agent] ?? false)
+                                                ? 'var(--accent-indigo)'
+                                                : 'var(--text-secondary)',
                                             cursor: 'pointer',
                                             fontWeight: 500,
+                                            fontSize: '11px',
+                                            whiteSpace: 'nowrap',
                                         }}
                                     >
+                                        <input
+                                            type="checkbox"
+                                            id={`thinking-${agent}`}
+                                            checked={enableThinking?.[agent] ?? false}
+                                            onChange={(event) => handleThinkingToggle(agent, event.target.checked)}
+                                            style={{ cursor: 'pointer', width: '14px', height: '14px', margin: 0 }}
+                                        />
+                                        <Brain size={12} />
                                         深度思考
                                     </label>
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -220,8 +259,9 @@ export default function AgentConfigPanel({
                     marginTop: '12px',
                     fontSize: '11px',
                     color: 'var(--text-muted)',
+                    lineHeight: 1.6,
                 }}>
-                    Temperature range: 0-2. Leave blank to use the default value ({DEFAULT_AGENT_TEMPERATURE}). Persona files live in runtime/agent_personas.
+                    Temperature 范围为 0-2。留空时使用默认值（{DEFAULT_AGENT_TEMPERATURE}）。人设文件位于 `runtime/agent_personas`。
                 </div>
             </motion.div>
             <SettingsPanel

@@ -3,6 +3,13 @@ import { api } from '../api/client';
 import type { AgentPersonaSummary, ModelConfig } from '../types';
 import { buildAgentConfigsPayload, createEmptyAgentFieldMap, createEmptyThinkingMap, type AgentRole } from '../utils/agent/agentConfigs';
 
+function getErrorMessage(error: unknown): string {
+    if (error instanceof Error && error.message.trim()) {
+        return error.message;
+    }
+    return '加载智能体配置失败，请稍后重试。';
+}
+
 export function useAgentConfigs() {
     const [savedConfigs, setSavedConfigs] = useState<ModelConfig[]>([]);
     const [agentPersonas, setAgentPersonas] = useState<AgentPersonaSummary[]>([]);
@@ -12,33 +19,73 @@ export function useAgentConfigs() {
     const [enableThinking, setEnableThinking] = useState<Record<AgentRole, boolean>>(createEmptyThinkingMap);
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [showConfigManager, setShowConfigManager] = useState(false);
-    const hasLoadedRef = useRef(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const hasInitializedRef = useRef(false);
+    const wasConfigManagerOpenRef = useRef(false);
+    const configRequestIdRef = useRef(0);
+    const personaRequestIdRef = useRef(0);
+    const pendingRequestCountRef = useRef(0);
 
-    const loadConfigs = useCallback(() => {
-        api.models.list()
-            .then(data => setSavedConfigs(data))
-            .catch(err => console.error(err));
+    const loadAgentConfigs = useCallback(async (options: { includePersonas?: boolean } = {}) => {
+        const { includePersonas = true } = options;
+        const configRequestId = ++configRequestIdRef.current;
+        const personaRequestId = includePersonas ? ++personaRequestIdRef.current : null;
+        pendingRequestCountRef.current += 1;
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const configsPromise = api.models.list();
+            const personasPromise = includePersonas ? api.agentPersonas.list() : Promise.resolve<AgentPersonaSummary[] | null>(null);
+            const [configsResult, personasResult] = await Promise.allSettled([
+                configsPromise,
+                personasPromise,
+            ]);
+
+            if (configRequestId === configRequestIdRef.current) {
+                if (configsResult.status === 'fulfilled') {
+                    setSavedConfigs(configsResult.value);
+                } else {
+                    setError((current) => current ?? getErrorMessage(configsResult.reason));
+                }
+            }
+
+            if (includePersonas && personaRequestId === personaRequestIdRef.current) {
+                if (personasResult.status === 'fulfilled' && personasResult.value) {
+                    setAgentPersonas(personasResult.value);
+                } else if (personasResult.status === 'rejected') {
+                    setError((current) => current ?? getErrorMessage(personasResult.reason));
+                }
+            }
+        } finally {
+            pendingRequestCountRef.current = Math.max(0, pendingRequestCountRef.current - 1);
+            setIsLoading(pendingRequestCountRef.current > 0);
+        }
     }, []);
 
-    const loadPersonas = useCallback(() => {
-        api.agentPersonas.list()
-            .then(data => setAgentPersonas(data))
-            .catch(err => console.error(err));
-    }, []);
+    const reload = useCallback(async () => {
+        await loadAgentConfigs();
+    }, [loadAgentConfigs]);
 
     useEffect(() => {
-        if (!hasLoadedRef.current) {
-            hasLoadedRef.current = true;
-            loadConfigs();
-            loadPersonas();
+        if (!hasInitializedRef.current) {
+            hasInitializedRef.current = true;
+            void loadAgentConfigs();
         }
-    }, [loadConfigs, loadPersonas]);
+    }, [loadAgentConfigs]);
 
     useEffect(() => {
-        if (!showConfigManager && hasLoadedRef.current) {
-            loadConfigs();
+        if (showConfigManager) {
+            wasConfigManagerOpenRef.current = true;
+            return;
         }
-    }, [showConfigManager, loadConfigs]);
+
+        if (wasConfigManagerOpenRef.current) {
+            wasConfigManagerOpenRef.current = false;
+            void loadAgentConfigs({ includePersonas: false });
+        }
+    }, [showConfigManager, loadAgentConfigs]);
 
     const handleConfigSelect = useCallback((agent: AgentRole, configId: string) => {
         setSelectedConfigIds(prev => ({ ...prev, [agent]: configId }));
@@ -77,6 +124,9 @@ export function useAgentConfigs() {
         setShowAdvanced,
         showConfigManager,
         setShowConfigManager,
+        isLoading,
+        error,
+        reload,
         handleConfigSelect,
         handlePersonaSelect,
         handleTemperatureChange,

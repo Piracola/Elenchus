@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentConfigs } from '../../hooks/useAgentConfigs';
 import { useConnectionViewState, useSessionViewState } from '../../hooks/useDebateViewState';
 import { useDebateWebSocket } from '../../hooks/useDebateWebSocket';
@@ -246,28 +246,37 @@ function SessionCreator() {
 
     return (
         <div style={{ position: 'relative', flexShrink: 0 }}>
-            {showAdvanced && !isInDemo && (
-                <div style={{ marginBottom: '10px' }}>
-                    <AgentConfigPanel
-                        savedConfigs={savedConfigs}
-                        agentPersonas={agentPersonas}
-                        selectedConfigIds={selectedConfigIds}
-                        selectedPersonaIds={selectedPersonaIds}
-                        temperatureInputs={temperatureInputs}
-                        enableThinking={enableThinking}
-                        showConfigManager={showConfigManager}
-                        setShowConfigManager={setShowConfigManager}
-                        handleConfigSelect={handleConfigSelect}
-                        handlePersonaSelect={handlePersonaSelect}
-                        handleTemperatureChange={handleTemperatureChange}
-                        handleThinkingToggle={handleThinkingToggle}
-                    />
-                </div>
-            )}
+            <AnimatePresence initial={false}>
+                {showAdvanced && !isInDemo && (
+                    <motion.div
+                        key="chat-agent-config"
+                        initial={{ opacity: 0, height: 0, y: 8 }}
+                        animate={{ opacity: 1, height: 'auto', y: 0 }}
+                        exit={{ opacity: 0, height: 0, y: 8 }}
+                        transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                        style={{ marginBottom: '10px', overflow: 'hidden' }}
+                    >
+                        <AgentConfigPanel
+                            savedConfigs={savedConfigs}
+                            agentPersonas={agentPersonas}
+                            selectedConfigIds={selectedConfigIds}
+                            selectedPersonaIds={selectedPersonaIds}
+                            temperatureInputs={temperatureInputs}
+                            enableThinking={enableThinking}
+                            showConfigManager={showConfigManager}
+                            setShowConfigManager={setShowConfigManager}
+                            handleConfigSelect={handleConfigSelect}
+                            handlePersonaSelect={handlePersonaSelect}
+                            handleTemperatureChange={handleTemperatureChange}
+                            handleThinkingToggle={handleThinkingToggle}
+                        />
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             <motion.div
                 style={{
-                    width: 'min(100%, 920px)',
+                    width: 'min(100%, 1040px)',
                     padding: '12px 14px',
                     background: 'var(--bg-card)',
                     borderRadius: 'var(--radius-lg)',

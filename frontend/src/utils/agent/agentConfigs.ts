@@ -2,10 +2,16 @@ import type { AgentConfigResult, ModelConfig } from '../../types';
 
 export const AGENT_ROLES = ['proposer', 'opposer', 'judge', 'fact_checker'] as const;
 export type AgentRole = (typeof AGENT_ROLES)[number];
+export const AGENT_PERSONA_ROLES = ['proposer', 'opposer'] as const;
+export type AgentPersonaRole = (typeof AGENT_PERSONA_ROLES)[number];
 
 export const DEFAULT_AGENT_TEMPERATURE = 0.7;
 export const MIN_AGENT_TEMPERATURE = 0;
 export const MAX_AGENT_TEMPERATURE = 2;
+
+export function agentRoleSupportsPersona(role: AgentRole): role is AgentPersonaRole {
+    return AGENT_PERSONA_ROLES.includes(role as AgentPersonaRole);
+}
 
 export function createEmptyAgentFieldMap(): Record<AgentRole, string> {
     return {
@@ -70,7 +76,9 @@ export function buildAgentConfigsPayload(
         const selectedKey = selectedConfigIds[role] ?? '';
         const temperature = parseAgentTemperatureInput(temperatureInputs[role] ?? '');
         const enableThinking = enableThinkingInputs?.[role] ?? false;
-        const personaId = selectedPersonaIds?.[role]?.trim() ?? '';
+        const personaId = agentRoleSupportsPersona(role)
+            ? (selectedPersonaIds?.[role]?.trim() ?? '')
+            : '';
 
         if (!selectedKey && temperature === undefined && !enableThinking && !personaId) {
             continue;

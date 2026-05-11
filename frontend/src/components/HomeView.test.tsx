@@ -1,0 +1,423 @@
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import React from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import HomeView from './HomeView';
+
+let animationFrameQueue: Array<{ id: number; callback: FrameRequestCallback }> = [];
+let nextAnimationFrameId = 1;
+const demoModeState = {
+    demoMode: false,
+    isAdmin: false,
+};
+let mockOffsetTop = 240;
+let nowTime = 10_000;
+
+function flushAnimationFrames() {
+    const queuedFrames = [...animationFrameQueue];
+    animationFrameQueue = [];
+
+    for (const { callback } of queuedFrames) {
+        callback(0);
+    }
+}
+
+vi.mock('framer-motion', () => {
+    const createPrimitive = (tag: keyof HTMLElementTagNameMap) => {
+        const Component = React.forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement> & {
+            children?: React.ReactNode;
+            animate?: unknown;
+            exit?: unknown;
+            initial?: unknown;
+            transition?: unknown;
+            whileHover?: unknown;
+            whileTap?: unknown;
+        }>((props, ref) => {
+            const {
+                children,
+                animate,
+                exit,
+                initial,
+                transition,
+                whileHover,
+                whileTap,
+                ...rest
+            } = props;
+            void animate;
+            void exit;
+            void initial;
+            void transition;
+            void whileHover;
+            void whileTap;
+            return React.createElement(tag, { ...rest, ref }, children);
+        });
+        Component.displayName = `MockMotion(${tag})`;
+        return Component;
+    };
+
+    return {
+        AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+        motion: new Proxy({}, {
+            get: (_target, property: string) => createPrimitive(property as keyof HTMLElementTagNameMap),
+        }),
+    };
+});
+
+vi.mock('../hooks/useAgentConfigs', () => ({
+    useAgentConfigs: () => {
+        const [showAdvanced, setShowAdvanced] = React.useState(false);
+        return {
+            showAdvanced,
+            setShowAdvanced,
+            savedConfigs: [],
+            agentPersonas: [],
+            selectedConfigIds: {},
+            selectedPersonaIds: {},
+            temperatureInputs: {},
+            enableThinking: {},
+            showConfigManager: false,
+            setShowConfigManager: vi.fn(),
+            isLoading: false,
+            error: null,
+            reload: vi.fn(),
+            handleConfigSelect: vi.fn(),
+            handlePersonaSelect: vi.fn(),
+            handleTemperatureChange: vi.fn(),
+            handleThinkingToggle: vi.fn(),
+            buildAgentConfigs: () => ({}),
+        };
+    },
+}));
+
+vi.mock('../hooks/useSessionCreate', () => ({
+    useSessionCreate: () => ({
+        isCreating: false,
+        error: '',
+        createSession: vi.fn(),
+        clearError: vi.fn(),
+    }),
+}));
+
+vi.mock('../stores/settingsStore', () => ({
+    useSettingsStore: () => ({
+        displaySettings: {
+            messageFontSize: 15,
+        },
+    }),
+}));
+
+vi.mock('../stores/demoModeStore', () => ({
+    useDemoModeStore: () => ({
+        demoMode: demoModeState.demoMode,
+        isAdmin: demoModeState.isAdmin,
+    }),
+}));
+
+vi.mock('../config/display', () => ({
+    getMessageFontTokens: () => ({
+        home: {
+            title: '32px',
+            subtitle: '16px',
+            topicInput: '18px',
+            warningBody: '14px',
+        },
+    }),
+}));
+
+vi.mock('./home/HomeModeSelector', () => ({
+    HomeModeSelector: () => <div data-testid="home-mode-selector" />,
+}));
+
+vi.mock('./home/HomeStatusLegend', () => ({
+    HomeStatusLegend: () => <div data-testid="home-status-legend" />,
+}));
+
+vi.mock('./shared/AgentConfigPanel', () => ({
+    default: () => <div data-testid="agent-config-panel" />,
+}));
+
+vi.mock('./shared/BrandIcon', () => ({
+    default: () => <div data-testid="brand-icon" />,
+}));
+
+vi.mock('./shared/SidebarExpandButton', () => ({
+    default: ({ onClick }: { onClick: () => void }) => (
+        <button type="button" onClick={onClick}>
+            Expand
+        </button>
+    ),
+}));
+
+vi.mock('./shared/SophistryModeNotice', () => ({
+    default: () => <div data-testid="sophistry-mode-notice" />,
+}));
+
+vi.mock('../api/client', () => ({
+    api: {
+        sessions: {
+            uploadDocument: vi.fn(),
+        },
+    },
+}));
+
+vi.mock('../utils/chat/toast', () => ({
+    toast: vi.fn(),
+}));
+
+vi.mock('./home/HomeComposerCard', () => ({
+    HomeComposerCard: ({
+        topic,
+        onTopicChange,
+        onShowAdvancedChange,
+        onDocumentsChange,
+        showAdvanced,
+    }: {
+        topic: string;
+        onTopicChange: (value: string) => void;
+        onShowAdvancedChange: (value: boolean) => void;
+        onDocumentsChange: (documents: Array<{ id: string; name: string; size: number; file: File }>) => void;
+        showAdvanced: boolean;
+    }) => (
+        <div>
+            <input
+                aria-label="topic"
+                value={topic}
+                onChange={(event) => onTopicChange(event.target.value)}
+            />
+            <button type="button" onClick={() => onShowAdvancedChange(!showAdvanced)}>
+                Toggle advanced
+            </button>
+            <button
+                type="button"
+                onClick={() => onDocumentsChange([
+                    {
+                        id: 'doc-1',
+                        name: 'note.md',
+                        size: 12,
+                        file: new File(['hello'], 'note.md', { type: 'text/markdown' }),
+                    },
+                ])}
+            >
+                Add document
+            </button>
+        </div>
+    ),
+}));
+
+describe('HomeView auto scroll', () => {
+    beforeEach(() => {
+        cleanup();
+        animationFrameQueue = [];
+        nextAnimationFrameId = 1;
+        mockOffsetTop = 240;
+        nowTime = 10_000;
+
+        Object.defineProperty(window, 'requestAnimationFrame', {
+            configurable: true,
+            writable: true,
+            value: vi.fn((callback: FrameRequestCallback) => {
+                const id = nextAnimationFrameId++;
+                animationFrameQueue.push({ id, callback });
+                return id;
+            }),
+        });
+
+        Object.defineProperty(window, 'cancelAnimationFrame', {
+            configurable: true,
+            writable: true,
+            value: vi.fn((id: number) => {
+                animationFrameQueue = animationFrameQueue.filter((frame) => frame.id !== id);
+            }),
+        });
+
+        Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+            configurable: true,
+            writable: true,
+            value: vi.fn(),
+        });
+
+        Object.defineProperty(HTMLElement.prototype, 'offsetTop', {
+            configurable: true,
+            get() {
+                return mockOffsetTop;
+            },
+        });
+
+        vi.spyOn(Date, 'now').mockImplementation(() => nowTime);
+    });
+
+    afterEach(() => {
+        cleanup();
+        vi.restoreAllMocks();
+        demoModeState.demoMode = false;
+    });
+
+    it('does not auto-scroll on first render', () => {
+        render(<HomeView isSidebarCollapsed={false} onExpandSidebar={() => {}} />);
+
+        act(() => {
+            flushAnimationFrames();
+        });
+
+        expect(HTMLElement.prototype.scrollTo).not.toHaveBeenCalled();
+    });
+
+    it('scrolls when the advanced panel opens, but not during later typing or document updates', () => {
+        render(<HomeView isSidebarCollapsed={false} onExpandSidebar={() => {}} />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Toggle advanced' }));
+
+        act(() => {
+            flushAnimationFrames();
+        });
+
+        expect(HTMLElement.prototype.scrollTo).toHaveBeenCalledTimes(1);
+        expect(HTMLElement.prototype.scrollTo).toHaveBeenLastCalledWith({
+            top: 224,
+            behavior: 'smooth',
+        });
+
+        vi.mocked(HTMLElement.prototype.scrollTo).mockClear();
+
+        fireEvent.change(screen.getByLabelText('topic'), {
+            target: { value: 'A better debate topic' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Add document' }));
+
+        act(() => {
+            flushAnimationFrames();
+        });
+
+        expect(HTMLElement.prototype.scrollTo).not.toHaveBeenCalled();
+    });
+
+    it('does not auto-scroll when the advanced panel closes', () => {
+        render(<HomeView isSidebarCollapsed={false} onExpandSidebar={() => {}} />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Toggle advanced' }));
+        act(() => {
+            flushAnimationFrames();
+        });
+
+        vi.mocked(HTMLElement.prototype.scrollTo).mockClear();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Toggle advanced' }));
+
+        act(() => {
+            flushAnimationFrames();
+        });
+
+        expect(HTMLElement.prototype.scrollTo).not.toHaveBeenCalled();
+    });
+
+    it('keeps the advanced panel hidden in demo mode without triggering scroll', () => {
+        demoModeState.demoMode = true;
+
+        render(<HomeView isSidebarCollapsed={false} onExpandSidebar={() => {}} />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Toggle advanced' }));
+
+        act(() => {
+            flushAnimationFrames();
+        });
+
+        expect(screen.queryByTestId('agent-config-panel')).toBeNull();
+        expect(HTMLElement.prototype.scrollTo).not.toHaveBeenCalled();
+
+        demoModeState.demoMode = false;
+    });
+
+    it('clamps the advanced panel scroll target to the top of the page on small layouts', () => {
+        mockOffsetTop = 8;
+
+        render(<HomeView isSidebarCollapsed={false} onExpandSidebar={() => {}} />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Toggle advanced' }));
+
+        act(() => {
+            flushAnimationFrames();
+        });
+
+        expect(HTMLElement.prototype.scrollTo).toHaveBeenCalledTimes(1);
+        expect(HTMLElement.prototype.scrollTo).toHaveBeenLastCalledWith({
+            top: 0,
+            behavior: 'smooth',
+        });
+    });
+
+    it('skips the first-open auto-scroll while the user is actively typing in the home view', () => {
+        render(<HomeView isSidebarCollapsed={false} onExpandSidebar={() => {}} />);
+
+        const topicInput = screen.getByLabelText('topic');
+        fireEvent.focus(topicInput);
+        fireEvent.click(screen.getByRole('button', { name: 'Toggle advanced' }));
+
+        act(() => {
+            flushAnimationFrames();
+        });
+
+        expect(HTMLElement.prototype.scrollTo).not.toHaveBeenCalled();
+    });
+
+    it('still allows a later first-open auto-scroll after the interaction guard window passes', () => {
+        render(<HomeView isSidebarCollapsed={false} onExpandSidebar={() => {}} />);
+
+        const topicInput = screen.getByLabelText('topic');
+        fireEvent.focus(topicInput);
+        fireEvent.click(screen.getByRole('button', { name: 'Toggle advanced' }));
+
+        act(() => {
+            flushAnimationFrames();
+        });
+
+        expect(HTMLElement.prototype.scrollTo).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Toggle advanced' }));
+        nowTime += 1_500;
+        fireEvent.blur(topicInput);
+        fireEvent.click(screen.getByRole('button', { name: 'Toggle advanced' }));
+
+        act(() => {
+            flushAnimationFrames();
+        });
+
+        expect(HTMLElement.prototype.scrollTo).toHaveBeenCalledTimes(1);
+        expect(HTMLElement.prototype.scrollTo).toHaveBeenLastCalledWith({
+            top: 224,
+            behavior: 'smooth',
+        });
+    });
+
+    it('does not treat focusing the toggle button as a blocked interaction', () => {
+        render(<HomeView isSidebarCollapsed={false} onExpandSidebar={() => {}} />);
+
+        const toggleButton = screen.getByRole('button', { name: 'Toggle advanced' });
+        fireEvent.focus(toggleButton);
+        fireEvent.click(toggleButton);
+
+        act(() => {
+            flushAnimationFrames();
+        });
+
+        expect(HTMLElement.prototype.scrollTo).toHaveBeenCalledTimes(1);
+        expect(HTMLElement.prototype.scrollTo).toHaveBeenLastCalledWith({
+            top: 224,
+            behavior: 'smooth',
+        });
+    });
+
+    it('skips auto-scroll when the panel is opened from keyboard interaction', () => {
+        render(<HomeView isSidebarCollapsed={false} onExpandSidebar={() => {}} />);
+
+        const toggleButton = screen.getByRole('button', { name: 'Toggle advanced' });
+        fireEvent.focus(toggleButton);
+        fireEvent.keyDown(toggleButton, { key: 'Enter' });
+        fireEvent.click(toggleButton);
+
+        act(() => {
+            flushAnimationFrames();
+        });
+
+        expect(HTMLElement.prototype.scrollTo).not.toHaveBeenCalled();
+    });
+});

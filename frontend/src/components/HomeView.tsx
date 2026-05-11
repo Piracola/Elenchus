@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentConfigs } from '../hooks/useAgentConfigs';
 import { useSessionCreate } from '../hooks/useSessionCreate';
@@ -29,7 +29,23 @@ interface HomeViewProps {
     onExpandSidebar: () => void;
 }
 
+const AUTO_SCROLL_INTERACTION_GUARD_MS = 1200;
+
+function isAutoScrollBlockingFocus(element: HTMLElement): boolean {
+    const tagName = element.tagName;
+    return element.isContentEditable
+        || tagName === 'INPUT'
+        || tagName === 'TEXTAREA'
+        || tagName === 'SELECT';
+}
+
 export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeViewProps) {
+    const homeScrollRef = useRef<HTMLDivElement>(null);
+    const composerAnchorRef = useRef<HTMLDivElement>(null);
+    const pendingAdvancedScrollRef = useRef<'open' | null>(null);
+    const scrollAnimationFrameRef = useRef<number | null>(null);
+    const hasAutoScrolledAdvancedRef = useRef(false);
+    const recentUserInteractionAtRef = useRef(0);
     const [topic, setTopic] = useState('');
     const [debateMode, setDebateMode] = useState<DebateMode>('standard');
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
@@ -39,7 +55,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
     const [juryRoundsInput, setJuryRoundsInput] = useState('');
     const [steelmanEnabled, setSteelmanEnabled] = useState(true);
     const [pendingDocuments, setPendingDocuments] = useState<PendingReferenceDocument[]>([]);
-    const { isCreating, error, createSession, clearError } = useSessionCreate();
+    const { isCreating, error: createError, createSession, clearError } = useSessionCreate();
     const {
         showAdvanced,
         setShowAdvanced,
@@ -51,6 +67,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
         enableThinking,
         showConfigManager,
         setShowConfigManager,
+        error: agentConfigsError,
         handleConfigSelect,
         handlePersonaSelect,
         handleTemperatureChange,
@@ -59,6 +76,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
     } = useAgentConfigs();
     const { demoMode, isAdmin } = useDemoModeStore();
     const isInDemo = demoMode && !isAdmin;
+    const advancedPanelVisible = showAdvanced && !isInDemo;
 
     const isSophistryMode = debateMode === 'sophistry_experiment';
     const { displaySettings } = useSettingsStore();
@@ -69,6 +87,91 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
     const teamDiscussionRounds = parseTeamDiscussionRoundsInput(teamRoundsInput);
     const juryAgents = parseJuryAgentsInput(juryAgentsInput);
     const juryDiscussionRounds = parseJuryDiscussionRoundsInput(juryRoundsInput);
+
+    useEffect(() => {
+        const scrollContainer = homeScrollRef.current;
+        if (!scrollContainer) {
+            return;
+        }
+
+        const markRecentInteraction = () => {
+            recentUserInteractionAtRef.current = Date.now();
+        };
+        const handleFocusIn = (event: FocusEvent) => {
+            const target = event.target;
+            if (target instanceof HTMLElement && isAutoScrollBlockingFocus(target)) {
+                markRecentInteraction();
+            }
+        };
+
+        scrollContainer.addEventListener('wheel', markRecentInteraction, { passive: true });
+        scrollContainer.addEventListener('touchstart', markRecentInteraction, { passive: true });
+        scrollContainer.addEventListener('scroll', markRecentInteraction, { passive: true });
+        scrollContainer.addEventListener('keydown', markRecentInteraction);
+        scrollContainer.addEventListener('focusin', handleFocusIn);
+
+        return () => {
+            scrollContainer.removeEventListener('wheel', markRecentInteraction);
+            scrollContainer.removeEventListener('touchstart', markRecentInteraction);
+            scrollContainer.removeEventListener('scroll', markRecentInteraction);
+            scrollContainer.removeEventListener('keydown', markRecentInteraction);
+            scrollContainer.removeEventListener('focusin', handleFocusIn);
+        };
+    }, []);
+
+    useEffect(() => {
+        const scrollContainer = homeScrollRef.current;
+        const scrollIntent = pendingAdvancedScrollRef.current;
+        if (!scrollContainer || !scrollIntent) {
+            return;
+        }
+
+        pendingAdvancedScrollRef.current = null;
+        scrollAnimationFrameRef.current = window.requestAnimationFrame(() => {
+            scrollAnimationFrameRef.current = null;
+
+            const recentlyInteracted =
+                Date.now() - recentUserInteractionAtRef.current < AUTO_SCROLL_INTERACTION_GUARD_MS;
+            const activeElement = document.activeElement;
+            const focusWithinHome =
+                activeElement instanceof HTMLElement
+                && scrollContainer.contains(activeElement)
+                && isAutoScrollBlockingFocus(activeElement);
+
+            if (
+                scrollIntent !== 'open' ||
+                !advancedPanelVisible ||
+                hasAutoScrolledAdvancedRef.current ||
+                recentlyInteracted ||
+                focusWithinHome
+            ) {
+                return;
+            }
+
+            hasAutoScrolledAdvancedRef.current = true;
+            const composerTop = composerAnchorRef.current?.offsetTop ?? 0;
+            scrollContainer.scrollTo({
+                top: Math.max(composerTop - 16, 0),
+                behavior: 'smooth',
+            });
+        });
+
+        return () => {
+            if (scrollAnimationFrameRef.current !== null) {
+                window.cancelAnimationFrame(scrollAnimationFrameRef.current);
+                scrollAnimationFrameRef.current = null;
+            }
+        };
+    }, [advancedPanelVisible]);
+
+    const handleShowAdvancedChange = (nextShowAdvanced: boolean) => {
+        const nextAdvancedPanelVisible = nextShowAdvanced && !isInDemo;
+        pendingAdvancedScrollRef.current =
+            nextAdvancedPanelVisible && !advancedPanelVisible
+                ? 'open'
+                : null;
+        setShowAdvanced(nextShowAdvanced);
+    };
 
     const handleCreateDebate = async () => {
         if (!topic.trim() || isCreating) {
@@ -139,15 +242,19 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
 
     return (
         <div
+            ref={homeScrollRef}
             style={{
                 flex: 1,
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                justifyContent: 'center',
+                justifyContent: advancedPanelVisible ? 'flex-start' : 'center',
                 padding: '24px',
                 background: 'var(--bg-primary)',
                 position: 'relative',
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                scrollBehavior: 'smooth',
             }}
         >
             {isSidebarCollapsed && (
@@ -196,12 +303,13 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                 transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
                 style={{
                     width: '100%',
-                    maxWidth: '760px',
+                    maxWidth: '980px',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     position: 'relative',
                     zIndex: 1,
+                    paddingBottom: '40px',
                 }}
             >
                 <motion.div
@@ -249,37 +357,39 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                     onModeChange={setDebateMode}
                 />
 
-                <HomeComposerCard
-                    topic={topic}
-                    isCreating={isCreating}
-                    isSophistryMode={isSophistryMode}
-                    showAdvanced={showAdvanced}
-                    maxTurnsInput={maxTurnsInput}
-                    teamAgentsInput={teamAgentsInput}
-                    teamRoundsInput={teamRoundsInput}
-                    juryAgentsInput={juryAgentsInput}
-                    juryRoundsInput={juryRoundsInput}
-                    steelmanEnabled={steelmanEnabled}
-                    homeFontSizes={homeFontSizes}
-                    pendingDocuments={pendingDocuments}
-                    onDocumentsChange={setPendingDocuments}
-                    onTopicChange={(value) => {
-                        if (error) {
-                            clearError();
-                        }
-                        setTopic(value);
-                    }}
-                    onShowAdvancedChange={setShowAdvanced}
-                    onMaxTurnsChange={setMaxTurnsInput}
-                    onTeamAgentsChange={setTeamAgentsInput}
-                    onTeamRoundsChange={setTeamRoundsInput}
-                    onJuryAgentsChange={setJuryAgentsInput}
-                    onJuryRoundsChange={setJuryRoundsInput}
-                    onSteelmanToggle={() => setSteelmanEnabled((value) => !value)}
-                    onCreateDebate={() => {
-                        void handleCreateDebate();
-                    }}
-                />
+                <div ref={composerAnchorRef} style={{ width: '100%' }}>
+                    <HomeComposerCard
+                        topic={topic}
+                        isCreating={isCreating}
+                        isSophistryMode={isSophistryMode}
+                        showAdvanced={showAdvanced}
+                        maxTurnsInput={maxTurnsInput}
+                        teamAgentsInput={teamAgentsInput}
+                        teamRoundsInput={teamRoundsInput}
+                        juryAgentsInput={juryAgentsInput}
+                        juryRoundsInput={juryRoundsInput}
+                        steelmanEnabled={steelmanEnabled}
+                        homeFontSizes={homeFontSizes}
+                        pendingDocuments={pendingDocuments}
+                        onDocumentsChange={setPendingDocuments}
+                        onTopicChange={(value) => {
+                            if (createError) {
+                                clearError();
+                            }
+                            setTopic(value);
+                        }}
+                        onShowAdvancedChange={handleShowAdvancedChange}
+                        onMaxTurnsChange={setMaxTurnsInput}
+                        onTeamAgentsChange={setTeamAgentsInput}
+                        onTeamRoundsChange={setTeamRoundsInput}
+                        onJuryAgentsChange={setJuryAgentsInput}
+                        onJuryRoundsChange={setJuryRoundsInput}
+                        onSteelmanToggle={() => setSteelmanEnabled((value) => !value)}
+                        onCreateDebate={() => {
+                            void handleCreateDebate();
+                        }}
+                    />
+                </div>
 
                 <div
                     style={{
@@ -288,16 +398,16 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                         flexDirection: 'column',
                         gap: '12px',
                         marginTop: '16px',
+                        minHeight: 0,
                     }}
                 >
                     <AnimatePresence initial={false}>
                         {isSophistryMode && !isInDemo && (
                             <motion.div
                                 key="sophistry-notice"
-                                layout
-                                initial={{ opacity: 0, height: 0, y: -10, scale: 0.98 }}
-                                animate={{ opacity: 1, height: 'auto', y: 0, scale: 1 }}
-                                exit={{ opacity: 0, height: 0, y: -6, scale: 0.985 }}
+                                initial={{ opacity: 0, height: 0, y: -10 }}
+                                animate={{ opacity: 1, height: 'auto', y: 0 }}
+                                exit={{ opacity: 0, height: 0, y: -6 }}
                                 transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                                 style={{ width: '100%', overflow: 'hidden' }}
                             >
@@ -306,38 +416,50 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                         )}
                     </AnimatePresence>
 
-                    <AnimatePresence initial={false}>
-                        {showAdvanced && !isInDemo && (
-                            <motion.div
-                                key="agent-config-panel"
-                                layout
-                                initial={{ opacity: 0, height: 0, y: -8, scale: 0.985 }}
-                                animate={{ opacity: 1, height: 'auto', y: 0, scale: 1 }}
-                                exit={{ opacity: 0, height: 0, y: -4, scale: 0.99 }}
-                                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                                style={{ width: '100%', overflow: 'hidden' }}
-                            >
-                                <AgentConfigPanel
-                                    savedConfigs={savedConfigs}
-                                    agentPersonas={agentPersonas}
-                                    selectedConfigIds={selectedConfigIds}
-                                    selectedPersonaIds={selectedPersonaIds}
-                                    temperatureInputs={temperatureInputs}
-                                    enableThinking={enableThinking}
-                                    showConfigManager={showConfigManager}
-                                    setShowConfigManager={setShowConfigManager}
-                                    handleConfigSelect={handleConfigSelect}
-                                    handlePersonaSelect={handlePersonaSelect}
-                                    handleTemperatureChange={handleTemperatureChange}
-                                    handleThinkingToggle={handleThinkingToggle}
-                                />
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+                <AnimatePresence initial={false}>
+                    {advancedPanelVisible && (
+                        <motion.div
+                            key="agent-config-panel"
+                            initial={{ opacity: 0, height: 0, y: -8 }}
+                            animate={{ opacity: 1, height: 'auto', y: 0 }}
+                            exit={{ opacity: 0, height: 0, y: -4 }}
+                            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                            style={{ width: '100%', overflow: 'visible', minHeight: 0 }}
+                        >
+                            {agentConfigsError && (
+                                <div style={{
+                                    marginBottom: '12px',
+                                    padding: '10px 12px',
+                                    borderRadius: 'var(--radius-md)',
+                                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                                    background: 'rgba(239, 68, 68, 0.08)',
+                                    color: 'var(--text-secondary)',
+                                    fontSize: '12px',
+                                }}>
+                                    {agentConfigsError}
+                                </div>
+                            )}
+                            <AgentConfigPanel
+                                savedConfigs={savedConfigs}
+                                agentPersonas={agentPersonas}
+                                selectedConfigIds={selectedConfigIds}
+                                selectedPersonaIds={selectedPersonaIds}
+                                temperatureInputs={temperatureInputs}
+                                enableThinking={enableThinking}
+                                showConfigManager={showConfigManager}
+                                setShowConfigManager={setShowConfigManager}
+                                handleConfigSelect={handleConfigSelect}
+                                handlePersonaSelect={handlePersonaSelect}
+                                handleTemperatureChange={handleTemperatureChange}
+                                handleThinkingToggle={handleThinkingToggle}
+                            />
+                        </motion.div>
+                    )}
+                </AnimatePresence>
                 </div>
 
                 <AnimatePresence>
-                    {error && (
+                    {createError && (
                         <motion.p
                             initial={{ opacity: 0, y: -8 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -353,7 +475,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                                 fontWeight: 500,
                             }}
                         >
-                            {error}
+                            {createError}
                         </motion.p>
                     )}
                 </AnimatePresence>

@@ -375,6 +375,24 @@ body::before {
   box-shadow: var(--shadow-xs);
 }
 
+/* ─── Agent Config Panel ─────────────────────────────────────── */
+
+.agent-config-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.agent-config-panel__card {
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .agent-config-panel__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ─── List Item Styles ───────────────────────────────────────── */
 
 .list-item {
