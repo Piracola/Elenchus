@@ -44,6 +44,13 @@ class ProviderService:
                 return provider_config_to_response(provider)
         return None
 
+    async def get_config_raw(self, config_id: str) -> dict[str, Any] | None:
+        """Return one raw provider config with plaintext api_key for internal use."""
+        for provider in self._store.load_provider_configs():
+            if isinstance(provider, dict) and provider.get("id") == config_id:
+                return provider_config_to_dict(provider)
+        return None
+
     async def create_config(self, config_in: ModelConfigCreate) -> ModelConfigResponse:
         """Create a new provider configuration."""
         name = config_in.name.strip()

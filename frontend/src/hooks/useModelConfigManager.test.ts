@@ -12,6 +12,8 @@ vi.mock('../api/client', () => ({
             create: vi.fn(),
             update: vi.fn(),
             delete: vi.fn(),
+            probe: vi.fn(),
+            fetchRemoteModels: vi.fn(),
         },
     },
 }));
@@ -21,6 +23,8 @@ const modelsApi = api.models as {
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
+    probe: ReturnType<typeof vi.fn>;
+    fetchRemoteModels: ReturnType<typeof vi.fn>;
 };
 
 afterEach(() => {

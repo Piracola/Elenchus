@@ -26,10 +26,16 @@ describe('ProviderForm', () => {
                 }}
                 isCreatingNew={false}
                 newModelInput=""
+                isProbing={false}
+                isFetchingModels={false}
+                probeMessage=""
+                probeStatus="idle"
                 onFieldChange={vi.fn()}
                 onAddModel={vi.fn()}
                 onRemoveModel={vi.fn()}
                 onNewModelInputChange={vi.fn()}
+                onProbeProvider={vi.fn()}
+                onFetchRemoteModels={vi.fn()}
                 onSave={vi.fn()}
                 onClose={vi.fn()}
             />,
@@ -63,10 +69,16 @@ describe('ProviderForm', () => {
                 }}
                 isCreatingNew={false}
                 newModelInput=""
+                isProbing={false}
+                isFetchingModels={false}
+                probeMessage=""
+                probeStatus="idle"
                 onFieldChange={onFieldChange}
                 onAddModel={vi.fn()}
                 onRemoveModel={vi.fn()}
                 onNewModelInputChange={vi.fn()}
+                onProbeProvider={vi.fn()}
+                onFetchRemoteModels={vi.fn()}
                 onSave={vi.fn()}
                 onClose={vi.fn()}
             />,
@@ -77,4 +89,3 @@ describe('ProviderForm', () => {
         expect(onFieldChange).toHaveBeenCalledWith('clearApiKey', true);
     });
 });
-

@@ -24,6 +24,22 @@ export interface ModelConfigCreatePayload {
     is_default?: boolean;
 }
 
+export interface ModelProviderProbePayload {
+    provider_type: string;
+    api_key?: string | null;
+    api_base_url?: string | null;
+}
+
+export interface ModelProviderProbeResult {
+    ok: boolean;
+    message: string;
+    model_count: number;
+}
+
+export interface ModelProviderModelsResult {
+    models: string[];
+}
+
 export interface ProviderFormData {
     name: string;
     providerType: string;

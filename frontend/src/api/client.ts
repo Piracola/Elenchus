@@ -12,6 +12,9 @@ import type {
     SessionCreatePayload,
     ModelConfig,
     ModelConfigCreatePayload,
+    ModelProviderModelsResult,
+    ModelProviderProbePayload,
+    ModelProviderProbeResult,
     AgentPersonaDetail,
     AgentPersonaSummary,
     LogLevel,
@@ -248,6 +251,18 @@ export const api = {
         delete: (id: string): Promise<void> =>
             request(`/models/${id}`, {
                 method: 'DELETE',
+            }),
+
+        probe: (id: string | null, payload: ModelProviderProbePayload): Promise<ModelProviderProbeResult> =>
+            request(id ? `/models/${id}/probe` : '/models/probe', {
+                method: 'POST',
+                body: JSON.stringify(payload),
+            }),
+
+        fetchRemoteModels: (id: string | null, payload: ModelProviderProbePayload): Promise<ModelProviderModelsResult> =>
+            request(id ? `/models/${id}/models` : '/models/remote-models', {
+                method: 'POST',
+                body: JSON.stringify(payload),
             }),
     },
 

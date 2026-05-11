@@ -8,7 +8,15 @@ from app.middleware.auth import require_auth
 from app.services.provider_service import ProviderService
 from app.services.demo_model_service import get_demo_models
 from app.config import get_settings
-from app.models.schemas import ModelConfigCreate, ModelConfigResponse, ModelConfigUpdate
+from app.models.schemas import (
+    ModelConfigCreate,
+    ModelConfigResponse,
+    ModelConfigUpdate,
+    ModelProviderModelsResponse,
+    ModelProviderProbeRequest,
+    ModelProviderProbeResponse,
+)
+from app.services.model_probe import fetch_provider_models, format_model_fetch_error
 
 router = APIRouter()
 
@@ -61,6 +69,128 @@ def _demo_to_config(m: dict) -> dict:
         "created_at": m.get("created_at", now),
         "updated_at": m.get("updated_at", now),
     }
+
+
+async def _resolve_probe_credentials(
+    *,
+    config_id: str,
+    payload: ModelProviderProbeRequest,
+    service: ProviderService,
+) -> tuple[str, str, str | None]:
+    provider = await service.get_config_raw(config_id)
+    if provider is None:
+        raise HTTPException(status_code=404, detail="Model configuration not found")
+
+    api_key = payload.api_key or str(provider.get("api_key") or "")
+    api_base_url = payload.api_base_url
+    if api_base_url is None and not payload.model_fields_set.intersection({"api_base_url"}):
+        api_base_url = provider.get("api_base_url")
+    provider_type = payload.provider_type or str(provider.get("provider_type") or "openai")
+    return provider_type, api_key, api_base_url
+
+
+@router.post("/probe", response_model=ModelProviderProbeResponse)
+async def probe_draft_model_provider(
+    payload: ModelProviderProbeRequest,
+    _auth: bool = Depends(require_auth),
+):
+    """Check whether draft provider settings can be reached."""
+    try:
+        models = await fetch_provider_models(
+            provider_type=payload.provider_type,
+            api_key=payload.api_key or "",
+            api_base_url=payload.api_base_url,
+        )
+    except Exception as error:  # noqa: BLE001 - normalized for the settings UI.
+        return ModelProviderProbeResponse(
+            ok=False,
+            message=format_model_fetch_error(error),
+            model_count=0,
+        )
+    return ModelProviderProbeResponse(
+        ok=True,
+        message=f"连接正常，获取到 {len(models)} 个模型。",
+        model_count=len(models),
+    )
+
+
+@router.post("/remote-models", response_model=ModelProviderModelsResponse)
+async def fetch_draft_model_provider_models(
+    payload: ModelProviderProbeRequest,
+    _auth: bool = Depends(require_auth),
+):
+    """Fetch a remote model list from draft provider settings."""
+    try:
+        models = await fetch_provider_models(
+            provider_type=payload.provider_type,
+            api_key=payload.api_key or "",
+            api_base_url=payload.api_base_url,
+        )
+    except Exception as error:  # noqa: BLE001 - normalized for the settings UI.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=format_model_fetch_error(error),
+        ) from error
+    return ModelProviderModelsResponse(models=models)
+
+
+@router.post("/{config_id}/probe", response_model=ModelProviderProbeResponse)
+async def probe_model_provider(
+    config_id: str,
+    payload: ModelProviderProbeRequest,
+    service: ProviderService = Depends(get_provider_service),
+    _auth: bool = Depends(require_auth),
+):
+    """Check whether a saved provider can be reached."""
+    provider_type, api_key, api_base_url = await _resolve_probe_credentials(
+        config_id=config_id,
+        payload=payload,
+        service=service,
+    )
+    try:
+        models = await fetch_provider_models(
+            provider_type=provider_type,
+            api_key=api_key,
+            api_base_url=api_base_url,
+        )
+    except Exception as error:  # noqa: BLE001 - normalized for the settings UI.
+        return ModelProviderProbeResponse(
+            ok=False,
+            message=format_model_fetch_error(error),
+            model_count=0,
+        )
+    return ModelProviderProbeResponse(
+        ok=True,
+        message=f"连接正常，获取到 {len(models)} 个模型。",
+        model_count=len(models),
+    )
+
+
+@router.post("/{config_id}/models", response_model=ModelProviderModelsResponse)
+async def fetch_model_provider_models(
+    config_id: str,
+    payload: ModelProviderProbeRequest,
+    service: ProviderService = Depends(get_provider_service),
+    _auth: bool = Depends(require_auth),
+):
+    """Fetch the remote model list for a saved provider."""
+    provider_type, api_key, api_base_url = await _resolve_probe_credentials(
+        config_id=config_id,
+        payload=payload,
+        service=service,
+    )
+    try:
+        models = await fetch_provider_models(
+            provider_type=provider_type,
+            api_key=api_key,
+            api_base_url=api_base_url,
+        )
+    except Exception as error:  # noqa: BLE001 - normalized for the settings UI.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=format_model_fetch_error(error),
+        ) from error
+    return ModelProviderModelsResponse(models=models)
 
 @router.post("", response_model=ModelConfigResponse)
 async def create_model_config(

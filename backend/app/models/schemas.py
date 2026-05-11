@@ -263,6 +263,40 @@ class ModelConfigUpdate(BaseModel):
         return _normalize_models(value)
 
 
+class ModelProviderProbeRequest(BaseModel):
+    """Payload for checking a provider connection or fetching remote models."""
+
+    provider_type: str = Field(default="openai")
+    api_key: str | None = None
+    api_base_url: str | None = None
+
+    @field_validator("provider_type", mode="before")
+    @classmethod
+    def _normalize_provider_type(cls, value: Any) -> str:
+        provider_type = str(value or "").strip().lower()
+        return provider_type or "openai"
+
+    @field_validator("api_key", "api_base_url", mode="before")
+    @classmethod
+    def _normalize_optional_text(cls, value: Any) -> Any:
+        value = _blank_to_none(value)
+        return value.strip() if isinstance(value, str) else value
+
+
+class ModelProviderProbeResponse(BaseModel):
+    """Connectivity check result for a provider."""
+
+    ok: bool
+    message: str
+    model_count: int = 0
+
+
+class ModelProviderModelsResponse(BaseModel):
+    """Remote model list for a provider."""
+
+    models: list[str]
+
+
 class SessionResponse(BaseModel):
     """Full session detail."""
 

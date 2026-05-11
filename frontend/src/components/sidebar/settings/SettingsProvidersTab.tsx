@@ -32,8 +32,14 @@ export function SettingsProvidersTab({
                 onAddModel={modelConfig.handleAddModel}
                 onRemoveModel={modelConfig.handleRemoveModel}
                 onNewModelInputChange={modelConfig.setNewModelInput}
+                onProbeProvider={modelConfig.handleProbeProvider}
+                onFetchRemoteModels={modelConfig.handleFetchRemoteModels}
                 onSave={modelConfig.handleSave}
                 onClose={onClose}
+                isProbing={modelConfig.isProbing}
+                isFetchingModels={modelConfig.isFetchingModels}
+                probeMessage={modelConfig.probeMessage}
+                probeStatus={modelConfig.probeStatus}
             />
         </div>
     );

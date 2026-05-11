@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 
 import { api } from '../api/client';
+import { toast } from '../utils/chat/toast';
 import type { ModelConfig, ModelConfigCreatePayload, ProviderFormData } from '../types';
 import { formatCustomParameters, parseCustomParametersInput } from '../utils/agent/customParameters';
 
@@ -89,6 +90,10 @@ function findProviderIndexById(
 export function useModelConfigManager() {
     const [providers, setProviders] = useState<ModelConfig[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [isProbing, setIsProbing] = useState(false);
+    const [isFetchingModels, setIsFetchingModels] = useState(false);
+    const [probeMessage, setProbeMessage] = useState('');
+    const [probeStatus, setProbeStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [activeIndex, setActiveIndex] = useState<number>(0);
     const [isCreatingNew, setIsCreatingNew] = useState(false);
     const [formData, setFormData] = useState<ProviderFormData>(createEmptyFormData);
@@ -124,11 +129,15 @@ export function useModelConfigManager() {
             enableThinking,
         });
         setIsCreatingNew(false);
+        setProbeMessage('');
+        setProbeStatus('idle');
     }, []);
 
     const startNew = useCallback(() => {
         setIsCreatingNew(true);
         setFormData(createEmptyFormData());
+        setProbeMessage('');
+        setProbeStatus('idle');
     }, []);
 
     const fetchConfigs = useCallback(async () => {
@@ -237,6 +246,10 @@ export function useModelConfigManager() {
         field: K,
         value: ProviderFormData[K],
     ) => {
+        if (field === 'providerType' || field === 'apiKey' || field === 'apiBaseUrl') {
+            setProbeMessage('');
+            setProbeStatus('idle');
+        }
         setFormData((previous) => {
             if (field === 'apiKey') {
                 const nextApiKey = String(value);
@@ -250,9 +263,91 @@ export function useModelConfigManager() {
         });
     }, []);
 
+    const getCurrentProviderId = useCallback(() => {
+        if (isCreatingNew) {
+            return null;
+        }
+        return providers[activeIndex]?.id ?? null;
+    }, [activeIndex, isCreatingNew, providers]);
+
+    const buildProbePayload = useCallback(() => ({
+        provider_type: formData.providerType,
+        api_key: formData.apiKey.trim() || null,
+        api_base_url: formData.apiBaseUrl.trim(),
+    }), [formData.apiBaseUrl, formData.apiKey, formData.providerType]);
+
+    const handleProbeProvider = useCallback(async () => {
+        const providerId = getCurrentProviderId();
+        if (!formData.apiKey.trim() && (!formData.apiKeyConfigured || formData.clearApiKey)) {
+            const message = '请先填写 API 密钥。';
+            setProbeMessage(message);
+            setProbeStatus('error');
+            toast(message, 'error');
+            return;
+        }
+
+        try {
+            setIsProbing(true);
+            setProbeMessage('正在检测连接...');
+            setProbeStatus('idle');
+            const result = await api.models.probe(providerId, buildProbePayload());
+            setProbeMessage(result.message);
+            setProbeStatus(result.ok ? 'success' : 'error');
+            toast(result.message, result.ok ? 'success' : 'error');
+        } catch (err) {
+            const message = err instanceof Error ? err.message : '检测失败。';
+            setProbeMessage(message);
+            setProbeStatus('error');
+            toast(message, 'error');
+        } finally {
+            setIsProbing(false);
+        }
+    }, [buildProbePayload, formData.apiKey, formData.apiKeyConfigured, formData.clearApiKey, getCurrentProviderId]);
+
+    const handleFetchRemoteModels = useCallback(async () => {
+        const providerId = getCurrentProviderId();
+        if (!formData.apiKey.trim() && (!formData.apiKeyConfigured || formData.clearApiKey)) {
+            const message = '请先填写 API 密钥。';
+            setProbeMessage(message);
+            setProbeStatus('error');
+            toast(message, 'error');
+            return;
+        }
+
+        try {
+            setIsFetchingModels(true);
+            setProbeMessage('正在获取模型列表...');
+            setProbeStatus('idle');
+            const result = await api.models.fetchRemoteModels(providerId, buildProbePayload());
+            const mergedModels = normalizeModelList([...formData.models, ...result.models]);
+            setFormData((previous) => ({
+                ...previous,
+                models: mergedModels,
+            }));
+            const addedCount = mergedModels.length - normalizeModelList(formData.models).length;
+            const message = addedCount > 0
+                ? `已获取 ${result.models.length} 个模型，新增 ${addedCount} 个。`
+                : `已获取 ${result.models.length} 个模型，没有新增项。`;
+            setProbeMessage(message);
+            setProbeStatus('success');
+            toast(message, 'success');
+        } catch (err) {
+            const message = err instanceof Error ? err.message : '获取模型列表失败。';
+            setProbeMessage(message);
+            setProbeStatus('error');
+            toast(message, 'error');
+        } finally {
+            setIsFetchingModels(false);
+        }
+    }, [buildProbePayload, formData.apiKey, formData.apiKeyConfigured, formData.clearApiKey, formData.models, getCurrentProviderId]);
+
     return {
         providers,
         isLoading,
+        isProbing,
+        isFetchingModels,
+        probeMessage,
+        probeStatus,
         activeIndex,
         isCreatingNew,
         formData,
@@ -264,6 +359,8 @@ export function useModelConfigManager() {
         handleSave,
         handleAddModel,
         handleRemoveModel,
+        handleProbeProvider,
+        handleFetchRemoteModels,
         updateFormField,
         startNew,
     };

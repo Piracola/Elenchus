@@ -193,3 +193,64 @@ def test_update_model_config_rejects_duplicate_name():
 
     assert update_response.status_code == 400
     assert "already exists" in update_response.json()["detail"]
+
+
+def test_probe_model_provider_uses_saved_secret(monkeypatch):
+    async def fake_fetch_provider_models(*, provider_type, api_key, api_base_url):
+        assert provider_type == "openai"
+        assert api_key == "sk-saved"
+        assert api_base_url == "https://example.com/v1"
+        return ["gpt-4o", "gpt-4.1"]
+
+    monkeypatch.setattr("app.api.models.fetch_provider_models", fake_fetch_provider_models)
+
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/models",
+        json={
+            "name": "probe-provider",
+            "provider_type": "openai",
+            "api_key": "sk-saved",
+            "api_base_url": "https://example.com/v1",
+            "custom_parameters": {},
+            "models": ["gpt-4o"],
+            "is_default": False,
+        },
+    )
+    assert create_response.status_code == 200
+    provider_id = create_response.json()["id"]
+
+    probe_response = client.post(
+        f"/api/models/{provider_id}/probe",
+        json={"provider_type": "openai"},
+    )
+
+    assert probe_response.status_code == 200
+    assert probe_response.json() == {
+        "ok": True,
+        "message": "连接正常，获取到 2 个模型。",
+        "model_count": 2,
+    }
+
+
+def test_fetch_model_provider_models_supports_draft_settings(monkeypatch):
+    async def fake_fetch_provider_models(*, provider_type, api_key, api_base_url):
+        assert provider_type == "openai"
+        assert api_key == "sk-draft"
+        assert api_base_url == "https://example.com/v1"
+        return ["gpt-4o"]
+
+    monkeypatch.setattr("app.api.models.fetch_provider_models", fake_fetch_provider_models)
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/models/remote-models",
+        json={
+            "provider_type": "openai",
+            "api_key": "sk-draft",
+            "api_base_url": "https://example.com/v1",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"models": ["gpt-4o"]}
