@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DialogueEntry, Session } from '../types';
 import { useDebateStore } from '../stores/debateStore';
 import ChatPanel from './ChatPanel';
+import {
+    FLOATING_INSPECTOR_STORAGE_KEY,
+} from '../utils/inspector/floatingInspector';
 
 vi.mock('framer-motion', () => {
     const createPrimitive = (tag: keyof HTMLElementTagNameMap) => {
@@ -87,7 +90,53 @@ vi.mock('./chat/DebateControls', () => ({
 }));
 
 vi.mock('./chat/RuntimeInspector', () => ({
-    default: () => <div data-testid="runtime-inspector" />,
+    default: ({
+        mode = 'inline',
+        expanded,
+        defaultExpanded,
+        onExpandedChange,
+    }: {
+        mode?: 'inline' | 'floating';
+        expanded?: boolean;
+        defaultExpanded?: boolean;
+        onExpandedChange?: (expanded: boolean) => void;
+    }) => (
+        <button
+            data-testid={`runtime-inspector-${mode}`}
+            data-expanded={expanded === undefined ? 'uncontrolled' : String(expanded)}
+            data-default-expanded={defaultExpanded === undefined ? 'unset' : String(defaultExpanded)}
+            onClick={() => onExpandedChange?.(!(expanded ?? defaultExpanded ?? false))}
+        />
+    ),
+}));
+
+vi.mock('./chat/FloatingRuntimeInspector', () => ({
+    default: ({
+        floatingInspectorRect,
+        floatingInspectorExpanded,
+        onExpandedChange,
+    }: {
+        floatingInspectorRect: { x: number; y: number; width: number; height: number } | null;
+        floatingInspectorExpanded: boolean;
+        onExpandedChange: (expanded: boolean) => void;
+    }) => {
+        if (!floatingInspectorRect) {
+            return null;
+        }
+
+        return (
+            <div
+                data-testid="floating-runtime-inspector"
+                data-has-rect="true"
+                data-expanded={String(floatingInspectorExpanded)}
+            >
+                <button
+                    data-testid="runtime-inspector-floating"
+                    onClick={() => onExpandedChange(!floatingInspectorExpanded)}
+                />
+            </div>
+        );
+    },
 }));
 
 vi.mock('./chat/StatusBanner', () => ({
@@ -163,6 +212,15 @@ function flushAnimationFrames() {
     for (const { callback } of queuedFrames) {
         callback(0);
     }
+}
+
+async function flushInspectorLayout() {
+    await act(async () => {
+        MockResizeObserver.triggerAll();
+        flushAnimationFrames();
+        await Promise.resolve();
+        await Promise.resolve();
+    });
 }
 
 function makeDialogueEntry(index: number): DialogueEntry {
@@ -256,6 +314,7 @@ describe('ChatPanel history rendering', () => {
             writable: true,
             value: 1440,
         });
+        window.localStorage.clear();
 
         Object.defineProperty(globalThis, 'ResizeObserver', {
             configurable: true,
@@ -371,5 +430,164 @@ describe('ChatPanel history rendering', () => {
 
         const after = screen.getAllByTestId('message-row').length;
         expect(after).toBeGreaterThan(before);
+    });
+
+    it('renders the floating runtime inspector on wide layouts instead of the inline inspector', async () => {
+        useDebateStore.getState().setCurrentSession(makeSession());
+
+        render(<ChatPanel isSidebarCollapsed={false} onExpandSidebar={() => {}} />);
+        await flushInspectorLayout();
+
+        expect(screen.getByTestId('floating-runtime-inspector')).toBeInTheDocument();
+        expect(screen.getByTestId('floating-runtime-inspector')).toHaveAttribute('data-expanded', 'false');
+        expect(screen.getByTestId('runtime-inspector-floating')).toBeInTheDocument();
+        expect(screen.queryByTestId('runtime-inspector-inline')).not.toBeInTheDocument();
+    });
+
+    it('renders the inline runtime inspector on narrow layouts and omits the floating overlay', () => {
+        useDebateStore.getState().setCurrentSession(makeSession());
+        Object.defineProperty(window, 'innerWidth', {
+            configurable: true,
+            writable: true,
+            value: 1024,
+        });
+
+        render(<ChatPanel isSidebarCollapsed={false} onExpandSidebar={() => {}} />);
+
+        expect(screen.getByTestId('runtime-inspector-inline')).toBeInTheDocument();
+        expect(screen.getByTestId('runtime-inspector-inline')).toHaveAttribute('data-default-expanded', 'true');
+        expect(screen.getByTestId('runtime-inspector-inline')).toHaveAttribute('data-expanded', 'uncontrolled');
+        expect(screen.queryByTestId('floating-runtime-inspector')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('runtime-inspector-floating')).not.toBeInTheDocument();
+    });
+
+    it('switches between wide and narrow layouts without rendering duplicate inspector paths', async () => {
+        useDebateStore.getState().setCurrentSession(makeSession());
+
+        render(<ChatPanel isSidebarCollapsed={false} onExpandSidebar={() => {}} />);
+        await flushInspectorLayout();
+
+        expect(screen.getAllByTestId('floating-runtime-inspector')).toHaveLength(1);
+        expect(screen.getByTestId('floating-runtime-inspector')).toHaveAttribute('data-expanded', 'false');
+        expect(screen.getAllByTestId('runtime-inspector-floating')).toHaveLength(1);
+        expect(screen.queryByTestId('runtime-inspector-inline')).not.toBeInTheDocument();
+
+        await act(async () => {
+            Object.defineProperty(window, 'innerWidth', {
+                configurable: true,
+                writable: true,
+                value: 1024,
+            });
+            window.dispatchEvent(new Event('resize'));
+            MockResizeObserver.triggerAll();
+            flushAnimationFrames();
+            await Promise.resolve();
+        });
+
+        expect(screen.getAllByTestId('runtime-inspector-inline')).toHaveLength(1);
+        expect(screen.getByTestId('runtime-inspector-inline')).toHaveAttribute('data-default-expanded', 'true');
+        expect(screen.queryByTestId('floating-runtime-inspector')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('runtime-inspector-floating')).not.toBeInTheDocument();
+
+        await act(async () => {
+            Object.defineProperty(window, 'innerWidth', {
+                configurable: true,
+                writable: true,
+                value: 1440,
+            });
+            window.dispatchEvent(new Event('resize'));
+            MockResizeObserver.triggerAll();
+            flushAnimationFrames();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(screen.getAllByTestId('floating-runtime-inspector')).toHaveLength(1);
+        expect(screen.getByTestId('floating-runtime-inspector')).toHaveAttribute('data-expanded', 'false');
+        expect(screen.getAllByTestId('runtime-inspector-floating')).toHaveLength(1);
+        expect(screen.queryByTestId('runtime-inspector-inline')).not.toBeInTheDocument();
+    });
+
+    it('preserves the floating expanded snapshot across a narrow-layout detour without duplicating inspector paths', async () => {
+        useDebateStore.getState().setCurrentSession(makeSession());
+
+        render(<ChatPanel isSidebarCollapsed={false} onExpandSidebar={() => {}} />);
+        await flushInspectorLayout();
+
+        await act(async () => {
+            screen.getByTestId('runtime-inspector-floating').click();
+            await Promise.resolve();
+        });
+
+        expect(screen.getByTestId('floating-runtime-inspector')).toHaveAttribute('data-expanded', 'true');
+
+        await act(async () => {
+            Object.defineProperty(window, 'innerWidth', {
+                configurable: true,
+                writable: true,
+                value: 1024,
+            });
+            window.dispatchEvent(new Event('resize'));
+            MockResizeObserver.triggerAll();
+            flushAnimationFrames();
+            await Promise.resolve();
+        });
+
+        expect(screen.getAllByTestId('runtime-inspector-inline')).toHaveLength(1);
+        expect(screen.queryByTestId('floating-runtime-inspector')).not.toBeInTheDocument();
+
+        await act(async () => {
+            Object.defineProperty(window, 'innerWidth', {
+                configurable: true,
+                writable: true,
+                value: 1440,
+            });
+            window.dispatchEvent(new Event('resize'));
+            MockResizeObserver.triggerAll();
+            flushAnimationFrames();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(screen.getAllByTestId('floating-runtime-inspector')).toHaveLength(1);
+        expect(screen.getByTestId('floating-runtime-inspector')).toHaveAttribute('data-expanded', 'false');
+        expect(screen.queryByTestId('runtime-inspector-inline')).not.toBeInTheDocument();
+
+        await act(async () => {
+            screen.getByTestId('runtime-inspector-floating').click();
+            await Promise.resolve();
+        });
+
+        expect(screen.getByTestId('floating-runtime-inspector')).toHaveAttribute('data-expanded', 'true');
+        expect(screen.queryByTestId('runtime-inspector-inline')).not.toBeInTheDocument();
+    });
+
+    it('keeps the floating collapsed shell separate from the inline default-expanded behavior', async () => {
+        useDebateStore.getState().setCurrentSession(makeSession());
+        window.localStorage.setItem(
+            FLOATING_INSPECTOR_STORAGE_KEY,
+            JSON.stringify({ x: 700, y: 120, width: 148, height: 38 }),
+        );
+
+        render(<ChatPanel isSidebarCollapsed={false} onExpandSidebar={() => {}} />);
+        await flushInspectorLayout();
+
+        expect(screen.getByTestId('floating-runtime-inspector')).toHaveAttribute('data-expanded', 'false');
+        expect(screen.queryByTestId('runtime-inspector-inline')).not.toBeInTheDocument();
+
+        await act(async () => {
+            Object.defineProperty(window, 'innerWidth', {
+                configurable: true,
+                writable: true,
+                value: 1024,
+            });
+            window.dispatchEvent(new Event('resize'));
+            MockResizeObserver.triggerAll();
+            flushAnimationFrames();
+            await Promise.resolve();
+        });
+
+        expect(screen.getByTestId('runtime-inspector-inline')).toHaveAttribute('data-default-expanded', 'true');
+        expect(screen.getByTestId('runtime-inspector-inline')).toHaveAttribute('data-expanded', 'uncontrolled');
     });
 });

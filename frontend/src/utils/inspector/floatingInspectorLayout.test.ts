@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
     clampFloatingInspectorRect,
+    createCollapsedFloatingInspectorRect,
     createDefaultFloatingInspectorRect,
+    createTopDockedFloatingInspectorRect,
     interactionCursor,
     parseStoredFloatingInspectorRect,
     resizeFloatingInspectorRect,
@@ -42,6 +44,31 @@ describe('floatingInspectorLayout', () => {
         expect(rect.height).toBe(520);
         expect(rect.x).toBe(524);
         expect(rect.y).toBe(24);
+    });
+
+    it('creates a top docked expanded rect spanning the visible chat workspace', () => {
+        expect(createTopDockedFloatingInspectorRect({ width: 900, height: 700 }, 72)).toEqual({
+            x: 8,
+            y: 72,
+            width: 884,
+            height: 520,
+        });
+    });
+
+    it('keeps the top docked rect inside a short viewport', () => {
+        const rect = createTopDockedFloatingInspectorRect({ width: 900, height: 300 }, 72);
+
+        expect(rect.y).toBe(72);
+        expect(rect.height).toBeLessThanOrEqual(300 - 72 - 8);
+    });
+
+    it('creates a compact collapsed rect without inflating to the expanded minimum size', () => {
+        expect(createCollapsedFloatingInspectorRect({ width: 900, height: 700 }, 72)).toEqual({
+            x: 736,
+            y: 72,
+            width: 148,
+            height: 38,
+        });
     });
 
     it('resizes from the left while respecting minimum size', () => {

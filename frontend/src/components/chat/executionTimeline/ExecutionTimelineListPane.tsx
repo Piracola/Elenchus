@@ -2,9 +2,11 @@ import type { RefObject } from 'react';
 import type { RuntimeEvent } from '../../../types';
 import {
     eventColor,
+    eventLabel,
     FILTER_LABELS,
     FILTERS,
     formatTime,
+    getEventSeverity,
     pillStyle,
     summarizeEvent,
     type TimelineFilter,
@@ -120,6 +122,8 @@ export function ExecutionTimelineListPane({
 
                 {visibleEvents.map((event) => {
                     const active = event.event_id === selectedEventId;
+                    const severity = getEventSeverity(event.type);
+                    const isError = severity === 'error';
                     return (
                         <button
                             key={event.event_id}
@@ -130,14 +134,19 @@ export function ExecutionTimelineListPane({
                                 display: 'grid',
                                 gridTemplateColumns: '58px 1fr',
                                 gap: '10px',
-                                border: 'none',
+                                border: active
+                                    ? `1px solid ${isError ? 'var(--accent-rose)' : 'var(--border-subtle)'}`
+                                    : '1px solid transparent',
                                 borderRadius: 'var(--radius-md)',
                                 marginBottom: '4px',
                                 padding: '8px',
                                 textAlign: 'left',
-                                background: active ? 'var(--bg-card)' : 'transparent',
+                                background: isError
+                                    ? 'rgba(239, 68, 68, 0.08)'
+                                    : active ? 'var(--bg-card)' : 'transparent',
                                 cursor: 'pointer',
                                 color: 'var(--text-primary)',
+                                boxShadow: active ? 'var(--shadow-xs)' : 'none',
                             }}
                         >
                             <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
@@ -155,7 +164,9 @@ export function ExecutionTimelineListPane({
                                 >
                                     #{event.seq}
                                 </span>
-                                <span style={{ fontSize: '11px', fontWeight: 500 }}>{event.type}</span>
+                                <span style={{ fontSize: '11px', fontWeight: 600 }}>
+                                    {eventLabel(event.type)}
+                                </span>
                                 <div
                                     style={{
                                         fontSize: '11px',

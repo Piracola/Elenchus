@@ -74,3 +74,39 @@ export function summarizeEvent(
 
     return event.type;
 }
+
+export function eventLabel(type: string): string {
+    const labels: Record<string, string> = {
+        error: '运行错误',
+        status: '状态更新',
+        speech_start: '开始发言',
+        speech_token: '发言片段',
+        speech: '完整发言',
+        speech_cancel: '发言取消',
+        turn_complete: '轮次完成',
+        judge_scores: '裁判评分',
+        fact_check: '事实核查',
+        memory_write: '记忆写入',
+        team_discussion: '组内讨论',
+        jury_discussion: '陪审讨论',
+    };
+    return labels[type] ?? type;
+}
+
+export function getEventSeverity(type: string): 'error' | 'warning' | 'info' {
+    if (getRuntimeEventGroup(type) === 'error' || type === 'error') {
+        return 'error';
+    }
+    if (type.includes('cancel') || type.includes('retry')) {
+        return 'warning';
+    }
+    return 'info';
+}
+
+export function formatPayloadForReading(payload: RuntimeEvent['payload']): string {
+    const content = payload.content;
+    if (typeof content === 'string' && content.trim()) {
+        return content.trim();
+    }
+    return formatJson(payload);
+}

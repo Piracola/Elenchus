@@ -162,7 +162,7 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
                 >
                     {!floatingInspector.isWideLayout && (
                         <div style={{ flex: '0 0 auto', minWidth: 0 }}>
-                            <RuntimeInspector key="inline-inspector" />
+                            <RuntimeInspector key="inline-inspector" defaultExpanded />
                         </div>
                     )}
 
@@ -214,9 +214,9 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
             {floatingInspector.isWideLayout && (
                 <FloatingRuntimeInspector
                     floatingInspectorRect={floatingInspector.floatingInspectorRect}
+                    floatingInspectorViewportOffset={floatingInspector.floatingInspectorViewportOffset}
                     floatingInspectorExpanded={floatingInspector.floatingInspectorExpanded}
                     floatingInspectorActive={floatingInspector.floatingInspectorActive}
-                    floatingInspectorInteractionRef={floatingInspector.floatingInspectorInteractionRef}
                     onMoveStart={floatingInspector.handleFloatingInspectorMoveStart}
                     onResizeStart={floatingInspector.handleFloatingInspectorResizeStart}
                     onExpandedChange={floatingInspector.handleFloatingInspectorExpandedChange}

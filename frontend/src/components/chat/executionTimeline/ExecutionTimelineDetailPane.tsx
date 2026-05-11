@@ -1,5 +1,12 @@
 import type { RuntimeEvent } from '../../../types';
-import { eventColor, formatJson, formatTime, pillStyle } from './shared';
+import {
+    eventColor,
+    eventLabel,
+    formatPayloadForReading,
+    formatTime,
+    getEventSeverity,
+    pillStyle,
+} from './shared';
 
 type ExecutionTimelineDetailPaneProps = {
     currentSessionId: string | null;
@@ -46,6 +53,9 @@ export function ExecutionTimelineDetailPane({
     onSliderDragStart,
     onSliderDragEnd,
 }: ExecutionTimelineDetailPaneProps) {
+    const selectedSeverity = selectedEvent ? getEventSeverity(selectedEvent.type) : 'info';
+    const selectedIsError = selectedSeverity === 'error';
+
     return (
         <div
             style={{
@@ -187,9 +197,17 @@ export function ExecutionTimelineDetailPane({
                 <div style={{ marginBottom: '8px', color: 'var(--text-muted)' }}>{replayProgress}</div>
                 {selectedEvent ? (
                     <>
-                        <div style={{ marginBottom: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <div
+                            style={{
+                                marginBottom: '10px',
+                                display: 'flex',
+                                gap: '8px',
+                                flexWrap: 'wrap',
+                                alignItems: 'center',
+                            }}
+                        >
                             <span style={{ fontWeight: 600, color: eventColor(selectedEvent.type) }}>
-                                {selectedEvent.type}
+                                {eventLabel(selectedEvent.type)}
                             </span>
                             <span>序号：{selectedEvent.seq}</span>
                             <span>{formatTime(selectedEvent.timestamp)}</span>
@@ -207,18 +225,38 @@ export function ExecutionTimelineDetailPane({
                                 </span>
                             )}
                         </div>
+                        {selectedIsError && (
+                            <div
+                                style={{
+                                    marginBottom: '10px',
+                                    padding: '10px 12px',
+                                    borderRadius: 'var(--radius-md)',
+                                    border: '1px solid rgba(239, 68, 68, 0.22)',
+                                    background: 'rgba(239, 68, 68, 0.08)',
+                                    color: 'var(--accent-rose)',
+                                    fontSize: '12px',
+                                    fontWeight: 700,
+                                }}
+                            >
+                                模型调用或运行流程出现错误，下面是后端返回的具体信息。
+                            </div>
+                        )}
                         <pre
                             style={{
                                 margin: 0,
                                 whiteSpace: 'pre-wrap',
                                 wordBreak: 'break-word',
-                                background: 'var(--bg-tertiary)',
+                                background: selectedIsError ? 'rgba(239, 68, 68, 0.06)' : 'var(--bg-tertiary)',
+                                border: selectedIsError
+                                    ? '1px solid rgba(239, 68, 68, 0.18)'
+                                    : '1px solid var(--border-subtle)',
                                 borderRadius: 'var(--radius-md)',
-                                padding: '8px',
+                                padding: '10px 12px',
                                 color: 'var(--text-primary)',
+                                lineHeight: 1.6,
                             }}
                         >
-                            {formatJson(selectedEvent.payload)}
+                            {formatPayloadForReading(selectedEvent.payload)}
                         </pre>
                     </>
                 ) : (

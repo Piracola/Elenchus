@@ -5,12 +5,19 @@ export type FloatingInspectorBounds = {
     height: number;
 };
 
+export type FloatingInspectorViewportOffset = {
+    left: number;
+    top: number;
+};
+
 export type FloatingInspectorRect = {
     x: number;
     y: number;
     width: number;
     height: number;
 };
+
+export type FloatingInspectorLayoutMode = 'collapsed' | 'top-docked' | 'floating';
 
 export type FloatingInspectorResizeHandle =
     | 'top'
@@ -29,6 +36,7 @@ export type FloatingInspectorInteraction =
         startY: number;
         startRect: FloatingInspectorRect;
         bounds: FloatingInspectorBounds;
+        startLayoutMode: FloatingInspectorLayoutMode;
     }
     | {
         mode: 'resize';
@@ -37,10 +45,12 @@ export type FloatingInspectorInteraction =
         startY: number;
         startRect: FloatingInspectorRect;
         bounds: FloatingInspectorBounds;
+        startLayoutMode: FloatingInspectorLayoutMode;
     };
 
 export const FLOATING_INSPECTOR_DEFAULT_SIZE = { width: 360, height: 520 };
 export const FLOATING_INSPECTOR_MIN_SIZE = { width: 300, height: 260 };
+export const FLOATING_INSPECTOR_COLLAPSED_SIZE = { width: 148, height: 38 };
 export const FLOATING_INSPECTOR_MARGIN = 8;
 export const FLOATING_INSPECTOR_DOCK_GAP = 16;
 
@@ -116,9 +126,10 @@ function getFloatingInspectorSizeRange(size: number, preferredMin: number): { mi
 export function clampFloatingInspectorRect(
     rect: FloatingInspectorRect,
     bounds: FloatingInspectorBounds,
+    preferredMinSize = FLOATING_INSPECTOR_MIN_SIZE,
 ): FloatingInspectorRect {
-    const widthRange = getFloatingInspectorSizeRange(bounds.width, FLOATING_INSPECTOR_MIN_SIZE.width);
-    const heightRange = getFloatingInspectorSizeRange(bounds.height, FLOATING_INSPECTOR_MIN_SIZE.height);
+    const widthRange = getFloatingInspectorSizeRange(bounds.width, preferredMinSize.width);
+    const heightRange = getFloatingInspectorSizeRange(bounds.height, preferredMinSize.height);
     const width = clampNumber(rect.width, widthRange.min, widthRange.max);
     const height = clampNumber(rect.height, heightRange.min, heightRange.max);
     const maxX = Math.max(FLOATING_INSPECTOR_MARGIN, bounds.width - width - FLOATING_INSPECTOR_MARGIN);
@@ -160,10 +171,53 @@ export function createDefaultFloatingInspectorRect(
     );
 }
 
+export function createTopDockedFloatingInspectorRect(
+    bounds: FloatingInspectorBounds,
+    preferredTop = FLOATING_INSPECTOR_MARGIN,
+): FloatingInspectorRect {
+    const widthRange = getFloatingInspectorSizeRange(bounds.width, FLOATING_INSPECTOR_MIN_SIZE.width);
+    const top = clampNumber(preferredTop, FLOATING_INSPECTOR_MARGIN, Math.max(FLOATING_INSPECTOR_MARGIN, bounds.height));
+    const maxHeight = Math.max(1, bounds.height - top - FLOATING_INSPECTOR_MARGIN);
+    const width = clampNumber(
+        bounds.width - FLOATING_INSPECTOR_MARGIN * 2,
+        widthRange.min,
+        widthRange.max,
+    );
+    const height = clampNumber(
+        FLOATING_INSPECTOR_DEFAULT_SIZE.height,
+        Math.min(FLOATING_INSPECTOR_MIN_SIZE.height, maxHeight),
+        maxHeight,
+    );
+
+    return {
+        x: FLOATING_INSPECTOR_MARGIN,
+        y: top,
+        width,
+        height,
+    };
+}
+
+export function createCollapsedFloatingInspectorRect(
+    bounds: FloatingInspectorBounds,
+    preferredTop = FLOATING_INSPECTOR_MARGIN,
+): FloatingInspectorRect {
+    const width = Math.min(FLOATING_INSPECTOR_COLLAPSED_SIZE.width, Math.max(1, bounds.width));
+    const height = Math.min(FLOATING_INSPECTOR_COLLAPSED_SIZE.height, Math.max(1, bounds.height));
+    const maxX = Math.max(FLOATING_INSPECTOR_MARGIN, bounds.width - width - FLOATING_INSPECTOR_DOCK_GAP);
+    const maxY = Math.max(FLOATING_INSPECTOR_MARGIN, bounds.height - height - FLOATING_INSPECTOR_MARGIN);
+
+    return clampFloatingInspectorRect({
+        x: maxX,
+        y: clampNumber(preferredTop, FLOATING_INSPECTOR_MARGIN, maxY),
+        width,
+        height,
+    }, bounds, FLOATING_INSPECTOR_COLLAPSED_SIZE);
+}
+
 export function getCollapsedFloatingInspectorSize(): { width: number; height: number } {
     return {
-        width: FLOATING_INSPECTOR_MIN_SIZE.width,
-        height: FLOATING_INSPECTOR_MIN_SIZE.height,
+        width: FLOATING_INSPECTOR_COLLAPSED_SIZE.width,
+        height: FLOATING_INSPECTOR_COLLAPSED_SIZE.height,
     };
 }
 

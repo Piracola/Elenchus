@@ -1,19 +1,18 @@
-import type { MutableRefObject } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import RuntimeInspector from './RuntimeInspector';
 import {
     FLOATING_INSPECTOR_RESIZE_HANDLES,
     getCollapsedFloatingInspectorSize,
-    type FloatingInspectorInteraction,
     type FloatingInspectorRect,
     type FloatingInspectorResizeHandle,
+    type FloatingInspectorViewportOffset,
 } from '../../utils/inspector/floatingInspectorLayout';
 
 type FloatingRuntimeInspectorProps = {
     floatingInspectorRect: FloatingInspectorRect | null;
+    floatingInspectorViewportOffset: FloatingInspectorViewportOffset;
     floatingInspectorExpanded: boolean;
     floatingInspectorActive: boolean;
-    floatingInspectorInteractionRef: MutableRefObject<FloatingInspectorInteraction | null>;
     onMoveStart: (event: ReactPointerEvent<HTMLElement>) => void;
     onResizeStart: (handle: FloatingInspectorResizeHandle) => (event: ReactPointerEvent<HTMLElement>) => void;
     onExpandedChange: (expanded: boolean) => void;
@@ -21,9 +20,9 @@ type FloatingRuntimeInspectorProps = {
 
 export default function FloatingRuntimeInspector({
     floatingInspectorRect,
+    floatingInspectorViewportOffset,
     floatingInspectorExpanded,
     floatingInspectorActive,
-    floatingInspectorInteractionRef,
     onMoveStart,
     onResizeStart,
     onExpandedChange,
@@ -33,18 +32,21 @@ export default function FloatingRuntimeInspector({
     }
 
     const collapsedSize = getCollapsedFloatingInspectorSize();
-    void floatingInspectorInteractionRef;
+    const showDragHandle = true;
+    const wrapperWidth = floatingInspectorExpanded ? floatingInspectorRect.width : collapsedSize.width;
+    const wrapperHeight = floatingInspectorExpanded ? floatingInspectorRect.height : collapsedSize.height;
 
     return (
         <div
             style={{
-                position: 'absolute',
-                left: `${floatingInspectorRect.x}px`,
-                top: `${floatingInspectorRect.y}px`,
-                zIndex: 10000,
-                width: floatingInspectorExpanded ? `${floatingInspectorRect.width}px` : `${collapsedSize.width}px`,
-                height: floatingInspectorExpanded ? `${floatingInspectorRect.height}px` : `${collapsedSize.height}px`,
+                position: 'fixed',
+                left: `${floatingInspectorViewportOffset.left + floatingInspectorRect.x}px`,
+                top: `${floatingInspectorViewportOffset.top + floatingInspectorRect.y}px`,
+                zIndex: 12000,
+                width: `${wrapperWidth}px`,
+                height: `${wrapperHeight}px`,
                 pointerEvents: 'auto',
+                overflow: 'visible',
             }}
         >
             <div
@@ -52,48 +54,48 @@ export default function FloatingRuntimeInspector({
                     position: 'relative',
                     width: '100%',
                     height: '100%',
-                    overflow: floatingInspectorExpanded ? 'hidden' : 'visible',
+                    overflow: 'visible',
                 }}
             >
-                <div
-                    onPointerDown={onMoveStart}
-                    title="拖动运行观察器"
-                    style={{
-                        position: 'absolute',
-                        top: floatingInspectorExpanded ? '8px' : '-10px',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        zIndex: 3,
-                        width: '52px',
-                        height: '16px',
-                        borderRadius: '999px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '4px',
-                        cursor: floatingInspectorActive ? 'grabbing' : 'grab',
-                        border: '1px solid var(--border-subtle)',
-                        background: 'var(--glass-bg)',
-                        backdropFilter: 'blur(10px)',
-                        boxShadow: floatingInspectorExpanded
-                            ? '0 6px 18px rgba(15, 23, 42, 0.12)'
-                            : '0 2px 8px rgba(15, 23, 42, 0.10)',
-                        userSelect: 'none',
-                        touchAction: 'none',
-                    }}
-                >
-                    {[0, 1, 2].map((dot) => (
-                        <span
-                            key={`floating-grip-${dot}`}
-                            style={{
-                                width: '4px',
-                                height: '4px',
-                                borderRadius: '999px',
-                                background: 'var(--text-muted)',
-                            }}
-                        />
-                    ))}
-                </div>
+                {showDragHandle && (
+                    <div
+                        onPointerDown={onMoveStart}
+                        title="拖动运行观察器入口"
+                        style={{
+                            position: 'absolute',
+                            top: '-10px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            zIndex: 3,
+                            width: '52px',
+                            height: '16px',
+                            borderRadius: '999px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '4px',
+                            cursor: floatingInspectorActive ? 'grabbing' : 'grab',
+                            border: '1px solid var(--border-subtle)',
+                            background: 'var(--glass-bg)',
+                            backdropFilter: 'blur(10px)',
+                            boxShadow: '0 2px 8px rgba(15, 23, 42, 0.10)',
+                            userSelect: 'none',
+                            touchAction: 'none',
+                        }}
+                    >
+                        {[0, 1, 2].map((dot) => (
+                            <span
+                                key={`floating-grip-${dot}`}
+                                style={{
+                                    width: '4px',
+                                    height: '4px',
+                                    borderRadius: '999px',
+                                    background: 'var(--text-muted)',
+                                }}
+                            />
+                        ))}
+                    </div>
+                )}
                 {floatingInspectorExpanded && FLOATING_INSPECTOR_RESIZE_HANDLES.map((handle) => (
                     <div
                         key={handle.key}
@@ -109,8 +111,8 @@ export default function FloatingRuntimeInspector({
 
                 <div
                     style={{
-                        width: floatingInspectorExpanded ? '100%' : 'auto',
-                        height: floatingInspectorExpanded ? '100%' : 'auto',
+                        width: '100%',
+                        height: '100%',
                         borderRadius: 'var(--radius-lg)',
                         overflow: floatingInspectorExpanded ? 'hidden' : 'visible',
                         boxSizing: 'border-box',
@@ -125,8 +127,9 @@ export default function FloatingRuntimeInspector({
                 >
                     <RuntimeInspector
                         key="floating-inspector"
-                        defaultExpanded={floatingInspectorExpanded}
+                        expanded={floatingInspectorExpanded}
                         fillHeight={floatingInspectorExpanded}
+                        mode="floating"
                         onExpandedChange={onExpandedChange}
                     />
                 </div>

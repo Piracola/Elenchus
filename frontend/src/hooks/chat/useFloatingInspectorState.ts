@@ -2,15 +2,18 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import {
     clampFloatingInspectorRect,
-    createDefaultFloatingInspectorRect,
+    createCollapsedFloatingInspectorRect,
+    createTopDockedFloatingInspectorRect,
     getCollapsedFloatingInspectorSize,
     interactionCursor,
     parseStoredFloatingInspectorRect,
     resizeFloatingInspectorRect,
     type FloatingInspectorBounds,
     type FloatingInspectorInteraction,
+    type FloatingInspectorLayoutMode,
     type FloatingInspectorRect,
     type FloatingInspectorResizeHandle,
+    type FloatingInspectorViewportOffset,
 } from '../../utils/inspector/floatingInspectorLayout';
 import {
     FLOATING_INSPECTOR_RESET_EVENT,
@@ -23,6 +26,13 @@ type UseFloatingInspectorStateArgs = {
     topOverlayHeight: number;
 };
 
+type ExpandedFloatingInspectorSnapshot = {
+    mode: Extract<FloatingInspectorLayoutMode, 'top-docked' | 'floating'>;
+    rect: FloatingInspectorRect | null;
+};
+
+type CollapsedFloatingInspectorSnapshot = Pick<FloatingInspectorRect, 'x' | 'y'> | null;
+
 export function useFloatingInspectorState({
     panelRef,
     messageWidth,
@@ -30,25 +40,64 @@ export function useFloatingInspectorState({
 }: UseFloatingInspectorStateArgs) {
     const floatingInspectorInteractionRef = useRef<FloatingInspectorInteraction | null>(null);
     const floatingInspectorRectRef = useRef<FloatingInspectorRect | null>(null);
+    const collapsedFloatingInspectorSnapshotRef = useRef<CollapsedFloatingInspectorSnapshot>(null);
+    const expandedFloatingInspectorSnapshotRef = useRef<ExpandedFloatingInspectorSnapshot>({
+        mode: 'top-docked',
+        rect: null,
+    });
     const [floatingInspectorBounds, setFloatingInspectorBounds] = useState<FloatingInspectorBounds>({
         width: 0,
         height: 0,
     });
+    const [floatingInspectorViewportOffset, setFloatingInspectorViewportOffset] = useState<FloatingInspectorViewportOffset>({
+        left: 0,
+        top: 0,
+    });
     const [floatingInspectorRect, setFloatingInspectorRect] = useState<FloatingInspectorRect | null>(null);
     const [floatingInspectorActive, setFloatingInspectorActive] = useState(false);
-    const [floatingInspectorExpanded, setFloatingInspectorExpanded] = useState(false);
-    // 保存展开状态下的尺寸，用于展开时恢复
-    const expandedRectRef = useRef<FloatingInspectorRect | null>(null);
+    const [floatingInspectorLayoutMode, setFloatingInspectorLayoutMode] = useState<FloatingInspectorLayoutMode>('collapsed');
     const [isWideLayout, setIsWideLayout] = useState(() => {
         if (typeof window === 'undefined') return true;
         return window.innerWidth >= 1280;
     });
     const floatingInspectorWidth = floatingInspectorBounds.width;
     const floatingInspectorHeight = floatingInspectorBounds.height;
+    const floatingInspectorDockTop = Math.max(topOverlayHeight + 8, 16);
+    const floatingInspectorExpanded = floatingInspectorLayoutMode !== 'collapsed';
+    const floatingInspectorTopDocked = floatingInspectorLayoutMode === 'top-docked';
+
+    const rectChanged = useCallback((left: FloatingInspectorRect, right: FloatingInspectorRect) => (
+        left.x !== right.x
+        || left.y !== right.y
+        || left.width !== right.width
+        || left.height !== right.height
+    ), []);
+
+    const createCollapsedRectFromSnapshot = useCallback((
+        bounds: FloatingInspectorBounds,
+        preferredTop: number,
+        source: CollapsedFloatingInspectorSnapshot,
+    ) => {
+        const collapsedSize = getCollapsedFloatingInspectorSize();
+        const defaultRect = createCollapsedFloatingInspectorRect(bounds, preferredTop);
+        if (!source) {
+            return defaultRect;
+        }
+
+        return clampFloatingInspectorRect(
+            {
+                ...defaultRect,
+                x: source.x,
+                y: source.y,
+                width: collapsedSize.width,
+                height: collapsedSize.height,
+            },
+            bounds,
+            collapsedSize,
+        );
+    }, []);
 
     const stopFloatingInspectorInteraction = useCallback(() => {
-        if (!floatingInspectorInteractionRef.current) return;
-
         floatingInspectorInteractionRef.current = null;
         setFloatingInspectorActive(false);
         if (typeof document !== 'undefined') {
@@ -59,10 +108,41 @@ export function useFloatingInspectorState({
 
     const clearFloatingInspectorInteraction = useCallback(() => {
         floatingInspectorInteractionRef.current = null;
+        setFloatingInspectorActive(false);
         if (typeof document !== 'undefined') {
             document.body.style.userSelect = '';
             document.body.style.cursor = '';
         }
+    }, []);
+
+    const rememberExpandedFloatingInspectorState = useCallback(() => {
+        if (!floatingInspectorExpanded) {
+            return;
+        }
+
+        const currentRect = floatingInspectorRectRef.current;
+        expandedFloatingInspectorSnapshotRef.current = {
+            mode: floatingInspectorTopDocked ? 'top-docked' : 'floating',
+            rect: currentRect,
+        };
+    }, [floatingInspectorExpanded, floatingInspectorTopDocked]);
+
+    const resetExpandedFloatingInspectorState = useCallback(() => {
+        expandedFloatingInspectorSnapshotRef.current = {
+            mode: 'top-docked',
+            rect: null,
+        };
+    }, []);
+
+    const rememberCollapsedFloatingInspectorState = useCallback((rect: FloatingInspectorRect | null) => {
+        if (!rect) {
+            return;
+        }
+
+        collapsedFloatingInspectorSnapshotRef.current = {
+            x: rect.x,
+            y: rect.y,
+        };
     }, []);
 
     useEffect(() => {
@@ -79,14 +159,24 @@ export function useFloatingInspectorState({
 
     useEffect(() => {
         floatingInspectorRectRef.current = floatingInspectorRect;
-        // 如果是展开状态，保存展开时的尺寸
-        if (floatingInspectorExpanded && floatingInspectorRect) {
-            expandedRectRef.current = floatingInspectorRect;
+        if (!floatingInspectorExpanded && floatingInspectorRect) {
+            rememberCollapsedFloatingInspectorState(floatingInspectorRect);
         }
-    }, [floatingInspectorRect, floatingInspectorExpanded]);
+        if (floatingInspectorExpanded) {
+            expandedFloatingInspectorSnapshotRef.current = {
+                mode: floatingInspectorTopDocked ? 'top-docked' : 'floating',
+                rect: floatingInspectorRect,
+            };
+        }
+    }, [
+        floatingInspectorExpanded,
+        floatingInspectorRect,
+        floatingInspectorTopDocked,
+        rememberCollapsedFloatingInspectorState,
+    ]);
 
     useEffect(() => {
-        if (typeof window === 'undefined' || !floatingInspectorRect) {
+        if (typeof window === 'undefined' || !floatingInspectorRect || floatingInspectorExpanded) {
             return;
         }
 
@@ -94,16 +184,21 @@ export function useFloatingInspectorState({
             FLOATING_INSPECTOR_STORAGE_KEY,
             JSON.stringify(floatingInspectorRect),
         );
-    }, [floatingInspectorRect]);
+    }, [floatingInspectorRect, floatingInspectorExpanded]);
 
     useEffect(() => {
         const panelElement = panelRef.current;
         if (!panelElement) return;
 
         const updateBounds = () => {
+            const rect = panelElement.getBoundingClientRect();
             setFloatingInspectorBounds({
                 width: panelElement.clientWidth,
-                height: panelElement.clientHeight,
+                height: Math.max(0, window.innerHeight - rect.top),
+            });
+            setFloatingInspectorViewportOffset({
+                left: rect.left,
+                top: rect.top,
             });
         };
 
@@ -124,9 +219,10 @@ export function useFloatingInspectorState({
 
     useEffect(() => {
         if (!isWideLayout) {
+            rememberExpandedFloatingInspectorState();
             queueMicrotask(() => {
-                setFloatingInspectorExpanded(false);
-                setFloatingInspectorActive(false);
+                setFloatingInspectorLayoutMode('collapsed');
+                setFloatingInspectorRect(null);
             });
             clearFloatingInspectorInteraction();
             return;
@@ -139,25 +235,42 @@ export function useFloatingInspectorState({
         };
 
         queueMicrotask(() => {
-            setFloatingInspectorRect((prev) => (
-                prev
-                    ? clampFloatingInspectorRect(prev, bounds)
-                    : clampFloatingInspectorRect(
-                        parseStoredFloatingInspectorRect(
-                            typeof window === 'undefined'
-                                ? null
-                                : window.localStorage.getItem(FLOATING_INSPECTOR_STORAGE_KEY),
-                        ) ?? createDefaultFloatingInspectorRect(bounds, topOverlayHeight),
-                        bounds,
-                    )
-            ));
+            if (floatingInspectorExpanded) {
+                setFloatingInspectorRect((prev) => {
+                    if (floatingInspectorLayoutMode === 'top-docked' || !prev) {
+                        return clampFloatingInspectorRect(
+                            createTopDockedFloatingInspectorRect(bounds, floatingInspectorDockTop),
+                            bounds,
+                        );
+                    }
+
+                    return clampFloatingInspectorRect(prev, bounds);
+                });
+                return;
+            }
+
+            setFloatingInspectorRect((prev) => {
+                const storedRect = typeof window === 'undefined'
+                    ? null
+                    : parseStoredFloatingInspectorRect(window.localStorage.getItem(FLOATING_INSPECTOR_STORAGE_KEY));
+                const sourceRect = prev ?? collapsedFloatingInspectorSnapshotRef.current ?? storedRect;
+                return createCollapsedRectFromSnapshot(
+                    bounds,
+                    floatingInspectorDockTop,
+                    sourceRect,
+                );
+            });
         });
     }, [
+        floatingInspectorExpanded,
         floatingInspectorHeight,
         floatingInspectorWidth,
+        floatingInspectorDockTop,
+        floatingInspectorTopDocked,
+        createCollapsedRectFromSnapshot,
         clearFloatingInspectorInteraction,
         isWideLayout,
-        topOverlayHeight,
+        rememberExpandedFloatingInspectorState,
     ]);
 
     useEffect(() => {
@@ -166,23 +279,25 @@ export function useFloatingInspectorState({
         }
 
         const handleReset = () => {
+            resetExpandedFloatingInspectorState();
             if (!isWideLayout || floatingInspectorWidth <= 0 || floatingInspectorHeight <= 0) {
                 setFloatingInspectorRect(null);
-                setFloatingInspectorExpanded(false);
+                setFloatingInspectorLayoutMode('collapsed');
                 stopFloatingInspectorInteraction();
                 return;
             }
 
             setFloatingInspectorRect(
-                createDefaultFloatingInspectorRect(
+                createCollapsedRectFromSnapshot(
                     {
                         width: floatingInspectorWidth,
                         height: floatingInspectorHeight,
                     },
-                    topOverlayHeight,
+                    floatingInspectorDockTop,
+                    null,
                 ),
             );
-            setFloatingInspectorExpanded(false);
+            setFloatingInspectorLayoutMode('collapsed');
             stopFloatingInspectorInteraction();
         };
 
@@ -191,9 +306,11 @@ export function useFloatingInspectorState({
     }, [
         floatingInspectorHeight,
         floatingInspectorWidth,
+        floatingInspectorDockTop,
+        createCollapsedRectFromSnapshot,
         isWideLayout,
+        resetExpandedFloatingInspectorState,
         stopFloatingInspectorInteraction,
-        topOverlayHeight,
     ]);
 
     useEffect(() => {
@@ -212,6 +329,7 @@ export function useFloatingInspectorState({
                         y: interaction.startRect.y + deltaY,
                     },
                     interaction.bounds,
+                    getCollapsedFloatingInspectorSize(),
                 )
                 : resizeFloatingInspectorRect(
                     interaction.startRect,
@@ -221,14 +339,12 @@ export function useFloatingInspectorState({
                     interaction.bounds,
                 );
 
+            if (interaction.startLayoutMode === 'top-docked' && rectChanged(interaction.startRect, nextRect)) {
+                setFloatingInspectorLayoutMode('floating');
+            }
+
             setFloatingInspectorRect((prev) => {
-                if (
-                    prev
-                    && prev.x === nextRect.x
-                    && prev.y === nextRect.y
-                    && prev.width === nextRect.width
-                    && prev.height === nextRect.height
-                ) {
+                if (prev && !rectChanged(prev, nextRect)) {
                     return prev;
                 }
                 return nextRect;
@@ -265,12 +381,9 @@ export function useFloatingInspectorState({
         const currentRect = floatingInspectorRectRef.current;
         if (!currentRect) return;
 
-        // 收起时使用最小尺寸作为拖动基准，避免位置计算错误
         const collapsedSize = getCollapsedFloatingInspectorSize();
         const effectiveWidth = floatingInspectorExpanded ? currentRect.width : collapsedSize.width;
         const effectiveHeight = floatingInspectorExpanded ? currentRect.height : collapsedSize.height;
-        
-        // 保持左上角位置，使用有效尺寸计算边界
         const effectiveRect = {
             x: currentRect.x,
             y: currentRect.y,
@@ -284,8 +397,13 @@ export function useFloatingInspectorState({
             startY: event.clientY,
             startRect: effectiveRect,
             bounds: floatingInspectorBounds,
+            startLayoutMode: floatingInspectorLayoutMode,
         });
-    }, [floatingInspectorBounds, floatingInspectorExpanded, startFloatingInspectorInteraction]);
+    }, [
+        floatingInspectorBounds,
+        floatingInspectorLayoutMode,
+        startFloatingInspectorInteraction,
+    ]);
 
     const handleFloatingInspectorResizeStart = useCallback(
         (handle: FloatingInspectorResizeHandle) =>
@@ -300,60 +418,53 @@ export function useFloatingInspectorState({
                     startY: event.clientY,
                     startRect: currentRect,
                     bounds: floatingInspectorBounds,
+                    startLayoutMode: floatingInspectorLayoutMode,
                 });
             },
-        [floatingInspectorBounds, startFloatingInspectorInteraction],
+        [floatingInspectorBounds, floatingInspectorLayoutMode, startFloatingInspectorInteraction],
     );
 
     return {
         isWideLayout,
         floatingInspectorRect,
+        floatingInspectorViewportOffset,
         floatingInspectorExpanded,
         floatingInspectorActive,
         floatingInspectorInteractionRef,
+        floatingInspectorTopDocked,
+        floatingInspectorLayoutMode,
         handleFloatingInspectorMoveStart,
         handleFloatingInspectorResizeStart,
         handleFloatingInspectorExpandedChange: (expanded: boolean) => {
             if (expanded) {
-                // 展开时：恢复之前保存的展开尺寸，保持位置不变
+                const snapshot = expandedFloatingInspectorSnapshotRef.current;
+                const nextMode = snapshot.rect ? snapshot.mode : 'top-docked';
+                setFloatingInspectorLayoutMode(nextMode);
                 setFloatingInspectorRect((prev) => {
-                    if (!prev) return prev;
-                    const savedExpandedRect = expandedRectRef.current;
-                    if (savedExpandedRect) {
-                        // 恢复展开时的尺寸，但保持当前位置
-                        return {
-                            ...prev,
-                            width: savedExpandedRect.width,
-                            height: savedExpandedRect.height,
-                        };
+                    if (floatingInspectorBounds.width <= 0 || floatingInspectorBounds.height <= 0) return prev;
+                    const savedExpandedRect = snapshot.rect;
+                    if (savedExpandedRect && nextMode === 'floating') {
+                        return clampFloatingInspectorRect(savedExpandedRect, floatingInspectorBounds);
                     }
-                    // 如果没有保存的展开尺寸，使用默认展开尺寸
-                    const defaultExpandedSize = {
-                        width: Math.min(560, floatingInspectorBounds.width - 32),
-                        height: Math.min(600, floatingInspectorBounds.height - 32),
-                    };
-                    return {
-                        ...prev,
-                        width: defaultExpandedSize.width,
-                        height: defaultExpandedSize.height,
-                    };
+                    return createTopDockedFloatingInspectorRect(
+                        floatingInspectorBounds,
+                        floatingInspectorDockTop,
+                    );
                 });
             } else {
-                // 收起时：保持当前位置和收起尺寸
+                rememberExpandedFloatingInspectorState();
+                const collapsedSnapshot = collapsedFloatingInspectorSnapshotRef.current;
                 setFloatingInspectorRect((prev) => {
-                    if (!prev) return prev;
-                    const collapsedSize = getCollapsedFloatingInspectorSize();
-                    return {
-                        ...prev,
-                        width: collapsedSize.width,
-                        height: collapsedSize.height,
-                    };
+                    if (floatingInspectorBounds.width <= 0 || floatingInspectorBounds.height <= 0) return prev;
+                    return createCollapsedRectFromSnapshot(
+                        floatingInspectorBounds,
+                        floatingInspectorDockTop,
+                        collapsedSnapshot,
+                    );
                 });
+                setFloatingInspectorLayoutMode('collapsed');
             }
-            setFloatingInspectorExpanded(expanded);
-            if (!expanded) {
-                setFloatingInspectorActive(false);
-            }
+            stopFloatingInspectorInteraction();
         },
     };
 }
