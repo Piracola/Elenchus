@@ -14,6 +14,8 @@ param(
     [string]$Version,
     [string]$OutputDir,
     [switch]$IncludeRuntimeConfig,
+    [string]$RuntimeConfigPath,
+    [switch]$AllowLiveRuntimeConfig,
     [switch]$DryRun
 )
 
@@ -185,6 +187,121 @@ function Resolve-AbsolutePath {
     return [System.IO.Path]::GetFullPath((Join-Path $BasePath $PathValue))
 }
 
+function Test-PathsEqual {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$LeftPath,
+        [Parameter(Mandatory = $true)]
+        [string]$RightPath
+    )
+
+    return [string]::Equals(
+        [System.IO.Path]::GetFullPath($LeftPath),
+        [System.IO.Path]::GetFullPath($RightPath),
+        [System.StringComparison]::OrdinalIgnoreCase
+    )
+}
+
+function Get-PathFileId {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PathValue
+    )
+
+    try {
+        $output = & fsutil file queryfileid $PathValue 2>$null
+        if ($LASTEXITCODE -ne 0 -or $null -eq $output) {
+            return $null
+        }
+        $match = [regex]::Match(($output | Out-String), 'File ID is (0x[0-9a-fA-F]+)')
+        if (-not $match.Success) {
+            return $null
+        }
+        return $match.Groups[1].Value.ToLowerInvariant()
+    } catch {
+        return $null
+    }
+}
+
+function Get-HardLinkCount {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PathValue
+    )
+
+    $output = & fsutil hardlink list $PathValue 2>$null
+    if ($LASTEXITCODE -ne 0 -or $null -eq $output) {
+        return $null
+    }
+
+    $lines = @(
+        $output | ForEach-Object { "$_".Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
+
+    return $lines.Count
+}
+
+function Get-ExistingFileItem {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PathValue,
+        [Parameter(Mandatory = $true)]
+        [string]$Label
+    )
+
+    if (-not (Test-Path -LiteralPath $PathValue)) {
+        throw "$Label not found: $PathValue"
+    }
+
+    $item = Get-Item -LiteralPath $PathValue -Force -ErrorAction Stop
+    if ($item.PSIsContainer) {
+        throw "$Label must be a file, not a directory: $PathValue"
+    }
+
+    return $item
+}
+
+function Test-PathIsLinked {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.IO.FileSystemInfo]$Item
+    )
+
+    $linkType = "$($Item.LinkType)".Trim()
+    if (-not [string]::IsNullOrWhiteSpace($linkType)) {
+        return $true
+    }
+
+    return [bool]($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)
+}
+
+function Test-PathHasLinkedAncestor {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PathValue
+    )
+
+    $currentPath = Split-Path -Path $PathValue -Parent
+    while (-not [string]::IsNullOrWhiteSpace($currentPath)) {
+        try {
+            $ancestor = Get-Item -LiteralPath $currentPath -Force -ErrorAction Stop
+            if (Test-PathIsLinked -Item $ancestor) {
+                return $true
+            }
+        } catch {
+            return $false
+        }
+
+        $nextPath = Split-Path -Path $currentPath -Parent
+        if ($nextPath -eq $currentPath) {
+            break
+        }
+        $currentPath = $nextPath
+    }
+
+    return $false
+}
+
 function Get-DefaultReleaseVersion {
     param(
         [Parameter(Mandatory = $true)]
@@ -239,7 +356,12 @@ function Invoke-ExternalCommand {
     )
 
     Print-Info $Title
-    Print-Info ("Running: " + (Format-CommandForDisplay -FilePath $FilePath -Arguments $Arguments))
+    $displayCommand = Format-CommandForDisplay -FilePath $FilePath -Arguments $Arguments
+    if ($script:DryRun) {
+        Print-Info ("Would run: " + $displayCommand)
+    } else {
+        Print-Info ("Running: " + $displayCommand)
+    }
 
     if ($script:DryRun) {
         return
@@ -435,6 +557,81 @@ $FrontendModulesDir = Join-Path $FrontendDir "node_modules"
 $FrontendEsbuildBinary = Join-Path $FrontendModulesDir "@esbuild\win32-x64\esbuild.exe"
 $RuntimeConfigFile = Join-Path $RootDir "runtime\config.json"
 $PackageJsonPath = Join-Path $RootDir "package.json"
+$SelectedRuntimeConfigPath = $null
+$SelectedRuntimeConfigItem = $null
+$BundlingLiveRuntimeConfig = $false
+
+# Runtime config bundling now requires an explicit source file, with an extra
+# acknowledgement if that source is the live runtime/config.json in the repo.
+if (-not $IncludeRuntimeConfig -and (-not [string]::IsNullOrWhiteSpace($RuntimeConfigPath) -or $AllowLiveRuntimeConfig)) {
+    Print-Err "Runtime config bundling options require -IncludeRuntimeConfig."
+    exit 1
+}
+
+if ($IncludeRuntimeConfig) {
+    if ([string]::IsNullOrWhiteSpace($RuntimeConfigPath)) {
+        Print-Err "Bundling a runtime config now requires -RuntimeConfigPath <sanitized-config.json>."
+        Print-Info "The live runtime/config.json is blocked by default. To intentionally ship it, add -RuntimeConfigPath runtime/config.json -AllowLiveRuntimeConfig."
+        exit 1
+    }
+
+    $SelectedRuntimeConfigPath = Resolve-AbsolutePath -PathValue $RuntimeConfigPath -BasePath $RootDir
+
+    try {
+        $SelectedRuntimeConfigItem = Get-ExistingFileItem -PathValue $SelectedRuntimeConfigPath -Label "Specified runtime config file"
+        $SelectedRuntimeConfigPath = $SelectedRuntimeConfigItem.FullName
+    } catch {
+        Print-Err $_.Exception.Message
+        exit 1
+    }
+
+    if (Test-PathIsLinked -Item $SelectedRuntimeConfigItem) {
+        Print-Err "Runtime config source must be a standalone regular file, not a linked alias: $SelectedRuntimeConfigPath"
+        Print-Info "Copy the config to a standalone file and pass that file via -RuntimeConfigPath."
+        exit 1
+    }
+
+    if (Test-PathHasLinkedAncestor -PathValue $SelectedRuntimeConfigPath) {
+        Print-Err "Runtime config source must not live under a symbolic link or junction: $SelectedRuntimeConfigPath"
+        Print-Info "Copy the config to a standalone file and pass that file via -RuntimeConfigPath."
+        exit 1
+    }
+
+    $selectedRuntimeConfigFileId = Get-PathFileId -PathValue $SelectedRuntimeConfigPath
+    $liveRuntimeConfigFileId = Get-PathFileId -PathValue $RuntimeConfigFile
+    if ($null -eq $selectedRuntimeConfigFileId -or $null -eq $liveRuntimeConfigFileId) {
+        Print-Err "Unable to verify runtime config file identity for: $SelectedRuntimeConfigPath"
+        Print-Info "Copy the config to a standalone file and pass that file via -RuntimeConfigPath."
+        exit 1
+    }
+
+    if ($selectedRuntimeConfigFileId -eq $liveRuntimeConfigFileId) {
+        $BundlingLiveRuntimeConfig = $true
+    }
+
+    $hardLinkCount = Get-HardLinkCount -PathValue $SelectedRuntimeConfigPath
+    if ($null -eq $hardLinkCount) {
+        Print-Err "Unable to verify that the runtime config source is not a hard-linked alias: $SelectedRuntimeConfigPath"
+        Print-Info "Copy the config to a standalone file and pass that file via -RuntimeConfigPath."
+        exit 1
+    }
+
+    if ($hardLinkCount -gt 1) {
+        Print-Err "Runtime config source must be a standalone regular file, not a hard-linked alias: $SelectedRuntimeConfigPath"
+        Print-Info "Copy the config to a standalone file and pass that file via -RuntimeConfigPath."
+        exit 1
+    }
+
+    if ($BundlingLiveRuntimeConfig -and -not $AllowLiveRuntimeConfig) {
+        Print-Err "Refusing to bundle the live runtime/config.json without -AllowLiveRuntimeConfig."
+        Print-Info "Recommended: create a sanitized release config file and pass it via -RuntimeConfigPath."
+        exit 1
+    }
+
+    if (-not $BundlingLiveRuntimeConfig -and $AllowLiveRuntimeConfig) {
+        Print-Warn "-AllowLiveRuntimeConfig was provided, but the selected runtime config is not runtime/config.json."
+    }
+}
 
 $EffectiveVersion = if ([string]::IsNullOrWhiteSpace($Version)) {
     Get-DefaultReleaseVersion -PackageJsonPath $PackageJsonPath
@@ -544,7 +741,11 @@ if ($DoBackendInstall) {
         -Arguments $backendInstallArgs `
         -WorkingDirectory $RootDir
 
-    Print-OK "Backend build dependencies are ready"
+    if ($DryRun) {
+        Print-Info "Backend build dependencies would be ready"
+    } else {
+        Print-OK "Backend build dependencies are ready"
+    }
 } else {
     Print-Warn "Skipping backend dependency installation"
 }
@@ -562,7 +763,11 @@ if ($DoFrontendInstall) {
         -FrontendModulesDirectory $FrontendModulesDir `
         -FrontendLockFilePath $FrontendLockFile `
         -EsbuildExecutablePath $FrontendEsbuildBinary
-    Print-OK "Frontend dependencies installed"
+    if ($DryRun) {
+        Print-Info "Frontend dependencies would be installed"
+    } else {
+        Print-OK "Frontend dependencies installed"
+    }
 } else {
     Print-Warn "Skipping frontend dependency installation"
 }
@@ -572,9 +777,13 @@ Invoke-ExternalCommand `
     -FilePath $NpmPath `
     -Arguments @("run", "build") `
     -WorkingDirectory $FrontendDir
-Print-OK "Frontend build completed"
+if ($DryRun) {
+    Print-Info "Frontend build would complete"
+} else {
+    Print-OK "Frontend build completed"
+}
 
-Write-Section -Step "Step 4/5" -Title "Smoke Test Packaged Backend"
+Write-Section -Step "Step 4/6" -Title "Smoke Test Packaged Backend"
 
 if ($SkipSmokeTest) {
     Print-Warn "Skipping release backend smoke test"
@@ -587,10 +796,14 @@ if ($SkipSmokeTest) {
         -FilePath $BuildPythonRuntime.FilePath `
         -Arguments $smokeArgs `
         -WorkingDirectory $RootDir
-    Print-OK "Release backend smoke test passed"
+    if ($DryRun) {
+        Print-Info "Release backend smoke test would pass"
+    } else {
+        Print-OK "Release backend smoke test passed"
+    }
 }
 
-Write-Section -Step "Step 5/5" -Title "Build Portable Release"
+Write-Section -Step "Step 5/6" -Title "Build Portable Release"
 
 $buildArgs = @()
 $buildArgs += $BuildPythonRuntime.Arguments
@@ -601,6 +814,13 @@ if (-not [string]::IsNullOrWhiteSpace($EffectiveVersion)) {
 if (-not [string]::IsNullOrWhiteSpace($EffectiveOutputDir)) {
     $buildArgs += "--output-dir", $EffectiveOutputDir
 }
+if ($IncludeRuntimeConfig) {
+    $buildArgs += "--include-runtime-config"
+    $buildArgs += "--runtime-config-path", $SelectedRuntimeConfigPath
+    if ($AllowLiveRuntimeConfig) {
+        $buildArgs += "--allow-live-runtime-config"
+    }
+}
 
 Invoke-ExternalCommand `
     -Title "Building portable Windows release with PyInstaller..." `
@@ -608,20 +828,24 @@ Invoke-ExternalCommand `
     -Arguments $buildArgs `
     -WorkingDirectory $RootDir
 
-if ($IncludeRuntimeConfig) {
-    if (Test-Path $RuntimeConfigFile) {
-        Print-Warn "Including runtime/config.json in the release package. Make sure it does not contain secrets."
+Write-Section -Step "Step 6/6" -Title "Smoke Test Packaged Release Artifact"
 
-        if (-not $DryRun) {
-            $targetRuntimeDir = Join-Path $ReleaseRoot "runtime"
-            New-Item -ItemType Directory -Path $targetRuntimeDir -Force | Out-Null
-            Copy-Item -Path $RuntimeConfigFile -Destination (Join-Path $targetRuntimeDir "config.json") -Force
-        }
-
-        Update-ReleaseArchive -ReleaseRoot $ReleaseRoot -ArchivePath $ArchivePath -ChecksumPath $ChecksumPath
-        Print-OK "Bundled runtime/config.json into release artifacts"
+if ($SkipSmokeTest) {
+    Print-Warn "Skipping packaged release smoke test"
+} else {
+    $packagedSmokeArgs = @()
+    $packagedSmokeArgs += $BuildPythonRuntime.Arguments
+    $packagedSmokeArgs += $SmokeTestScript
+    $packagedSmokeArgs += "--release-archive", $ArchivePath
+    Invoke-ExternalCommand `
+        -Title "Running packaged release smoke test..." `
+        -FilePath $BuildPythonRuntime.FilePath `
+        -Arguments $packagedSmokeArgs `
+        -WorkingDirectory $RootDir
+    if ($DryRun) {
+        Print-Info "Packaged release smoke test would pass"
     } else {
-        Print-Warn "runtime/config.json not found, skipping runtime config bundling"
+        Print-OK "Packaged release smoke test passed"
     }
 }
 
@@ -632,7 +856,7 @@ Write-Host $CYAN"========================================"$RESET
 Write-Host ""
 
 if ($DryRun) {
-    Print-Info "Dry run finished. No commands were executed."
+    Print-Info "Dry run finished. No mutating commands were executed."
 } else {
     Print-OK "Release folder: $ReleaseRoot"
     Print-OK "Release zip: $ArchivePath"

@@ -1,6 +1,6 @@
 # 系统架构总览
 
-> 更新时间：2026-04-09
+> 更新时间：2026-05-10
 > 本文档聚焦**当前系统如何组织**：系统分层、前后端职责、模式化运行链路与关键代码入口。
 > `runtime/` 目录结构、`session.json` / `events.jsonl` / `documents/` / `reference_entries/` 的职责请见 [runtime.md](./runtime.md)。
 
@@ -85,7 +85,9 @@ Persistence
 
 - `backend/app/main.py`
 - `backend/app/api/sessions.py`
+- `backend/app/api/session_control.py`
 - `backend/app/api/websocket.py`
+- `backend/app/middleware/demo_guard.py`
 - `backend/app/services/session_service.py`
 - `backend/app/runtime/orchestrator.py`
 - `backend/app/runtime/engines/langgraph.py`
@@ -132,12 +134,20 @@ Elenchus 的一个关键架构选择，是把“模式差异”放在运行链�
 ### API 层
 
 - `backend/app/api/sessions.py`：会话 CRUD、导出入口与子路由聚合
+- `backend/app/api/session_control.py`：REST 会话控制入口，负责 start / stop / intervene / status / live-events，并与 demo 访客/管理员能力表共用访问策略
 - `backend/app/api/session_documents.py`：会话文档上传、列表、详情、删除与资料池接口
 - `backend/app/api/session_runtime.py`：运行事件分页与快照导出接口
 - `backend/app/api/websocket.py`：WebSocket 会话控制与事件收发
 - `backend/app/api/models.py`：provider / 模型配置
 - `backend/app/api/search.py`：搜索配置与健康检查
 - `backend/app/api/log.py`：日志配置
+
+### 应用入口与中间件
+
+- `backend/app/main.py`：应用装配入口，负责中间件栈与路由注册；`session_control_router` 需要先于 `sessions_router` 注册，确保 `/sessions/{id}/start` / `stop` 控制路径不会被旧兼容路由抢占
+- `backend/app/middleware/demo_guard.py`：Demo 模式下的游客/管理员能力表与 HTTP / WebSocket 访问策略主入口
+- `backend/app/middleware/auth.py`：全局认证中间件，在 auth.enabled 打开时进一步收紧写操作与管理能力
+- `backend/app/middleware/rate_limit.py`：IP 限流入口；`auto` 模式下只有在 `server.database_url` 是可共享的 SQLite 文件时才会启用共享存储。若数据库是非 SQLite，或是 `sqlite:///:memory:` 这类不可共享场景，则会明确退回进程内内存限流
 
 ### 服务层
 
@@ -154,7 +164,7 @@ Elenchus 的一个关键架构选择，是把“模式差异”放在运行链�
 - `backend/app/services/reference_library_serializers.py`：资料文档与条目序列化
 - `backend/app/services/reference_library_knowledge.py`：资料池到 shared knowledge 的同步逻辑
 - `backend/app/services/builtin_reference_service.py`：模式内置参考文档注入
-- `backend/app/services/export_service.py`：导出 facade 入口，统一转出会话导出、文件名与运行时快照导出能力
+- `backend/app/services/export/__init__.py`：导出能力的推荐主入口，统一聚合会话导出、文件名与运行时快照导出能力；`backend/app/services/export_service.py` 仅保留为兼容壳
 - `backend/app/services/export_markdown_service.py`：会话 Markdown 导出与 transcript 分类渲染
 - `backend/app/services/export_scoring_service.py`：导出评分维度、模块权重与综合分推导
 - `backend/app/services/export_filename_service.py`：导出文件名清洗与 `Content-Disposition` 头生成
@@ -178,9 +188,10 @@ Elenchus 的一个关键架构选择，是把“模式差异”放在运行链�
 ### 模型调用与输出长度
 
 - `runtime/config.json`：统一持久化服务商级默认输出参数；当前 `providers[].default_max_tokens` 可由用户在设置面板中配置，作为该服务商的默认输出上限，系统默认值为 64k
-- `backend/app/agents/llm.py`：统一解析 agent/provider 覆盖配置，并按“角色/会话覆盖 → 服务商默认 `default_max_tokens` → 系统默认值”顺序解析 `max_tokens`；当前系统约定默认最大输入为 128k、默认最大输出为 64k
-- `backend/app/agents/safe_invoke.py`：统一模型调用入口，公开发言、组内讨论、陪审团讨论和总结都经由这里进入底层模型客户端
-- `backend/app/agents/openai_transport.py`：OpenAI 兼容传输层，最终把解析出的 `max_tokens` 写入 chat completions payload
+- `backend/app/llm/config.py`：模型配置的推荐主入口，负责解析 agent/provider 覆盖配置，并按“角色/会话覆盖 → 服务商默认 `default_max_tokens` → 系统默认值”顺序解析 `max_tokens`；当前系统约定默认最大输入为 128k、默认最大输出为 64k
+- `backend/app/llm/invoke.py`：统一模型调用的推荐主入口，公开发言、组内讨论、陪审团讨论和总结都应经由这里进入底层模型客户端；`backend/app/agents/safe_invoke.py` 仅保留为兼容壳
+- `backend/app/llm/transport.py`：OpenAI 兼容传输层的推荐主入口，最终把解析出的 `max_tokens` 写入 chat completions payload；`backend/app/agents/openai_transport.py` 仅保留为兼容壳
+- `backend/app/llm/providers/*`：服务商 client 的推荐主入口；`backend/app/agents/llm.py`、`backend/app/agents/providers/*` 仅保留为兼容壳，避免旧脚本与旧测试导入失效
 
 ### 提示词资源
 
@@ -191,10 +202,27 @@ Elenchus 的一个关键架构选择，是把“模式差异”放在运行链�
 
 ### Agent 技能
 
-- `backend/app/agents/skills/search_tool.py`：`web_search` 的稳定 facade 与 LangChain tool 注册入口，保留 shared knowledge metadata 标记与外部导入路径
-- `backend/app/agents/skills/search_query_planner.py`：查询清洗、prompt-like 输入纠偏、辩题主题提取与搜索计划构建
-- `backend/app/agents/skills/search_result_filter.py`：搜索结果关键词提取、相关性评分、去重与过滤
-- `backend/app/agents/skills/search_formatter.py`：证据摘要格式化与 snippet 截断
+- `backend/app/tools/__init__.py`：Agent 工具的推荐聚合入口；新代码应从这里或 `backend/app/tools/*` 子模块导入
+- `backend/app/tools/search_tool.py`：`web_search` 的推荐主入口与 LangChain tool 注册入口，保留 shared knowledge metadata 标记
+- `backend/app/tools/search_query_planner.py`：查询清洗、prompt-like 输入纠偏、辩题主题提取与搜索计划构建
+- `backend/app/tools/search_result_filter.py`：搜索结果关键词提取、相关性评分、去重与过滤
+- `backend/app/tools/search_formatter.py`：证据摘要格式化与 snippet 截断
+- `backend/app/agents/skills/*`：历史导入路径保留为兼容壳，避免旧代码与测试失效，不再作为新实现入口
+
+### 兼容壳约定
+
+- `backend/app/tools/*`、`backend/app/llm/*`、`backend/app/services/export/*` 是当前推荐主入口
+- `backend/app/agents/skills/*`、`backend/app/agents/openai_transport.py`、`backend/app/agents/safe_invoke.py`、`backend/app/agents/llm.py`、`backend/app/agents/providers/*`、`backend/app/services/export_service.py` 仅用于兼容旧导入
+- 阅读代码、修 bug 或新增实现时，优先从推荐主入口进入；只有在排查历史脚本或旧测试时，才需要继续看兼容壳
+- `backend/app/agents/skills/__init__.py` 当前只保证有限兼容面：包级 `web_search` / `get_all_skills`，以及 `metadata`、`search_formatter`、`search_query_planner`、`search_result_filter`、`search_tool` 这些历史镜像子模块的包属性访问
+
+当前最常见的对应关系可以直接按下面记：
+
+| 能力 | 推荐主入口 | 兼容入口 |
+| --- | --- | --- |
+| Agent 工具 | `backend/app/tools/__init__.py` 与 `backend/app/tools/*` | `backend/app/agents/skills/*` |
+| OpenAI 兼容传输层 | `backend/app/llm/transport.py` | `backend/app/agents/openai_transport.py` |
+| 导出能力 | `backend/app/services/export/__init__.py` | `backend/app/services/export_service.py` |
 
 ### 前端主路径
 

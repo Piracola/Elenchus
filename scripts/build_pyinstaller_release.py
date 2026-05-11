@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import zipfile
 from pathlib import Path
 
@@ -19,6 +20,8 @@ RAW_DIST_DIR = BUILD_ROOT / "raw-dist"
 WORK_DIR = BUILD_ROOT / "work"
 DEFAULT_OUTPUT_DIR = ROOT / "dist" / "releases"
 SPEC_FILE = ROOT / "packaging" / "elenchus.spec"
+LIVE_RUNTIME_CONFIG = ROOT / "runtime" / "config.json"
+_REPARSE_POINT_FLAG = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 
 
 def detect_default_version() -> str:
@@ -73,6 +76,20 @@ def parse_args() -> argparse.Namespace:
         default=str(DEFAULT_OUTPUT_DIR),
         help="Directory where the portable release will be written.",
     )
+    parser.add_argument(
+        "--include-runtime-config",
+        action="store_true",
+        help="Bundle a runtime/config.json file into the portable release.",
+    )
+    parser.add_argument(
+        "--runtime-config-path",
+        help="Repository-relative or absolute path to the runtime config file to bundle.",
+    )
+    parser.add_argument(
+        "--allow-live-runtime-config",
+        action="store_true",
+        help="Acknowledge bundling the live runtime/config.json file from the repository.",
+    )
     return parser.parse_args()
 
 
@@ -109,7 +126,135 @@ def release_name(version: str) -> str:
     return f"elenchus-portable-{version}-windows"
 
 
-def build_release(version: str, output_dir: Path) -> tuple[Path, Path, Path]:
+def resolve_absolute_path(path_value: str, *, base_path: Path = ROOT) -> Path:
+    candidate = Path(path_value).expanduser()
+    if not candidate.is_absolute():
+        candidate = base_path / candidate
+    return Path(os.path.abspath(os.fspath(candidate)))
+
+
+def ensure_existing_file(path: Path, *, label: str) -> Path:
+    if not path.exists():
+        raise FileNotFoundError(f"{label} was not found: {path}")
+    if not path.is_file():
+        raise FileNotFoundError(f"{label} is not a file: {path}")
+    return path
+
+
+def path_is_linked(path: Path) -> bool:
+    if path.is_symlink():
+        return True
+    try:
+        file_attributes = getattr(path.lstat(), "st_file_attributes", 0)
+    except OSError as exc:
+        raise RuntimeError(f"Unable to inspect path metadata: {path}") from exc
+    return bool(file_attributes & _REPARSE_POINT_FLAG)
+
+
+def path_has_linked_ancestor(path: Path) -> bool:
+    current = path.parent
+    while True:
+        if path_is_linked(current):
+            return True
+        if current.parent == current:
+            return False
+        current = current.parent
+
+
+def bundle_runtime_config(release_root: Path, runtime_config_path: Path) -> None:
+    target_runtime_dir = release_root / "runtime"
+    target_runtime_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(runtime_config_path, target_runtime_dir / "config.json")
+
+
+def validate_runtime_config_args(
+    args: argparse.Namespace,
+) -> tuple[Path | None, bool]:
+    if not args.include_runtime_config and (
+        args.runtime_config_path or args.allow_live_runtime_config
+    ):
+        raise ValueError("Runtime config bundling options require --include-runtime-config.")
+
+    if not args.include_runtime_config:
+        return None, False
+
+    if not args.runtime_config_path:
+        raise ValueError(
+            "Bundling a runtime config now requires "
+            "--runtime-config-path <sanitized-config.json>. "
+            "The live runtime/config.json is blocked by default. "
+            "To intentionally ship it, add "
+            "--runtime-config-path runtime/config.json --allow-live-runtime-config."
+        )
+
+    runtime_config_path = ensure_existing_file(
+        resolve_absolute_path(args.runtime_config_path),
+        label="Specified runtime config file",
+    )
+
+    if path_is_linked(runtime_config_path):
+        raise ValueError(
+            "Runtime config source must be a standalone regular file, "
+            f"not a linked alias: {runtime_config_path}"
+        )
+
+    if path_has_linked_ancestor(runtime_config_path):
+        raise ValueError(
+            "Runtime config source must not live under a symbolic link or junction: "
+            f"{runtime_config_path}"
+        )
+
+    live_runtime_config = ensure_existing_file(
+        LIVE_RUNTIME_CONFIG,
+        label="Live runtime config file",
+    )
+
+    try:
+        bundling_live_runtime_config = os.path.samefile(
+            runtime_config_path,
+            live_runtime_config,
+        )
+    except OSError as exc:
+        raise RuntimeError(
+            f"Unable to verify runtime config file identity for: {runtime_config_path}"
+        ) from exc
+
+    try:
+        hard_link_count = runtime_config_path.stat().st_nlink
+    except OSError as exc:
+        raise RuntimeError(
+            "Unable to verify that the runtime config source is not a hard-linked "
+            f"alias: {runtime_config_path}"
+        ) from exc
+
+    if hard_link_count > 1:
+        raise ValueError(
+            "Runtime config source must be a standalone regular file, "
+            f"not a hard-linked alias: {runtime_config_path}"
+        )
+
+    if bundling_live_runtime_config and not args.allow_live_runtime_config:
+        raise ValueError(
+            "Refusing to bundle the live runtime/config.json without "
+            "--allow-live-runtime-config. Recommended: create a sanitized release "
+            "config file and pass it via --runtime-config-path."
+        )
+
+    if args.allow_live_runtime_config and not bundling_live_runtime_config:
+        print(
+            "Warning: --allow-live-runtime-config was provided, but the selected "
+            "runtime config is not runtime/config.json."
+        )
+
+    return runtime_config_path, bundling_live_runtime_config
+
+
+def build_release(
+    version: str,
+    output_dir: Path,
+    *,
+    runtime_config_path: Path | None = None,
+) -> tuple[Path, Path, Path]:
     pyinstaller_run = load_pyinstaller_runner()
 
     if BUILD_ROOT.exists():
@@ -140,6 +285,8 @@ def build_release(version: str, output_dir: Path) -> tuple[Path, Path, Path]:
     if release_root.exists():
         shutil.rmtree(release_root)
     shutil.copytree(built_dir, release_root)
+    if runtime_config_path is not None:
+        bundle_runtime_config(release_root, runtime_config_path)
 
     archive_path = output_dir / f"{release_name(version)}.zip"
     if archive_path.exists():
@@ -153,13 +300,29 @@ def build_release(version: str, output_dir: Path) -> tuple[Path, Path, Path]:
 def main() -> int:
     args = parse_args()
     output_dir = Path(args.output_dir).resolve()
+    runtime_config_path, bundling_live_runtime_config = validate_runtime_config_args(args)
 
     ensure_required_files()
-    release_root, archive_path, checksum_path = build_release(args.version, output_dir)
+    release_root, archive_path, checksum_path = build_release(
+        args.version,
+        output_dir,
+        runtime_config_path=runtime_config_path,
+    )
 
     print(f"Created portable folder: {release_root}")
     print(f"Created portable zip: {archive_path}")
     print(f"Created checksum: {checksum_path}")
+    if runtime_config_path is not None:
+        if bundling_live_runtime_config:
+            print(
+                "Bundled runtime config into release artifacts from the live "
+                f"repository file: {runtime_config_path}"
+            )
+        else:
+            print(
+                "Bundled runtime config into release artifacts from "
+                f"{runtime_config_path}"
+            )
     return 0
 
 

@@ -14,6 +14,20 @@ on:
         description: "发行说明（Markdown）；留空时自动生成"
         required: false
         default: ""
+      include_runtime_config:
+        description: "是否把指定的 runtime config 文件打进发布包"
+        required: false
+        type: boolean
+        default: false
+      runtime_config_path:
+        description: "启用运行时配置打包时，要打包的仓库内文件路径"
+        required: false
+        default: ""
+      allow_live_runtime_config:
+        description: "是否确认直接打包仓库里的 live runtime/config.json"
+        required: false
+        type: boolean
+        default: false
       prerelease:
         description: "是否标记为预发布版本"
         required: false
@@ -27,8 +41,66 @@ permissions:
   contents: write
 
 jobs:
+  frontend-quality:
+    name: Frontend quality gate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Lint frontend
+        run: npm run lint
+
+      - name: Test frontend
+        run: npm run test:run
+
+  backend-tests:
+    name: Backend pytest gate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Run backend tests
+        run: pytest tests
+
   build:
     name: Build Windows Portable EXE
+    needs:
+      - frontend-quality
+      - backend-tests
     runs-on: windows-latest
     outputs:
       version: ${{ steps.meta.outputs.version }}
@@ -96,7 +168,33 @@ jobs:
         run: python scripts/smoke_test_release_backend.py
 
       - name: Build portable EXE release
-        run: python scripts/build_pyinstaller_release.py --version ${{ steps.meta.outputs.version }}
+        shell: pwsh
+        env:
+          INCLUDE_RUNTIME_CONFIG: ${{ github.event.inputs.include_runtime_config || 'false' }}
+          RUNTIME_CONFIG_PATH: ${{ github.event.inputs.runtime_config_path || '' }}
+          ALLOW_LIVE_RUNTIME_CONFIG: ${{ github.event.inputs.allow_live_runtime_config || 'false' }}
+        run: |
+          $arguments = @(
+            "scripts/build_pyinstaller_release.py",
+            "--version",
+            "${{ steps.meta.outputs.version }}"
+          )
+
+          if ($env:INCLUDE_RUNTIME_CONFIG -eq "true") {
+            $arguments += "--include-runtime-config"
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:RUNTIME_CONFIG_PATH)) {
+            $arguments += "--runtime-config-path"
+            $arguments += $env:RUNTIME_CONFIG_PATH
+          }
+          if ($env:ALLOW_LIVE_RUNTIME_CONFIG -eq "true") {
+            $arguments += "--allow-live-runtime-config"
+          }
+
+          python @arguments
+
+      - name: Smoke test packaged release artifact
+        run: python scripts/smoke_test_release_backend.py --release-archive dist/releases/${{ steps.meta.outputs.artifact }}
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
@@ -128,7 +226,7 @@ jobs:
         env:
           RELEASE_NOTES: ${{ github.event.inputs.release_notes }}
         run: |
-          notes_path="dist/releases/release-notes.md"
+          notes_path="$RUNNER_TEMP/release-notes.md"
           printf '%s\n' "$RELEASE_NOTES" > "$notes_path"
           echo "notes_path=${notes_path}" >> "$GITHUB_OUTPUT"
 
@@ -141,7 +239,9 @@ jobs:
           name: ${{ needs.build.outputs.release_title }}
           prerelease: ${{ needs.build.outputs.prerelease }}
           body_path: ${{ steps.notes.outputs.notes_path }}
-          files: dist/releases/*
+          files: |
+            dist/releases/${{ needs.build.outputs.artifact }}
+            dist/releases/${{ needs.build.outputs.artifact }}.sha256
           generate_release_notes: false
 
       - name: Publish assets to GitHub Release with generated notes
@@ -152,5 +252,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: ${{ needs.build.outputs.release_title }}
           prerelease: ${{ needs.build.outputs.prerelease }}
-          files: dist/releases/*
+          files: |
+            dist/releases/${{ needs.build.outputs.artifact }}
+            dist/releases/${{ needs.build.outputs.artifact }}.sha256
           generate_release_notes: true
