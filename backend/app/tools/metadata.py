@@ -1,3 +1,5 @@
+"""Canonical tool metadata helpers used by ``app.tools.search_tool``."""
+
 from __future__ import annotations
 
 from langchain_core.tools import BaseTool

@@ -4,7 +4,7 @@ Tests for search-tool guardrails.
 
 import pytest
 
-from app.agents.skills import search_tool
+from app.tools import search_tool
 from app.search.base import SearchResult
 
 

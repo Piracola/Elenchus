@@ -1,21 +1,14 @@
-"""Export service facade — RE-EXPORT for backward compatibility."""
+"""Backward-compatible alias for the canonical ``app.services.export`` package.
 
-from app.services.export import (
-    build_content_disposition,
-    build_export_filename,
-    compute_runtime_events_checksum,
-    export_json,
-    export_markdown,
-    export_runtime_events_snapshot,
-    normalize_markdown_export_categories,
-)
+Recommended entrypoint:
+- New backend code should import export helpers from ``app.services.export``.
 
-__all__ = [
-    "build_content_disposition",
-    "build_export_filename",
-    "export_json",
-    "export_markdown",
-    "normalize_markdown_export_categories",
-    "compute_runtime_events_checksum",
-    "export_runtime_events_snapshot",
-]
+Compatibility contract:
+- ``app.services.export_service`` remains importable for older code only.
+"""
+
+import sys
+
+from app.services import export as _export_module
+
+sys.modules[__name__] = _export_module

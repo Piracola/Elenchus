@@ -1,8 +1,8 @@
 from types import SimpleNamespace
 
 from app.agents.graph import _build_tool_knowledge_entry
-from app.agents.skills.metadata import get_tool_shared_knowledge_type
-from app.agents.skills.search_tool import web_search
+from app.tools.metadata import get_tool_shared_knowledge_type
+from app.tools.search_tool import web_search
 
 
 def test_web_search_declares_fact_memory_metadata():

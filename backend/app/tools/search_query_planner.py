@@ -1,3 +1,5 @@
+"""Canonical query-planning helpers for ``app.tools.search_tool``."""
+
 from __future__ import annotations
 
 import re

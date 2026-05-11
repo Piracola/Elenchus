@@ -1,20 +1,9 @@
-from __future__ import annotations
+"""Backward-compatible alias for ``app.tools.metadata``.
 
-from langchain_core.tools import BaseTool
+Prefer importing tool metadata helpers from ``app.tools.metadata`` in new code.
+"""
 
-_SHARED_KNOWLEDGE_TYPE = "shared_knowledge_type"
+from app.tools import metadata as _metadata_module
+import sys
 
-
-def mark_tool_shared_knowledge(tool: BaseTool, knowledge_type: str) -> BaseTool:
-    """Annotate a tool so the graph can persist selected results as shared knowledge."""
-    tool.metadata = {
-        **(tool.metadata or {}),
-        _SHARED_KNOWLEDGE_TYPE: knowledge_type,
-    }
-    return tool
-
-
-def get_tool_shared_knowledge_type(tool: BaseTool) -> str | None:
-    """Return the shared-knowledge type declared by a tool, if any."""
-    value = (tool.metadata or {}).get(_SHARED_KNOWLEDGE_TYPE)
-    return value if isinstance(value, str) and value else None
+sys.modules[__name__] = _metadata_module

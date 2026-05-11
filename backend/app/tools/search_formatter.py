@@ -1,3 +1,5 @@
+"""Canonical evidence-formatting helpers for ``app.tools.search_tool``."""
+
 from __future__ import annotations
 
 import re

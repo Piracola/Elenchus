@@ -1,10 +1,13 @@
 """
-Unified web search tool for agents.
+Canonical web search tool for agents.
 
 The tool accepts either a concise fact query or a full debate topic. For
 debate topics it automatically plans several targeted searches, filters
 obviously irrelevant results, and returns a compact evidence brief that the
 model can synthesize into an argument.
+
+New imports should use ``app.tools.search_tool``. The mirrored
+``app.agents.skills.search_tool`` module is compatibility-only.
 """
 
 from __future__ import annotations
