@@ -300,7 +300,7 @@ python -c "import bcrypt; print(bcrypt.hashpw(b'你的密码', bcrypt.gensalt())
 - 启动/停止辩论
 - 实时监控辩论进展
 - 向辩论中插入用户干预
-- 导出辩论结果
+- 导出辩论结果（JSON / Markdown / HTML 静态阅读页）
 
 ### API 端点
 
@@ -332,7 +332,7 @@ openclaw 自动执行：
 1. `POST /api/sessions` → 创建会话
 2. `POST /api/sessions/{id}/start` → 启动辩论
 3. 循环轮询 `GET /api/sessions/{id}/live-events` → 实时展示进展
-4. `GET /api/sessions/{id}/export?format=markdown` → 导出结果
+4. `GET /api/sessions/{id}/export?format=markdown` → 导出结果（可改为 `format=json` 或 `format=html`）
 
 ### 完整文档
 

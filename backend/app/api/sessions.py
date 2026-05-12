@@ -4,7 +4,7 @@ Session CRUD REST API backed by file-based session storage.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 
 from app.api.session_documents import router as session_documents_router
 from app.api.session_runtime import router as session_runtime_router
@@ -67,6 +67,7 @@ async def export_session(
     Export full session data.
     - format=json returns a JSON file
     - format=markdown returns a markdown file
+    - format=html returns a static HTML reading page
     """
     data = await session_service.get_session(session_id)
     if data is None:
@@ -83,11 +84,22 @@ async def export_session(
             },
         )
 
-    markdown = export_service.export_markdown(data, categories)
-    filename = export_service.build_export_filename(data, "md")
+    if format == ExportFormat.MARKDOWN:
+        markdown = export_service.export_markdown(data, categories)
+        filename = export_service.build_export_filename(data, "md")
+        return Response(
+            content=markdown,
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": export_service.build_content_disposition(filename)
+            },
+        )
+
+    html = export_service.export_html(data, categories)
+    filename = export_service.build_export_filename(data, "html")
     return Response(
-        content=markdown,
-        media_type="text/markdown; charset=utf-8",
+        content=html,
+        media_type="text/html; charset=utf-8",
         headers={
             "Content-Disposition": export_service.build_content_disposition(filename)
         },

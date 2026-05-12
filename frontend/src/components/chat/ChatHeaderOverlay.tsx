@@ -53,7 +53,7 @@ export default function ChatHeaderOverlay({
   bulkCollapseLabel,
   onToggleAllAgentMessages,
 }: ChatHeaderOverlayProps) {
-  const [exportingFormat, setExportingFormat] = useState<'markdown' | 'json' | null>(null);
+  const [exportingFormat, setExportingFormat] = useState<'markdown' | 'json' | 'html' | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showDebaterSettings, setShowDebaterSettings] = useState(false);
   const [markdownExportCategories, setMarkdownExportCategories] = useState<MarkdownExportCategory[]>([]);
@@ -71,7 +71,7 @@ export default function ChatHeaderOverlay({
     ));
   };
 
-  const handleExport = async (format: 'markdown' | 'json') => {
+  const handleExport = async (format: 'markdown' | 'json' | 'html') => {
     console.log('[export] handleExport called', { format, hasCurrentSession, currentSessionId, exportingFormat });
     if (!hasCurrentSession || exportingFormat || !currentSessionId) {
       console.warn('[export] early return — guard fired');
@@ -87,6 +87,9 @@ export default function ChatHeaderOverlay({
       if (format === 'markdown') {
         await api.sessions.exportMarkdown(currentSessionId, currentTopic, normalizedMarkdownCategories);
         toast('已导出 Markdown 辩论记录', 'success');
+      } else if (format === 'html') {
+        await api.sessions.exportHtml(currentSessionId, currentTopic, normalizedMarkdownCategories);
+        toast('已导出 HTML 阅读页', 'success');
       } else {
         await api.sessions.exportJson(currentSessionId, currentTopic);
         toast('已导出 JSON 辩论数据', 'success');
@@ -414,6 +417,45 @@ export default function ChatHeaderOverlay({
                   {/* 分隔线 */}
                   <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
 
+                  {/* HTML 选项 */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        HTML 网页
+                      </span>
+                      <motion.button
+                        whileHover={{ y: -1 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => {
+                          void handleExport('html');
+                          setShowExportMenu(false);
+                        }}
+                        disabled={Boolean(exportingFormat)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '5px 10px',
+                          background: 'var(--text-primary)',
+                          color: 'var(--bg-primary)',
+                          border: 'none',
+                          borderRadius: 'var(--radius-md)',
+                          cursor: exportingFormat ? 'not-allowed' : 'pointer',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          opacity: exportingFormat ? 0.65 : 1,
+                        }}
+                      >
+                        {exportingFormat === 'html' ? '导出中...' : '导出'}
+                      </motion.button>
+                    </div>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', paddingLeft: '4px' }}>
+                      生成可离线阅读的静态网页，支持收起、展开和轮次跳转。
+                    </span>
+                  </div>
+
+                  {/* 分隔线 */}
+                  <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
                   {/* JSON 选项 */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>

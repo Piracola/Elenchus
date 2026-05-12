@@ -165,6 +165,7 @@ Elenchus 的一个关键架构选择，是把“模式差异”放在运行链�
 - `backend/app/services/reference_library_knowledge.py`：资料池到 shared knowledge 的同步逻辑
 - `backend/app/services/builtin_reference_service.py`：模式内置参考文档注入
 - `backend/app/services/export/__init__.py`：导出能力的推荐主入口，统一聚合会话导出、文件名与运行时快照导出能力；`backend/app/services/export_service.py` 仅保留为兼容壳
+- `backend/app/services/export/html.py`：会话 HTML 静态阅读页导出，内联黑白灰阅读样式、低饱和智能体点缀色、轮次导航与一键展开/收起脚本
 - `backend/app/services/export_markdown_service.py`：会话 Markdown 导出与 transcript 分类渲染
 - `backend/app/services/export_scoring_service.py`：导出评分维度、模块权重与综合分推导
 - `backend/app/services/export_filename_service.py`：导出文件名清洗与 `Content-Disposition` 头生成

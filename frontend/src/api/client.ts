@@ -238,6 +238,12 @@ export const api = {
             return download(`/sessions/${id}/export?${params.toString()}`, buildTopicFilename(topic, 'md'));
         },
 
+        exportHtml: (id: string, topic: string, categories?: MarkdownExportCategory[]): Promise<void> => {
+            const params = new URLSearchParams({ format: 'html' });
+            categories?.forEach((category) => params.append('categories', category));
+            return download(`/sessions/${id}/export?${params.toString()}`, buildTopicFilename(topic, 'html'));
+        },
+
         exportRuntimeEventsSnapshot: (id: string, topic: string): Promise<void> => {
             return download(
                 `/sessions/${id}/runtime-events/export`,

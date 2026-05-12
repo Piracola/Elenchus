@@ -351,11 +351,17 @@ GET /api/sessions/abc123def456/export?format=markdown
 
 **响应**：Markdown 文件下载
 
-**也可以使用 JSON 格式**：
+**也可以使用 JSON 或 HTML 格式**：
 
 ```http
 GET /api/sessions/abc123def456/export?format=json
 ```
+
+```http
+GET /api/sessions/abc123def456/export?format=html
+```
+
+HTML 导出会返回可离线阅读的静态网页，内置低饱和角色色、一键展开/收起和轮次跳转，适合分享给人类读者。
 
 ---
 
@@ -742,6 +748,8 @@ POST /api/sessions/{id}/stop
 ### 导出
 ```
 GET /api/sessions/{id}/export?format=markdown
+GET /api/sessions/{id}/export?format=html
+GET /api/sessions/{id}/export?format=json
 ```
 
 ---

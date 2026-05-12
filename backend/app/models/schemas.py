@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, field_validator
 class ExportFormat(str, Enum):
     JSON = "json"
     MARKDOWN = "markdown"
+    HTML = "html"
 
 
 class SessionStatus(str, Enum):

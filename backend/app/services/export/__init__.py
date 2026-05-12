@@ -1,6 +1,7 @@
 """Export service facade — re-exports from export subpackage."""
 
 from app.services.export.filename import build_content_disposition, build_export_filename
+from app.services.export.html import export_html
 from app.services.export.json import export_json
 from app.services.export.markdown import export_markdown, normalize_markdown_export_categories
 from app.services.export.runtime import (
@@ -11,6 +12,7 @@ from app.services.export.runtime import (
 __all__ = [
     "build_content_disposition",
     "build_export_filename",
+    "export_html",
     "export_json",
     "export_markdown",
     "normalize_markdown_export_categories",

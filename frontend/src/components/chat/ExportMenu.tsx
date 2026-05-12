@@ -11,10 +11,10 @@ const MARKDOWN_EXPORT_OPTIONS: { value: MarkdownExportCategory; label: string }[
 ];
 
 type ExportMenuProps = {
-  exportingFormat: 'markdown' | 'json' | null;
+  exportingFormat: 'markdown' | 'json' | 'html' | null;
   markdownExportCategories: MarkdownExportCategory[];
   onToggleCategory: (category: MarkdownExportCategory) => void;
-  onExport: (format: 'markdown' | 'json') => void;
+  onExport: (format: 'markdown' | 'json' | 'html') => void;
 };
 
 export default function ExportMenu({
@@ -95,7 +95,7 @@ export default function ExportMenu({
   }, []);
 
   const handleExportClick = useCallback(
-    (format: 'markdown' | 'json') => {
+    (format: 'markdown' | 'json' | 'html') => {
       onExport(format);
       setOpen(false);
     },
@@ -258,6 +258,58 @@ export default function ExportMenu({
                   </label>
                 ))}
               </div>
+            </div>
+
+            {/* 分隔线 */}
+            <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
+
+            {/* HTML 部分 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  HTML 网页
+                </span>
+                <button
+                  onClick={() => handleExportClick('html')}
+                  disabled={Boolean(exportingFormat)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '5px 10px',
+                    background: 'var(--text-primary)',
+                    color: 'var(--bg-primary)',
+                    border: 'none',
+                    borderRadius: 'var(--radius-md)',
+                    cursor: exportingFormat ? 'not-allowed' : 'pointer',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    opacity: exportingFormat ? 0.65 : 1,
+                    transition: 'opacity 0.15s ease, transform 0.1s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!exportingFormat) {
+                      e.currentTarget.style.opacity = '0.85';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.opacity = exportingFormat ? '0.65' : '1';
+                  }}
+                  onMouseDown={(e) => {
+                    if (!exportingFormat) {
+                      e.currentTarget.style.transform = 'scale(0.97)';
+                    }
+                  }}
+                  onMouseUp={(e) => {
+                    e.currentTarget.style.transform = '';
+                  }}
+                >
+                  {exportingFormat === 'html' ? '导出中...' : '导出'}
+                </button>
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', paddingLeft: '4px' }}>
+                生成可离线阅读的静态网页，支持收起、展开和轮次跳转。
+              </span>
             </div>
 
             {/* 分隔线 */}

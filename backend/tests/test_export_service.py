@@ -6,6 +6,10 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
+from app.api import sessions as sessions_api
+from app.models.schemas import ExportFormat
 from app.services import export_service
 
 
@@ -149,6 +153,70 @@ def test_export_json_preserves_unicode_content():
 
     assert '"topic": "测试导出"' in payload
     assert '"value": "中文内容"' in payload
+
+
+def test_export_html_renders_static_reading_page_with_controls():
+    html = export_service.export_html(build_markdown_session_payload())
+
+    assert "<!doctype html>" in html
+    assert "Elenchus 辩论记录" in html
+    assert "人工智能是否会改变教育" in html
+    assert "全部展开" in html
+    assert "全部收起" in html
+    assert 'href="#turn-1"' in html
+    assert "AI 可以显著提升个性化教学效果。" in html
+    assert "论证结构完整，举例清晰。" in html
+    assert "正方证据更完整。" not in html
+    assert "当前评分" in html
+    assert "综合评分：7.5/10" in html
+    assert "由 Elenchus 导出" in html
+
+
+def test_export_html_supports_category_filtered_sections():
+    html = export_service.export_html(
+        build_markdown_session_payload(),
+        ["jury_messages", "group_discussion", "judge_messages"],
+    )
+
+    assert "组内讨论" in html
+    assert "裁判消息" in html
+    assert "审判团消息" in html
+    assert "先巩固个性化学习的定义。" in html
+    assert "正方证据更完整。" in html
+    assert "AI 可以显著提升个性化教学效果。" not in html
+
+
+def test_export_html_escapes_agent_content():
+    payload = build_markdown_session_payload()
+    payload["topic"] = "<script>alert('topic')</script>"
+    payload["dialogue_history"][0]["content"] = "<script>alert('xss')</script>\nhttps://example.com/path"
+
+    html = export_service.export_html(payload)
+
+    assert "<script>alert('topic')</script>" not in html
+    assert "<script>alert('xss')</script>" not in html
+    assert "&lt;script&gt;alert(&#x27;topic&#x27;)&lt;/script&gt;" in html
+    assert "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;" in html
+    assert '<a href="https://example.com/path"' in html
+
+
+@pytest.mark.asyncio
+async def test_export_session_route_returns_html_response(monkeypatch):
+    async def _get_session(session_id: str):
+        assert session_id == "abc123def456"
+        return build_markdown_session_payload()
+
+    monkeypatch.setattr(sessions_api.session_service, "get_session", _get_session)
+
+    response = await sessions_api.export_session(
+        "abc123def456",
+        format=ExportFormat.HTML,
+        categories=["debater_speeches"],
+    )
+
+    assert response.media_type == "text/html; charset=utf-8"
+    assert response.headers["content-disposition"].endswith(".html")
+    assert b"<!doctype html>" in response.body
 
 
 def test_export_runtime_events_snapshot_contains_checksum_and_full_event_list():

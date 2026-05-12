@@ -332,7 +332,8 @@ GET /api/sessions/{session_id}/export
 ```
 
 **查询参数**：
-- `format`（string，默认 `json`）：`json` 或 `markdown`
+- `format`（string，默认 `json`）：`json`、`markdown` 或 `html`
+- `categories`（string[]，可选）：导出内容范围；适用于 `markdown` 和 `html`
 
 **响应**：文件下载
 
