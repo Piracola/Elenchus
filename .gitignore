@@ -9,6 +9,7 @@
 .claude/
 .trae/
 .qwen/
+.codex-run/
 
 # ========================================
 # Sensitive Files (never commit)
