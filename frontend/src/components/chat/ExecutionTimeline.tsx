@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useRuntimeActions, useRuntimeViewState } from '../../hooks/useDebateViewState';
 import { getEventNode } from '../../utils/runtime/eventFocus';
@@ -216,7 +216,7 @@ export default function ExecutionTimeline({
     };
 
     // 处理滑块拖动结束时的同步
-    const handleSliderDragEnd = () => {
+    const handleSliderDragEnd = useCallback(() => {
         setIsDraggingSlider(false);
         // 拖动结束时，同步选中事件
         if (replayEnabled && replayCursor >= 0 && replayCursor < runtimeEvents.length) {
@@ -224,7 +224,13 @@ export default function ExecutionTimeline({
             setSelectedEventId(cursorEventId);
             setFocusedRuntimeEventId(cursorEventId);
         }
-    };
+    }, [
+        replayCursor,
+        replayEnabled,
+        runtimeEvents,
+        setFocusedRuntimeEventId,
+        setSelectedEventId,
+    ]);
 
     useEffect(() => {
         if (!isDraggingSlider) {
@@ -242,7 +248,7 @@ export default function ExecutionTimeline({
             window.removeEventListener('pointerup', handleWindowPointerRelease);
             window.removeEventListener('pointercancel', handleWindowPointerRelease);
         };
-    }, [isDraggingSlider, replayCursor, replayEnabled, runtimeEvents]);
+    }, [handleSliderDragEnd, isDraggingSlider]);
 
     const replayProgress = replayEnabled
         ? `回放 ${Math.max(0, replayCursor + 1)} / ${runtimeEvents.length}`

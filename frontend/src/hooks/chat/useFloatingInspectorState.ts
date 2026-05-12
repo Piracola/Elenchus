@@ -269,6 +269,7 @@ export function useFloatingInspectorState({
         floatingInspectorTopDocked,
         createCollapsedRectFromSnapshot,
         clearFloatingInspectorInteraction,
+        floatingInspectorLayoutMode,
         isWideLayout,
         rememberExpandedFloatingInspectorState,
     ]);
@@ -360,7 +361,7 @@ export function useFloatingInspectorState({
             window.removeEventListener('pointercancel', stopFloatingInspectorInteraction);
             stopFloatingInspectorInteraction();
         };
-    }, [stopFloatingInspectorInteraction]);
+    }, [rectChanged, stopFloatingInspectorInteraction]);
 
     const startFloatingInspectorInteraction = useCallback((
         event: ReactPointerEvent<HTMLElement>,
@@ -401,6 +402,7 @@ export function useFloatingInspectorState({
         });
     }, [
         floatingInspectorBounds,
+        floatingInspectorExpanded,
         floatingInspectorLayoutMode,
         startFloatingInspectorInteraction,
     ]);

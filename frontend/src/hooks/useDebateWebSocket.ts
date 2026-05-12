@@ -34,7 +34,9 @@ export function useDebateWebSocket(sessionId: string | null) {
     const activeGeneration = useRef(0);
     const requestedSessionId = useRef<string | null>(sessionId);
 
-    requestedSessionId.current = sessionId;
+    useLayoutEffect(() => {
+        requestedSessionId.current = sessionId;
+    }, [sessionId]);
 
     useEffect(() => {
         isMounted.current = true;
