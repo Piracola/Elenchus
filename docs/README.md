@@ -36,6 +36,7 @@
 ### 前端
 
 - [前端开发指南](./guides/frontend-development.md) — Vite 代理、联调要点、常用开发命令、关键入口
+- [前端组件契约](./guides/frontend-design-contract.md) — 前端视觉、token、组件、动画与迁移规则
 - [前端目录入口 README](../frontend/README.md) — 轻量目录说明与继续阅读入口
 
 说明：首次安装与启动步骤统一收口到 [快速开始](./getting-started.md)，开发指南不再重复完整启动手册。

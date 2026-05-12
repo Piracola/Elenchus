@@ -13,6 +13,8 @@
 - Framer Motion
 - Vitest
 
+视觉与组件统一规范见：[前端组件契约](./frontend-design-contract.md)。新增或重构 UI 时优先遵守该契约。
+
 ## 2. 前端开发时最常用的命令
 
 完成首次依赖安装后，前端单独开发通常使用下面这些命令：
@@ -37,7 +39,7 @@ npm run preview
 
 当前默认行为：
 
-- 前端开发服务器：`http://localhost:5173`
+- 前端开发服务器：`http://127.0.0.1:5173`
 - 后端默认端口：`8001`
 - `vite.config.ts` 会读取 `VITE_BACKEND_PORT`，默认回退到 `8001`
 
@@ -129,4 +131,5 @@ VITE_BACKEND_PORT=8001
 - [运行时与回放](../runtime.md)
 - [快速开始](../getting-started.md)
 - [后端开发指南](./backend-development.md)
+- [前端组件契约](./frontend-design-contract.md)
 - [编码规范指南](./encoding.md)

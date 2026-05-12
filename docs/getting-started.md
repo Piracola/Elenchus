@@ -51,7 +51,7 @@ chmod +x ./start.sh
 
 ## 3. 默认地址
 
-- 前端：`http://localhost:5173`
+- 前端：`http://127.0.0.1:5173`
 - 后端：`http://localhost:8001`
 - 后端 API 文档：`http://localhost:8001/docs`
 

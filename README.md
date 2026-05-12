@@ -28,7 +28,7 @@
 
 默认地址：
 
-- 前端：`http://localhost:5173`
+- 前端：`http://127.0.0.1:5173`
 - 后端：`http://localhost:8001`
 
 首次使用时，打开 Web UI 后需要先在模型配置中添加可用的 provider。
