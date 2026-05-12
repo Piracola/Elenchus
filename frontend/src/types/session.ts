@@ -132,6 +132,10 @@ export interface SessionCreatePayload {
     reasoning_config?: ReasoningConfig;
 }
 
+export interface SessionAgentConfigsUpdatePayload {
+    agent_configs?: Record<string, AgentConfig>;
+}
+
 export interface SessionDocumentListItem {
     id: string;
     session_id: string;

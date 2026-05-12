@@ -11,6 +11,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph.message import RemoveMessage
 
 from app.agents.context_builder import build_context_for_agent
+from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.runtime_progress import (
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
     MODEL_INVOCATION_TIMEOUT_SECONDS,
@@ -100,7 +101,7 @@ async def sophistry_debater_speak(state: dict[str, Any]) -> dict[str, Any]:
         recent_dialogue_history = dialogue_history if isinstance(dialogue_history, list) else []
     shared_knowledge = state.get("shared_knowledge", [])
     messages = state.get("messages", [])
-    agent_configs = state.get("agent_configs", {})
+    agent_configs = await refresh_agent_configs_for_session(state)
     runtime_event_emitter = state.get("runtime_event_emitter")
 
     role_config = agent_configs.get(role, {})
@@ -199,4 +200,5 @@ async def sophistry_debater_speak(state: dict[str, Any]) -> dict[str, Any]:
         "recent_dialogue_history": [*recent_dialogue_history, entry],
         "messages": [RemoveMessage(id=message.id) for message in messages if getattr(message, "id", None)],
         "speech_was_streamed": speech_started,
+        "agent_configs": agent_configs,
     }

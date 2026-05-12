@@ -8,6 +8,7 @@
 
 import type {
     Session,
+    SessionAgentConfigsUpdatePayload,
     SessionListItem,
     SessionCreatePayload,
     ModelConfig,
@@ -173,6 +174,12 @@ export const api = {
 
         get: (id: string): Promise<Session> =>
             request(`/sessions/${id}`),
+
+        updateAgentConfigs: (id: string, payload: SessionAgentConfigsUpdatePayload): Promise<Session> =>
+            request(`/sessions/${id}/agent-configs`, {
+                method: 'PATCH',
+                body: JSON.stringify(payload),
+            }),
 
         uploadDocument: async (id: string, file: File): Promise<SessionDocumentResponse> => {
             const body = new FormData();

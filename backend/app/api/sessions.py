@@ -10,6 +10,7 @@ from app.api.session_documents import router as session_documents_router
 from app.api.session_runtime import router as session_runtime_router
 from app.models.schemas import (
     ExportFormat,
+    SessionAgentConfigsUpdate,
     SessionCreate,
     SessionListResponse,
     SessionResponse,
@@ -43,6 +44,21 @@ async def list_sessions(
 async def get_session(session_id: str):
     """Get a single session's full data."""
     data = await session_service.get_session(session_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return SessionResponse(**data)
+
+
+@router.patch("/sessions/{session_id}/agent-configs", response_model=SessionResponse)
+async def update_session_agent_configs(
+    session_id: str,
+    body: SessionAgentConfigsUpdate,
+):
+    """Update per-agent settings used by subsequent runtime model calls."""
+    data = await session_service.update_session_agent_configs(
+        session_id,
+        body.agent_configs,
+    )
     if data is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return SessionResponse(**data)

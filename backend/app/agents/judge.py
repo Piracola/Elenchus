@@ -13,6 +13,7 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import ValidationError
 
+from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.prompt_loader import get_judge_prompt
 from app.agents.runtime_progress import (
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
@@ -284,7 +285,7 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
     logger.info("Judge scoring turn %d for %d participants", current_turn + 1, len(participants))
 
     system_prompt = get_judge_prompt()
-    agent_configs = state.get("agent_configs", {})
+    agent_configs = await refresh_agent_configs_for_session(state)
     override = agent_configs.get("judge")
     current_scores: dict[str, Any] = {}
     judge_history_entries: list[dict[str, Any]] = []
@@ -381,4 +382,5 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
         "current_scores": current_scores,
         "cumulative_scores": cumulative_scores,
         "judge_history": judge_history_entries,
+        "agent_configs": agent_configs,
     }

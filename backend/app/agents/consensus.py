@@ -10,6 +10,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.prompt_loader import get_consensus_prompt
 from app.agents.runtime_progress import (
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
@@ -85,7 +86,7 @@ async def converge_consensus(state: dict[str, Any]) -> dict[str, Any]:
     if not bool(reasoning_config.get("consensus_enabled", True)):
         return {}
 
-    agent_configs = state.get("agent_configs", {})
+    agent_configs = await refresh_agent_configs_for_session(state)
     override = agent_configs.get("consensus", agent_configs.get("judge"))
     custom_prompt = ""
     if isinstance(override, dict):
@@ -130,4 +131,5 @@ async def converge_consensus(state: dict[str, Any]) -> dict[str, Any]:
     }
     return {
         "jury_dialogue_history": [entry],
+        "agent_configs": agent_configs,
     }

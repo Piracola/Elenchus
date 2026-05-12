@@ -11,6 +11,7 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.agents.context_builder import build_context_for_agent
+from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.prompt_loader import get_debater_system_prompt
 from app.agents.runtime_progress import (
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
@@ -174,7 +175,7 @@ async def team_discuss(state: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(recent_dialogue_history, list):
         recent_dialogue_history = dialogue_history if isinstance(dialogue_history, list) else []
 
-    agent_configs = state.get("agent_configs", {})
+    agent_configs = await refresh_agent_configs_for_session(state)
     side_config = agent_configs.get(side, agent_configs.get("debater", {}))
     custom_prompt = str(side_config.get("custom_prompt", "") or "")
     override = side_config if isinstance(side_config, dict) else None
@@ -305,4 +306,5 @@ async def team_discuss(state: dict[str, Any]) -> dict[str, Any]:
         "team_dialogue_history": team_history_delta,
         "current_team_discussion": current_team_discussion,
         "current_team_summary": summary_entry,
+        "agent_configs": agent_configs,
     }

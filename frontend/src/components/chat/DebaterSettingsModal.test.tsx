@@ -1,8 +1,14 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import DebaterSettingsModal from './DebaterSettingsModal';
+
+const updateAgentConfigsMock = vi.fn();
+const updateCurrentSessionAgentConfigsMock = vi.fn();
+const buildAgentConfigsMock = vi.fn(() => ({
+    proposer: { provider_id: 'provider-1', model: 'model-a' },
+}));
 
 vi.mock('framer-motion', () => {
     const createPrimitive = (tag: keyof HTMLElementTagNameMap) => {
@@ -45,6 +51,18 @@ vi.mock('framer-motion', () => {
     };
 });
 
+vi.mock('../../api/client', () => ({
+    api: {
+        sessions: {
+            updateAgentConfigs: (...args: unknown[]) => updateAgentConfigsMock(...args),
+        },
+    },
+}));
+
+vi.mock('../../utils/chat/toast', () => ({
+    toast: vi.fn(),
+}));
+
 vi.mock('../../hooks/useAgentConfigs', () => ({
     useAgentConfigs: () => ({
         savedConfigs: [],
@@ -80,6 +98,7 @@ vi.mock('../../hooks/useAgentConfigs', () => ({
         handleTemperatureChange: vi.fn(),
         handleThinkingToggle: vi.fn(),
         reload: vi.fn(),
+        buildAgentConfigs: buildAgentConfigsMock,
         isLoading: false,
         error: null,
     }),
@@ -91,6 +110,9 @@ vi.mock('../../hooks/useDebateViewState', () => ({
             agent_configs: {},
         },
     }),
+    useSessionActions: () => ({
+        updateCurrentSessionAgentConfigs: updateCurrentSessionAgentConfigsMock,
+    }),
 }));
 
 vi.mock('../shared/AgentConfigPanel', () => ({
@@ -101,8 +123,13 @@ vi.mock('../shared/AgentConfigPanel', () => ({
     ),
 }));
 
+afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+});
+
 describe('DebaterSettingsModal', () => {
-    it('renders the in-debate settings panel as read-only guidance', () => {
+    it('renders editable agent settings as a lightweight popover', () => {
         render(
             <DebaterSettingsModal
                 isOpen
@@ -111,9 +138,38 @@ describe('DebaterSettingsModal', () => {
             />,
         );
 
-        expect(screen.getByText('本次会话模型配置')).toBeInTheDocument();
-        expect(screen.getByText('当前辩论参数不可在此处热更新')).toBeInTheDocument();
-        expect(screen.getByTestId('agent-config-panel')).toHaveAttribute('data-read-only', 'true');
-        expect(screen.getByText('管理配置并刷新')).toBeInTheDocument();
+        expect(screen.getByText('辩手设置')).toBeInTheDocument();
+        expect(screen.queryByText('当前辩论参数不可在此处热更新')).not.toBeInTheDocument();
+        expect(screen.getByTestId('agent-config-panel')).toHaveAttribute('data-read-only', 'undefined');
+        expect(screen.getByText('保存设置')).toBeInTheDocument();
+    });
+
+    it('saves current settings for subsequent agent calls', async () => {
+        updateAgentConfigsMock.mockResolvedValueOnce({
+            agent_configs: {
+                proposer: { provider_id: 'provider-1', model: 'model-a' },
+            },
+        });
+
+        render(
+            <DebaterSettingsModal
+                isOpen
+                onClose={() => {}}
+                sessionId="session-1"
+            />,
+        );
+
+        fireEvent.click(screen.getByText('保存设置'));
+
+        await waitFor(() => {
+            expect(updateAgentConfigsMock).toHaveBeenCalledWith('session-1', {
+                agent_configs: {
+                    proposer: { provider_id: 'provider-1', model: 'model-a' },
+                },
+            });
+        });
+        expect(updateCurrentSessionAgentConfigsMock).toHaveBeenCalledWith({
+            proposer: { provider_id: 'provider-1', model: 'model-a' },
+        });
     });
 });

@@ -8,6 +8,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.runtime_progress import (
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
     MODEL_INVOCATION_TIMEOUT_SECONDS,
@@ -86,7 +87,7 @@ async def sophistry_observer_report(state: dict[str, Any]) -> dict[str, Any]:
         f"{_render_turn_excerpt(turn_entries)}"
     )
 
-    agent_configs = state.get("agent_configs", {})
+    agent_configs = await refresh_agent_configs_for_session(state)
     override = agent_configs.get("observer") or agent_configs.get("judge")
     progress_callback = build_status_heartbeat_callback(
         state,
@@ -135,6 +136,7 @@ async def sophistry_observer_report(state: dict[str, Any]) -> dict[str, Any]:
         "dialogue_history": [entry],
         "mode_artifacts": [artifact],
         "current_mode_report": artifact,
+        "agent_configs": agent_configs,
     }
 
 
@@ -152,7 +154,7 @@ async def sophistry_final_report(state: dict[str, Any]) -> dict[str, Any]:
         "如果已有阶段观察不足，请补充整场辩论中最关键的转折句与高频套路。"
     )
 
-    agent_configs = state.get("agent_configs", {})
+    agent_configs = await refresh_agent_configs_for_session(state)
     override = agent_configs.get("observer") or agent_configs.get("judge")
     progress_callback = build_status_heartbeat_callback(
         state,
@@ -192,4 +194,5 @@ async def sophistry_final_report(state: dict[str, Any]) -> dict[str, Any]:
         "dialogue_history": [entry],
         "mode_artifacts": [artifact],
         "final_mode_report": artifact,
+        "agent_configs": agent_configs,
     }

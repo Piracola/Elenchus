@@ -124,6 +124,31 @@ async def get_session_record(session_id: str) -> StoredSessionRecord | None:
     return read_session_record(session_id)
 
 
+async def update_session_agent_configs(
+    session_id: str,
+    agent_configs: dict[str, dict[str, Any]] | None,
+) -> dict[str, Any] | None:
+    """Update the session's agent config snapshot for future model invocations."""
+    record = read_session_record(session_id)
+    if record is None:
+        return None
+
+    agent_config_service = get_agent_config_service()
+    participants = record.participants or ["proposer", "opposer"]
+    normalized_configs = await agent_config_service.build_session_agent_configs(
+        agent_configs,
+        participants,
+    )
+
+    snapshot = dict(record.state_snapshot or {})
+    snapshot["agent_configs"] = normalized_configs
+    record.state_snapshot = sanitize_state_snapshot(snapshot)
+    record.updated_at = _utcnow()
+    write_session_record(record)
+    sync_session_round_results_files(record)
+    return serialize_session_record(record)
+
+
 async def update_session_state(
     session_id: str,
     *,

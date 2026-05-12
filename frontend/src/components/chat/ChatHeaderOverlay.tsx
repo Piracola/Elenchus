@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronDown, FileText, Users } from 'lucide-react';
 import { api } from '../../api/client';
@@ -58,6 +58,7 @@ export default function ChatHeaderOverlay({
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showDebaterSettings, setShowDebaterSettings] = useState(false);
   const [markdownExportCategories, setMarkdownExportCategories] = useState<MarkdownExportCategory[]>([]);
+  const debaterSettingsButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setShowExportMenu(false);
@@ -252,9 +253,10 @@ export default function ChatHeaderOverlay({
               )}
 
               <motion.button
+                ref={debaterSettingsButtonRef}
                 whileHover={{ y: -1 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => setShowDebaterSettings(true)}
+                onClick={() => setShowDebaterSettings((current) => !current)}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -537,6 +539,7 @@ export default function ChatHeaderOverlay({
           isOpen={showDebaterSettings}
           onClose={() => setShowDebaterSettings(false)}
           sessionId={currentSessionId}
+          anchorRef={debaterSettingsButtonRef}
         />
       )}
     </div>

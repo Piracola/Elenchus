@@ -1,14 +1,15 @@
 /**
- * DebaterSettingsModal - 辩论中查看当前会话实际使用配置的弹窗
- * 注意：运行中的辩论无法动态切换模型，此弹窗保持只读。
+ * DebaterSettingsModal - toolbar popover for editing current session agent settings.
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, AlertCircle } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { RefreshCw, Save, X } from 'lucide-react';
+import { api } from '../../api/client';
 import { useAgentConfigs } from '../../hooks/useAgentConfigs';
-import { useSessionViewState } from '../../hooks/useDebateViewState';
+import { useSessionActions, useSessionViewState } from '../../hooks/useDebateViewState';
+import { toast } from '../../utils/chat/toast';
 import { AGENT_ROLES } from '../../utils/agent/agentConfigs';
 import AgentConfigPanel from '../shared/AgentConfigPanel';
 
@@ -16,12 +17,22 @@ interface DebaterSettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
     sessionId: string;
+    anchorRef?: RefObject<HTMLElement | null>;
 }
+
+const HIDDEN_POPOVER_STYLE: CSSProperties = {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    opacity: 0,
+    pointerEvents: 'none',
+};
 
 export default function DebaterSettingsModal({
     isOpen,
     onClose,
-    // sessionId reserved for future use
+    sessionId,
+    anchorRef,
 }: DebaterSettingsModalProps) {
     const {
         savedConfigs,
@@ -37,15 +48,18 @@ export default function DebaterSettingsModal({
         handleTemperatureChange,
         handleThinkingToggle,
         reload,
+        buildAgentConfigs,
         isLoading: agentConfigsLoading,
         error: agentConfigsError,
     } = useAgentConfigs();
     const { currentSession } = useSessionViewState();
+    const { updateCurrentSessionAgentConfigs } = useSessionActions();
+    const popoverRef = useRef<HTMLDivElement>(null);
+    const [popoverStyle, setPopoverStyle] = useState<CSSProperties>(HIDDEN_POPOVER_STYLE);
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
     const hasInitializedFromSessionRef = useRef(false);
 
-    // Sync session agent_configs into the panel's local state when modal opens.
-    // The home screen passes agent configs when creating a session; we read them
-    // back here so the in-debate settings panel reflects what was actually used.
     const initializeFromSession = useCallback(() => {
         const agentConfigs = currentSession?.agent_configs;
         if (!agentConfigs || Object.keys(agentConfigs).length === 0) return;
@@ -55,29 +69,56 @@ export default function DebaterSettingsModal({
             const cfg = agentConfigs[role];
             if (!cfg) continue;
 
-            // Build "providerId::model" key for selectedConfigIds
             const providerId = cfg.provider_id ?? '';
             const model = cfg.model ?? '';
             if (providerId || model) {
                 const key = providerId && model ? `${providerId}::${model}` : providerId || model;
                 handleConfigSelect(role, key);
+            } else {
+                handleConfigSelect(role, '');
             }
 
-            // Sync temperature
-            if (cfg.temperature !== undefined) {
-                handleTemperatureChange(role, String(cfg.temperature));
-            }
-
-            // Sync enable_thinking back from session
-            if (cfg.enable_thinking !== undefined) {
-                handleThinkingToggle(role, cfg.enable_thinking);
-            }
-
-            if (cfg.persona_id) {
-                handlePersonaSelect(role, cfg.persona_id);
-            }
+            handleTemperatureChange(role, cfg.temperature !== undefined ? String(cfg.temperature) : '');
+            handleThinkingToggle(role, Boolean(cfg.enable_thinking));
+            handlePersonaSelect(role, cfg.persona_id ?? '');
         }
-    }, [currentSession, savedConfigs, handleConfigSelect, handleTemperatureChange, handleThinkingToggle, handlePersonaSelect]);
+    }, [
+        currentSession,
+        savedConfigs,
+        handleConfigSelect,
+        handleTemperatureChange,
+        handleThinkingToggle,
+        handlePersonaSelect,
+    ]);
+
+    const updatePopoverPosition = useCallback(() => {
+        const anchor = anchorRef?.current;
+        if (!anchor) {
+            setPopoverStyle({
+                position: 'fixed',
+                top: 92,
+                left: 24,
+                width: 'min(720px, calc(100vw - 32px))',
+                maxHeight: 'calc(100vh - 116px)',
+                zIndex: 2200,
+            });
+            return;
+        }
+
+        const rect = anchor.getBoundingClientRect();
+        const width = Math.min(720, window.innerWidth - 32);
+        const left = Math.min(Math.max(16, rect.left), window.innerWidth - width - 16);
+        const top = Math.min(rect.bottom + 8, window.innerHeight - 120);
+
+        setPopoverStyle({
+            position: 'fixed',
+            top,
+            left,
+            width,
+            maxHeight: `min(640px, ${Math.max(220, window.innerHeight - top - 16)}px)`,
+            zIndex: 2200,
+        });
+    }, [anchorRef]);
 
     useEffect(() => {
         if (isOpen && savedConfigs.length > 0 && !hasInitializedFromSessionRef.current) {
@@ -86,224 +127,215 @@ export default function DebaterSettingsModal({
         }
         if (!isOpen) {
             hasInitializedFromSessionRef.current = false;
-        }
-    }, [isOpen, savedConfigs.length, initializeFromSession]);
-
-    // 弹窗打开时关闭配置管理器
-    useEffect(() => {
-        if (!isOpen) {
             setShowConfigManager(false);
+            setSaveError(null);
         }
-    }, [isOpen, setShowConfigManager]);
+    }, [isOpen, savedConfigs.length, initializeFromSession, setShowConfigManager]);
 
-    const handleClose = () => {
-        setShowConfigManager(false);
-        onClose();
+    useLayoutEffect(() => {
+        if (!isOpen) return;
+
+        updatePopoverPosition();
+        const rafId = window.requestAnimationFrame(updatePopoverPosition);
+        window.addEventListener('resize', updatePopoverPosition);
+        window.addEventListener('scroll', updatePopoverPosition, true);
+
+        return () => {
+            window.cancelAnimationFrame(rafId);
+            window.removeEventListener('resize', updatePopoverPosition);
+            window.removeEventListener('scroll', updatePopoverPosition, true);
+        };
+    }, [isOpen, updatePopoverPosition]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const handlePointerDown = (event: MouseEvent) => {
+            const target = event.target as Node;
+            if (anchorRef?.current?.contains(target) || popoverRef.current?.contains(target)) {
+                return;
+            }
+            onClose();
+        };
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') onClose();
+        };
+
+        const timerId = window.setTimeout(() => {
+            document.addEventListener('mousedown', handlePointerDown);
+            document.addEventListener('keydown', handleKeyDown);
+        }, 0);
+
+        return () => {
+            window.clearTimeout(timerId);
+            document.removeEventListener('mousedown', handlePointerDown);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [anchorRef, isOpen, onClose]);
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        setSaveError(null);
+        try {
+            const updatedSession = await api.sessions.updateAgentConfigs(sessionId, {
+                agent_configs: buildAgentConfigs(),
+            });
+            updateCurrentSessionAgentConfigs(updatedSession.agent_configs);
+            toast('辩手设置已保存，后续 agent 将使用新配置', 'success');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : '保存辩手设置失败';
+            setSaveError(message);
+            toast(message, 'error');
+        } finally {
+            setIsSaving(false);
+        }
     };
 
-    const modalContent = (
+    if (typeof document === 'undefined') {
+        return null;
+    }
+
+    return createPortal(
         <AnimatePresence>
             {isOpen && (
-                <>
-                    {/* 背景遮罩 */}
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={handleClose}
-                        style={{
-                            position: 'fixed',
-                            inset: 0,
-                            background: 'rgba(0,0,0,0.5)',
-                            backdropFilter: 'blur(8px)',
-                            zIndex: 2000,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                        }}
-                    >
-                        {/* 弹窗内容 */}
-                        <motion.div
-                            onClick={(e) => e.stopPropagation()}
-                            initial={{ opacity: 0, scale: 0.9, y: 30 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.9, y: 30 }}
-                            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                <motion.div
+                    ref={popoverRef}
+                    initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                    transition={{ duration: 0.16, ease: 'easeOut' }}
+                    style={{
+                        ...popoverStyle,
+                        padding: '14px',
+                        borderRadius: 'var(--radius-xl)',
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border-subtle)',
+                        boxShadow: '0 10px 28px rgba(15, 23, 42, 0.14)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px',
+                        overflow: 'hidden',
+                    }}
+                >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+                            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                辩手设置
+                            </span>
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                                保存后只影响后续 agent 调用，已完成的发言与评分不会改变。
+                            </span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={onClose}
                             style={{
-                                width: '90%',
-                                maxWidth: '800px',
-                                maxHeight: '85vh',
-                                background: 'var(--bg-secondary)',
-                                borderRadius: 'var(--radius-xl)',
-                                boxShadow: 'var(--shadow-2xl)',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                overflow: 'hidden',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: 'var(--radius-md)',
                                 border: '1px solid var(--border-subtle)',
+                                background: 'var(--bg-tertiary)',
+                                color: 'var(--text-secondary)',
+                                cursor: 'pointer',
+                                flexShrink: 0,
+                            }}
+                            title="关闭辩手设置"
+                        >
+                            <X size={14} />
+                        </button>
+                    </div>
+
+                    {(agentConfigsLoading || agentConfigsError || saveError) && (
+                        <div
+                            style={{
+                                padding: '10px 12px',
+                                borderRadius: 'var(--radius-md)',
+                                border: '1px solid var(--border-subtle)',
+                                background: 'var(--bg-secondary)',
+                                color: agentConfigsError || saveError ? 'var(--accent-rose)' : 'var(--text-secondary)',
+                                fontSize: '12px',
+                                lineHeight: 1.5,
                             }}
                         >
-                            {/* 标题栏 */}
-                            <div style={{
-                                padding: '20px 24px',
-                                borderBottom: '1px solid var(--border-subtle)',
-                                display: 'flex',
-                                justifyContent: 'space-between',
+                            {agentConfigsError || saveError || '正在加载配置...'}
+                        </div>
+                    )}
+
+                    <div style={{ overflowY: 'auto', paddingRight: '2px' }}>
+                        <AgentConfigPanel
+                            savedConfigs={savedConfigs}
+                            agentPersonas={agentPersonas}
+                            selectedConfigIds={selectedConfigIds}
+                            selectedPersonaIds={selectedPersonaIds}
+                            temperatureInputs={temperatureInputs}
+                            enableThinking={enableThinking}
+                            showConfigManager={showConfigManager}
+                            setShowConfigManager={setShowConfigManager}
+                            handleConfigSelect={handleConfigSelect}
+                            handlePersonaSelect={handlePersonaSelect}
+                            handleTemperatureChange={handleTemperatureChange}
+                            handleThinkingToggle={handleThinkingToggle}
+                            manageButtonLabel="管理配置"
+                        />
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                void reload();
+                            }}
+                            disabled={agentConfigsLoading || isSaving}
+                            style={{
+                                display: 'inline-flex',
                                 alignItems: 'center',
-                            }}>
-                                <div>
-                                    <h2 style={{
-                                        margin: '0 0 4px',
-                                        fontSize: '20px',
-                                        fontWeight: 700,
-                                        color: 'var(--text-primary)',
-                                    }}>
-                                        本次会话模型配置
-                                    </h2>
-                                    <p style={{
-                                        margin: 0,
-                                        fontSize: '13px',
-                                        color: 'var(--text-muted)',
-                                    }}>
-                                        查看当前会话实际使用的模型、人设与温度参数
-                                    </p>
-                                </div>
-                                <motion.button
-                                    whileHover={{ scale: 1.1, color: 'var(--text-primary)' }}
-                                    onClick={handleClose}
-                                    style={{
-                                        background: 'var(--bg-tertiary)',
-                                        border: 'none',
-                                        color: 'var(--text-muted)',
-                                        cursor: 'pointer',
-                                        fontSize: '28px',
-                                        width: '36px',
-                                        height: '36px',
-                                        borderRadius: '50%',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        boxShadow: 'var(--shadow-xs)',
-                                    }}
-                                >
-                                    <X size={20} />
-                                </motion.button>
-                            </div>
-
-                            {/* 内容区域 */}
-                            <div style={{
-                                flex: 1,
-                                overflowY: 'auto',
-                                padding: '24px',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '16px',
-                            }}>
-                                {/* 警告提示 */}
-                                <div style={{
-                                    padding: '12px 16px',
-                                    background: 'rgba(251, 191, 36, 0.1)',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: '1px solid rgba(251, 191, 36, 0.3)',
-                                    display: 'flex',
-                                    gap: '12px',
-                                    alignItems: 'flex-start',
-                                }}>
-                                    <AlertCircle size={18} style={{ color: '#f59e0b', flexShrink: 0, marginTop: '1px' }} />
-                                    <div>
-                                        <p style={{
-                                            margin: '0 0 4px',
-                                            fontSize: '13px',
-                                            fontWeight: 600,
-                                            color: '#f59e0b',
-                                        }}>
-                                            当前辩论参数不可在此处热更新
-                                        </p>
-                                        <p style={{
-                                            margin: 0,
-                                            fontSize: '12px',
-                                            color: 'var(--text-secondary)',
-                                            lineHeight: 1.6,
-                                        }}>
-                                            这里展示的是本次会话已经采用的参数快照。若要调整后续新会话的默认配置，请打开“管理配置”后返回首页重新创建辩论。
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {agentConfigsLoading && (
-                                    <div style={{
-                                        padding: '10px 12px',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: '1px solid var(--border-subtle)',
-                                        background: 'var(--bg-card)',
-                                        color: 'var(--text-muted)',
-                                        fontSize: '12px',
-                                    }}>
-                                        正在加载配置...
-                                    </div>
-                                )}
-
-                                {agentConfigsError && (
-                                    <div style={{
-                                        padding: '10px 12px',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: '1px solid rgba(239, 68, 68, 0.25)',
-                                        background: 'rgba(239, 68, 68, 0.08)',
-                                        color: 'var(--text-secondary)',
-                                        fontSize: '12px',
-                                    }}>
-                                        {agentConfigsError}
-                                    </div>
-                                )}
-
-                                {/* 模型配置面板 */}
-                                <AgentConfigPanel
-                                    savedConfigs={savedConfigs}
-                                    agentPersonas={agentPersonas}
-                                    selectedConfigIds={selectedConfigIds}
-                                    selectedPersonaIds={selectedPersonaIds}
-                                    temperatureInputs={temperatureInputs}
-                                    enableThinking={enableThinking}
-                                    showConfigManager={showConfigManager}
-                                    setShowConfigManager={setShowConfigManager}
-                                    handleConfigSelect={handleConfigSelect}
-                                    handlePersonaSelect={handlePersonaSelect}
-                                    handleTemperatureChange={handleTemperatureChange}
-                                    handleThinkingToggle={handleThinkingToggle}
-                                    readOnly
-                                    manageButtonLabel="管理配置并刷新"
-                                />
-                                <div style={{
-                                    display: 'flex',
-                                    justifyContent: 'flex-end',
-                                    gap: '8px',
-                                }}>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            void reload();
-                                        }}
-                                        style={{
-                                            border: '1px solid var(--border-subtle)',
-                                            background: 'var(--bg-card)',
-                                            color: 'var(--text-secondary)',
-                                            borderRadius: 'var(--radius-md)',
-                                            padding: '8px 12px',
-                                            cursor: 'pointer',
-                                            fontSize: '12px',
-                                            fontWeight: 600,
-                                        }}
-                                    >
-                                        重新读取当前配置
-                                    </button>
-                                </div>
-                            </div>
-                        </motion.div>
-                    </motion.div>
-                </>
+                                gap: '6px',
+                                border: '1px solid var(--border-subtle)',
+                                background: 'var(--bg-secondary)',
+                                color: 'var(--text-secondary)',
+                                borderRadius: 'var(--radius-md)',
+                                padding: '8px 12px',
+                                cursor: agentConfigsLoading || isSaving ? 'not-allowed' : 'pointer',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                opacity: agentConfigsLoading || isSaving ? 0.65 : 1,
+                            }}
+                        >
+                            <RefreshCw size={13} />
+                            刷新配置
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                void handleSave();
+                            }}
+                            disabled={isSaving || agentConfigsLoading}
+                            style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '6px',
+                                border: 'none',
+                                background: 'var(--text-primary)',
+                                color: 'var(--bg-primary)',
+                                borderRadius: 'var(--radius-md)',
+                                padding: '8px 12px',
+                                cursor: isSaving || agentConfigsLoading ? 'not-allowed' : 'pointer',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                opacity: isSaving || agentConfigsLoading ? 0.65 : 1,
+                            }}
+                        >
+                            <Save size={13} />
+                            {isSaving ? '保存中...' : '保存设置'}
+                        </button>
+                    </div>
+                </motion.div>
             )}
-        </AnimatePresence>
+        </AnimatePresence>,
+        document.body,
     );
-
-    return createPortal(modalContent, document.body);
 }
-

@@ -94,6 +94,7 @@ export interface DebateActionSlice {
     toggleAgentMessageCollapsed: (sessionId: string, collapseKey: string) => void;
     setAllAgentMessagesCollapsed: (sessionId: string, collapseKeys: string[], collapsed: boolean) => void;
     clearSessionCollapsedAgentMessages: (sessionId: string) => void;
+    updateCurrentSessionAgentConfigs: (agentConfigs: Session['agent_configs']) => void;
     appendDialogueEntry: (entry: DialogueEntry) => void;
     startStreaming: (role: string) => void;
     appendStreamToken: (token: string) => void;
@@ -273,6 +274,18 @@ export const useDebateStore = create<DebateState>((set) => ({
         set((state) => createHydrateRuntimeEventsPatch(state, events, hasOlderRuntimeEvents)),
     prependRuntimeEvents: (events, hasOlderRuntimeEvents = false) =>
         set((state) => createPrependRuntimeEventsPatch(state, events, hasOlderRuntimeEvents)),
+
+    updateCurrentSessionAgentConfigs: (agentConfigs) =>
+        set((state) => (
+            state.currentSession
+                ? {
+                    currentSession: {
+                        ...state.currentSession,
+                        agent_configs: agentConfigs,
+                    },
+                }
+                : {}
+        )),
 
     appendDialogueEntry: (entry) =>
         set((state) => {

@@ -11,6 +11,7 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.agents.context_builder import build_context_for_agent
+from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.prompt_loader import get_judge_prompt
 from app.agents.runtime_progress import (
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
@@ -157,7 +158,7 @@ async def jury_discuss(state: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(recent_dialogue_history, list):
         recent_dialogue_history = dialogue_history if isinstance(dialogue_history, list) else []
 
-    agent_configs = state.get("agent_configs", {})
+    agent_configs = await refresh_agent_configs_for_session(state)
     jury_config_override = agent_configs.get("jury", agent_configs.get("judge", {}))
     custom_prompt = str(jury_config_override.get("custom_prompt", "") or "")
     reasoning_config = state.get("reasoning_config", {})
@@ -276,4 +277,5 @@ async def jury_discuss(state: dict[str, Any]) -> dict[str, Any]:
         "jury_dialogue_history": jury_history_delta,
         "current_jury_discussion": current_jury_discussion,
         "current_jury_summary": summary_entry,
+        "agent_configs": agent_configs,
     }

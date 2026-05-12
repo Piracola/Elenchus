@@ -31,6 +31,7 @@ export function useSessionActions() {
     return useDebateStore(useShallow((state) => ({
         setSessions: state.setSessions,
         setCurrentSession: state.setCurrentSession,
+        updateCurrentSessionAgentConfigs: state.updateCurrentSessionAgentConfigs,
     })));
 }
 

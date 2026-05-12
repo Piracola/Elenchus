@@ -13,6 +13,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph.message import RemoveMessage
 
 from app.agents.context_builder import build_context_for_agent
+from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.prompt_loader import get_debater_system_prompt, load_prompt
 from app.agents.runtime_progress import (
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
@@ -157,7 +158,7 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
         recent_dialogue_history = dialogue_history if isinstance(dialogue_history, list) else []
     shared_knowledge = state.get("shared_knowledge", [])
     messages = state.get("messages", [])
-    agent_configs = state.get("agent_configs", {})
+    agent_configs = await refresh_agent_configs_for_session(state)
     reasoning_config = state.get("reasoning_config", {})
 
     role_config = agent_configs.get(role, {})
@@ -290,6 +291,7 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
         return {
             "messages": [response],
             "speech_was_streamed": False,
+            "agent_configs": agent_configs,
         }
 
     response_content = response.content if hasattr(response, "content") else response
@@ -331,4 +333,5 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
         "recent_dialogue_history": [*recent_dialogue_history, entry],
         "messages": [RemoveMessage(id=message.id) for message in messages if message.id],
         "speech_was_streamed": speech_started,
+        "agent_configs": agent_configs,
     }

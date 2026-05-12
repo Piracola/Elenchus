@@ -163,6 +163,12 @@ class SessionCreate(BaseModel):
     mode_config: dict[str, Any] = Field(default_factory=dict)
 
 
+class SessionAgentConfigsUpdate(BaseModel):
+    """Payload to update per-agent model overrides for future runtime calls."""
+
+    agent_configs: dict[str, dict[str, Any]] | None = Field(default=None)
+
+
 class ModelConfigCreate(BaseModel):
     """Payload to create a reusable provider configuration."""
 
