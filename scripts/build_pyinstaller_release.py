@@ -98,6 +98,7 @@ def ensure_required_files() -> None:
         ROOT / "backend" / "run_packaged.py",
         ROOT / "backend" / "prompts",
         ROOT / "frontend" / "dist" / "index.html",
+        ROOT / "frontend" / "public" / "brand" / "elenchus.png",
         ROOT / "frontend" / "public" / "brand" / "elenchus.ico",
         SPEC_FILE,
     ]

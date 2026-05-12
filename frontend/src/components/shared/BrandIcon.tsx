@@ -21,7 +21,7 @@ export default function BrandIcon({
     if (!withBadge) {
         return (
             <img
-                src="/brand/elenchus.svg"
+                src="/brand/elenchus.png"
                 alt={alt}
                 width={size}
                 height={size}
@@ -54,7 +54,7 @@ export default function BrandIcon({
             }}
         >
             <img
-                src="/brand/elenchus.svg"
+                src="/brand/elenchus.png"
                 alt={alt}
                 width={size}
                 height={size}

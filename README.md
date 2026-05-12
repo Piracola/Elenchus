@@ -1,8 +1,23 @@
-# Elenchus
+<div align="center">
+  <img src="./Elenchus.png" alt="Elenchus 项目图标" width="132" height="132" />
 
-这个项目叫 Elenchus，核心是一套 AI 多智能体辩论平台。简单来说：用户输入一个辩题，系统会让多个 AI 角色围绕它展开辩论，比如正方、反方、裁判、观察员等，并把整个过程实时展示出来，还能保存、回放、导出。
+  <h1>Elenchus</h1>
 
-本项目完全由AI实现，感谢 [Linux Do](https://linux.do/) 热心佬友和OAI大善人的支持❤️。
+  <p>一个面向思辨训练的 AI 多智能体辩论平台。</p>
+
+  <p>输入辩题后，系统会组织正方、反方、裁判、观察员等多个 AI 角色展开辩论，并实时展示、保存、回放、导出整场过程。</p>
+
+  <p>
+    <a href="https://github.com/Piracola/Elenchus/actions/workflows/ci.yml"><img src="https://github.com/Piracola/Elenchus/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+    <a href="https://github.com/Piracola/Elenchus/actions/workflows/build-portable-release.yml"><img src="https://github.com/Piracola/Elenchus/actions/workflows/build-portable-release.yml/badge.svg" alt="Build Portable Release" /></a>
+    <a href="https://github.com/Piracola/Elenchus/releases"><img src="https://img.shields.io/github/v/release/Piracola/Elenchus?display_name=tag&label=release" alt="Release" /></a>
+    <img src="https://img.shields.io/badge/platform-Windows-0078D4" alt="Windows" />
+    <img src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-646CFF" alt="React Vite" />
+    <img src="https://img.shields.io/badge/backend-FastAPI-009688" alt="FastAPI" />
+  </p>
+</div>
+
+本项目完全由 AI 实现，感谢 [Linux Do](https://linux.do/) 热心佬友和 OAI 大善人的支持 ❤️。
 
 本项目建立的初衷是提升使用者的思辨能力和交流水平。
 
@@ -19,6 +34,8 @@
 双击exe文件即可启动。
 
 前端启动后请在左下角配置自定义模型提供商。
+
+构建流程会在前端构建阶段自动从根目录的 `Elenchus.png` 生成 favicon、`apple-touch-icon` 和 Windows 发布包使用的 `.ico` 图标文件，GitHub CI 产物也会同步使用这套新图标。
 
 ![Elenchus 界面预览](./docs/2026-04-06_20-30-48.png)
 
