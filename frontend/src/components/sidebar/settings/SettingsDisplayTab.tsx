@@ -28,7 +28,7 @@ type SettingsDisplayTabProps = {
 export function SettingsDisplayTab({ displaySettings, setDisplaySettings }: SettingsDisplayTabProps) {
     const handleFloatingInspectorReset = () => {
         resetStoredFloatingInspectorRect();
-        toast('运行观察器已重置到默认位置', 'success');
+        toast('运行观察器已重置到默认位置和大小', 'success');
     };
 
     const handleMessageFontSizeChange = (value: string) => {
@@ -236,7 +236,7 @@ export function SettingsDisplayTab({ displaySettings, setDisplaySettings }: Sett
                         color: 'var(--text-muted)',
                         lineHeight: 1.6,
                     }}>
-                        如果观察器被拖到异常位置或尺寸不合适，可以恢复到默认位置和大小。
+                        如果观察器尺寸不合适，或者想清空已记住的展开大小，可以恢复默认设置。
                     </p>
                 </div>
 

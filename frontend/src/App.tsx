@@ -11,11 +11,18 @@ import { useToastState } from './hooks/useToastState';
 import { useThemeStore } from './stores/themeStore';
 import { useDemoModeStore } from './stores/demoModeStore';
 
+const MOBILE_SIDEBAR_BREAKPOINT = 760;
+
+function isMobileSidebarViewport() {
+  return typeof window !== 'undefined' && window.innerWidth < MOBILE_SIDEBAR_BREAKPOINT;
+}
+
 function App() {
   const { theme, setTheme } = useThemeStore();
   const { currentSession } = useSessionViewState();
   const { toasts, removeToast } = useToastState();
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isNarrowViewport, setIsNarrowViewport] = useState(isMobileSidebarViewport);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(isMobileSidebarViewport);
   const { demoMode, isAdmin, initialized, fetchModeStatus, setIsAdmin } = useDemoModeStore();
   const [showAdminLogin, setShowAdminLogin] = useState(false);
 
@@ -26,6 +33,20 @@ function App() {
   useEffect(() => {
     fetchModeStatus();
   }, [fetchModeStatus]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const nextIsNarrow = isMobileSidebarViewport();
+      setIsNarrowViewport(nextIsNarrow);
+      if (nextIsNarrow) {
+        setIsSidebarCollapsed(true);
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const bannerText = isAdmin
     ? '管理员模式 — 完整权限'
@@ -64,26 +85,49 @@ function App() {
           {initialized && bannerText && (
             <div
               style={{
-                background: bannerColor,
-                color: 'white',
-                padding: '6px 16px',
+                background: 'var(--bg-secondary)',
+                color: 'var(--text-primary)',
+                padding: '8px 16px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
+                gap: '12px',
                 fontSize: '13px',
                 fontWeight: 500,
+                borderBottom: '1px solid var(--border-subtle)',
+                minWidth: 0,
               }}
             >
-              <span>{bannerText}</span>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  minWidth: 0,
+                }}
+              >
+                <span
+                  style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: 'var(--radius-full)',
+                    background: bannerColor,
+                    flexShrink: 0,
+                  }}
+                />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {bannerText}
+                </span>
+              </span>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
                 {!isAdmin && (
                   <button
                     onClick={() => setShowAdminLogin(true)}
                     style={{
-                      background: 'rgba(255,255,255,0.15)',
-                      border: 'none',
-                      color: 'white',
-                      padding: '2px 10px',
+                      background: 'var(--bg-tertiary)',
+                      border: '1px solid var(--border-subtle)',
+                      color: 'var(--text-primary)',
+                      padding: '4px 10px',
                       borderRadius: 'var(--radius-md)',
                       cursor: 'pointer',
                       fontSize: '12px',
@@ -97,10 +141,10 @@ function App() {
                   <button
                     onClick={handleAdminLogout}
                     style={{
-                      background: 'rgba(255,255,255,0.15)',
-                      border: 'none',
-                      color: 'white',
-                      padding: '2px 10px',
+                      background: 'var(--bg-tertiary)',
+                      border: '1px solid var(--border-subtle)',
+                      color: 'var(--text-primary)',
+                      padding: '4px 10px',
                       borderRadius: 'var(--radius-md)',
                       cursor: 'pointer',
                       fontSize: '12px',
@@ -123,7 +167,34 @@ function App() {
             }}
           >
             {!isSidebarCollapsed && (
-              <SessionList onCollapse={() => setIsSidebarCollapsed(true)} />
+              isNarrowViewport ? (
+                <>
+                  <div
+                    onClick={() => setIsSidebarCollapsed(true)}
+                    style={{
+                      position: 'fixed',
+                      inset: 0,
+                      background: 'rgba(0, 0, 0, 0.28)',
+                      zIndex: 40,
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: 'fixed',
+                      top: 0,
+                      bottom: 0,
+                      left: 0,
+                      zIndex: 50,
+                      width: 'min(320px, 86vw)',
+                      maxWidth: '100vw',
+                    }}
+                  >
+                    <SessionList onCollapse={() => setIsSidebarCollapsed(true)} />
+                  </div>
+                </>
+              ) : (
+                <SessionList onCollapse={() => setIsSidebarCollapsed(true)} />
+              )
             )}
 
             <main

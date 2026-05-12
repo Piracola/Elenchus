@@ -94,6 +94,7 @@ describe('floatingInspectorLayout', () => {
             startY: 0,
             startRect: { x: 0, y: 0, width: 1, height: 1 },
             bounds: { width: 1, height: 1 },
+            startLayoutMode: 'collapsed',
         })).toBe('grabbing');
         expect(interactionCursor({
             mode: 'resize',
@@ -102,6 +103,7 @@ describe('floatingInspectorLayout', () => {
             startY: 0,
             startRect: { x: 0, y: 0, width: 1, height: 1 },
             bounds: { width: 1, height: 1 },
+            startLayoutMode: 'collapsed',
         })).toBe('nesw-resize');
     });
 });

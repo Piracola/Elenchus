@@ -249,14 +249,14 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                justifyContent: advancedPanelVisible ? 'flex-start' : 'center',
-                padding: '24px',
+                justifyContent: 'flex-start',
                 background: 'var(--bg-primary)',
                 position: 'relative',
                 overflowY: 'auto',
                 overflowX: 'hidden',
                 scrollBehavior: 'smooth',
             }}
+            className={advancedPanelVisible ? 'home-workbench home-workbench--advanced' : 'home-workbench'}
         >
             {isSidebarCollapsed && (
                 <SidebarExpandButton
@@ -269,88 +269,75 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                         boxShadow: 'var(--shadow-sm)',
                         backdropFilter: undefined,
                     }}
+                    className="home-sidebar-expand-button"
                 />
             )}
-            <div
-                style={{
-                    position: 'absolute',
-                    top: '5%',
-                    left: '5%',
-                    width: '400px',
-                    height: '400px',
-                    background: 'radial-gradient(circle, var(--glass-bg) 0%, transparent 70%)',
-                    borderRadius: '50%',
-                    pointerEvents: 'none',
-                    opacity: 0.6,
-                }}
-            />
-            <div
-                style={{
-                    position: 'absolute',
-                    bottom: '10%',
-                    right: '8%',
-                    width: '300px',
-                    height: '300px',
-                    background: 'radial-gradient(circle, var(--glass-bg) 0%, transparent 70%)',
-                    borderRadius: '50%',
-                    pointerEvents: 'none',
-                    opacity: 0.4,
-                }}
-            />
 
             <motion.div
-                initial={{ opacity: 0, y: 20 }}
+                initial={false}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
                 style={{
                     width: '100%',
                     maxWidth: '980px',
                     display: 'flex',
                     flexDirection: 'column',
-                    alignItems: 'center',
+                    alignItems: 'stretch',
                     position: 'relative',
                     zIndex: 1,
                     paddingBottom: '40px',
                 }}
+                className={isSidebarCollapsed ? 'home-workbench-content home-workbench-content--with-sidebar-button' : 'home-workbench-content'}
             >
                 <motion.div
-                    initial={{ scale: 0.9, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ delay: 0.1, duration: 0.5 }}
+                    initial={false}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.05, duration: 0.24 }}
                     style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '12px',
-                        marginBottom: '28px',
+                        justifyContent: 'space-between',
+                        gap: '16px',
+                        marginBottom: '16px',
+                        flexWrap: 'wrap',
                     }}
                 >
-                    <BrandIcon size={44} alt="Elenchus 品牌图标" withBadge={false} />
-                    <h1
+                    <div
                         style={{
-                            fontSize: homeFontSizes.title,
-                            fontWeight: 700,
-                            color: 'var(--text-primary)',
-                            letterSpacing: '-0.02em',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            minWidth: 0,
                         }}
                     >
-                        Elenchus
-                    </h1>
+                        <BrandIcon size={36} alt="Elenchus 品牌图标" withBadge={false} />
+                        <div style={{ minWidth: 0 }}>
+                            <h1
+                                style={{
+                                    fontSize: homeFontSizes.title,
+                                    fontWeight: 700,
+                                    color: 'var(--text-primary)',
+                                    letterSpacing: 0,
+                                    margin: 0,
+                                }}
+                            >
+                                Elenchus
+                            </h1>
+                            <p
+                                style={{
+                                    fontSize: homeFontSizes.subtitle,
+                                    color: 'var(--text-secondary)',
+                                    marginTop: '2px',
+                                    fontWeight: 400,
+                                    lineHeight: 1.45,
+                                }}
+                            >
+                                输入辩题，配置角色，直接开始多智能体辩论。
+                            </p>
+                        </div>
+                    </div>
+                    <HomeStatusLegend isSophistryMode={isSophistryMode} compact />
                 </motion.div>
-
-                <motion.p
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.2 }}
-                    style={{
-                        fontSize: homeFontSizes.subtitle,
-                        color: 'var(--text-secondary)',
-                        marginBottom: '24px',
-                        textAlign: 'center',
-                        fontWeight: 400,
-                    }}
-                >
-                    AI 多智能体辩论平台，让观点碰撞产出更清晰的过程与结果。
-                </motion.p>
 
                 <HomeModeSelector
                     debateMode={debateMode}
@@ -432,8 +419,8 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                                     marginBottom: '12px',
                                     padding: '10px 12px',
                                     borderRadius: 'var(--radius-md)',
-                                    border: '1px solid rgba(239, 68, 68, 0.25)',
-                                    background: 'rgba(239, 68, 68, 0.08)',
+                                    border: '1px solid var(--accent-rose)',
+                                    background: 'var(--accent-rose-alpha)',
                                     color: 'var(--text-secondary)',
                                     fontSize: '12px',
                                 }}>
@@ -471,7 +458,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                                 marginTop: '12px',
                                 textAlign: 'center',
                                 padding: '10px 16px',
-                                background: 'rgba(239, 68, 68, 0.08)',
+                                background: 'var(--accent-rose-alpha)',
                                 borderRadius: 'var(--radius-lg)',
                                 fontWeight: 500,
                             }}
@@ -480,8 +467,6 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                         </motion.p>
                     )}
                 </AnimatePresence>
-
-                <HomeStatusLegend isSophistryMode={isSophistryMode} />
             </motion.div>
         </div>
     );

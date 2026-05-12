@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 
 import { api } from '../api/client';
 import { toast } from '../utils/chat/toast';
-import type { ModelConfig, ModelConfigCreatePayload, ProviderFormData } from '../types';
+import type { ModelConfig, ModelConfigCreatePayload, ProviderFormData, RemoteModelCandidate } from '../types';
 import { formatCustomParameters, parseCustomParametersInput } from '../utils/agent/customParameters';
 
 function createEmptyFormData(): ProviderFormData {
@@ -35,6 +35,18 @@ function parseDefaultMaxTokensInput(input: string): number {
 
 function normalizeModelList(models: string[]): string[] {
     return Array.from(new Set(models.map((model) => model.trim()).filter(Boolean)));
+}
+
+function createRemoteModelCandidates(
+    currentModels: string[],
+    remoteModels: string[],
+): RemoteModelCandidate[] {
+    const currentSet = new Set(normalizeModelList(currentModels));
+    return normalizeModelList(remoteModels).map((model) => ({
+        id: model,
+        name: model,
+        added: currentSet.has(model),
+    }));
 }
 
 function buildSavePayload(formData: ProviderFormData): ModelConfigCreatePayload {
@@ -98,6 +110,7 @@ export function useModelConfigManager() {
     const [isCreatingNew, setIsCreatingNew] = useState(false);
     const [formData, setFormData] = useState<ProviderFormData>(createEmptyFormData);
     const [newModelInput, setNewModelInput] = useState('');
+    const [remoteModelCandidates, setRemoteModelCandidates] = useState<RemoteModelCandidate[]>([]);
 
     const getActiveIndexClamped = useCallback((length: number, index: number) => {
         if (length === 0) {
@@ -131,6 +144,7 @@ export function useModelConfigManager() {
         setIsCreatingNew(false);
         setProbeMessage('');
         setProbeStatus('idle');
+        setRemoteModelCandidates([]);
     }, []);
 
     const startNew = useCallback(() => {
@@ -138,6 +152,7 @@ export function useModelConfigManager() {
         setFormData(createEmptyFormData());
         setProbeMessage('');
         setProbeStatus('idle');
+        setRemoteModelCandidates([]);
     }, []);
 
     const fetchConfigs = useCallback(async () => {
@@ -231,6 +246,11 @@ export function useModelConfigManager() {
                 ...previous,
                 models: [...previous.models, nextModel],
             }));
+            setRemoteModelCandidates((previous) => previous.map((candidate) => (
+                candidate.name === nextModel
+                    ? { ...candidate, added: true }
+                    : candidate
+            )));
         }
         setNewModelInput('');
     }, [formData.models, newModelInput]);
@@ -240,6 +260,11 @@ export function useModelConfigManager() {
             ...previous,
             models: previous.models.filter((item) => item !== model),
         }));
+        setRemoteModelCandidates((previous) => previous.map((candidate) => (
+            candidate.name === model
+                ? { ...candidate, added: false }
+                : candidate
+        )));
     }, []);
 
     const updateFormField = useCallback(<K extends keyof ProviderFormData>(
@@ -319,15 +344,12 @@ export function useModelConfigManager() {
             setProbeMessage('正在获取模型列表...');
             setProbeStatus('idle');
             const result = await api.models.fetchRemoteModels(providerId, buildProbePayload());
-            const mergedModels = normalizeModelList([...formData.models, ...result.models]);
-            setFormData((previous) => ({
-                ...previous,
-                models: mergedModels,
-            }));
-            const addedCount = mergedModels.length - normalizeModelList(formData.models).length;
-            const message = addedCount > 0
-                ? `已获取 ${result.models.length} 个模型，新增 ${addedCount} 个。`
-                : `已获取 ${result.models.length} 个模型，没有新增项。`;
+            const nextCandidates = createRemoteModelCandidates(formData.models, result.models);
+            setRemoteModelCandidates(nextCandidates);
+            const existingCount = nextCandidates.filter((candidate) => candidate.added).length;
+            const message = existingCount > 0
+                ? `已获取 ${nextCandidates.length} 个模型，其中 ${existingCount} 个已在当前配置中。`
+                : `已获取 ${nextCandidates.length} 个模型，请选择要加入配置的模型。`;
             setProbeMessage(message);
             setProbeStatus('success');
             toast(message, 'success');
@@ -341,6 +363,30 @@ export function useModelConfigManager() {
         }
     }, [buildProbePayload, formData.apiKey, formData.apiKeyConfigured, formData.clearApiKey, formData.models, getCurrentProviderId]);
 
+    const handleAddRemoteModel = useCallback((model: string) => {
+        const normalizedModel = model.trim();
+        if (!normalizedModel) {
+            return;
+        }
+
+        setFormData((previous) => {
+            const nextModels = normalizeModelList([...previous.models, normalizedModel]);
+            if (nextModels.length === previous.models.length) {
+                return previous;
+            }
+
+            return {
+                ...previous,
+                models: nextModels,
+            };
+        });
+        setRemoteModelCandidates((previous) => previous.map((candidate) => (
+            candidate.name === normalizedModel
+                ? { ...candidate, added: true }
+                : candidate
+        )));
+    }, []);
+
     return {
         providers,
         isLoading,
@@ -352,6 +398,7 @@ export function useModelConfigManager() {
         isCreatingNew,
         formData,
         newModelInput,
+        remoteModelCandidates,
         setNewModelInput,
         fetchConfigs,
         handleSelectProvider,
@@ -361,9 +408,10 @@ export function useModelConfigManager() {
         handleRemoveModel,
         handleProbeProvider,
         handleFetchRemoteModels,
+        handleAddRemoteModel,
         updateFormField,
         startNew,
     };
 }
 
-export { buildSavePayload, createEmptyFormData, findProviderIndexById };
+export { buildSavePayload, createEmptyFormData, createRemoteModelCandidates, findProviderIndexById };

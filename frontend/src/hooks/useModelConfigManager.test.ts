@@ -101,6 +101,37 @@ describe('findProviderIndexById', () => {
 });
 
 describe('useModelConfigManager', () => {
+    it('keeps fetched remote models separate until the user adds one', async () => {
+        const { result } = renderHook(() => useModelConfigManager());
+
+        await act(async () => {
+            result.current.startNew();
+        });
+        await act(async () => {
+            result.current.updateFormField('apiKey', 'sk-demo');
+        });
+        modelsApi.fetchRemoteModels.mockResolvedValueOnce({
+            models: ['gpt-4o', 'claude-sonnet-4'],
+        });
+
+        await act(async () => {
+            await result.current.handleFetchRemoteModels();
+        });
+
+        expect(result.current.formData.models).toEqual([]);
+        expect(result.current.remoteModelCandidates.map((item) => item.name)).toEqual([
+            'gpt-4o',
+            'claude-sonnet-4',
+        ]);
+
+        await act(async () => {
+            result.current.handleAddRemoteModel('gpt-4o');
+        });
+
+        expect(result.current.formData.models).toEqual(['gpt-4o']);
+        expect(result.current.remoteModelCandidates.find((item) => item.name === 'gpt-4o')?.added).toBe(true);
+    });
+
     it('surfaces invalid custom-parameter JSON as a save failure alert', async () => {
         const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
         modelsApi.list.mockResolvedValue([]);

@@ -400,6 +400,7 @@ if [[ "$FRONTEND_ONLY" != true && "$BACKEND_ONLY" != true ]]; then
 fi
 
 BACKEND_PORT=8001
+FRONTEND_URL="http://127.0.0.1:5173"
 
 echo ""
 echo -e "${BOLD}${GREEN}  Elenchus Starting...${RESET}"
@@ -410,7 +411,7 @@ if [[ "$FRONTEND_ONLY" != true ]]; then
     echo -e "    API Docs:     ${BOLD}http://localhost:$BACKEND_PORT/docs${RESET}"
 fi
 if [[ "$BACKEND_ONLY" != true ]]; then
-    echo -e "    Frontend UI:  ${BOLD}http://localhost:5173${RESET}"
+    echo -e "    Frontend UI:  ${BOLD}$FRONTEND_URL${RESET}"
 fi
 if [[ "$FRONTEND_ONLY" != true && "$BACKEND_ONLY" != true && "$SKIP_SEARXNG" != true ]]; then
     if test_searxng_healthy; then
@@ -435,9 +436,9 @@ echo ""
 cd "$SCRIPT_DIR"
 
 if [[ "$BACKEND_ONLY" == true ]]; then
-    npm run dev:backend
+    node scripts/run-backend-dev.cjs
 elif [[ "$FRONTEND_ONLY" == true ]]; then
-    npm run dev:frontend
+    node scripts/run-frontend-dev.cjs
 else
-    npm run dev
+    node scripts/run-stack.cjs
 fi

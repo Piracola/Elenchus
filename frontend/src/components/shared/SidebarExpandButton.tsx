@@ -6,17 +6,20 @@ type SidebarExpandButtonProps = {
     onClick: () => void;
     variant?: 'default' | 'sophistry';
     style?: CSSProperties;
+    className?: string;
 };
 
 export default function SidebarExpandButton({
     onClick,
     variant = 'default',
     style,
+    className,
 }: SidebarExpandButtonProps) {
     const isSophistry = variant === 'sophistry';
 
     return (
         <motion.button
+            className={className}
             whileHover={{ y: -1 }}
             whileTap={{ scale: 0.98 }}
             onClick={onClick}

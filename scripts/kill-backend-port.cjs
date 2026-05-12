@@ -4,13 +4,6 @@
  */
 const { exec } = require('child_process');
 
-const backendPort = Number.parseInt(process.env.ELENCHUS_BACKEND_PORT || '8001', 10);
-
-if (!Number.isInteger(backendPort) || backendPort <= 0) {
-  console.error('[elenchus] Invalid backend port.');
-  process.exit(1);
-}
-
 function killPortWindows(port) {
   return new Promise((resolve) => {
     // Find PIDs on the port using netstat
@@ -79,24 +72,63 @@ function killPortUnix(port) {
   });
 }
 
-async function main() {
+function resolveBackendPort() {
+  const backendPort = Number.parseInt(process.env.ELENCHUS_BACKEND_PORT || '8001', 10);
+
+  if (!Number.isInteger(backendPort) || backendPort <= 0) {
+    throw new Error('Invalid backend port.');
+  }
+
+  return backendPort;
+}
+
+async function freePort(port) {
   try {
     const killed = process.platform === 'win32'
-      ? await killPortWindows(backendPort)
-      : await killPortUnix(backendPort);
+      ? await killPortWindows(port)
+      : await killPortUnix(port);
 
     if (killed) {
       // Give the OS a moment to release the port
       await new Promise((r) => setTimeout(r, 500));
     }
+
+    return killed;
   } catch (error) {
     const message = String(error?.message || error);
     if (!message.toLowerCase().includes('no process')) {
-      console.warn(`[elenchus] Could not free port ${backendPort}: ${message}`);
+      console.warn(`[elenchus] Could not free port ${port}: ${message}`);
     }
-  }
 
-  process.exit(0);
+    return false;
+  }
 }
 
-main();
+async function freeBackendPort() {
+  return freePort(resolveBackendPort());
+}
+
+async function freeFrontendPort() {
+  return freePort(5173);
+}
+
+async function main() {
+  try {
+    await freeBackendPort();
+    process.exit(0);
+  } catch (error) {
+    console.error(`[elenchus] ${String(error?.message || error)}`);
+    process.exit(1);
+  }
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  freeBackendPort,
+  freeFrontendPort,
+  freePort,
+  resolveBackendPort,
+};

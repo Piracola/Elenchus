@@ -451,6 +451,18 @@ describe('HomeView auto scroll', () => {
             if (file.name === 'failed.md') {
                 throw new Error('upload failed');
             }
+            return {
+                id: file.name,
+                session_id: 'session-created',
+                filename: file.name,
+                mime_type: file.type,
+                size_bytes: file.size,
+                status: 'uploaded',
+                summary_short: null,
+                error_message: null,
+                created_at: '2026-01-01T00:00:00Z',
+                updated_at: '2026-01-01T00:00:00Z',
+            };
         });
 
         render(<HomeView isSidebarCollapsed={false} onExpandSidebar={() => {}} />);

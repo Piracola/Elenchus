@@ -40,6 +40,8 @@ export function SettingsProvidersTab({
                 isFetchingModels={modelConfig.isFetchingModels}
                 probeMessage={modelConfig.probeMessage}
                 probeStatus={modelConfig.probeStatus}
+                remoteModelCandidates={modelConfig.remoteModelCandidates}
+                onAddRemoteModel={modelConfig.handleAddRemoteModel}
             />
         </div>
     );

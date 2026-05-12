@@ -2,20 +2,24 @@ import { motion } from 'framer-motion';
 
 type HomeStatusLegendProps = {
     isSophistryMode: boolean;
+    compact?: boolean;
 };
 
-export function HomeStatusLegend({ isSophistryMode }: HomeStatusLegendProps) {
+export function HomeStatusLegend({ isSophistryMode, compact = false }: HomeStatusLegendProps) {
     return (
         <motion.div
-            initial={{ opacity: 0 }}
+            initial={false}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.5 }}
             style={{
                 display: 'flex',
-                gap: '24px',
-                marginTop: '36px',
+                gap: compact ? '12px' : '24px',
+                marginTop: compact ? 0 : '36px',
                 color: 'var(--text-muted)',
                 fontSize: '12px',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                justifyContent: compact ? 'flex-end' : 'center',
             }}
         >
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

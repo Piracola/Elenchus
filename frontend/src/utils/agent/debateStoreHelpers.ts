@@ -62,18 +62,19 @@ export function normalizeDialogueEntryMetadata(
     if (!unsupportedRaw || typeof unsupportedRaw !== 'object') {
         return undefined;
     }
+    const unsupportedNotice = unsupportedRaw as Record<string, unknown>;
 
     const provider = repairKnownMojibakeText(
-        typeof unsupportedRaw.provider === 'string' ? unsupportedRaw.provider : '',
+        typeof unsupportedNotice.provider === 'string' ? unsupportedNotice.provider : '',
     );
-    const unsupportedParameters = Array.isArray(unsupportedRaw.unsupported_parameters)
-        ? unsupportedRaw.unsupported_parameters
+    const unsupportedParameters = Array.isArray(unsupportedNotice.unsupported_parameters)
+        ? unsupportedNotice.unsupported_parameters
             .filter((item): item is string => typeof item === 'string')
             .map((item) => repairKnownMojibakeText(item))
             .filter(Boolean)
         : [];
     const message = repairKnownMojibakeText(
-        typeof unsupportedRaw.message === 'string' ? unsupportedRaw.message : '',
+        typeof unsupportedNotice.message === 'string' ? unsupportedNotice.message : '',
     );
 
     if (!provider && unsupportedParameters.length === 0 && !message) {

@@ -54,6 +54,12 @@ export interface ProviderFormData {
     enableThinking: boolean;  // 新增：思考模式开关
 }
 
+export interface RemoteModelCandidate {
+    id: string;
+    name: string;
+    added: boolean;
+}
+
 export interface AgentConfigResult {
     model?: string;
     provider_type?: string;

@@ -15,6 +15,7 @@ export function HomeModeSelector({
 }: HomeModeSelectorProps) {
     return (
         <div
+            className="home-mode-selector"
             style={{
                 width: '100%',
                 display: 'grid',
@@ -28,21 +29,25 @@ export function HomeModeSelector({
                 return (
                     <motion.button
                         key={item.mode}
-                        whileHover={{ y: -2 }}
+                        whileHover={{ y: -1 }}
                         whileTap={{ scale: 0.99 }}
                         onClick={() => onModeChange(item.mode)}
                         style={{
                             textAlign: 'left',
-                            padding: '16px 18px',
-                            borderRadius: 'var(--radius-xl)',
+                            padding: '14px 16px',
+                            borderRadius: 'var(--radius-lg)',
                             border: active
                                 ? `1px solid ${item.mode === 'sophistry_experiment' ? 'var(--mode-sophistry-accent)' : 'var(--accent-indigo)'}`
                                 : '1px solid var(--border-subtle)',
                             background: active && item.mode === 'sophistry_experiment'
                                 ? 'var(--mode-sophistry-card)'
-                                : 'var(--bg-card)',
-                            boxShadow: active ? 'var(--shadow-md)' : 'var(--shadow-xs)',
+                                : active
+                                ? 'var(--accent-indigo-alpha)'
+                                : 'var(--bg-secondary)',
+                            boxShadow: 'var(--shadow-xs)',
                             cursor: 'pointer',
+                            transition: 'background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast)',
+                            minWidth: 0,
                         }}
                     >
                         <div
@@ -72,8 +77,8 @@ export function HomeModeSelector({
                                         padding: '2px 8px',
                                         borderRadius: 'var(--radius-full)',
                                         background: item.mode === 'sophistry_experiment'
-                                            ? 'rgba(184, 137, 70, 0.12)'
-                                            : 'rgba(99, 102, 241, 0.12)',
+                                            ? 'var(--mode-sophistry-soft)'
+                                            : 'var(--bg-card)',
                                         color: item.mode === 'sophistry_experiment'
                                             ? 'var(--mode-sophistry-accent)'
                                             : 'var(--accent-indigo)',

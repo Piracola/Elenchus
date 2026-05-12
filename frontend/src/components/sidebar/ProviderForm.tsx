@@ -1,5 +1,6 @@
 import type { CSSProperties, FocusEvent, ReactNode } from 'react';
 import {
+    Check,
     CheckCircle2,
     Download,
     Loader2,
@@ -12,7 +13,7 @@ import {
     XCircle,
 } from 'lucide-react';
 
-import type { ProviderFormData } from '../../types';
+import type { ProviderFormData, RemoteModelCandidate } from '../../types';
 import CustomSelect from '../shared/CustomSelect';
 
 interface ProviderFormProps {
@@ -23,8 +24,10 @@ interface ProviderFormProps {
     isFetchingModels: boolean;
     probeMessage: string;
     probeStatus: 'idle' | 'success' | 'error';
+    remoteModelCandidates: RemoteModelCandidate[];
     onFieldChange: <K extends keyof ProviderFormData>(field: K, value: ProviderFormData[K]) => void;
     onAddModel: () => void;
+    onAddRemoteModel: (model: string) => void;
     onRemoveModel: (mod: string) => void;
     onNewModelInputChange: (value: string) => void;
     onProbeProvider: () => void;
@@ -243,8 +246,10 @@ export function ProviderForm({
     isFetchingModels,
     probeMessage,
     probeStatus,
+    remoteModelCandidates,
     onFieldChange,
     onAddModel,
+    onAddRemoteModel,
     onRemoveModel,
     onNewModelInputChange,
     onProbeProvider,
@@ -427,7 +432,7 @@ export function ProviderForm({
                         <ActionButton
                             onClick={onFetchRemoteModels}
                             disabled={disableRemoteActions}
-                            title="从服务商获取模型列表并合并到当前列表"
+                            title="从服务商获取模型列表"
                         >
                             {isFetchingModels ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={16} />}
                             获取模型列表
@@ -502,6 +507,83 @@ export function ProviderForm({
                             <Plus size={16} />
                             添加
                         </ActionButton>
+                    </div>
+
+                    <div
+                        style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '10px',
+                            padding: '14px',
+                            borderRadius: 'var(--radius-lg)',
+                            background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-subtle)',
+                        }}
+                    >
+                        <div>
+                            <div style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 700 }}>
+                                已获取模型列表
+                            </div>
+                            <div style={{ marginTop: '4px', fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                                获取后会先显示在这里，点击“添加到配置”后才会加入当前服务商配置。
+                            </div>
+                        </div>
+
+                        {remoteModelCandidates.length === 0 ? (
+                            <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                                还没有获取到模型列表。
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {remoteModelCandidates.map((candidate) => (
+                                    <div
+                                        key={candidate.id}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            gap: '12px',
+                                            padding: '10px 12px',
+                                            borderRadius: 'var(--radius-md)',
+                                            background: 'var(--bg-card)',
+                                            border: '1px solid var(--border-subtle)',
+                                        }}
+                                    >
+                                        <div style={{ minWidth: 0 }}>
+                                            <div
+                                                style={{
+                                                    fontSize: '13px',
+                                                    fontWeight: 600,
+                                                    color: 'var(--text-primary)',
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                    whiteSpace: 'nowrap',
+                                                }}
+                                            >
+                                                {candidate.name}
+                                            </div>
+                                            <div style={{ marginTop: '4px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                                                {candidate.added ? '已加入当前配置' : '尚未加入当前配置'}
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => onAddRemoteModel(candidate.name)}
+                                            disabled={candidate.added}
+                                            style={{
+                                                ...secondaryButtonStyle,
+                                                minWidth: '112px',
+                                                ...(candidate.added ? disabledButtonStyle : {}),
+                                            }}
+                                        >
+                                            {candidate.added ? <Check size={15} /> : <Plus size={15} />}
+                                            {candidate.added ? '已添加' : '添加到配置'}
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </SettingGroup>
 

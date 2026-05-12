@@ -88,6 +88,8 @@ const controlStyle = {
     fontSize: '13px',
     fontWeight: 500,
     boxShadow: 'var(--shadow-xs)',
+    minHeight: '34px',
+    whiteSpace: 'nowrap',
 } as const;
 
 const numberInputStyle = {
@@ -205,20 +207,22 @@ export function HomeComposerCard({
 
     return (
         <motion.div
-            initial={{ opacity: 0, y: 16 }}
+            initial={false}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3, duration: 0.5 }}
+            transition={{ duration: 0.22 }}
             style={{
                 width: '100%',
                 background: isSophistryMode ? 'var(--mode-sophistry-card)' : 'var(--bg-card)',
-                borderRadius: 'var(--radius-xl)',
-                boxShadow: 'var(--shadow-md)',
+                borderRadius: 'var(--radius-lg)',
+                boxShadow: 'var(--shadow-sm)',
                 border: isSophistryMode
                     ? '1px solid var(--mode-sophistry-border)'
                     : '1px solid var(--border-subtle)',
+                overflow: 'visible',
             }}
+            className="home-composer-card"
         >
-            <div style={{ padding: '20px 24px 16px' }}>
+            <div className="home-composer-card__input" style={{ padding: '20px 22px 16px' }}>
                 <textarea
                     value={topic}
                     onChange={(event) => onTopicChange(event.target.value)}
@@ -234,6 +238,7 @@ export function HomeComposerCard({
                         resize: 'none',
                         lineHeight: 1.6,
                         fontWeight: 500,
+                        minHeight: '116px',
                     }}
                 />
             </div>
@@ -244,11 +249,13 @@ export function HomeComposerCard({
                     justifyContent: 'space-between',
                     alignItems: 'center',
                     gap: '12px',
-                    padding: '12px 16px 16px',
+                    padding: '12px 16px',
                     borderTop: isSophistryMode
                         ? '1px solid var(--mode-sophistry-border)'
                         : '1px solid var(--border-subtle)',
+                    flexWrap: 'wrap',
                 }}
+                className="home-composer-card__toolbar"
             >
                 <div
                     style={{
@@ -261,7 +268,7 @@ export function HomeComposerCard({
                     }}
                 >
                     <motion.button
-                        whileHover={{ scale: 1.02, background: 'var(--bg-hover)' }}
+                        whileHover={{ y: -1, background: 'var(--bg-hover)' }}
                         whileTap={{ scale: 0.98 }}
                         onClick={() => onShowAdvancedChange(!showAdvanced)}
                         style={{
@@ -381,7 +388,7 @@ export function HomeComposerCard({
                         <div
                             style={{
                                 ...controlStyle,
-                                background: 'rgba(184, 137, 70, 0.08)',
+                                background: 'var(--mode-sophistry-soft)',
                                 borderColor: 'var(--mode-sophistry-border)',
                                 color: 'var(--mode-sophistry-accent)',
                             }}
@@ -401,7 +408,7 @@ export function HomeComposerCard({
                         />
 
                         <motion.button
-                            whileHover={{ scale: 1.02, background: 'var(--bg-hover)' }}
+                            whileHover={{ y: -1, background: 'var(--bg-hover)' }}
                             whileTap={{ scale: 0.98 }}
                             onClick={() => setShowUploadPopover((current) => !current)}
                             style={{
@@ -421,7 +428,7 @@ export function HomeComposerCard({
                                         right: '-4px',
                                         minWidth: '16px',
                                         height: '16px',
-                                        borderRadius: '8px',
+                                        borderRadius: 'var(--radius-full)',
                                         background: isSophistryMode
                                             ? 'var(--mode-sophistry-accent)'
                                             : 'var(--accent-indigo)',
@@ -453,6 +460,7 @@ export function HomeComposerCard({
                                     onClick={() => setShowUploadPopover(false)}
                                 />
                                 <motion.div
+                                    className="home-reference-popover"
                                     initial={{ opacity: 0, y: -8, scale: 0.96 }}
                                     animate={{ opacity: 1, y: 0, scale: 1 }}
                                     exit={{ opacity: 0, y: -8, scale: 0.96 }}
@@ -470,8 +478,8 @@ export function HomeComposerCard({
                                         border: isSophistryMode
                                             ? '1px solid var(--mode-sophistry-border)'
                                             : '1px solid var(--border-subtle)',
-                                        borderRadius: 'var(--radius-xl)',
-                                        boxShadow: '0 10px 28px rgba(15, 23, 42, 0.14)',
+                                        borderRadius: 'var(--radius-lg)',
+                                        boxShadow: 'var(--shadow-lg)',
                                     }}
                                 >
                                     <div
@@ -526,9 +534,9 @@ export function HomeComposerCard({
                                             }`,
                                             borderRadius: 'var(--radius-lg)',
                                             background: isDragging
-                                                ? 'rgba(99, 102, 241, 0.05)'
+                                                ? 'var(--accent-indigo-alpha)'
                                                 : isSophistryMode
-                                                ? 'rgba(184, 137, 70, 0.05)'
+                                                ? 'var(--mode-sophistry-soft)'
                                                 : 'var(--bg-secondary)',
                                             display: 'flex',
                                             flexDirection: 'column',
@@ -585,7 +593,7 @@ export function HomeComposerCard({
                                                         gap: '10px',
                                                         padding: '10px 12px',
                                                         background: isSophistryMode
-                                                            ? 'rgba(184, 137, 70, 0.08)'
+                                                            ? 'var(--mode-sophistry-soft)'
                                                             : 'var(--bg-secondary)',
                                                         border: `1px solid ${
                                                             isSophistryMode
@@ -660,8 +668,8 @@ export function HomeComposerCard({
                                             marginTop: '12px',
                                             padding: '10px 12px',
                                             background: isSophistryMode
-                                                ? 'rgba(184, 137, 70, 0.08)'
-                                                : 'rgba(99, 102, 241, 0.05)',
+                                                ? 'var(--mode-sophistry-soft)'
+                                                : 'var(--accent-indigo-alpha)',
                                             border: `1px solid ${
                                                 isSophistryMode
                                                     ? 'var(--mode-sophistry-border)'
@@ -677,7 +685,7 @@ export function HomeComposerCard({
                                                 lineHeight: 1.5,
                                             }}
                                         >
-                                            💡 参考资料将在创建辩论时一起提交，上传后会自动提炼为结构化知识点供辩论使用。
+                                            参考资料会在创建辩论时一起提交，并用于整理辩论知识点。
                                         </span>
                                     </div>
                                 </motion.div>
@@ -687,7 +695,7 @@ export function HomeComposerCard({
                 </div>
 
                 <motion.button
-                    whileHover={{ scale: 1.05, boxShadow: 'var(--shadow-md)' }}
+                    whileHover={{ y: -1, boxShadow: 'var(--shadow-sm)' }}
                     whileTap={{ scale: 0.95 }}
                     onClick={onCreateDebate}
                     disabled={!topic.trim() || isCreating}
@@ -696,11 +704,7 @@ export function HomeComposerCard({
                         height: '40px',
                         borderRadius: '50%',
                         background: topic.trim() && !isCreating
-                            ? (
-                                isSophistryMode
-                                    ? 'linear-gradient(135deg, var(--mode-sophistry-accent) 0%, #d6a363 100%)'
-                                    : 'linear-gradient(135deg, var(--accent-indigo) 0%, var(--accent-cyan) 100%)'
-                            )
+                            ? (isSophistryMode ? 'var(--mode-sophistry-accent)' : 'var(--accent-indigo)')
                             : 'var(--bg-tertiary)',
                         color: topic.trim() && !isCreating ? 'white' : 'var(--text-muted)',
                         border: 'none',
@@ -710,7 +714,7 @@ export function HomeComposerCard({
                         cursor: topic.trim() && !isCreating ? 'pointer' : 'not-allowed',
                         transition: 'all var(--transition-fast)',
                         boxShadow: topic.trim() && !isCreating
-                            ? '0 4px 16px rgba(99, 102, 241, 0.35)'
+                            ? 'var(--shadow-sm)'
                             : 'var(--shadow-inner)',
                         flexShrink: 0,
                     }}

@@ -6,6 +6,7 @@ import type { MarkdownExportCategory } from '../../types';
 import { toast } from '../../utils/chat/toast';
 import StatusBanner from './StatusBanner';
 import ReferenceLibraryPanel from './ReferenceLibraryPanel';
+import RuntimeInspectorDock from './RuntimeInspectorDock';
 import SidebarExpandButton from '../shared/SidebarExpandButton';
 import DebaterSettingsModal from './DebaterSettingsModal';
 
@@ -213,17 +214,47 @@ export default function ChatHeaderOverlay({
           <div
             style={{
               display: 'flex',
-              alignItems: 'center',
+              alignItems: 'flex-start',
               gap: '8px',
               flexWrap: 'wrap',
               pointerEvents: 'auto',
             }}
           >
-            {transcriptCollapseSummary.hasAgentRows && (
+              {transcriptCollapseSummary.hasAgentRows && (
+                <motion.button
+                  whileHover={{ y: -1 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={onToggleAllAgentMessages}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 12px',
+                    background: '#FFFFFF',
+                    color: '#1D1D1F',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-full)',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                  }}
+                  title={bulkCollapseLabel}
+                >
+                  {bulkCollapseLabel}
+                </motion.button>
+              )}
+
+              {currentSessionId && (
+                <ReferenceLibraryPanel
+                  currentSessionId={currentSessionId}
+                  isSophistryMode={isSophistryMode}
+                />
+              )}
+
               <motion.button
                 whileHover={{ y: -1 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={onToggleAllAgentMessages}
+                onClick={() => setShowDebaterSettings(true)}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -237,94 +268,64 @@ export default function ChatHeaderOverlay({
                   fontSize: '12px',
                   fontWeight: 600,
                 }}
-                title={bulkCollapseLabel}
+                title="辩手设置"
               >
-                {bulkCollapseLabel}
-              </motion.button>
-            )}
-
-            {currentSessionId && (
-              <ReferenceLibraryPanel
-                currentSessionId={currentSessionId}
-                isSophistryMode={isSophistryMode}
-              />
-            )}
-
-            <motion.button
-              whileHover={{ y: -1 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setShowDebaterSettings(true)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '7px 12px',
-                background: '#FFFFFF',
-                color: '#1D1D1F',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-full)',
-                cursor: 'pointer',
-                fontSize: '12px',
-                fontWeight: 600,
-              }}
-              title="辩手设置"
-            >
-              <Users size={14} />
-              辩手设置
-            </motion.button>
-
-            {/* 导出按钮和下拉菜单 */}
-            <div style={{ position: 'relative' }}>
-              <motion.button
-                whileHover={{ y: -1 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setShowExportMenu((current) => !current)}
-                disabled={Boolean(exportingFormat)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '7px 12px',
-                  background: '#FFFFFF',
-                  color: '#1D1D1F',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-full)',
-                  cursor: exportingFormat ? 'not-allowed' : 'pointer',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  opacity: exportingFormat ? 0.7 : 1,
-                }}
-                title="导出辩论记录"
-              >
-                <FileText size={14} />
-                导出
-                <ChevronDown
-                  size={12}
-                  style={{
-                    transform: showExportMenu ? 'rotate(180deg)' : 'rotate(0deg)',
-                    transition: 'transform var(--transition-fast)',
-                  }}
-                />
+                <Users size={14} />
+                辩手设置
               </motion.button>
 
-              {showExportMenu && (
-                <div
+              {/* 导出按钮和下拉菜单 */}
+              <div style={{ position: 'relative' }}>
+                <motion.button
+                  whileHover={{ y: -1 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowExportMenu((current) => !current)}
+                  disabled={Boolean(exportingFormat)}
                   style={{
-                    position: 'absolute',
-                    top: 'calc(100% + 8px)',
-                    left: 0,
-                    minWidth: '240px',
-                    padding: '14px',
-                    borderRadius: 'var(--radius-xl)',
-                    background: 'var(--bg-card)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 12px',
+                    background: '#FFFFFF',
+                    color: '#1D1D1F',
                     border: '1px solid var(--border-subtle)',
-                    boxShadow: '0 10px 28px rgba(15, 23, 42, 0.14)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '12px',
-                    zIndex: 1000,
+                    borderRadius: 'var(--radius-full)',
+                    cursor: exportingFormat ? 'not-allowed' : 'pointer',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    opacity: exportingFormat ? 0.7 : 1,
                   }}
+                  title="导出辩论记录"
                 >
+                  <FileText size={14} />
+                  导出
+                  <ChevronDown
+                    size={12}
+                    style={{
+                      transform: showExportMenu ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform var(--transition-fast)',
+                    }}
+                  />
+                </motion.button>
+
+                {showExportMenu && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 8px)',
+                      left: 0,
+                      minWidth: '240px',
+                      padding: '14px',
+                      borderRadius: 'var(--radius-xl)',
+                      background: 'var(--bg-card)',
+                      border: '1px solid var(--border-subtle)',
+                      boxShadow: '0 10px 28px rgba(15, 23, 42, 0.14)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px',
+                      zIndex: 1000,
+                    }}
+                  >
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
                       导出辩论记录
@@ -456,6 +457,7 @@ export default function ChatHeaderOverlay({
 
                   {/* 分隔线 */}
                   <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
+
                   {/* JSON 选项 */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -490,39 +492,41 @@ export default function ChatHeaderOverlay({
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)', paddingLeft: '4px' }}>
                     包含完整原始数据结构，适合程序处理。
                   </span>
-                </div>
-              )}
-            </div>
+                  </div>
+                )}
+              </div>
 
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '5px 12px',
-                background: '#FFFFFF',
-                color: '#1D1D1F',
-                borderRadius: 'var(--radius-full)',
-                border: '1px solid var(--border-subtle)',
-              }}
-            >
               <span
                 style={{
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
-                  background: 'var(--accent-emerald)',
-                }}
-              />
-              <span
-                style={{
-                  fontSize: '12px',
-                  fontWeight: 500,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '5px 12px',
+                  background: '#FFFFFF',
+                  color: '#1D1D1F',
+                  borderRadius: 'var(--radius-full)',
+                  border: '1px solid var(--border-subtle)',
                 }}
               >
-                {currentTurn} / {maxTurns} 轮
+                <span
+                  style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    background: 'var(--accent-emerald)',
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: 500,
+                  }}
+                >
+                  {currentTurn} / {maxTurns} 轮
+                </span>
               </span>
-            </span>
+
+            {currentSessionId && <RuntimeInspectorDock currentSessionId={currentSessionId} />}
           </div>
         )}
       </div>

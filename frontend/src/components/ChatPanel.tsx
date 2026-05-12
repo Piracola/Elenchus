@@ -6,7 +6,6 @@
 import { useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { getMessageFontTokens } from '../config/display';
-import { useFloatingInspectorState } from '../hooks/chat/useFloatingInspectorState';
 import { useChatHistoryWindow } from '../hooks/chat/useChatHistoryWindow';
 import { useChatViewportMetrics } from '../hooks/chat/useChatViewportMetrics';
 import { useTranscriptPanelState } from '../hooks/chat/useTranscriptPanelState';
@@ -15,8 +14,6 @@ import { useSettingsStore, MESSAGE_WIDTH_VALUES } from '../stores/settingsStore'
 import DebateControls from './chat/DebateControls';
 import ChatHeaderOverlay from './chat/ChatHeaderOverlay';
 import ChatHistoryList from './chat/ChatHistoryList';
-import FloatingRuntimeInspector from './chat/FloatingRuntimeInspector';
-import RuntimeInspector from './chat/RuntimeInspector';
 
 const HISTORY_ROW_PRELOAD_THRESHOLD = 240;
 
@@ -26,7 +23,6 @@ interface ChatPanelProps {
 }
 
 export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatPanelProps) {
-    const panelRef = useRef<HTMLDivElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const topOverlayRef = useRef<HTMLDivElement>(null);
     const bottomOverlayRef = useRef<HTMLDivElement>(null);
@@ -78,12 +74,6 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
         smoothScrollSuppressed: viewportMetrics.smoothScrollSuppressed,
     });
 
-    const floatingInspector = useFloatingInspectorState({
-        panelRef,
-        messageWidth: displaySettings.messageWidth,
-        topOverlayHeight: viewportMetrics.topOverlayHeight,
-    });
-
     const isSophistryMode = debateMode === 'sophistry_experiment';
     const panelMaxWidth = MESSAGE_WIDTH_VALUES[displaySettings.messageWidth];
     const messageFontSize = displaySettings.messageFontSize ?? 15;
@@ -122,7 +112,6 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
             }}
         >
             <div
-                ref={panelRef}
                 style={{
                     flex: 1,
                     display: 'flex',
@@ -160,12 +149,6 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
                         gap: '14px',
                     }}
                 >
-                    {!floatingInspector.isWideLayout && (
-                        <div style={{ flex: '0 0 auto', minWidth: 0 }}>
-                            <RuntimeInspector key="inline-inspector" defaultExpanded />
-                        </div>
-                    )}
-
                     <ChatHistoryList
                         scrollRef={scrollRef}
                         topOverlayHeight={viewportMetrics.topOverlayHeight}
@@ -209,19 +192,6 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
                     </div>
                 </div>
             </div>
-
-            {/* 浮动观察器放在 panelRef 外层，确保不被任何元素遮挡 */}
-            {floatingInspector.isWideLayout && (
-                <FloatingRuntimeInspector
-                    floatingInspectorRect={floatingInspector.floatingInspectorRect}
-                    floatingInspectorViewportOffset={floatingInspector.floatingInspectorViewportOffset}
-                    floatingInspectorExpanded={floatingInspector.floatingInspectorExpanded}
-                    floatingInspectorActive={floatingInspector.floatingInspectorActive}
-                    onMoveStart={floatingInspector.handleFloatingInspectorMoveStart}
-                    onResizeStart={floatingInspector.handleFloatingInspectorResizeStart}
-                    onExpandedChange={floatingInspector.handleFloatingInspectorExpandedChange}
-                />
-            )}
         </motion.section>
     );
 }

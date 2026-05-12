@@ -584,6 +584,7 @@ if (-not $FrontendOnly -and -not $BackendOnly) {
 }
 
 $BackendPort = 8001
+$FrontendUrl = "http://127.0.0.1:5173"
 $env:ELENCHUS_BACKEND_PORT = "$BackendPort"
 
 if (-not $BackendOnly) {
@@ -599,7 +600,7 @@ if (-not $FrontendOnly) {
     Write-Host "    API Docs:     "$BOLD"http://localhost:$BackendPort/docs"$RESET
 }
 if (-not $BackendOnly) {
-    Write-Host "    Frontend UI:  "$BOLD"http://localhost:5173"$RESET
+    Write-Host "    Frontend UI:  "$BOLD$FrontendUrl$RESET
 }
 if (-not $FrontendOnly -and -not $BackendOnly -and -not $SkipSearXNG) {
     if (Test-SearXNGHealthy) {
@@ -619,15 +620,17 @@ Write-Host ""
 Push-Location $RootDir
 
 if ($BackendOnly) {
-    npm run dev:backend
+    node "scripts/run-backend-dev.cjs"
 } elseif ($FrontendOnly) {
     Print-Info "Starting frontend service in this window..."
-    Start-DelayedBrowser -Url "http://localhost:5173"
-    npm run dev:frontend
+    Start-DelayedBrowser -Url $FrontendUrl
+    node "scripts/run-frontend-dev.cjs"
 } else {
     Print-Info "Starting backend and frontend in this window..."
-    Start-DelayedBrowser -Url "http://localhost:5173"
-    npm run dev:stack
+    Start-DelayedBrowser -Url $FrontendUrl
+    node "scripts/run-stack.cjs"
 }
 
+$exitCode = $LASTEXITCODE
 Pop-Location
+exit $exitCode
