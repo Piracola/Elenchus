@@ -172,4 +172,31 @@ describe('DebaterSettingsModal', () => {
             proposer: { provider_id: 'provider-1', model: 'model-a' },
         });
     });
+
+    it('keeps the settings popover open while interacting with portal select menus', () => {
+        const handleClose = vi.fn();
+        const selectMenu = document.createElement('div');
+        selectMenu.setAttribute('data-floating-select-menu', 'true');
+        const selectOption = document.createElement('button');
+        selectOption.type = 'button';
+        selectOption.textContent = 'portal model option';
+        selectMenu.appendChild(selectOption);
+        document.body.appendChild(selectMenu);
+
+        try {
+            render(
+                <DebaterSettingsModal
+                    isOpen
+                    onClose={handleClose}
+                    sessionId="session-1"
+                />,
+            );
+
+            fireEvent.mouseDown(selectOption);
+
+            expect(handleClose).not.toHaveBeenCalled();
+        } finally {
+            document.body.removeChild(selectMenu);
+        }
+    });
 });

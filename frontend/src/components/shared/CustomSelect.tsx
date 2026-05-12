@@ -189,6 +189,7 @@ export default function CustomSelect({
                     {isOpen && (
                         <motion.div
                             ref={menuRef}
+                            data-floating-select-menu="true"
                             initial={{ opacity: 0, y: menuStyle.placement === 'above' ? 8 : -8, scale: 0.96 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: menuStyle.placement === 'above' ? 8 : -8, scale: 0.96 }}

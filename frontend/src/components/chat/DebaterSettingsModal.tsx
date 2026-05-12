@@ -152,7 +152,12 @@ export default function DebaterSettingsModal({
 
         const handlePointerDown = (event: MouseEvent) => {
             const target = event.target as Node;
-            if (anchorRef?.current?.contains(target) || popoverRef.current?.contains(target)) {
+            const targetElement = target instanceof Element ? target : null;
+            if (
+                anchorRef?.current?.contains(target)
+                || popoverRef.current?.contains(target)
+                || targetElement?.closest('[data-floating-select-menu="true"]')
+            ) {
                 return;
             }
             onClose();
