@@ -23,7 +23,6 @@ from app.api.models import router as models_router
 from app.api.log import router as log_router
 from app.api.search import router as search_router
 from app.api.search import build_search_health_payload
-from app.api.searxng import router as searxng_router
 from app.api.session_control import router as session_control_router
 from app.api.admin import router as admin_router
 from app.api.agent_personas import router as agent_personas_router
@@ -88,7 +87,6 @@ app.include_router(ws_router, prefix="/api")
 app.include_router(models_router, prefix="/api/models", tags=["models"])
 app.include_router(log_router, prefix="/api")
 app.include_router(search_router, prefix="/api")
-app.include_router(searxng_router, prefix="/api")
 app.include_router(admin_router)
 app.include_router(agent_personas_router, prefix="/api")
 

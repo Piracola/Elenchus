@@ -90,9 +90,8 @@ def write_packaged_runtime_config(runtime_root: Path, port: int) -> None:
         },
         "providers": [],
         "search": {
-            "provider": "duckduckgo",
+            "provider": "ddgs",
             "max_results_per_query": 5,
-            "searxng": {"base_url": "http://localhost:8080", "api_key": ""},
             "tavily": {"api_url": "https://api.tavily.com/search", "api_key": ""},
         },
         "logging": {

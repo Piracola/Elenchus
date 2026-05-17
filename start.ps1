@@ -8,8 +8,7 @@
 param(
     [switch]$SkipInstall,
     [switch]$BackendOnly,
-    [switch]$FrontendOnly,
-    [switch]$SkipSearXNG
+    [switch]$FrontendOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -307,54 +306,6 @@ function Save-EnvCache {
     Set-Content -Path $CacheFile -Value $Content -NoNewline
 }
 
-function Test-DockerInstalled {
-    try {
-        $null = docker --version 2>$null
-        return $true
-    } catch {
-        return $false
-    }
-}
-
-function Test-SearXNGHealthy {
-    try {
-        $response = Invoke-WebRequest -Uri "http://localhost:8080/healthz" -TimeoutSec 2 -UseBasicParsing -ErrorAction SilentlyContinue
-        return ($response.StatusCode -eq 200)
-    } catch {
-        return $false
-    }
-}
-
-function Start-SearXNGInBackground {
-    if ($SkipSearXNG) {
-        Print-Info "Skipping SearXNG startup (user requested)"
-        return
-    }
-
-    if (-not (Test-DockerInstalled)) {
-        Print-Warn "Docker not installed - SearXNG will be unavailable"
-        return
-    }
-
-    if (Test-SearXNGHealthy) {
-        Print-OK "SearXNG is already running and healthy"
-        return
-    }
-
-    $searxngScript = Join-Path $RootDir "scripts\start_searxng.ps1"
-    if (-not (Test-Path $searxngScript)) {
-        Print-Warn "SearXNG management script not found"
-        return
-    }
-
-    Print-Info "Starting SearXNG service in background..."
-
-    # Launch SearXNG in a background PowerShell process
-    Start-Process -FilePath "powershell.exe" `
-        -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $searxngScript, "start" `
-        -WindowStyle Hidden | Out-Null
-}
-
 Clear-Host
 Write-Host ""
 Write-Host $BOLD$CYAN"   __                                         "$RESET
@@ -578,11 +529,6 @@ Write-Host $BOLD"Step 4/4: Starting Services"$RESET
 Write-Host $CYAN"========================================"$RESET
 Write-Host ""
 
-# Start SearXNG in background (non-blocking)
-if (-not $FrontendOnly -and -not $BackendOnly) {
-    Start-SearXNGInBackground
-}
-
 $BackendPort = 8001
 $FrontendUrl = "http://127.0.0.1:5173"
 $env:ELENCHUS_BACKEND_PORT = "$BackendPort"
@@ -601,11 +547,6 @@ if (-not $FrontendOnly) {
 }
 if (-not $BackendOnly) {
     Write-Host "    Frontend UI:  "$BOLD$FrontendUrl$RESET
-}
-if (-not $FrontendOnly -and -not $BackendOnly -and -not $SkipSearXNG) {
-    if (Test-SearXNGHealthy) {
-        Write-Host "    SearXNG:      "$BOLD"http://localhost:8080"$RESET
-    }
 }
 Write-Host ""
 

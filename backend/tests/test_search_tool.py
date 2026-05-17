@@ -48,13 +48,13 @@ def test_filter_results_discards_irrelevant_writing_pages():
             title="Preparing Your Thesis Proposal Presentation",
             url="https://example.com/thesis",
             snippet="Open with a thesis, overview, and presentation roadmap.",
-            source_engine="duckduckgo",
+            source_engine="ddgs",
         ),
         SearchResult(
             title="GFW 对网络内容治理的影响研究",
             url="https://example.com/gfw-study",
             snippet="文章讨论了 GFW 在网络安全、信息流动与治理中的影响。",
-            source_engine="duckduckgo",
+            source_engine="ddgs",
         ),
     ]
 
@@ -80,13 +80,13 @@ async def test_web_search_plans_queries_and_returns_filtered_brief(monkeypatch):
                         title="Preparing Your Thesis Proposal Presentation",
                         url="https://example.com/thesis",
                         snippet="Use a thesis statement and essay outline.",
-                        source_engine="duckduckgo",
+                        source_engine="ddgs",
                     ),
                     SearchResult(
                         title="网络安全法与互联网信息治理框架",
                         url="https://example.com/law",
                         snippet="介绍中国网络安全法及相关网络治理制度框架。",
-                        source_engine="duckduckgo",
+                        source_engine="ddgs",
                     ),
                 ]
             if "作用 影响 数据 研究" in query:
@@ -95,7 +95,7 @@ async def test_web_search_plans_queries_and_returns_filtered_brief(monkeypatch):
                         title="GFW 对网络安全与信息流动影响的研究",
                         url="https://example.com/impact",
                         snippet="梳理了 GFW 对网络安全、访问成本与信息流动的影响。",
-                        source_engine="duckduckgo",
+                        source_engine="ddgs",
                     )
                 ]
             if "争议 风险 案例" in query:
@@ -104,7 +104,7 @@ async def test_web_search_plans_queries_and_returns_filtered_brief(monkeypatch):
                         title="GFW 相关争议与案例分析",
                         url="https://example.com/cases",
                         snippet="总结了围绕 GFW 的主要争议点与案例。",
-                        source_engine="duckduckgo",
+                        source_engine="ddgs",
                     )
                 ]
             return []

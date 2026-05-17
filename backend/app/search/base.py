@@ -21,7 +21,7 @@ class SearchResult(BaseModel):
 class SearchProvider(ABC):
     """
     All search backends must implement this interface.
-    This abstraction allows swapping SearXNG ↔ Tavily (or future providers)
+    This abstraction allows swapping DDGS ↔ Tavily (or future providers)
     via configuration without changing agent code.
     """
 

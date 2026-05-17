@@ -49,6 +49,8 @@ export function SearchProviderSettingsCard({
     clearIdleLabel,
     clearBusyLabel,
 }: SearchProviderSettingsCardProps) {
+    const shouldShowSaveButton = saveIdleLabel.trim().length > 0;
+
     return (
         <div
             style={{
@@ -88,23 +90,25 @@ export function SearchProviderSettingsCard({
             </div>
 
             <div style={{ display: 'flex', gap: '12px', marginTop: '18px', flexWrap: 'wrap' }}>
-                <button
-                    onClick={onSave}
-                    disabled={isBusy}
-                    style={{
-                        padding: '12px 18px',
-                        background: 'var(--text-primary)',
-                        color: 'var(--bg-primary)',
-                        border: 'none',
-                        borderRadius: 'var(--radius-md)',
-                        fontWeight: 600,
-                        fontSize: '16px',
-                        cursor: isBusy ? 'not-allowed' : 'pointer',
-                        opacity: isBusy ? 0.7 : 1,
-                    }}
-                >
-                    {activeAction === saveActionId ? saveBusyLabel : saveIdleLabel}
-                </button>
+                {shouldShowSaveButton && (
+                    <button
+                        onClick={onSave}
+                        disabled={isBusy}
+                        style={{
+                            padding: '12px 18px',
+                            background: 'var(--text-primary)',
+                            color: 'var(--bg-primary)',
+                            border: 'none',
+                            borderRadius: 'var(--radius-md)',
+                            fontWeight: 600,
+                            fontSize: '16px',
+                            cursor: isBusy ? 'not-allowed' : 'pointer',
+                            opacity: isBusy ? 0.7 : 1,
+                        }}
+                    >
+                        {activeAction === saveActionId ? saveBusyLabel : saveIdleLabel}
+                    </button>
+                )}
 
                 {showClearButton && onClear && clearActionId && clearIdleLabel && clearBusyLabel && (
                     <button

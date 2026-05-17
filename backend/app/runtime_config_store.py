@@ -9,7 +9,8 @@ from typing import Any
 
 from app.runtime_paths import get_runtime_paths, prepare_runtime_environment
 
-SUPPORTED_SEARCH_PROVIDERS = {"duckduckgo", "searxng", "tavily"}
+SUPPORTED_SEARCH_PROVIDERS = {"ddgs", "duckduckgo", "searxng", "tavily"}
+SEARCH_PROVIDER_ALIASES = {"duckduckgo": "ddgs"}
 DEFAULT_SEARXNG_BASE_URL = "http://localhost:8080"
 DEFAULT_TAVILY_API_URL = "https://api.tavily.com/search"
 _DEFAULT_CORS_ORIGINS = [
@@ -23,6 +24,13 @@ _CONFIG_WRITE_LOCK = Lock()
 
 def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def normalize_search_provider_name(value: str) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized in SEARCH_PROVIDER_ALIASES:
+        return SEARCH_PROVIDER_ALIASES[normalized]
+    return normalized
 
 
 def _write_text_atomic(path: Path, content: str) -> None:
@@ -82,7 +90,7 @@ def _default_config() -> dict[str, Any]:
             },
         },
         "search": {
-            "provider": "duckduckgo",
+            "provider": "ddgs",
             "max_results_per_query": 5,
             "searxng": {
                 "base_url": DEFAULT_SEARXNG_BASE_URL,
@@ -207,7 +215,9 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
     search = incoming.get("search") if isinstance(incoming.get("search"), dict) else {}
     searxng = search.get("searxng") if isinstance(search.get("searxng"), dict) else {}
     tavily = search.get("tavily") if isinstance(search.get("tavily"), dict) else {}
-    provider = str(search.get("provider") or base["search"]["provider"]).strip().lower()
+    provider = normalize_search_provider_name(
+        str(search.get("provider") or base["search"]["provider"])
+    )
     if provider not in SUPPORTED_SEARCH_PROVIDERS:
         provider = base["search"]["provider"]
     base["search"] = {

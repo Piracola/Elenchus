@@ -26,7 +26,7 @@ def _workspace_runtime_dir():
         shutil.rmtree(runtime_root, ignore_errors=True)
 
 
-class _FakeDuckDuckGoProvider:
+class _FakeDDGSProvider:
     def __init__(self) -> None:
         self.closed = False
 
@@ -37,18 +37,18 @@ class _FakeDuckDuckGoProvider:
         self.closed = True
 
 
-class _FakeSearXNGProvider(_FakeDuckDuckGoProvider):
-    def __init__(self, base_url: str, api_key: str | None = None) -> None:
-        super().__init__()
-        self.base_url = base_url
-        self.api_key = api_key
-
-
-class _FakeTavilyProvider(_FakeDuckDuckGoProvider):
+class _FakeTavilyProvider(_FakeDDGSProvider):
     def __init__(self, api_key: str, api_url: str) -> None:
         super().__init__()
         self.api_key = api_key
         self.api_url = api_url
+
+
+class _FakeSearXNGProvider(_FakeDDGSProvider):
+    def __init__(self, base_url: str, api_key: str | None = None) -> None:
+        super().__init__()
+        self.base_url = base_url
+        self.api_key = api_key or ""
 
 
 @pytest.fixture(autouse=True)
@@ -67,24 +67,16 @@ def test_persist_search_settings_updates_runtime_config_and_snapshot(monkeypatch
 
         config_module.persist_search_settings(
             provider="tavily",
-            searxng_base_url="http://searx.local:8080",
-            searxng_api_key="searx-secret",
             tavily_api_key="tvly-secret",
             tavily_api_url="https://example.com/tavily/search",
         )
 
         runtime_config = load_runtime_config()
         assert runtime_config["search"]["provider"] == "tavily"
-        assert runtime_config["search"]["searxng"]["base_url"] == "http://searx.local:8080"
-        assert runtime_config["search"]["searxng"]["api_key"] == "searx-secret"
         assert runtime_config["search"]["tavily"]["api_key"] == "tvly-secret"
         assert runtime_config["search"]["tavily"]["api_url"] == "https://example.com/tavily/search"
 
         snapshot = config_module.get_search_provider_settings_snapshot()
-        assert snapshot["searxng"] == {
-            "base_url": "http://searx.local:8080",
-            "api_key_configured": True,
-        }
         assert snapshot["tavily"] == {
             "api_url": "https://example.com/tavily/search",
             "api_key_configured": True,
@@ -96,6 +88,34 @@ def test_persist_search_settings_updates_runtime_config_and_snapshot(monkeypatch
         runtime_config = load_runtime_config()
         assert runtime_config["search"]["tavily"]["api_key"] == ""
         assert snapshot["tavily"]["api_key_configured"] is False
+
+
+def test_persist_search_settings_preserves_remote_searxng_config(monkeypatch):
+    with _workspace_runtime_dir() as runtime_root:
+        monkeypatch.setenv("ELENCHUS_RUNTIME_DIR", str(runtime_root.resolve()))
+
+        config_module.persist_search_settings(
+            provider="searxng",
+            searxng_base_url="https://search.example.com",
+            searxng_api_key="searxng-secret",
+        )
+
+        runtime_config = load_runtime_config()
+        assert runtime_config["search"]["provider"] == "searxng"
+        assert runtime_config["search"]["searxng"]["base_url"] == "https://search.example.com"
+        assert runtime_config["search"]["searxng"]["api_key"] == "searxng-secret"
+
+        snapshot = config_module.get_search_provider_settings_snapshot()
+        assert snapshot["searxng"] == {
+            "base_url": "https://search.example.com",
+            "api_key_configured": True,
+        }
+
+        config_module.persist_search_settings(clear_searxng_api_key=True)
+
+        runtime_config = load_runtime_config()
+        assert runtime_config["search"]["searxng"]["api_key"] == ""
+        assert config_module.get_search_provider_settings_snapshot()["searxng"]["api_key_configured"] is False
 
 
 def test_load_runtime_config_accepts_utf8_bom(monkeypatch):
@@ -125,23 +145,23 @@ async def test_search_factory_reload_rebuilds_provider_instances(monkeypatch):
     with _workspace_runtime_dir() as runtime_root:
         monkeypatch.setenv("ELENCHUS_RUNTIME_DIR", str(runtime_root.resolve()))
 
-        monkeypatch.setattr(factory_module, "DuckDuckGoProvider", _FakeDuckDuckGoProvider)
+        monkeypatch.setattr(factory_module, "DDGSProvider", _FakeDDGSProvider)
         monkeypatch.setattr(factory_module, "SearXNGProvider", _FakeSearXNGProvider)
         monkeypatch.setattr(factory_module, "TavilyProvider", _FakeTavilyProvider)
 
         config_module.persist_search_settings(
-            provider="tavily",
-            searxng_base_url="http://searx.initial",
-            searxng_api_key="initial-searx-key",
+            provider="searxng",
+            searxng_base_url="https://search.example.com",
+            searxng_api_key="initial-searxng-key",
             tavily_api_key="initial-tavily-key",
             tavily_api_url="https://initial.example/search",
         )
 
         factory = SearchProviderFactory()
-        assert factory.get_current_provider() == "tavily"
-        assert isinstance(factory._providers["duckduckgo"], _FakeDuckDuckGoProvider)
-        assert factory._providers["searxng"].base_url == "http://searx.initial"
-        assert factory._providers["searxng"].api_key == "initial-searx-key"
+        assert factory.get_current_provider() == "searxng"
+        assert isinstance(factory._providers["ddgs"], _FakeDDGSProvider)
+        assert factory._providers["searxng"].base_url == "https://search.example.com"
+        assert factory._providers["searxng"].api_key == "initial-searxng-key"
         assert factory._providers["tavily"].api_key == "initial-tavily-key"
         assert factory._providers["tavily"].api_url == "https://initial.example/search"
 
@@ -149,9 +169,9 @@ async def test_search_factory_reload_rebuilds_provider_instances(monkeypatch):
         old_tavily = factory._providers["tavily"]
 
         config_module.persist_search_settings(
-            provider="searxng",
-            searxng_base_url="http://searx.updated",
-            searxng_api_key="updated-searx-key",
+            provider="ddgs",
+            clear_searxng_api_key=True,
+            searxng_base_url="https://updated-search.example.com",
             clear_tavily_api_key=True,
             tavily_api_url="https://updated.example/search",
         )
@@ -159,7 +179,19 @@ async def test_search_factory_reload_rebuilds_provider_instances(monkeypatch):
 
         assert old_searxng.closed is True
         assert old_tavily.closed is True
-        assert factory.get_current_provider() == "searxng"
-        assert factory._providers["searxng"].base_url == "http://searx.updated"
-        assert factory._providers["searxng"].api_key == "updated-searx-key"
+        assert factory.get_current_provider() == "ddgs"
+        assert "searxng" in factory._providers
+        assert factory._providers["searxng"].base_url == "https://updated-search.example.com"
+        assert factory._providers["searxng"].api_key == ""
         assert "tavily" not in factory._providers
+
+
+def test_legacy_duckduckgo_provider_is_normalized_to_ddgs(monkeypatch):
+    with _workspace_runtime_dir() as runtime_root:
+        monkeypatch.setenv("ELENCHUS_RUNTIME_DIR", str(runtime_root.resolve()))
+
+        config_module.persist_search_settings(provider="duckduckgo")
+
+        runtime_config = load_runtime_config()
+        assert runtime_config["search"]["provider"] == "ddgs"
+        assert config_module.get_settings().search.provider == "ddgs"

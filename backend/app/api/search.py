@@ -14,13 +14,13 @@ from app.search.factory import SearchProviderFactory
 router = APIRouter(prefix="/search", tags=["search"])
 
 
-class SearXNGSettingsResponse(BaseModel):
-    base_url: str
+class TavilySettingsResponse(BaseModel):
+    api_url: str
     api_key_configured: bool
 
 
-class TavilySettingsResponse(BaseModel):
-    api_url: str
+class SearXNGSettingsResponse(BaseModel):
+    base_url: str
     api_key_configured: bool
 
 
@@ -43,14 +43,14 @@ class UpdateProviderRequest(BaseModel):
     provider: str
 
 
-class SearXNGSettingsUpdate(BaseModel):
-    base_url: str | None = None
+class TavilySettingsUpdate(BaseModel):
+    api_url: str | None = None
     api_key: str | None = None
     clear_api_key: bool = False
 
 
-class TavilySettingsUpdate(BaseModel):
-    api_url: str | None = None
+class SearXNGSettingsUpdate(BaseModel):
+    base_url: str | None = None
     api_key: str | None = None
     clear_api_key: bool = False
 
@@ -123,9 +123,9 @@ async def update_search_settings(
 
     persist_search_settings(
         provider=request.provider,
-        searxng_base_url=request.provider_settings.searxng.base_url,
         searxng_api_key=request.provider_settings.searxng.api_key,
         clear_searxng_api_key=request.provider_settings.searxng.clear_api_key,
+        searxng_base_url=request.provider_settings.searxng.base_url,
         tavily_api_key=request.provider_settings.tavily.api_key,
         clear_tavily_api_key=request.provider_settings.tavily.clear_api_key,
         tavily_api_url=request.provider_settings.tavily.api_url,

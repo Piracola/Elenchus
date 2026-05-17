@@ -19,6 +19,7 @@ from app.runtime_config_store import (
     DEFAULT_TAVILY_API_URL,
     SUPPORTED_SEARCH_PROVIDERS,
     load_runtime_config,
+    normalize_search_provider_name,
     update_runtime_config,
 )
 from app.runtime_paths import prepare_runtime_environment
@@ -30,7 +31,7 @@ _PROJECT_ROOT = _RUNTIME_PATHS.runtime_root
 class SearchConfig(BaseModel):
     """Search provider configuration."""
 
-    provider: str = "duckduckgo"
+    provider: str = "ddgs"
     max_results_per_query: int = 5
     searxng_base_url: str = DEFAULT_SEARXNG_BASE_URL
     searxng_api_key: str = ""
@@ -43,7 +44,7 @@ class SearchConfig(BaseModel):
         searxng = data.get("searxng") if isinstance(data.get("searxng"), dict) else {}
         tavily = data.get("tavily") if isinstance(data.get("tavily"), dict) else {}
         return cls(
-            provider=str(data.get("provider") or "duckduckgo"),
+            provider=normalize_search_provider_name(str(data.get("provider") or "ddgs")),
             max_results_per_query=int(data.get("max_results_per_query") or 5),
             searxng_base_url=str(searxng.get("base_url") or DEFAULT_SEARXNG_BASE_URL),
             searxng_api_key=str(searxng.get("api_key") or ""),
@@ -86,10 +87,10 @@ class DebateConfig(BaseModel):
 class EnvSettings(BaseModel):
     """Compatibility wrapper for runtime values historically read from `.env`."""
 
-    searxng_base_url: str = DEFAULT_SEARXNG_BASE_URL
-    searxng_api_key: str = ""
     tavily_api_key: str = ""
     tavily_api_url: str = DEFAULT_TAVILY_API_URL
+    searxng_api_key: str = ""
+    searxng_base_url: str = DEFAULT_SEARXNG_BASE_URL
     host: str = "0.0.0.0"
     port: int = 8001
     debug: bool = False
@@ -110,10 +111,10 @@ class EnvSettings(BaseModel):
             cors_origin_text = str(cors_origins or "")
 
         return cls(
-            searxng_base_url=search.searxng_base_url,
-            searxng_api_key=search.searxng_api_key,
             tavily_api_key=search.tavily_api_key,
             tavily_api_url=search.tavily_api_url,
+            searxng_api_key=search.searxng_api_key,
+            searxng_base_url=search.searxng_base_url,
             host=str(data.get("host") or "0.0.0.0"),
             port=int(data.get("port") or 8001),
             debug=bool(data.get("debug", False)),
@@ -277,7 +278,7 @@ def _clear_settings_cache() -> None:
 
 
 def _normalize_search_provider(provider: str) -> str:
-    normalized = (provider or "").strip().lower()
+    normalized = normalize_search_provider_name(provider)
     if normalized not in SUPPORTED_SEARCH_PROVIDERS:
         raise ValueError(f"Unsupported search provider: {provider}")
     return normalized
@@ -290,9 +291,9 @@ def persist_search_provider(provider: str) -> None:
 def persist_search_settings(
     *,
     provider: str | None = None,
-    searxng_base_url: str | None = None,
     searxng_api_key: str | None = None,
     clear_searxng_api_key: bool = False,
+    searxng_base_url: str | None = None,
     tavily_api_key: str | None = None,
     clear_tavily_api_key: bool = False,
     tavily_api_url: str | None = None,
@@ -303,21 +304,21 @@ def persist_search_settings(
         if searxng_base_url is not None
         else None
     )
+    normalized_searxng_api_key = (searxng_api_key or "").strip()
     normalized_tavily_api_url = (
         (tavily_api_url or "").strip() or DEFAULT_TAVILY_API_URL
         if tavily_api_url is not None
         else None
     )
-    normalized_searxng_api_key = (searxng_api_key or "").strip()
     normalized_tavily_api_key = (tavily_api_key or "").strip()
 
     update_runtime_config(
         lambda config: _update_search_config(
             config,
             provider=normalized_provider,
-            searxng_base_url=normalized_searxng_base_url,
             searxng_api_key=normalized_searxng_api_key,
             clear_searxng_api_key=clear_searxng_api_key,
+            searxng_base_url=normalized_searxng_base_url,
             tavily_api_key=normalized_tavily_api_key,
             clear_tavily_api_key=clear_tavily_api_key,
             tavily_api_url=normalized_tavily_api_url,
@@ -330,9 +331,9 @@ def _update_search_config(
     config: dict[str, Any],
     *,
     provider: str | None,
-    searxng_base_url: str | None,
     searxng_api_key: str,
     clear_searxng_api_key: bool,
+    searxng_base_url: str | None,
     tavily_api_key: str,
     clear_tavily_api_key: bool,
     tavily_api_url: str | None,

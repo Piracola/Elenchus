@@ -1,6 +1,6 @@
 """
-SearXNG search provider — primary search backend.
-Connects to a locally deployed SearXNG instance via its JSON API.
+SearXNG search provider — optional remote instance backend.
+Connects to a user-specified SearXNG instance via its JSON API.
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 class SearXNGProvider(SearchProvider):
     """
-    Queries a self-hosted SearXNG meta-search engine.
-    Expects the instance to have JSON output enabled in settings.yml.
+    Queries a self-hosted or remote SearXNG meta-search engine.
+    Expects the instance to have JSON output enabled.
     """
 
     def __init__(self, base_url: str = "http://localhost:8080", api_key: str | None = None):
@@ -35,9 +35,6 @@ class SearXNGProvider(SearchProvider):
         }
 
     async def search(self, query: str, num_results: int = 5) -> list[SearchResult]:
-        """
-        Call SearXNG's /search endpoint with format=json.
-        """
         params: dict[str, Any] = {
             "q": query,
             "format": "json",
@@ -69,7 +66,6 @@ class SearXNGProvider(SearchProvider):
         return results
 
     async def is_available(self) -> bool:
-        """Check if SearXNG instance is reachable with short timeout."""
         try:
             resp = await self._client.get(
                 f"{self.base_url}/healthz",
@@ -80,5 +76,5 @@ class SearXNGProvider(SearchProvider):
         except Exception:
             return False
 
-    async def close(self):
+    async def close(self) -> None:
         await self._client.aclose()

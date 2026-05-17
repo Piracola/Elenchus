@@ -11,13 +11,13 @@ from typing import Literal
 
 from app.config import get_settings, persist_search_provider
 from app.search.base import SearchProvider, SearchResult
-from app.search.duckduckgo import DuckDuckGoProvider
+from app.search.ddgs import DDGSProvider
 from app.search.searxng import SearXNGProvider
 from app.search.tavily import TavilyProvider
 
 logger = logging.getLogger(__name__)
 
-ProviderType = Literal["duckduckgo", "searxng", "tavily"]
+ProviderType = Literal["ddgs", "searxng", "tavily"]
 
 
 class ProviderInfo:
@@ -39,14 +39,14 @@ class ProviderInfo:
 class SearchProviderFactory:
     """
     Creates and manages search provider instances.
-    Supports automatic failover: User Choice -> DuckDuckGo -> SearXNG -> Tavily.
-    DuckDuckGo is the default provider as it requires no API key.
+    Supports automatic failover: User Choice -> DDGS -> SearXNG -> Tavily.
+    DDGS is the default provider as it requires no API key.
     """
 
     def __init__(self) -> None:
         """Initialize the factory with empty provider registry."""
         self._providers: dict[str, SearchProvider] = {}
-        self._current_provider: str = "duckduckgo"
+        self._current_provider: str = "ddgs"
         self._initialized: bool = False
 
     def _init_providers(self) -> None:
@@ -56,14 +56,15 @@ class SearchProviderFactory:
 
         settings = get_settings()
 
-        # Always create DuckDuckGo provider (no config required)
-        self._providers["duckduckgo"] = DuckDuckGoProvider()
+        # Always create DDGS provider (no config required)
+        self._providers["ddgs"] = DDGSProvider()
 
-        # Create SearXNG provider
-        self._providers["searxng"] = SearXNGProvider(
-            base_url=settings.env.searxng_base_url,
-            api_key=settings.env.searxng_api_key or None,
-        )
+        # Create remote SearXNG provider when a base URL is configured
+        if settings.env.searxng_base_url:
+            self._providers["searxng"] = SearXNGProvider(
+                base_url=settings.env.searxng_base_url,
+                api_key=settings.env.searxng_api_key or None,
+            )
 
         # Create Tavily provider if API key is available
         if settings.env.tavily_api_key:
@@ -72,16 +73,16 @@ class SearchProviderFactory:
                 api_url=settings.env.tavily_api_url,
             )
 
-        # Set initial provider from config (default to duckduckgo)
+        # Set initial provider from config (default to ddgs)
         config_provider = settings.search.provider
         if config_provider in self._providers:
             self._current_provider = config_provider
         else:
             logger.warning(
-                "Configured provider '%s' not available, using duckduckgo",
+                "Configured provider '%s' not available, using ddgs",
                 config_provider,
             )
-            self._current_provider = "duckduckgo"
+            self._current_provider = "ddgs"
 
         self._initialized = True
         logger.info("Search providers initialized. Current: %s", self._current_provider)
@@ -101,7 +102,7 @@ class SearchProviderFactory:
         Set the current search provider at runtime.
 
         Args:
-            provider: The provider to use ("duckduckgo", "searxng", or "tavily")
+            provider: The provider to use ("ddgs", "searxng", or "tavily")
 
         Returns:
             True if provider was set successfully, False if provider not available.
@@ -167,13 +168,13 @@ class SearchProviderFactory:
         """
         Return the best available search provider.
         Checks current provider availability first, then falls back in order:
-        DuckDuckGo -> SearXNG -> Tavily.
+        DDGS -> SearXNG -> Tavily.
         Returns None if all providers are unavailable.
         """
         self._init_providers()
 
         # Define fallback order
-        fallback_order = ["duckduckgo", "searxng", "tavily"]
+        fallback_order = ["ddgs", "searxng", "tavily"]
 
         # Put current provider first
         if self._current_provider in fallback_order:
@@ -248,5 +249,5 @@ class SearchProviderFactory:
     async def reload(self) -> None:
         """Rebuild provider instances after runtime settings change."""
         await self.close()
-        self._current_provider = "duckduckgo"
+        self._current_provider = "ddgs"
         self._init_providers()

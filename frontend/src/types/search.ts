@@ -5,7 +5,7 @@ export interface SearchResult {
     source_engine: string;
 }
 
-export type SearchProviderType = 'duckduckgo' | 'searxng' | 'tavily';
+export type SearchProviderType = 'ddgs' | 'searxng' | 'tavily';
 
 export interface SearchProviderStatus {
     name: SearchProviderType;

@@ -3,13 +3,13 @@ import type { CSSProperties } from 'react';
 import type { SearchProviderType } from '../../../types';
 
 export const PROVIDER_INFO: Record<SearchProviderType, { label: string; description: string }> = {
-    duckduckgo: {
-        label: 'DuckDuckGo',
-        description: '\u9ed8\u8ba4\u641c\u7d22\u5f15\u64ce\uff0c\u65e0\u9700\u989d\u5916\u914d\u7f6e\uff0c\u5f00\u7bb1\u5373\u7528\u3002',
+    ddgs: {
+        label: 'DDGS',
+        description: '\u8f7b\u91cf\u7ea7\u805a\u5408\u641c\u7d22\u63d0\u4f9b\u5668\uff0c\u65e0\u9700 Docker \u6216 API Key\uff0c\u53ef\u76f4\u63a5\u968f\u9879\u76ee\u4ea7\u7269\u5206\u53d1\u3002',
     },
     searxng: {
         label: 'SearXNG',
-        description: '\u9002\u5408\u81ea\u6258\u7ba1\u90e8\u7f72\uff0c\u53ef\u4ee5\u914d\u7f6e\u81ea\u5b9a\u4e49 Base URL \u548c\u53ef\u9009 API Key\u3002',
+        description: '\u652f\u6301\u63a5\u5165\u4f60\u81ea\u5df1\u7684 SearXNG \u5b9e\u4f8b\uff0c\u53ef\u914d\u7f6e Base URL \u548c API Key\uff0c\u4f46\u4e0d\u518d\u5185\u7f6e Docker \u5b89\u88c5\u7ba1\u7406\u3002',
     },
     tavily: {
         label: 'Tavily',

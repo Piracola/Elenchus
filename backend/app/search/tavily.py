@@ -1,5 +1,5 @@
 """
-Tavily search provider — optional fallback when SearXNG is unavailable.
+Tavily search provider — optional API-based fallback.
 Requires a Tavily API key from runtime configuration.
 """
 
