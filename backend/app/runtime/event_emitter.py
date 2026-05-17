@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from .emitters.discussion import emit_jury_discussion as _emit_jury_discussion
+from .emitters.discussion import emit_discussion_entry as _emit_discussion_entry
 from .emitters.discussion import emit_team_discussion as _emit_team_discussion
 from .emitters.report import emit_fact_check as _emit_fact_check
 from .emitters.report import emit_judge_scores as _emit_judge_scores
@@ -211,6 +212,17 @@ class RuntimeEventEmitter:
             session_id,
             final_state,
             prev_history_len,
+        )
+
+    async def emit_discussion_entry(
+        self,
+        session_id: str,
+        entry: dict[str, Any],
+    ) -> None:
+        await _emit_discussion_entry(
+            self.emit_runtime_event,
+            session_id,
+            entry,
         )
 
     async def emit_jury_discussion(

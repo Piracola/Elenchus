@@ -1,6 +1,7 @@
 """Runtime event emitter subpackage."""
 
 from app.runtime.emitters.discussion import (
+    emit_discussion_entry,
     emit_jury_discussion,
     emit_team_discussion,
 )
@@ -21,6 +22,7 @@ from app.runtime.emitters.speech import (
 __all__ = [
     "emit_team_discussion",
     "emit_jury_discussion",
+    "emit_discussion_entry",
     "emit_fact_check",
     "emit_judge_scores",
     "emit_memory_updates",

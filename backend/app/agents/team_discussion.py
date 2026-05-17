@@ -199,6 +199,8 @@ async def team_discuss(state: dict[str, Any]) -> dict[str, Any]:
 
     current_team_discussion: list[dict[str, Any]] = []
     team_history_delta: list[dict[str, Any]] = []
+    session_id = str(state.get("session_id", "") or "")
+    runtime_event_emitter = state.get("runtime_event_emitter")
 
     logger.info(
         "Running internal team discussion for [%s]: agents=%d rounds=%d",
@@ -222,6 +224,17 @@ async def team_discuss(state: dict[str, Any]) -> dict[str, Any]:
                 discussion_history=current_team_discussion,
                 reasoning_config=reasoning_config,
             )
+            if session_id and runtime_event_emitter is not None:
+                await runtime_event_emitter.emit_runtime_event(
+                    session_id=session_id,
+                    event_type="status",
+                    payload={
+                        "content": f"组内讨论中：{agent_name}（{specialty}）正在整理建议...",
+                        "node": "team_discussion",
+                    },
+                    source="runtime.node.team_discussion",
+                    phase="preparing",
+                )
 
             try:
                 content = await invoke_text_model(
@@ -261,6 +274,8 @@ async def team_discuss(state: dict[str, Any]) -> dict[str, Any]:
             }
             current_team_discussion.append(entry)
             team_history_delta.append(entry)
+            if session_id and runtime_event_emitter is not None:
+                await runtime_event_emitter.emit_discussion_entry(session_id, entry)
 
     summary_instruction = _build_summary_instruction(
         side=side,
@@ -271,6 +286,17 @@ async def team_discuss(state: dict[str, Any]) -> dict[str, Any]:
         discussion_history=current_team_discussion,
         reasoning_config=reasoning_config,
     )
+    if session_id and runtime_event_emitter is not None:
+        await runtime_event_emitter.emit_runtime_event(
+            session_id=session_id,
+            event_type="status",
+            payload={
+                "content": f"组内讨论中：{_team_summary_name(side)}正在汇总本方意见...",
+                "node": "team_discussion",
+            },
+            source="runtime.node.team_discussion",
+            phase="preparing",
+        )
 
     try:
         summary_content = await invoke_text_model(
@@ -301,10 +327,13 @@ async def team_discuss(state: dict[str, Any]) -> dict[str, Any]:
         "source_role": side,
     }
     team_history_delta.append(summary_entry)
+    if session_id and runtime_event_emitter is not None:
+        await runtime_event_emitter.emit_discussion_entry(session_id, summary_entry)
 
     return {
         "team_dialogue_history": team_history_delta,
         "current_team_discussion": current_team_discussion,
         "current_team_summary": summary_entry,
         "agent_configs": agent_configs,
+        "emitted_team_discussion_count": len(team_history_delta),
     }

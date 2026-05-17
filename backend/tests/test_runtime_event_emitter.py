@@ -201,6 +201,58 @@ async def test_emit_jury_discussion_uses_separate_event_types():
 
 
 @pytest.mark.asyncio
+async def test_emit_discussion_entry_routes_team_jury_and_consensus_event_shapes():
+    bus = _FakeRuntimeBus()
+    emitter = RuntimeEventEmitter(runtime_bus=bus)
+
+    await emitter.emit_discussion_entry(
+        "session-1",
+        {
+            "role": "team_member",
+            "agent_name": "正方组员1",
+            "content": "先补证据。",
+            "discussion_kind": "team",
+            "team_side": "proposer",
+            "team_round": 0,
+            "team_member_index": 0,
+            "team_specialty": "证据审查",
+            "source_role": "proposer",
+        },
+    )
+    await emitter.emit_discussion_entry(
+        "session-1",
+        {
+            "role": "jury_summary",
+            "agent_name": "陪审团总结员",
+            "content": "争点仍在因果链强度。",
+            "discussion_kind": "jury",
+            "turn": 1,
+            "jury_round": 0,
+        },
+    )
+    await emitter.emit_discussion_entry(
+        "session-1",
+        {
+            "role": "consensus_summary",
+            "agent_name": "共识收敛员",
+            "content": "可先收敛到条件依赖结论。",
+            "discussion_kind": "consensus",
+            "turn": 3,
+        },
+    )
+
+    assert [event["type"] for event in bus.events] == [
+        "team_discussion",
+        "jury_summary",
+        "consensus_summary",
+    ]
+    assert bus.events[0]["payload"]["team_specialty"] == "证据审查"
+    assert bus.events[1]["source"] == "runtime.node.jury_discussion"
+    assert bus.events[2]["source"] == "runtime.node.consensus"
+    assert bus.events[2]["phase"] == "complete"
+
+
+@pytest.mark.asyncio
 async def test_emit_speech_skips_duplicate_start_when_tokens_already_streamed():
     bus = _FakeRuntimeBus()
     emitter = RuntimeEventEmitter(runtime_bus=bus)

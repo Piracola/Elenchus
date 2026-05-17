@@ -146,6 +146,12 @@ class SessionRuntimeRepository:
                 "current_team_summary": None,
                 "current_jury_discussion": [],
                 "current_jury_summary": None,
+                "emitted_team_discussion_count": int(
+                    session_snapshot.get("emitted_team_discussion_count", 0) or 0
+                ),
+                "emitted_jury_discussion_count": int(
+                    session_snapshot.get("emitted_jury_discussion_count", 0) or 0
+                ),
                 "last_executed_node": str(session_snapshot.get("last_executed_node", "") or ""),
                 "last_progress_at": str(session_snapshot.get("last_progress_at", "") or ""),
                 "last_status_message": str(
@@ -194,6 +200,8 @@ class SessionRuntimeRepository:
                 "mode_artifacts": state.get("mode_artifacts", []),
                 "current_mode_report": state.get("current_mode_report"),
                 "final_mode_report": state.get("final_mode_report"),
+                "emitted_team_discussion_count": state.get("emitted_team_discussion_count", 0),
+                "emitted_jury_discussion_count": state.get("emitted_jury_discussion_count", 0),
                 "builtin_reference_docs": state.get("builtin_reference_docs", []),
                 "last_executed_node": state.get("last_executed_node", ""),
                 "last_progress_at": state.get("last_progress_at", ""),

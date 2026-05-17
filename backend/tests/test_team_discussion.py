@@ -131,3 +131,42 @@ async def test_team_discuss_falls_back_to_older_feedback_and_excludes_same_turn(
         assert "Logical Rigor: 4/10" in instruction
         assert "Too old to choose." not in instruction
         assert "Same-turn feedback should not appear." not in instruction
+
+
+@pytest.mark.asyncio
+async def test_team_discuss_emits_incremental_runtime_events(monkeypatch):
+    emitted: list[tuple[str, dict[str, str]]] = []
+
+    async def fake_invoke_text_model(messages, *, override=None, tools=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+        prompt = messages[-1].content
+        if "内部总结员" in prompt:
+            return "总结内容"
+        return "组员内容"
+
+    class _Emitter:
+        async def emit_discussion_entry(self, session_id: str, entry: dict[str, str]) -> None:
+            emitted.append((session_id, entry))
+
+    monkeypatch.setattr(team_discussion, "get_debater_system_prompt", lambda role: "系统提示")
+    monkeypatch.setattr(team_discussion, "invoke_text_model", fake_invoke_text_model)
+
+    result = await team_discussion.team_discuss(
+        {
+            "session_id": "session-team",
+            "runtime_event_emitter": _Emitter(),
+            "current_speaker": "proposer",
+            "topic": "Should AI be regulated?",
+            "current_turn": 0,
+            "max_turns": 3,
+            "dialogue_history": [],
+            "recent_dialogue_history": [],
+            "shared_knowledge": [],
+            "judge_history": [],
+            "team_config": {"agents_per_team": 2, "discussion_rounds": 1},
+            "agent_configs": {},
+            "reasoning_config": {},
+        }
+    )
+
+    assert [entry["role"] for _, entry in emitted] == ["team_member", "team_member", "team_summary"]
+    assert result["emitted_team_discussion_count"] == 3

@@ -180,6 +180,8 @@ async def jury_discuss(state: dict[str, Any]) -> dict[str, Any]:
 
     current_jury_discussion: list[dict[str, Any]] = []
     jury_history_delta: list[dict[str, Any]] = []
+    session_id = str(state.get("session_id", "") or "")
+    runtime_event_emitter = state.get("runtime_event_emitter")
 
     logger.info(
         "Running jury discussion: jurors=%d rounds=%d turn=%d",
@@ -202,6 +204,17 @@ async def jury_discuss(state: dict[str, Any]) -> dict[str, Any]:
                 discussion_history=current_jury_discussion,
                 reasoning_config=reasoning_config,
             )
+            if session_id and runtime_event_emitter is not None:
+                await runtime_event_emitter.emit_runtime_event(
+                    session_id=session_id,
+                    event_type="status",
+                    payload={
+                        "content": f"陪审讨论中：{agent_name}（{perspective}）正在评估本轮表现...",
+                        "node": "jury_discussion",
+                    },
+                    source="runtime.node.jury_discussion",
+                    phase="preparing",
+                )
             try:
                 content = await invoke_text_model(
                     [
@@ -237,6 +250,8 @@ async def jury_discuss(state: dict[str, Any]) -> dict[str, Any]:
             }
             current_jury_discussion.append(entry)
             jury_history_delta.append(entry)
+            if session_id and runtime_event_emitter is not None:
+                await runtime_event_emitter.emit_discussion_entry(session_id, entry)
 
     summary_instruction = _build_summary_instruction(
         topic=topic,
@@ -245,6 +260,17 @@ async def jury_discuss(state: dict[str, Any]) -> dict[str, Any]:
         context_block=context_block,
         discussion_history=current_jury_discussion,
     )
+    if session_id and runtime_event_emitter is not None:
+        await runtime_event_emitter.emit_runtime_event(
+            session_id=session_id,
+            event_type="status",
+            payload={
+                "content": f"{_jury_summary_name()}正在汇总多视角意见...",
+                "node": "jury_discussion",
+            },
+            source="runtime.node.jury_discussion",
+            phase="preparing",
+        )
     try:
         summary_content = await invoke_text_model(
             [
@@ -272,10 +298,13 @@ async def jury_discuss(state: dict[str, Any]) -> dict[str, Any]:
         "jury_round": discussion_rounds - 1,
     }
     jury_history_delta.append(summary_entry)
+    if session_id and runtime_event_emitter is not None:
+        await runtime_event_emitter.emit_discussion_entry(session_id, summary_entry)
 
     return {
         "jury_dialogue_history": jury_history_delta,
         "current_jury_discussion": current_jury_discussion,
         "current_jury_summary": summary_entry,
         "agent_configs": agent_configs,
+        "emitted_jury_discussion_count": len(jury_history_delta),
     }

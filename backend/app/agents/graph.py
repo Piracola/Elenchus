@@ -91,6 +91,8 @@ class DebateGraphState(TypedDict, total=False):
     current_team_summary: DialogueEntryDict | None
     current_jury_discussion: list[DialogueEntryDict]
     current_jury_summary: DialogueEntryDict | None
+    emitted_team_discussion_count: int
+    emitted_jury_discussion_count: int
     
     messages: Annotated[list[BaseMessage], add_messages]
 
@@ -290,6 +292,8 @@ async def node_advance_turn(state: DebateGraphState) -> dict[str, Any]:
         "current_team_summary": None,
         "current_jury_discussion": [],
         "current_jury_summary": None,
+        "emitted_team_discussion_count": 0,
+        "emitted_jury_discussion_count": 0,
         "speech_was_streamed": False,
         "last_executed_node": "advance_turn",
     }

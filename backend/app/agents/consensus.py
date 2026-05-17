@@ -103,6 +103,19 @@ async def converge_consensus(state: dict[str, Any]) -> dict[str, Any]:
         node_name="consensus",
         template="正在生成最终共识总结，已等待 {seconds} 秒...",
     )
+    session_id = str(state.get("session_id", "") or "")
+    runtime_event_emitter = state.get("runtime_event_emitter")
+    if session_id and runtime_event_emitter is not None:
+        await runtime_event_emitter.emit_runtime_event(
+            session_id=session_id,
+            event_type="status",
+            payload={
+                "content": "共识收敛员正在整理全局结论...",
+                "node": "consensus",
+            },
+            source="runtime.node.consensus",
+            phase="complete",
+        )
 
     try:
         content = await invoke_text_model(
@@ -129,7 +142,10 @@ async def converge_consensus(state: dict[str, Any]) -> dict[str, Any]:
         "turn": int(state.get("current_turn", 0) or 0),
         "discussion_kind": "consensus",
     }
+    if session_id and runtime_event_emitter is not None:
+        await runtime_event_emitter.emit_discussion_entry(session_id, entry)
     return {
         "jury_dialogue_history": [entry],
         "agent_configs": agent_configs,
+        "emitted_jury_discussion_count": 1,
     }

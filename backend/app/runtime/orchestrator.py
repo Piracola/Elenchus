@@ -160,6 +160,8 @@ class DebateOrchestrator:
         prev_history_len = len(initial_state.get("dialogue_history", []))
         prev_team_history_len = len(initial_state.get("team_dialogue_history", []))
         prev_jury_history_len = len(initial_state.get("jury_dialogue_history", []))
+        prev_emitted_team_count = int(initial_state.get("emitted_team_discussion_count", 0) or 0)
+        prev_emitted_jury_count = int(initial_state.get("emitted_jury_discussion_count", 0) or 0)
         initial_knowledge = initial_state.get("shared_knowledge", [])
         prev_knowledge_len = len(initial_knowledge) if isinstance(initial_knowledge, list) else 0
         emitted_judge_keys: set[tuple[int, str]] = set()
@@ -170,6 +172,12 @@ class DebateOrchestrator:
                 node_name = state_snapshot.get("last_executed_node", "")
                 final_state = dict(state_snapshot)
                 final_state["last_progress_at"] = datetime.now(timezone.utc).isoformat()
+                prev_emitted_team_count = int(
+                    final_state.get("emitted_team_discussion_count", prev_emitted_team_count) or 0
+                )
+                prev_emitted_jury_count = int(
+                    final_state.get("emitted_jury_discussion_count", prev_emitted_jury_count) or 0
+                )
                 prev_knowledge_len = await self._events.emit_memory_updates(
                     session_id,
                     final_state,
@@ -202,13 +210,13 @@ class DebateOrchestrator:
                         prev_team_history_len = await self._events.emit_team_discussion(
                             session_id,
                             final_state,
-                            prev_team_history_len,
+                            max(prev_team_history_len, prev_emitted_team_count),
                         )
                     elif node_name == "jury_discussion":
                         prev_jury_history_len = await self._events.emit_jury_discussion(
                             session_id,
                             final_state,
-                            prev_jury_history_len,
+                            max(prev_jury_history_len, prev_emitted_jury_count),
                         )
                     elif node_name == "tool_executor":
                         await self._events.emit_fact_check(session_id, final_state)
@@ -224,7 +232,7 @@ class DebateOrchestrator:
                         prev_jury_history_len = await self._events.emit_jury_discussion(
                             session_id,
                             final_state,
-                            prev_jury_history_len,
+                            max(prev_jury_history_len, prev_emitted_jury_count),
                         )
 
                     next_status_node = self._events.predict_next_status_node(

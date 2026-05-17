@@ -92,6 +92,8 @@ def normalize_resumable_snapshot(
     snapshot["current_team_summary"] = None
     snapshot["current_jury_discussion"] = []
     snapshot["current_jury_summary"] = None
+    snapshot["emitted_team_discussion_count"] = 0
+    snapshot["emitted_jury_discussion_count"] = 0
     snapshot["current_scores"] = {}
     snapshot["cumulative_scores"] = recompute_cumulative_scores(snapshot["judge_history"])
     snapshot["last_executed_node"] = "manage_context"
