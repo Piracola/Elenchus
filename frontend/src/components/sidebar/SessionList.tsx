@@ -16,9 +16,10 @@ import { toast } from '../../utils/chat/toast';
 
 interface SessionListProps {
     onCollapse: () => void;
+    fluidWidth?: boolean;
 }
 
-export default function SessionList({ onCollapse }: SessionListProps) {
+export default function SessionList({ onCollapse, fluidWidth = false }: SessionListProps) {
     const { sessions, currentSessionId } = useSessionListViewState();
     const { setSessions, setCurrentSession } = useSessionActions();
     const { hydrateRuntimeEvents } = useRuntimeActions();
@@ -106,9 +107,9 @@ export default function SessionList({ onCollapse }: SessionListProps) {
 
     return (
         <aside style={{
-            width: '320px',
-            minWidth: '280px',
-            maxWidth: '380px',
+            width: fluidWidth ? '100%' : '320px',
+            minWidth: fluidWidth ? 0 : '280px',
+            maxWidth: fluidWidth ? '100%' : '380px',
             display: 'flex',
             flexDirection: 'column',
             background: 'var(--bg-secondary)',

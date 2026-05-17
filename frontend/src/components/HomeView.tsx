@@ -259,18 +259,27 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
             className={advancedPanelVisible ? 'home-workbench home-workbench--advanced' : 'home-workbench'}
         >
             {isSidebarCollapsed && (
-                <SidebarExpandButton
-                    onClick={onExpandSidebar}
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.14 }}
                     style={{
                         position: 'absolute',
                         top: '20px',
                         left: '20px',
                         zIndex: 2,
-                        boxShadow: 'var(--shadow-sm)',
-                        backdropFilter: undefined,
                     }}
-                    className="home-sidebar-expand-button"
-                />
+                >
+                    <SidebarExpandButton
+                        onClick={onExpandSidebar}
+                        style={{
+                            boxShadow: 'var(--shadow-sm)',
+                            backdropFilter: undefined,
+                        }}
+                        className="home-sidebar-expand-button"
+                    />
+                </motion.div>
             )}
 
             <motion.div

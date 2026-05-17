@@ -5,6 +5,10 @@ import { useReferenceLibraryPanelState } from './referenceLibrary/useReferenceLi
 import {
     type ReferenceLibraryPanelProps,
 } from './referenceLibrary/shared';
+import {
+    HEADER_TOOLBAR_BUTTON_ACTIVE_STYLE,
+    HEADER_TOOLBAR_BUTTON_STYLE,
+} from './toolbarStyles';
 
 export default function ReferenceLibraryPanel({
     currentSessionId,
@@ -42,21 +46,12 @@ export default function ReferenceLibraryPanel({
             />
 
             <motion.button
-                whileHover={{ y: -1 }}
-                whileTap={{ scale: 0.98 }}
+                whileHover={{ opacity: 0.92 }}
+                whileTap={{ opacity: 0.82 }}
                 onClick={() => setIsOpen((current) => !current)}
                 style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '7px 12px',
-                    background: '#FFFFFF',
-                    color: '#1D1D1F',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 'var(--radius-full)',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                    fontWeight: 600,
+                    ...HEADER_TOOLBAR_BUTTON_STYLE,
+                    ...(isOpen ? HEADER_TOOLBAR_BUTTON_ACTIVE_STYLE : null),
                 }}
                 title="查看并上传参考资料"
             >

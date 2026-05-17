@@ -17,6 +17,16 @@ import { DEFAULT_SETTINGS_FONT_SIZE } from '../../config/display';
 
 export type SettingsTab = 'providers' | 'display' | 'logging' | 'search';
 
+const SETTINGS_TAB_TRANSITION = {
+    duration: 0.16,
+    ease: 'easeOut' as const,
+};
+
+const SETTINGS_SHELL_TRANSITION = {
+    duration: 0.18,
+    ease: 'easeOut' as const,
+};
+
 interface Props {
     isOpen: boolean;
     onClose: () => void;
@@ -70,6 +80,45 @@ export default function SettingsPanel({
         }
     };
 
+    const renderActiveTab = () => {
+        if (activeTab === 'providers') {
+            return isInDemoMode
+                ? <DemoModelsList />
+                : (
+                    <SettingsProvidersTab
+                        modelConfig={modelConfig}
+                        onClose={onClose}
+                    />
+                );
+        }
+
+        if (activeTab === 'display') {
+            return isInDemoMode
+                ? <DemoFeatureNotice feature="显示设置" />
+                : (
+                    <SettingsDisplayTab
+                        displaySettings={displaySettings}
+                        setDisplaySettings={setDisplaySettings}
+                    />
+                );
+        }
+
+        if (activeTab === 'logging') {
+            return isInDemoMode
+                ? <DemoFeatureNotice feature="日志级别" />
+                : (
+                    <SettingsLoggingTab
+                        logLevel={logLevel}
+                        onLogLevelChange={handleLogLevelChange}
+                    />
+                );
+        }
+
+        return isInDemoMode
+            ? <DemoModelsList />
+            : <SearchConfigTab />;
+    };
+
     const modalContent = (
         <AnimatePresence>
             {isOpen && (
@@ -78,24 +127,26 @@ export default function SettingsPanel({
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
+                        transition={SETTINGS_SHELL_TRANSITION}
                         onClick={onClose}
                         style={{
                             position: 'fixed',
                             inset: 0,
-                            background: 'rgba(0,0,0,0.5)',
+                            background: 'rgba(0,0,0,0.42)',
                             backdropFilter: 'blur(8px)',
                             zIndex: 1000,
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center'
+                            justifyContent: 'center',
+                            padding: '20px',
                         }}
                     >
                         <motion.div
                             onClick={(e) => e.stopPropagation()}
-                            initial={{ opacity: 0, scale: 0.9, y: 30 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.9, y: 30 }}
-                            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={SETTINGS_SHELL_TRANSITION}
                             style={{
                                 width: '92%',
                                 maxWidth: '1100px',
@@ -110,14 +161,21 @@ export default function SettingsPanel({
                             }}
                         >
                             {/* Sidebar */}
-                            <div style={{
-                                width: '200px',
-                                background: 'var(--bg-tertiary)',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                padding: '20px 14px',
-                                gap: '6px',
-                            }}>
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={SETTINGS_SHELL_TRANSITION}
+                                style={{
+                                    width: '200px',
+                                    background: 'var(--bg-tertiary)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    padding: '20px 14px',
+                                    gap: '6px',
+                                    borderRight: '1px solid var(--border-subtle)',
+                                }}
+                            >
                                 <div style={{
                                     padding: '0 8px 16px',
                                     borderBottom: '1px solid var(--border-subtle)',
@@ -134,7 +192,7 @@ export default function SettingsPanel({
                                 </div>
 
                                 <motion.div
-                                    whileHover={{ scale: 1.02 }}
+                                    whileHover={{ opacity: 0.92 }}
                                     onClick={() => setActiveTab('providers')}
                                     style={{
                                         padding: `${fonts.spacingSm} ${fonts.spacingSm}`,
@@ -152,7 +210,7 @@ export default function SettingsPanel({
                                 </motion.div>
 
                                 <motion.div
-                                    whileHover={{ scale: 1.02 }}
+                                    whileHover={{ opacity: 0.92 }}
                                     onClick={() => setActiveTab('display')}
                                     style={{
                                         padding: `${fonts.spacingSm} ${fonts.spacingSm}`,
@@ -170,7 +228,7 @@ export default function SettingsPanel({
                                 </motion.div>
 
                                 <motion.div
-                                    whileHover={{ scale: 1.02 }}
+                                    whileHover={{ opacity: 0.92 }}
                                     onClick={() => setActiveTab('logging')}
                                     style={{
                                         padding: `${fonts.spacingSm} ${fonts.spacingSm}`,
@@ -188,7 +246,7 @@ export default function SettingsPanel({
                                 </motion.div>
 
                                 <motion.div
-                                    whileHover={{ scale: 1.02 }}
+                                    whileHover={{ opacity: 0.92 }}
                                     onClick={() => setActiveTab('search')}
                                     style={{
                                         padding: `${fonts.spacingSm} ${fonts.spacingSm}`,
@@ -204,72 +262,77 @@ export default function SettingsPanel({
                                 >
                                     搜索引擎
                                 </motion.div>
-                            </div>
+                            </motion.div>
 
                             {/* Content Area */}
-                            <div style={{
-                                flex: 1,
-                                display: 'flex',
-                                flexDirection: 'column',
-                                position: 'relative',
-                                overflow: 'hidden',
-                                padding: '18px',
-                            }}>
-                                {activeTab !== 'providers' && <motion.button
-                                    whileHover={{ scale: 1.1, color: 'var(--text-primary)' }}
-                                    onClick={onClose}
-                                    style={{
-                                        position: 'absolute',
-                                        top: '12px',
-                                        right: '18px',
-                                        zIndex: 10,
-                                        background: 'var(--bg-tertiary)',
-                                        border: 'none',
-                                        color: 'var(--text-muted)',
-                                        cursor: 'pointer',
-                                        fontSize: '32px',
-                                        width: '36px',
-                                        height: '36px',
-                                        borderRadius: '50%',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        boxShadow: 'var(--shadow-xs)',
-                                    }}
-                                >
-                                    ×
-                                </motion.button>}
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={SETTINGS_SHELL_TRANSITION}
+                                style={{
+                                    flex: 1,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    position: 'relative',
+                                    overflow: 'hidden',
+                                    padding: '18px',
+                                    minWidth: 0,
+                                    background: 'var(--bg-secondary)',
+                                }}
+                            >
+                                <AnimatePresence initial={false}>
+                                    {activeTab !== 'providers' && (
+                                        <motion.button
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            exit={{ opacity: 0 }}
+                                            transition={{ duration: 0.14 }}
+                                            whileHover={{ color: 'var(--text-primary)' }}
+                                            whileTap={{ scale: 0.96 }}
+                                            onClick={onClose}
+                                            style={{
+                                                position: 'absolute',
+                                                top: '12px',
+                                                right: '18px',
+                                                zIndex: 10,
+                                                background: 'var(--bg-tertiary)',
+                                                border: '1px solid var(--border-subtle)',
+                                                color: 'var(--text-muted)',
+                                                cursor: 'pointer',
+                                                fontSize: '32px',
+                                                width: '38px',
+                                                height: '38px',
+                                                borderRadius: '50%',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                boxShadow: 'var(--shadow-xs)',
+                                            }}
+                                        >
+                                            ×
+                                        </motion.button>
+                                    )}
+                                </AnimatePresence>
 
-                                {activeTab === 'providers' && (
-                                    isInDemoMode
-                                        ? <DemoModelsList />
-                                        : <SettingsProvidersTab
-                                            modelConfig={modelConfig}
-                                            onClose={onClose}
-                                        />
-                                )}
-                                {activeTab === 'display' && (
-                                    isInDemoMode
-                                        ? <DemoFeatureNotice feature="显示设置" />
-                                        : <SettingsDisplayTab
-                                            displaySettings={displaySettings}
-                                            setDisplaySettings={setDisplaySettings}
-                                        />
-                                )}
-                                {activeTab === 'logging' && (
-                                    isInDemoMode
-                                        ? <DemoFeatureNotice feature="日志级别" />
-                                        : <SettingsLoggingTab
-                                            logLevel={logLevel}
-                                            onLogLevelChange={handleLogLevelChange}
-                                        />
-                                )}
-                                {activeTab === 'search' && (
-                                    isInDemoMode
-                                        ? <DemoModelsList />
-                                        : <SearchConfigTab />
-                                )}
-                            </div>
+                                <AnimatePresence mode="wait" initial={false}>
+                                    <motion.div
+                                        key={activeTab}
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        transition={SETTINGS_TAB_TRANSITION}
+                                        style={{
+                                            flex: 1,
+                                            minHeight: 0,
+                                            minWidth: 0,
+                                            overflow: 'hidden',
+                                        }}
+                                    >
+                                        {renderActiveTab()}
+                                    </motion.div>
+                                </AnimatePresence>
+                            </motion.div>
                         </motion.div>
                     </motion.div>
                 </>

@@ -9,6 +9,12 @@ import ReferenceLibraryPanel from './ReferenceLibraryPanel';
 import RuntimeInspectorDock from './RuntimeInspectorDock';
 import SidebarExpandButton from '../shared/SidebarExpandButton';
 import DebaterSettingsModal from './DebaterSettingsModal';
+import {
+  HEADER_TOOLBAR_BUTTON_ACTIVE_STYLE,
+  HEADER_TOOLBAR_BUTTON_STYLE,
+  HEADER_TOOLBAR_PANEL_STYLE,
+  HEADER_TOOLBAR_PRIMARY_BUTTON_STYLE,
+} from './toolbarStyles';
 
 const MARKDOWN_EXPORT_OPTIONS: { value: MarkdownExportCategory; label: string }[] = [
   { value: 'group_discussion', label: '组内讨论' },
@@ -59,11 +65,44 @@ export default function ChatHeaderOverlay({
   const [showDebaterSettings, setShowDebaterSettings] = useState(false);
   const [markdownExportCategories, setMarkdownExportCategories] = useState<MarkdownExportCategory[]>([]);
   const debaterSettingsButtonRef = useRef<HTMLButtonElement>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const exportButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setShowExportMenu(false);
     setMarkdownExportCategories([]);
   }, [currentSessionId]);
+
+  useEffect(() => {
+    if (!showExportMenu) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (exportButtonRef.current?.contains(target) || exportMenuRef.current?.contains(target)) {
+        return;
+      }
+      setShowExportMenu(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowExportMenu(false);
+      }
+    };
+
+    const timerId = window.setTimeout(() => {
+      document.addEventListener('mousedown', handlePointerDown);
+      document.addEventListener('keydown', handleKeyDown);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timerId);
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showExportMenu]);
 
   const toggleMarkdownExportCategory = (category: MarkdownExportCategory) => {
     setMarkdownExportCategories((current) => (
@@ -74,9 +113,7 @@ export default function ChatHeaderOverlay({
   };
 
   const handleExport = async (format: 'markdown' | 'json' | 'html') => {
-    console.log('[export] handleExport called', { format, hasCurrentSession, currentSessionId, exportingFormat });
     if (!hasCurrentSession || exportingFormat || !currentSessionId) {
-      console.warn('[export] early return — guard fired');
       return;
     }
 
@@ -85,7 +122,6 @@ export default function ChatHeaderOverlay({
 
     setExportingFormat(format);
     try {
-      console.log('[export] calling API...', format);
       if (format === 'markdown') {
         await api.sessions.exportMarkdown(currentSessionId, currentTopic, normalizedMarkdownCategories);
         toast('已导出 Markdown 辩论记录', 'success');
@@ -96,10 +132,8 @@ export default function ChatHeaderOverlay({
         await api.sessions.exportJson(currentSessionId, currentTopic);
         toast('已导出 JSON 辩论数据', 'success');
       }
-      console.log('[export] success');
       setShowExportMenu(false);
     } catch (error) {
-      console.error('[export] FAILED:', error);
       toast(error instanceof Error ? error.message : '导出失败', 'error');
     } finally {
       setExportingFormat(null);
@@ -223,21 +257,11 @@ export default function ChatHeaderOverlay({
           >
               {transcriptCollapseSummary.hasAgentRows && (
                 <motion.button
-                  whileHover={{ y: -1 }}
-                  whileTap={{ scale: 0.98 }}
+                  whileHover={{ opacity: 0.92 }}
+                  whileTap={{ opacity: 0.82 }}
                   onClick={onToggleAllAgentMessages}
                   style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '7px 12px',
-                    background: '#FFFFFF',
-                    color: '#1D1D1F',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 'var(--radius-full)',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                    fontWeight: 600,
+                    ...HEADER_TOOLBAR_BUTTON_STYLE,
                   }}
                   title={bulkCollapseLabel}
                 >
@@ -254,21 +278,12 @@ export default function ChatHeaderOverlay({
 
               <motion.button
                 ref={debaterSettingsButtonRef}
-                whileHover={{ y: -1 }}
-                whileTap={{ scale: 0.98 }}
+                whileHover={{ opacity: 0.92 }}
+                whileTap={{ opacity: 0.82 }}
                 onClick={() => setShowDebaterSettings((current) => !current)}
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '7px 12px',
-                  background: '#FFFFFF',
-                  color: '#1D1D1F',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-full)',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: 600,
+                  ...HEADER_TOOLBAR_BUTTON_STYLE,
+                  ...(showDebaterSettings ? HEADER_TOOLBAR_BUTTON_ACTIVE_STYLE : null),
                 }}
                 title="辩手设置"
               >
@@ -279,22 +294,15 @@ export default function ChatHeaderOverlay({
               {/* 导出按钮和下拉菜单 */}
               <div style={{ position: 'relative' }}>
                 <motion.button
-                  whileHover={{ y: -1 }}
-                  whileTap={{ scale: 0.98 }}
+                  ref={exportButtonRef}
+                  whileHover={{ opacity: 0.92 }}
+                  whileTap={{ opacity: 0.82 }}
                   onClick={() => setShowExportMenu((current) => !current)}
                   disabled={Boolean(exportingFormat)}
                   style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '7px 12px',
-                    background: '#FFFFFF',
-                    color: '#1D1D1F',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 'var(--radius-full)',
-                    cursor: exportingFormat ? 'not-allowed' : 'pointer',
-                    fontSize: '12px',
-                    fontWeight: 600,
+                    ...HEADER_TOOLBAR_BUTTON_STYLE,
+                    ...(showExportMenu ? HEADER_TOOLBAR_BUTTON_ACTIVE_STYLE : null),
+                    cursor: exportingFormat ? 'not-allowed' : HEADER_TOOLBAR_BUTTON_STYLE.cursor,
                     opacity: exportingFormat ? 0.7 : 1,
                   }}
                   title="导出辩论记录"
@@ -312,16 +320,14 @@ export default function ChatHeaderOverlay({
 
                 {showExportMenu && (
                   <div
+                    ref={exportMenuRef}
                     style={{
                       position: 'absolute',
                       top: 'calc(100% + 8px)',
                       left: 0,
                       minWidth: '240px',
                       padding: '14px',
-                      borderRadius: 'var(--radius-xl)',
-                      background: 'var(--bg-card)',
-                      border: '1px solid var(--border-subtle)',
-                      boxShadow: '0 10px 28px rgba(15, 23, 42, 0.14)',
+                      ...HEADER_TOOLBAR_PANEL_STYLE,
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '12px',
@@ -351,28 +357,19 @@ export default function ChatHeaderOverlay({
                         Markdown
                       </span>
                       <motion.button
-                        whileHover={{ y: -1, opacity: 0.9 }}
-                        whileTap={{ scale: 0.96 }}
+                        whileHover={{ opacity: 0.9 }}
+                        whileTap={{ opacity: 0.8 }}
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          console.log('[export] Markdown export button pressed');
                           setShowExportMenu(false);
                           void handleExport('markdown');
                         }}
                         disabled={Boolean(exportingFormat)}
                         style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
+                          ...HEADER_TOOLBAR_PRIMARY_BUTTON_STYLE,
                           padding: '5px 10px',
-                          background: 'var(--text-primary)',
-                          color: 'var(--bg-primary)',
-                          border: 'none',
-                          borderRadius: 'var(--radius-md)',
-                          cursor: exportingFormat ? 'not-allowed' : 'pointer',
                           fontSize: '11px',
-                          fontWeight: 700,
                           opacity: exportingFormat ? 0.65 : 1,
                         }}
                       >
@@ -427,25 +424,17 @@ export default function ChatHeaderOverlay({
                         HTML 网页
                       </span>
                       <motion.button
-                        whileHover={{ y: -1 }}
-                        whileTap={{ scale: 0.98 }}
+                        whileHover={{ opacity: 0.9 }}
+                        whileTap={{ opacity: 0.8 }}
                         onClick={() => {
                           void handleExport('html');
                           setShowExportMenu(false);
                         }}
                         disabled={Boolean(exportingFormat)}
                         style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
+                          ...HEADER_TOOLBAR_PRIMARY_BUTTON_STYLE,
                           padding: '5px 10px',
-                          background: 'var(--text-primary)',
-                          color: 'var(--bg-primary)',
-                          border: 'none',
-                          borderRadius: 'var(--radius-md)',
-                          cursor: exportingFormat ? 'not-allowed' : 'pointer',
                           fontSize: '11px',
-                          fontWeight: 700,
                           opacity: exportingFormat ? 0.65 : 1,
                         }}
                       >
@@ -466,25 +455,17 @@ export default function ChatHeaderOverlay({
                       JSON
                     </span>
                     <motion.button
-                      whileHover={{ y: -1 }}
-                      whileTap={{ scale: 0.98 }}
+                      whileHover={{ opacity: 0.9 }}
+                      whileTap={{ opacity: 0.8 }}
                       onClick={() => {
                         void handleExport('json');
                         setShowExportMenu(false);
                       }}
                       disabled={Boolean(exportingFormat)}
                       style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
+                        ...HEADER_TOOLBAR_PRIMARY_BUTTON_STYLE,
                         padding: '5px 10px',
-                        background: 'var(--text-primary)',
-                        color: 'var(--bg-primary)',
-                        border: 'none',
-                        borderRadius: 'var(--radius-md)',
-                        cursor: exportingFormat ? 'not-allowed' : 'pointer',
                         fontSize: '11px',
-                        fontWeight: 700,
                         opacity: exportingFormat ? 0.65 : 1,
                       }}
                     >
@@ -498,16 +479,15 @@ export default function ChatHeaderOverlay({
                 )}
               </div>
 
+              {currentSessionId && <RuntimeInspectorDock currentSessionId={currentSessionId} />}
+              <div style={{ marginLeft: 'auto' }} />
+
               <span
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
+                  ...HEADER_TOOLBAR_BUTTON_STYLE,
                   gap: '8px',
-                  padding: '5px 12px',
-                  background: '#FFFFFF',
-                  color: '#1D1D1F',
-                  borderRadius: 'var(--radius-full)',
-                  border: '1px solid var(--border-subtle)',
+                  cursor: 'default',
+                  minHeight: '32px',
                 }}
               >
                 <span
@@ -527,8 +507,6 @@ export default function ChatHeaderOverlay({
                   {currentTurn} / {maxTurns} 轮
                 </span>
               </span>
-
-            {currentSessionId && <RuntimeInspectorDock currentSessionId={currentSessionId} />}
           </div>
         )}
       </div>

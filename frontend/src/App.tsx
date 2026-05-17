@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import ChatPanel from './components/ChatPanel';
 import HomeView from './components/HomeView';
 import SessionList from './components/sidebar/SessionList';
@@ -166,36 +167,62 @@ function App() {
               overflow: 'hidden',
             }}
           >
-            {!isSidebarCollapsed && (
-              isNarrowViewport ? (
-                <>
-                  <div
-                    onClick={() => setIsSidebarCollapsed(true)}
+            <AnimatePresence initial={false}>
+              {!isSidebarCollapsed && (
+                isNarrowViewport ? (
+                  <>
+                    <motion.div
+                      key="mobile-sidebar-backdrop"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.16 }}
+                      onClick={() => setIsSidebarCollapsed(true)}
+                      style={{
+                        position: 'fixed',
+                        inset: 0,
+                        background: 'rgba(0, 0, 0, 0.28)',
+                        zIndex: 40,
+                      }}
+                    />
+                    <motion.div
+                      key="mobile-sidebar-sheet"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.16 }}
+                      style={{
+                        position: 'fixed',
+                        top: 0,
+                        bottom: 0,
+                        left: 0,
+                        zIndex: 50,
+                        width: 'min(320px, 86vw)',
+                        maxWidth: '100vw',
+                      }}
+                    >
+                      <SessionList onCollapse={() => setIsSidebarCollapsed(true)} fluidWidth />
+                    </motion.div>
+                  </>
+                ) : (
+                  <motion.div
+                    key="desktop-sidebar"
+                    initial={{ width: 0, opacity: 0 }}
+                    animate={{ width: 320, opacity: 1 }}
+                    exit={{ width: 0, opacity: 0 }}
+                    transition={{ duration: 0.16 }}
                     style={{
-                      position: 'fixed',
-                      inset: 0,
-                      background: 'rgba(0, 0, 0, 0.28)',
-                      zIndex: 40,
-                    }}
-                  />
-                  <div
-                    style={{
-                      position: 'fixed',
-                      top: 0,
-                      bottom: 0,
-                      left: 0,
-                      zIndex: 50,
-                      width: 'min(320px, 86vw)',
-                      maxWidth: '100vw',
+                      flexShrink: 0,
+                      minWidth: 0,
+                      height: '100%',
+                      overflow: 'hidden',
                     }}
                   >
-                    <SessionList onCollapse={() => setIsSidebarCollapsed(true)} />
-                  </div>
-                </>
-              ) : (
-                <SessionList onCollapse={() => setIsSidebarCollapsed(true)} />
-              )
-            )}
+                    <SessionList onCollapse={() => setIsSidebarCollapsed(true)} fluidWidth />
+                  </motion.div>
+                )
+              )}
+            </AnimatePresence>
 
             <main
               style={{

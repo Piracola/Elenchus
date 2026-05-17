@@ -16,13 +16,18 @@ import {
     writeStoredRuntimeInspectorPanelSize,
     readStoredRuntimeInspectorPanelSizes,
 } from '../../utils/inspector/runtimeInspectorDock';
+import {
+    HEADER_TOOLBAR_BUTTON_ACTIVE_STYLE,
+    HEADER_TOOLBAR_BUTTON_STYLE,
+    HEADER_TOOLBAR_PANEL_STYLE,
+    HEADER_TOOLBAR_SECONDARY_BUTTON_STYLE,
+} from './toolbarStyles';
 
 type RuntimeInspectorDockProps = {
     currentSessionId: string | null;
 };
 
 type RuntimeInspectorPanelPlacement = {
-    panel: RuntimeInspectorPanelId;
     top: number;
     left: number;
     width: number;
@@ -42,12 +47,6 @@ const PANEL_DESCRIPTIONS: Record<RuntimeInspectorPanelId, string> = {
     timeline: '查看事件顺序、状态变化和回放详情。',
     graph: '查看当前节点、路径切换和流程流向。',
     memory: '查看记忆写入、图谱关系和时间推进。',
-};
-
-const PANEL_ACCENTS: Record<RuntimeInspectorPanelId, string> = {
-    timeline: 'var(--accent-indigo)',
-    graph: 'var(--accent-cyan)',
-    memory: 'var(--accent-amber)',
 };
 
 const PANEL_ICONS = {
@@ -102,7 +101,8 @@ export default function RuntimeInspectorDock({
         replayEnabled,
         isDocumentVisible,
     } = useRuntimeViewState();
-    const [activePanel, setActivePanel] = useState<RuntimeInspectorPanelId | null>(null);
+    const [isOpen, setIsOpen] = useState(false);
+    const [activePanel, setActivePanel] = useState<RuntimeInspectorPanelId>('timeline');
     const [panelSizes, setPanelSizes] = useState<Record<RuntimeInspectorPanelId, RuntimeInspectorPanelSize>>(buildInitialPanelSizes);
     const [panelPlacement, setPanelPlacement] = useState<RuntimeInspectorPanelPlacement | null>(null);
     const panelSurfaceRef = useRef<HTMLDivElement | null>(null);
@@ -153,11 +153,7 @@ export default function RuntimeInspectorDock({
         });
     }, []);
 
-    const persistCurrentPanelSize = useCallback((panel: RuntimeInspectorPanelId | null) => {
-        if (!panel) {
-            return;
-        }
-
+    const persistCurrentPanelSize = useCallback((panel: RuntimeInspectorPanelId) => {
         const panelElement = panelSurfaceRef.current;
         if (!panelElement) {
             return;
@@ -170,33 +166,43 @@ export default function RuntimeInspectorDock({
         });
     }, [commitPanelSize]);
 
+    const closePanel = useCallback(() => {
+        persistCurrentPanelSize(activePanel);
+        setPanelPlacement(null);
+        setIsOpen(false);
+    }, [activePanel, persistCurrentPanelSize]);
+
     const handlePanelToggle = useCallback((panel: RuntimeInspectorPanelId) => {
-        if (activePanel) {
-            persistCurrentPanelSize(activePanel);
+        if (!isOpen) {
+            setActivePanel(panel);
+            setPanelPlacement(null);
+            setIsOpen(true);
+            return;
         }
 
-        setPanelPlacement(null);
-        setActivePanel(activePanel === panel ? null : panel);
-    }, [activePanel, persistCurrentPanelSize]);
+        persistCurrentPanelSize(activePanel);
 
-    const handleCloseActivePanel = useCallback(() => {
-        if (activePanel) {
-            persistCurrentPanelSize(activePanel);
+        if (activePanel === panel) {
+            setPanelPlacement(null);
+            setIsOpen(false);
+            return;
         }
 
+        setActivePanel(panel);
         setPanelPlacement(null);
-        setActivePanel(null);
-    }, [activePanel, persistCurrentPanelSize]);
+    }, [activePanel, isOpen, persistCurrentPanelSize]);
 
     useEffect(() => {
-        setActivePanel(null);
+        setActivePanel('timeline');
+        setIsOpen(false);
         setPanelPlacement(null);
     }, [currentSessionId]);
 
     useEffect(() => {
         const handleReset = () => {
             setPanelSizes(buildInitialPanelSizes());
-            setActivePanel(null);
+            setActivePanel('timeline');
+            setIsOpen(false);
             setPanelPlacement(null);
         };
 
@@ -205,7 +211,7 @@ export default function RuntimeInspectorDock({
     }, []);
 
     useEffect(() => {
-        if (!activePanel || typeof ResizeObserver === 'undefined') {
+        if (!isOpen || typeof ResizeObserver === 'undefined') {
             return;
         }
 
@@ -225,7 +231,7 @@ export default function RuntimeInspectorDock({
 
         observer.observe(panelElement);
         return () => observer.disconnect();
-    }, [activePanel, commitPanelSize]);
+    }, [activePanel, commitPanelSize, isOpen]);
 
     const panelSummaries = useMemo<Record<RuntimeInspectorPanelId, string>>(() => ({
         timeline: replayEnabled ? `回放中 · ${runtimeEventCount} 条事件` : `${runtimeEventCount} 条事件`,
@@ -236,10 +242,10 @@ export default function RuntimeInspectorDock({
         memory: replayEnabled ? `${memoryWriteCount} 条记忆写入 · 回放` : `${memoryWriteCount} 条记忆写入`,
     }), [currentNode, debateMode, memoryWriteCount, replayEnabled, runtimeEventCount]);
 
-    const activePanelSize = activePanel ? panelSizes[activePanel] : null;
+    const activePanelSize = panelSizes[activePanel];
 
     useLayoutEffect(() => {
-        if (!activePanel || !activePanelSize || typeof window === 'undefined') {
+        if (!isOpen || !activePanelSize || typeof window === 'undefined') {
             setPanelPlacement(null);
             panelViewportBoundsRef.current = null;
             return;
@@ -277,7 +283,6 @@ export default function RuntimeInspectorDock({
 
             panelViewportBoundsRef.current = { availableWidth, availableHeight };
             setPanelPlacement({
-                panel: activePanel,
                 top: rect.bottom + triggerGap,
                 left,
                 width,
@@ -295,22 +300,18 @@ export default function RuntimeInspectorDock({
             return () => window.removeEventListener('resize', updatePlacement);
         }
 
-        const triggerElement = triggerRefs.current[activePanel];
-        if (!triggerElement) {
-            return () => window.removeEventListener('resize', updatePlacement);
-        }
-
+        const observedTriggers = Object.values(triggerRefs.current).filter((node): node is HTMLDivElement => Boolean(node));
         const observer = new ResizeObserver(() => updatePlacement());
-        observer.observe(triggerElement);
+        observedTriggers.forEach((node) => observer.observe(node));
 
         return () => {
             observer.disconnect();
             window.removeEventListener('resize', updatePlacement);
         };
-    }, [activePanel, activePanelSize]);
+    }, [activePanel, activePanelSize, isOpen]);
 
     useEffect(() => {
-        if (!activePanel) {
+        if (!isOpen) {
             return;
         }
 
@@ -325,10 +326,10 @@ export default function RuntimeInspectorDock({
             window.removeEventListener('mouseup', handlePointerUp);
             window.removeEventListener('touchend', handlePointerUp);
         };
-    }, [activePanel, persistCurrentPanelSize]);
+    }, [activePanel, isOpen, persistCurrentPanelSize]);
 
     useEffect(() => {
-        if (!activePanel) {
+        if (!isOpen) {
             return;
         }
 
@@ -338,11 +339,11 @@ export default function RuntimeInspectorDock({
                 return;
             }
 
-            if (triggerRefs.current[activePanel]?.contains(target)) {
+            if (Object.values(triggerRefs.current).some((trigger) => trigger?.contains(target))) {
                 return;
             }
 
-            setActivePanel(null);
+            setIsOpen(false);
         };
 
         document.addEventListener('mousedown', handlePointerDown);
@@ -350,22 +351,22 @@ export default function RuntimeInspectorDock({
         return () => {
             document.removeEventListener('mousedown', handlePointerDown);
         };
-    }, [activePanel]);
+    }, [isOpen]);
 
     useEffect(() => {
-        if (!activePanel) {
+        if (!isOpen) {
             return;
         }
 
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
-                setActivePanel(null);
+                setIsOpen(false);
             }
         };
 
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [activePanel]);
+    }, [isOpen]);
 
     return (
         <>
@@ -379,8 +380,7 @@ export default function RuntimeInspectorDock({
                 }}
             >
                 {(['timeline', 'graph', 'memory'] as RuntimeInspectorPanelId[]).map((panel) => {
-                    const active = activePanel === panel;
-                    const accent = PANEL_ACCENTS[panel];
+                    const active = isOpen && activePanel === panel;
                     const Icon = PANEL_ICONS[panel];
 
                     return (
@@ -396,23 +396,13 @@ export default function RuntimeInspectorDock({
                         >
                             <motion.button
                                 type="button"
-                                whileHover={{ y: -1 }}
-                                whileTap={{ scale: 0.98 }}
+                                whileHover={{ opacity: 0.92 }}
+                                whileTap={{ opacity: 0.82 }}
                                 onClick={() => handlePanelToggle(panel)}
                                 title={PANEL_LABELS[panel]}
                                 style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    padding: '7px 12px',
-                                    background: active ? `${accent}14` : '#FFFFFF',
-                                    color: active ? accent : '#1D1D1F',
-                                    border: active ? `1px solid ${accent}33` : '1px solid var(--border-subtle)',
-                                    borderRadius: 'var(--radius-full)',
-                                    cursor: 'pointer',
-                                    fontSize: '12px',
-                                    fontWeight: 600,
-                                    boxShadow: active ? '0 8px 22px rgba(15, 23, 42, 0.08)' : 'none',
+                                    ...HEADER_TOOLBAR_BUTTON_STYLE,
+                                    ...(active ? HEADER_TOOLBAR_BUTTON_ACTIVE_STYLE : null),
                                 }}
                             >
                                 <Icon size={14} />
@@ -425,13 +415,13 @@ export default function RuntimeInspectorDock({
 
             {typeof document !== 'undefined' && createPortal(
                 <AnimatePresence initial={false}>
-                    {activePanel && activePanelSize && panelPlacement?.panel === activePanel && (
+                    {isOpen && panelPlacement && (
                         <motion.div
-                            key={activePanel}
-                            initial={{ opacity: 0, y: -8, scale: 0.985 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -6, scale: 0.985 }}
-                            transition={{ duration: 0.2 }}
+                            key="runtime-inspector-panel"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.16 }}
                             style={{
                                 position: 'fixed',
                                 top: `${panelPlacement.top}px`,
@@ -443,11 +433,7 @@ export default function RuntimeInspectorDock({
                                 resize: 'both',
                                 overflow: 'hidden',
                                 boxSizing: 'border-box',
-                                border: '1px solid var(--border-subtle)',
-                                borderRadius: 'var(--radius-xl)',
-                                background: 'rgba(255, 255, 255, 0.96)',
-                                boxShadow: '0 18px 42px rgba(15, 23, 42, 0.12), 0 4px 12px rgba(15, 23, 42, 0.06)',
-                                backdropFilter: 'blur(14px)',
+                                ...HEADER_TOOLBAR_PANEL_STYLE,
                                 display: 'flex',
                                 flexDirection: 'column',
                                 transformOrigin: `${panelPlacement.anchorOffset}px top`,
@@ -465,7 +451,7 @@ export default function RuntimeInspectorDock({
                                     alignItems: 'flex-start',
                                     justifyContent: 'space-between',
                                     gap: '12px',
-                                    background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.92))',
+                                    background: 'var(--bg-card)',
                                 }}
                             >
                                 <div style={{ minWidth: 0 }}>
@@ -481,7 +467,7 @@ export default function RuntimeInspectorDock({
                                     >
                                         {(() => {
                                             const Icon = PANEL_ICONS[activePanel];
-                                            return <Icon size={15} color={PANEL_ACCENTS[activePanel]} />;
+                                            return <Icon size={15} />;
                                         })()}
                                         {PANEL_LABELS[activePanel]}
                                     </div>
@@ -499,7 +485,7 @@ export default function RuntimeInspectorDock({
                                         style={{
                                             marginTop: '6px',
                                             fontSize: '11px',
-                                            color: PANEL_ACCENTS[activePanel],
+                                            color: 'var(--text-secondary)',
                                             fontWeight: 600,
                                         }}
                                     >
@@ -509,24 +495,53 @@ export default function RuntimeInspectorDock({
 
                                 <button
                                     type="button"
-                                    onClick={handleCloseActivePanel}
+                                    onClick={closePanel}
                                     style={{
-                                        border: '1px solid var(--border-subtle)',
-                                        borderRadius: '999px',
-                                        background: 'var(--bg-secondary)',
-                                        color: 'var(--text-secondary)',
+                                        ...HEADER_TOOLBAR_SECONDARY_BUTTON_STYLE,
                                         width: '30px',
                                         height: '30px',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        cursor: 'pointer',
+                                        padding: 0,
                                         flexShrink: 0,
                                     }}
                                     aria-label="关闭运行观察器面板"
                                 >
                                     <X size={14} />
                                 </button>
+                            </div>
+
+                            <div
+                                style={{
+                                    padding: '10px 12px 0',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    flexWrap: 'wrap',
+                                }}
+                                role="tablist"
+                                aria-label="运行观察器标签"
+                            >
+                                {(['timeline', 'graph', 'memory'] as RuntimeInspectorPanelId[]).map((panel) => {
+                                    const selected = activePanel === panel;
+                                    const Icon = PANEL_ICONS[panel];
+
+                                    return (
+                                        <button
+                                            key={panel}
+                                            type="button"
+                                            onClick={() => setActivePanel(panel)}
+                                            role="tab"
+                                            aria-selected={selected}
+                                            aria-label={`${PANEL_LABELS[panel]}标签`}
+                                            style={{
+                                                ...HEADER_TOOLBAR_BUTTON_STYLE,
+                                                ...(selected ? HEADER_TOOLBAR_BUTTON_ACTIVE_STYLE : null),
+                                            }}
+                                        >
+                                            <Icon size={13} />
+                                            {PANEL_LABELS[panel]}
+                                        </button>
+                                    );
+                                })}
                             </div>
 
                             <div
@@ -547,7 +562,7 @@ export default function RuntimeInspectorDock({
                                     overflow: 'auto',
                                     display: 'flex',
                                     flexDirection: 'column',
-                                    background: 'linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(248, 250, 252, 0.82))',
+                                    background: 'var(--bg-secondary)',
                                 }}
                             >
                                 {!isDocumentVisible && (

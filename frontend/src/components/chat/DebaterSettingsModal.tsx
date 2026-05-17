@@ -12,6 +12,11 @@ import { useSessionActions, useSessionViewState } from '../../hooks/useDebateVie
 import { toast } from '../../utils/chat/toast';
 import { AGENT_ROLES } from '../../utils/agent/agentConfigs';
 import AgentConfigPanel from '../shared/AgentConfigPanel';
+import {
+    HEADER_TOOLBAR_PANEL_STYLE,
+    HEADER_TOOLBAR_PRIMARY_BUTTON_STYLE,
+    HEADER_TOOLBAR_SECONDARY_BUTTON_STYLE,
+} from './toolbarStyles';
 
 interface DebaterSettingsModalProps {
     isOpen: boolean;
@@ -205,17 +210,14 @@ export default function DebaterSettingsModal({
             {isOpen && (
                 <motion.div
                     ref={popoverRef}
-                    initial={{ opacity: 0, y: -6, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
                     transition={{ duration: 0.16, ease: 'easeOut' }}
                     style={{
                         ...popoverStyle,
                         padding: '14px',
-                        borderRadius: 'var(--radius-xl)',
-                        background: 'var(--bg-card)',
-                        border: '1px solid var(--border-subtle)',
-                        boxShadow: '0 10px 28px rgba(15, 23, 42, 0.14)',
+                        ...HEADER_TOOLBAR_PANEL_STYLE,
                         display: 'flex',
                         flexDirection: 'column',
                         gap: '12px',
@@ -235,17 +237,11 @@ export default function DebaterSettingsModal({
                             type="button"
                             onClick={onClose}
                             style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
+                                ...HEADER_TOOLBAR_SECONDARY_BUTTON_STYLE,
                                 width: '32px',
                                 height: '32px',
-                                borderRadius: 'var(--radius-md)',
-                                border: '1px solid var(--border-subtle)',
-                                background: 'var(--bg-tertiary)',
-                                color: 'var(--text-secondary)',
-                                cursor: 'pointer',
                                 flexShrink: 0,
+                                padding: 0,
                             }}
                             title="关闭辩手设置"
                         >
@@ -295,17 +291,7 @@ export default function DebaterSettingsModal({
                             }}
                             disabled={agentConfigsLoading || isSaving}
                             style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                border: '1px solid var(--border-subtle)',
-                                background: 'var(--bg-secondary)',
-                                color: 'var(--text-secondary)',
-                                borderRadius: 'var(--radius-md)',
-                                padding: '8px 12px',
-                                cursor: agentConfigsLoading || isSaving ? 'not-allowed' : 'pointer',
-                                fontSize: '12px',
-                                fontWeight: 600,
+                                ...HEADER_TOOLBAR_SECONDARY_BUTTON_STYLE,
                                 opacity: agentConfigsLoading || isSaving ? 0.65 : 1,
                             }}
                         >
@@ -319,18 +305,7 @@ export default function DebaterSettingsModal({
                             }}
                             disabled={isSaving || agentConfigsLoading}
                             style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '6px',
-                                border: 'none',
-                                background: 'var(--text-primary)',
-                                color: 'var(--bg-primary)',
-                                borderRadius: 'var(--radius-md)',
-                                padding: '8px 12px',
-                                cursor: isSaving || agentConfigsLoading ? 'not-allowed' : 'pointer',
-                                fontSize: '12px',
-                                fontWeight: 700,
+                                ...HEADER_TOOLBAR_PRIMARY_BUTTON_STYLE,
                                 opacity: isSaving || agentConfigsLoading ? 0.65 : 1,
                             }}
                         >

@@ -2,6 +2,11 @@ import { motion } from 'framer-motion';
 import { FileUp, RefreshCw, Trash2 } from 'lucide-react';
 import type { ReferenceLibraryResponse } from '../../../types';
 import { countEntriesByDocumentId, formatSize, getStatusMeta } from './shared';
+import {
+    HEADER_TOOLBAR_PANEL_STYLE,
+    HEADER_TOOLBAR_PRIMARY_BUTTON_STYLE,
+    HEADER_TOOLBAR_SECONDARY_BUTTON_STYLE,
+} from '../toolbarStyles';
 
 type ReferenceLibraryPopoverProps = {
     currentSessionId: string;
@@ -46,12 +51,12 @@ export function ReferenceLibraryPopover({
                 left: 0,
                 width: 'min(360px, calc(100vw - 64px))',
                 padding: '14px',
-                borderRadius: 'var(--radius-xl)',
                 background: isSophistryMode ? 'var(--mode-sophistry-card)' : 'var(--bg-card)',
                 border: isSophistryMode
                     ? '1px solid var(--mode-sophistry-border)'
                     : '1px solid var(--border-subtle)',
-                boxShadow: '0 10px 28px rgba(15, 23, 42, 0.14)',
+                boxShadow: HEADER_TOOLBAR_PANEL_STYLE.boxShadow,
+                borderRadius: HEADER_TOOLBAR_PANEL_STYLE.borderRadius,
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '12px',
@@ -74,23 +79,13 @@ export function ReferenceLibraryPopover({
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <motion.button
-                    whileHover={{ y: -1 }}
-                    whileTap={{ scale: 0.98 }}
+                    whileHover={{ opacity: 0.92 }}
+                    whileTap={{ opacity: 0.82 }}
                     onClick={onUploadClick}
                     disabled={isUploading || Boolean(deletingDocumentId)}
                     style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
+                        ...HEADER_TOOLBAR_PRIMARY_BUTTON_STYLE,
                         padding: '9px 12px',
-                        background: 'var(--text-primary)',
-                        color: 'var(--bg-primary)',
-                        border: 'none',
-                        borderRadius: 'var(--radius-md)',
-                        cursor: isUploading || deletingDocumentId ? 'not-allowed' : 'pointer',
-                        fontSize: '12px',
-                        fontWeight: 700,
                         opacity: isUploading || deletingDocumentId ? 0.65 : 1,
                         flex: 1,
                     }}
@@ -100,23 +95,17 @@ export function ReferenceLibraryPopover({
                 </motion.button>
 
                 <motion.button
-                    whileHover={{ y: -1 }}
-                    whileTap={{ scale: 0.98 }}
+                    whileHover={{ opacity: 0.92 }}
+                    whileTap={{ opacity: 0.82 }}
                     onClick={() => onRefresh(currentSessionId)}
                     disabled={isLoading || isUploading}
                     style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
+                        ...HEADER_TOOLBAR_SECONDARY_BUTTON_STYLE,
                         width: '36px',
                         height: '36px',
-                        background: 'var(--bg-tertiary)',
-                        color: 'var(--text-secondary)',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 'var(--radius-md)',
-                        cursor: isLoading || isUploading ? 'not-allowed' : 'pointer',
                         opacity: isLoading || isUploading ? 0.65 : 1,
                         flexShrink: 0,
+                        padding: 0,
                     }}
                     title="刷新参考资料列表"
                 >
@@ -240,23 +229,18 @@ export function ReferenceLibraryPopover({
                                 </div>
 
                                 <motion.button
-                                    whileHover={{ y: -1 }}
-                                    whileTap={{ scale: 0.98 }}
+                                    whileHover={{ opacity: 0.92 }}
+                                    whileTap={{ opacity: 0.82 }}
                                     onClick={() => onDeleteDocument(document.id, document.filename)}
                                     disabled={isDeleting || isUploading}
                                     style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
+                                        ...HEADER_TOOLBAR_SECONDARY_BUTTON_STYLE,
                                         width: '32px',
                                         height: '32px',
-                                        background: 'transparent',
-                                        color: 'var(--text-muted)',
-                                        border: '1px solid var(--border-subtle)',
-                                        borderRadius: 'var(--radius-md)',
-                                        cursor: isDeleting || isUploading ? 'not-allowed' : 'pointer',
                                         opacity: isDeleting || isUploading ? 0.55 : 1,
                                         flexShrink: 0,
+                                        padding: 0,
+                                        background: 'transparent',
                                     }}
                                     title={isDeleting ? '删除中...' : '删除参考资料'}
                                 >
