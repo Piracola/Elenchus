@@ -49,10 +49,9 @@
 
 ## 4. 特性实现文档
 
-- [会话级资料池实现说明](./session-reference-library-implementation.md) — **资料池当前实现说明**
 - [诡辩实验模式说明](./sophistry-experiment-mode-design.md) — 当前模式行为与边界
 - [诡辩实验模式谬误库](./sophistry-fallacy-catalog.md) — 模式使用的概念资料
-- [v1.0.0 发布说明](./v1.0.0-release-notes.md) — 主版本发布说明
+- 历史实现说明、旧发布记录与清理后的参考材料统一归档到 `docs/history-archive.md`
 
 ### 提示词文件索引
 
@@ -68,11 +67,7 @@
 
 说明：标准模式与诡辩模式都采用"基础提示词 + 角色补充提示词"的拼接加载方式；具体加载入口见 [prompt_loader.py](../backend/app/agents/prompt_loader.py) 与 [sophistry_prompt_loader.py](../backend/app/agents/sophistry_prompt_loader.py)。
 
-## 5. UI 概念设计
+## 5. 界面参考
 
-本目录保存界面设计的概念稿和原型图，用于理解 UI 演进方向：
-
-- [UI 概念设计目录](./UI概念设计/README.md) — 界面概念图与设计文档
 - [界面截图](./2026-04-06_20-30-48.png) — 当前界面参考截图
-
-说明：这些概念设计稿保留为**设计参考资料**，不对应当前的具体实现。
+- 历史 UI 概念稿与已删除设计便笺统一归档到 `docs/history-archive.md`

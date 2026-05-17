@@ -43,8 +43,7 @@ pip install -r requirements-dev.txt
     "database_url": "sqlite+aiosqlite:///.../runtime/elenchus.db"
   },
   "search": {
-    "provider": "duckduckgo",
-    "searxng": {"base_url": "http://localhost:8080", "api_key": ""},
+    "provider": "ddgs",
     "tavily": {"api_url": "https://api.tavily.com/search", "api_key": ""}
   },
   "logging": {
@@ -134,11 +133,11 @@ pip install -r requirements-dev.txt
 
 - `runtime/sessions/<session_id>/documents/`
 - `runtime/sessions/<session_id>/reference_entries/`
-- [会话级资料池实现说明](../session-reference-library-implementation.md)
+- `docs/history-archive.md` 中的资料池历史说明索引
 
 ## 8. 关联文档
 
 - [系统架构总览](../architecture.md)
 - [运行时与回放](../runtime.md)
 - [快速开始](../getting-started.md)
-- [会话级资料池实现说明](../session-reference-library-implementation.md)
+- `docs/history-archive.md`：历史实现说明与旧参考资料索引

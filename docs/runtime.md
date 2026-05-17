@@ -43,7 +43,7 @@ runtime/
 
 - provider 配置与 API key
 - 服务端基础配置（host / port / debug / CORS / database_url）
-- 搜索配置（provider、SearXNG、Tavily）
+- 搜索配置（provider、Tavily）
 - 辩论默认配置（如 `default_max_turns`、context window）
 - 日志级别等非会话配置
 
@@ -131,7 +131,7 @@ Elenchus 的历史恢复与回放依赖两类持久化数据配合完成：
 - 高价值条目可被同步进共享知识，影响后续辩论上下文
 - 回看问题时，通常需要把 `documents/`、`reference_entries/` 与 `session.json` 一起看
 
-资料池实现细节请见：[session-reference-library-implementation.md](./session-reference-library-implementation.md)
+资料池历史实现说明已归档到 `docs/history-archive.md`；当前运行时行为以本页和 [architecture.md](./architecture.md) 为准。
 
 ## 6. 源码与运行时产物的边界
 
@@ -164,5 +164,4 @@ Elenchus 的历史恢复与回放依赖两类持久化数据配合完成：
 
 - [architecture.md](./architecture.md)：解释系统分层、前后端职责、模式化运行链路与模块入口
 - [getting-started.md](./getting-started.md)：解释如何启动项目
-- [session-reference-library-implementation.md](./session-reference-library-implementation.md)：解释资料池当前实现
-- 历史审查材料：已清理，不再作为独立文档维护
+- [docs/history-archive.md](./history-archive.md)：收纳资料池旧实现说明与其他历史材料索引

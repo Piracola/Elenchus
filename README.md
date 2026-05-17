@@ -229,79 +229,13 @@ python -c "import bcrypt; print(bcrypt.hashpw(b'你的密码', bcrypt.gensalt())
 </details>
 
 <details>
-<summary><b>SearXNG 搜索服务（可选）</b></summary>
+<summary><b>搜索服务说明</b></summary>
 
-本项目支持一键部署 SearXNG 元搜索引擎作为搜索服务的后端，所有数据保存在项目目录内，删除项目文件夹即完全清理。
+当前项目内置 `DDGS` 作为默认轻量搜索提供商，无需 Docker、无需单独服务、也无需额外部署步骤。
 
-### 前置要求
+如果你希望接入外部搜索 API，可以在 **设置** → **搜索引擎** 中配置 `Tavily` 的 API URL 与 API Key。
 
-- 已安装 Docker Desktop（Windows/macOS）或 Docker Engine（Linux）
-- Docker Compose 可用（Docker Desktop 已内置）
-
-### 方式一：前端 UI 管理（推荐）
-
-启动项目后，从 Web UI 左下角打开 **设置** → **搜索引擎** 标签页，你会看到"本地 SearXNG 部署"管理卡片。
-
-1. 点击 **一键启动 SearXNG** 按钮
-2. 等待状态变为"运行正常"（绿色）
-3. 在上方将搜索提供商切换为 **SearXNG**
-4. 点击 **保存 SearXNG** 即可使用
-
-如未安装 Docker，卡片会显示安装提示。
-
-### 方式二：命令行启动
-
-```bash
-# Windows
-.\start.bat
-
-# Linux/macOS
-./start.sh
-```
-
-启动脚本会自动检测 Docker 并启动 SearXNG 容器，服务地址：`http://localhost:8080`
-
-**跳过 SearXNG 启动：**
-```bash
-# Windows
-.\start.bat --skip-searxng
-
-# Linux/macOS
-./start.sh --skip-searxng
-```
-
-### 手动管理 SearXNG
-
-```bash
-# 查看状态
-.\scripts\start_searxng.ps1 status   # Windows
-./scripts/start_searxng.sh status     # Linux/macOS
-
-# 启动/重启
-.\scripts\start_searxng.ps1 start
-./scripts/start_searxng.sh start
-
-# 停止
-.\scripts\start_searxng.ps1 stop
-./scripts/start_searxng.sh stop
-
-# 查看日志
-.\scripts\start_searxng.ps1 logs
-./scripts/start_searxng.sh logs
-
-# 清理数据
-.\scripts\start_searxng.ps1 clean
-./scripts/start_searxng.sh clean
-```
-
-### 配置文件位置
-
-- Docker 配置：`searxng/docker-compose.yml`
-- SearXNG 设置：`searxng/settings.yml`
-- 限流配置：`searxng/limiter.toml`
-- 持久化数据：`searxng-data/`（运行时创建）
-
-**注意：** 如未安装 Docker 或跳过启动，系统将默认使用 DuckDuckGo 作为搜索提供商，不影响正常使用。
+**注意：** 默认情况下系统会优先使用 `DDGS`，如已配置 Tavily，也可手动切换到 Tavily。
 
 </details>
 
@@ -354,7 +288,8 @@ openclaw 自动执行：
 ### 完整文档
 
 - API 参考文档：[docs/API_REFERENCE.md](./docs/API_REFERENCE.md)
-- openclaw 集成指南：[docs/Elenchus.md](./docs/Elenchus.md)
+- 当前项目文档入口：[docs/README.md](./docs/README.md)
+- 历史集成说明与旧版资料统一归档到 `docs/history-archive.md`
 
 </details>
 
@@ -392,6 +327,7 @@ openclaw 自动执行：
 - [诡辩实验模式说明](./docs/sophistry-experiment-mode-design.md)
 - [后端开发指南](./docs/guides/backend-development.md)
 - [前端开发指南](./docs/guides/frontend-development.md)
+- 历史资料归档：`docs/history-archive.md`
 
 ## 项目结构概览
 

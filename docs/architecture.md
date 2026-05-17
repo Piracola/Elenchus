@@ -288,8 +288,8 @@ Elenchus 的一个关键架构选择，是把“模式差异”放在运行链�
 
 相关文档：
 
-- [会话级资料池实现说明](./session-reference-library-implementation.md)
 - [运行时与回放](./runtime.md)
+- `docs/history-archive.md`：资料池历史实现说明与其他归档材料
 
 ## 7. 文档边界
 
@@ -304,8 +304,7 @@ Elenchus 的一个关键架构选择，是把“模式差异”放在运行链�
 
 - 如何启动项目：读 [getting-started.md](./getting-started.md)
 - `runtime/` 目录和回放文件职责：读 [runtime.md](./runtime.md)
-- 资料池文件与同步细节：读 [session-reference-library-implementation.md](./session-reference-library-implementation.md)
-- 历史审查材料：已清理，不再作为独立文档维护
+- 资料池历史实现细节与旧审查材料：统一读 `docs/history-archive.md`
 
 ## 8. 继续阅读
 

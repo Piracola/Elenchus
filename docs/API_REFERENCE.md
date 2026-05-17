@@ -13,10 +13,9 @@
 2. [会话管理 API](#二会话管理api)
 3. [模型配置 API](#三模型配置api)
 4. [搜索配置 API](#四搜索配置api)
-5. [SearXNG 管理 API](#五searxng管理api)
-6. [WebSocket 实时通信](#六websocket-实时通信)
-7. [错误码说明](#七错误码说明)
-8. [完整工作流示例](#八完整工作流示例)
+5. [WebSocket 实时通信](#五websocket-实时通信)
+6. [错误码说明](#六错误码说明)
+7. [完整工作流示例](#七完整工作流示例)
 
 ---
 
@@ -440,39 +439,7 @@ GET /api/search/health
 
 ---
 
-## 五、SearXNG 管理 API
-
-### 5.1 获取 SearXNG 状态
-
-```
-GET /api/searxng/status
-```
-
-**响应**：`200 OK`
-```json
-{
-  "docker_available": true,
-  "searxng_running": true,
-  "searxng_healthy": true,
-  "searxng_url": "http://localhost:8080"
-}
-```
-
-### 5.2 启动 SearXNG
-
-```
-POST /api/searxng/start
-```
-
-### 5.3 停止 SearXNG
-
-```
-POST /api/searxng/stop
-```
-
----
-
-## 六、WebSocket 实时通信
+## 五、WebSocket 实时通信
 
 > 如果需要真正的实时推送（而非轮询），可以使用 WebSocket。
 
@@ -497,7 +464,7 @@ WebSocket /api/ws/{session_id}
 
 ---
 
-## 七、错误码说明
+## 六、错误码说明
 
 | 状态码 | 说明 | 处理建议 |
 |--------|------|---------|
@@ -508,7 +475,7 @@ WebSocket /api/ws/{session_id}
 
 ---
 
-## 八、完整工作流示例
+## 七、完整工作流示例
 
 ### 场景：创建并监控一场辩论
 
