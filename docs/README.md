@@ -19,6 +19,7 @@
 
 - [系统架构总览](./architecture.md) — **当前系统分层、职责边界、关键模块入口**
 - [运行时与回放](./runtime.md) — **当前 `runtime/` 目录、快照 / 事件 / 回放关系**
+- [Android 本地优先规划](./android-local-first-plan.md) — **Android 纯本地运行的目标架构、风险与验证顺序**
 
 说明：
 
@@ -58,6 +59,7 @@
 - [backend/prompts/debater_system.md](../backend/prompts/debater_system.md) — 标准模式辩手通用基础提示词
 - [backend/prompts/debater_proposer.md](../backend/prompts/debater_proposer.md) — 标准模式正方补充提示词
 - [backend/prompts/debater_opposer.md](../backend/prompts/debater_opposer.md) — 标准模式反方补充提示词
+- [backend/prompts/steelman/](../backend/prompts/steelman/) — 钢人论证开关使用的场景化提示词
 - [backend/prompts/judge_system.md](../backend/prompts/judge_system.md) — 标准模式裁判提示词
 - [backend/prompts/fact_checker_system.md](../backend/prompts/fact_checker_system.md) — 事实核查代理提示词
 - [backend/prompts/sophistry/debater_system.md](../backend/prompts/sophistry/debater_system.md) — 诡辩模式辩手通用基础提示词

@@ -1,13 +1,13 @@
 <div align="center">
   <img src="./Elenchus.png" alt="Elenchus 项目图标" width="132" height="132" />
 
-  <h1>Elenchus</h1>
+<h1>Elenchus</h1>
 
-  <p>一个面向思辨训练的 AI 多智能体辩论平台。</p>
+<p>一个面向思辨训练的 AI 多智能体辩论平台。</p>
 
-  <p>输入辩题后，系统会组织正方、反方、裁判、观察员等多个 AI 角色展开辩论，并实时展示、保存、回放、导出整场过程。</p>
+<p>输入辩题后，系统会组织正方、反方、裁判、观察员等多个 AI 角色展开辩论，并实时展示、保存、回放、导出整场过程。</p>
 
-  <p>
+<p>
     <a href="https://github.com/Piracola/Elenchus/actions/workflows/ci.yml"><img src="https://github.com/Piracola/Elenchus/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
     <a href="https://github.com/Piracola/Elenchus/actions/workflows/build-portable-release.yml"><img src="https://github.com/Piracola/Elenchus/actions/workflows/build-portable-release.yml/badge.svg" alt="Build Portable Release" /></a>
     <a href="https://github.com/Piracola/Elenchus/releases"><img src="https://img.shields.io/github/v/release/Piracola/Elenchus?display_name=tag&label=release" alt="Release" /></a>
@@ -17,9 +17,9 @@
   </p>
 </div>
 
-本项目完全由 AI 实现，感谢 [Linux Do](https://linux.do/) 热心佬友和 OAI 大善人的支持 ❤️。
+本项目完全由 AI 实现，感谢 [Linux Do](https://linux.do/) 和各家大善人的支持 ❤️。
 
-本项目建立的初衷是提升使用者的思辨能力和交流水平。
+本项目的核心原理是：高质量的输入会让模型产生高质量的输入结果。
 
 ## 核心特性
 
@@ -195,6 +195,7 @@ export ELENCHUS_ENCRYPTION_KEY="<上面生成的密钥>"
 #### 5. 管理员密码哈希升级
 
 旧版本使用 SHA-256 存储密码，新版本已迁移至 **bcrypt**。兼容逻辑如下：
+
 - 系统会检测现有哈希格式，若为 64 位十六进制字符串（旧 SHA-256），仍可通过旧逻辑验证
 - **强烈建议在首次登录后通过「设置密码」功能重置密码**，系统会自动使用 bcrypt 重新哈希
 - 生成 bcrypt 哈希：
@@ -206,6 +207,7 @@ python -c "import bcrypt; print(bcrypt.hashpw(b'你的密码', bcrypt.gensalt())
 #### 6. 安全响应头
 
 后端已自动添加以下安全响应头（无需额外配置）：
+
 - `X-Content-Type-Options: nosniff`
 - `X-Frame-Options: DENY`
 - `Referrer-Policy: strict-origin-when-cross-origin`
@@ -247,6 +249,7 @@ python -c "import bcrypt; print(bcrypt.hashpw(b'你的密码', bcrypt.gensalt())
 ### 功能概述
 
 通过新增的 REST API，openclaw 可以：
+
 - 创建辩论会话并指定模型配置
 - 启动/停止辩论
 - 实时监控辩论进展
@@ -255,13 +258,13 @@ python -c "import bcrypt; print(bcrypt.hashpw(b'你的密码', bcrypt.gensalt())
 
 ### API 端点
 
-| 方法 | 路径 | 功能 |
-|------|------|------|
-| POST | `/api/sessions/{id}/start` | 启动辩论 |
-| POST | `/api/sessions/{id}/stop` | 停止辩论 |
-| POST | `/api/sessions/{id}/intervene` | 干预辩论 |
-| GET | `/api/sessions/{id}/status` | 获取辩论状态 |
-| GET | `/api/sessions/{id}/live-events` | 轮询实时事件 |
+| 方法   | 路径                               | 功能     |
+| ---- | -------------------------------- | ------ |
+| POST | `/api/sessions/{id}/start`       | 启动辩论   |
+| POST | `/api/sessions/{id}/stop`        | 停止辩论   |
+| POST | `/api/sessions/{id}/intervene`   | 干预辩论   |
+| GET  | `/api/sessions/{id}/status`      | 获取辩论状态 |
+| GET  | `/api/sessions/{id}/live-events` | 轮询实时事件 |
 
 ### openclaw 配置示例
 
@@ -280,6 +283,7 @@ tools:
 用户："帮我创建一个关于 AI 安全的辩论，用 GPT-4 和 Claude"
 
 openclaw 自动执行：
+
 1. `POST /api/sessions` → 创建会话
 2. `POST /api/sessions/{id}/start` → 启动辩论
 3. 循环轮询 `GET /api/sessions/{id}/live-events` → 实时展示进展
@@ -299,6 +303,7 @@ openclaw 自动执行：
 后端提示词文件集中在 `backend/prompts/`，运行时由 prompt_loader.py 和 sophistry_prompt_loader.py 按模式加载。
 
 **标准模式**：
+
 - `debater_system.md`：标准辩手通用基础提示词
 - `debater_proposer.md`：标准模式正方补充提示词
 - `debater_opposer.md`：标准模式反方补充提示词
@@ -306,12 +311,14 @@ openclaw 自动执行：
 - `fact_checker_system.md`：事实核查代理提示词
 
 **诡辩模式**：
+
 - `sophistry/debater_system.md`：诡辩模式辩手通用基础提示词
 - `sophistry/debater_proposer.md`：诡辩模式正方补充提示词
 - `sophistry/debater_opposer.md`：诡辩模式反方补充提示词
 - `sophistry/observer_system.md`：诡辩模式观察员提示词
 
 **补充说明**：
+
 - 标准模式辩手提示词采用"基础提示词 + 角色补充提示词"的组合方式
 - 当细分角色没有单独文件时，会回退到对应的通用角色文件
 - 诡辩模式也采用相同的"基础 + 角色补充"加载策略
