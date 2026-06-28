@@ -7,9 +7,29 @@ from __future__ import annotations
 import errno
 import os
 import socket
+import sys
 import threading
 import time
 import webbrowser
+
+_STANDARD_STREAMS_DEVNULL = None
+
+
+def _ensure_standard_streams() -> None:
+    """PyInstaller windowed builds can start with missing std streams."""
+    global _STANDARD_STREAMS_DEVNULL
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+
+    if _STANDARD_STREAMS_DEVNULL is None:
+        _STANDARD_STREAMS_DEVNULL = open(os.devnull, "w", encoding="utf-8")
+    if sys.stdout is None:
+        sys.stdout = _STANDARD_STREAMS_DEVNULL
+    if sys.stderr is None:
+        sys.stderr = _STANDARD_STREAMS_DEVNULL
+
+
+_ensure_standard_streams()
 
 import uvicorn
 

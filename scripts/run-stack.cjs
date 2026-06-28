@@ -8,6 +8,7 @@ const { freeBackendPort } = require('./kill-backend-port.cjs');
 
 const rootDir = path.resolve(__dirname, '..');
 const env = { ...process.env };
+const shouldFreeBackendPort = env.ELENCHUS_FREE_BACKEND_PORT === '1';
 
 if (env.ELENCHUS_BACKEND_PORT && !env.VITE_BACKEND_PORT) {
   env.VITE_BACKEND_PORT = env.ELENCHUS_BACKEND_PORT;
@@ -80,7 +81,9 @@ async function main() {
   );
   attachLifecycle(frontend);
 
-  await freeBackendPort();
+  if (shouldFreeBackendPort) {
+    await freeBackendPort();
+  }
 
   if (shuttingDown) {
     maybeExit();

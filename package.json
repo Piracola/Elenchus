@@ -8,6 +8,9 @@
     "dev:stack": "node scripts/run-stack.cjs",
     "dev:backend": "node scripts/run-backend-dev.cjs",
     "dev:frontend": "node scripts/run-frontend-dev.cjs",
+    "launcher:dev": "npx @tauri-apps/cli dev",
+    "launcher:build": "npx @tauri-apps/cli build",
+    "test:backend": "node scripts/run-backend-tests.cjs",
     "kill:backend": "node scripts/kill-backend-port.cjs",
     "lint": "npm --prefix frontend run lint"
   }

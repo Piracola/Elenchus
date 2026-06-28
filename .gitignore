@@ -50,6 +50,8 @@ htmlcov/
 node_modules/
 dist/
 frontend/dist/
+src-tauri/gen/
+src-tauri/target/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

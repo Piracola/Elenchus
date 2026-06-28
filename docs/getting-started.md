@@ -125,14 +125,54 @@ npm run dev
 
 ## 6. 开发常用命令速查
 
+### Windows 启动器原型
+
+当前仓库包含一个轻量 Tauri 启动器原型，用于优化 Windows 发布版的启动体验。它负责启动本地后端、等待健康检查并打开浏览器。
+
+开发运行：
+
+```powershell
+npm run launcher:dev
+```
+
+构建启动器：
+
+```powershell
+npm run launcher:build -- --no-bundle
+```
+
+装配启动器发布目录需要先构建前端、PyInstaller 后端和 Tauri 启动器，然后运行：
+
+```powershell
+python scripts/build_windows_launcher_release.py
+```
+
+发布目录结构会变为：
+
+```text
+elenchus-launcher-<version>-windows/
+├─ elenchus.exe
+└─ backend/
+   ├─ elenchus-backend.exe
+   └─ _internal/
+```
+
+其中根目录 `elenchus.exe` 是启动器，`backend/elenchus-backend.exe` 是本地后端 sidecar。
+
 ### 后端
 
 ```bash
 cd backend
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
-pytest
-pytest tests/test_graph.py
+venv/Scripts/python -m pytest
+venv/Scripts/python -m pytest tests/test_graph.py
 pip install -r requirements-dev.txt
+```
+
+如果你在仓库根目录，也可以直接运行：
+
+```bash
+npm run test:backend
 ```
 
 ### 前端

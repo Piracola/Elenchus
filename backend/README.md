@@ -17,6 +17,7 @@
 - `prompts/debater_system.md`：标准模式辩手通用基础提示词
 - `prompts/debater_proposer.md`：标准模式正方补充提示词
 - `prompts/debater_opposer.md`：标准模式反方补充提示词
+- `prompts/steelman/`：钢人论证开关使用的场景化提示词
 - `prompts/judge_system.md`：标准模式裁判提示词
 - `prompts/fact_checker_system.md`：事实核查代理提示词
 - `prompts/sophistry/debater_system.md`：诡辩模式辩手通用基础提示词
@@ -31,11 +32,14 @@
 在已经完成首次环境准备后，通常只需要：
 
 ```bash
+npm run test:backend
 cd backend
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
-pytest
-pytest tests/test_graph.py
+venv/Scripts/python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+venv/Scripts/python -m pytest
+venv/Scripts/python -m pytest tests/test_graph.py
 ```
+
+macOS / Linux 请把 `venv/Scripts/python` 换成 `venv/bin/python`。
 
 如果你还没有准备虚拟环境、依赖或前后端联调环境，请回到 [快速开始](../docs/getting-started.md)。
 
