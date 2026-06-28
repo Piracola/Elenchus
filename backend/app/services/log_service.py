@@ -108,12 +108,16 @@ class LogManager:
         for handler in root_logger.handlers[:]:
             root_logger.removeHandler(handler)
 
-        self._console_handler = logging.StreamHandler(sys.stdout)
-        self._console_handler.setLevel(self._current_level.value)
-        self._console_handler.setFormatter(
-            logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT)
-        )
-        root_logger.addHandler(self._console_handler)
+        console_stream = sys.stdout or sys.stderr
+        if console_stream is not None:
+            self._console_handler = logging.StreamHandler(console_stream)
+            self._console_handler.setLevel(self._current_level.value)
+            self._console_handler.setFormatter(
+                logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT)
+            )
+            root_logger.addHandler(self._console_handler)
+        else:
+            self._console_handler = None
 
         if enable_file_logging:
             self._setup_file_handler()

@@ -87,6 +87,7 @@ class DebateGraphState(TypedDict, total=False):
     team_config: dict[str, int]
     jury_config: dict[str, int]
     reasoning_config: dict[str, Any]
+    speech_config: dict[str, int]
     current_team_discussion: list[DialogueEntryDict]
     current_team_summary: DialogueEntryDict | None
     current_jury_discussion: list[DialogueEntryDict]

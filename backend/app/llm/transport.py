@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Awaitable, Callable, Sequence
+from inspect import isawaitable
 from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage
@@ -21,6 +22,12 @@ from app.llm.response import (
 from app.llm.request_params import split_openai_params
 
 TokenCallback = Callable[[str], Awaitable[None]]
+
+
+async def _close_openai_client(client: AsyncOpenAI) -> None:
+    result = client.close()
+    if isawaitable(result):
+        await result
 
 
 def build_openai_chat_payload(
@@ -77,7 +84,7 @@ async def invoke_openai_chat_raw(
             raise _provider_html_response_error(config)
         return _coerce_openai_response_to_ai_message(raw_text)
     finally:
-        client.close()
+        await _close_openai_client(client)
 
 
 async def invoke_openai_chat_raw_streaming(
@@ -94,6 +101,7 @@ async def invoke_openai_chat_raw_streaming(
     )
 
     sse_lines: list[str] = []
+    streaming_think_block = False
 
     try:
         stream = await client.chat.completions.create(
@@ -121,7 +129,11 @@ async def invoke_openai_chat_raw_streaming(
                     # Emit reasoning tokens if present (deep-thinking models)
                     reasoning = getattr(delta, "reasoning_content", None)
                     if isinstance(reasoning, str) and reasoning:
-                        await on_token(reasoning)
+                        if on_token is not None:
+                            if not streaming_think_block:
+                                await on_token("<think>")
+                                streaming_think_block = True
+                            await on_token(reasoning)
 
                     content = getattr(delta, "content", None)
                     if content is None:
@@ -135,7 +147,13 @@ async def invoke_openai_chat_raw_streaming(
                             if getattr(item, "text", None)
                         )
                     if text_piece:
+                        if on_token is not None and streaming_think_block:
+                            await on_token("</think>\n\n")
+                            streaming_think_block = False
                         await on_token(text_piece)
+
+        if on_token is not None and streaming_think_block:
+            await on_token("</think>")
 
         sse_lines.append("data: [DONE]")
         raw_text = "\n\n".join(sse_lines)
@@ -143,4 +161,4 @@ async def invoke_openai_chat_raw_streaming(
             raise _provider_html_response_error(config)
         return _coerce_openai_response_to_ai_message(raw_text)
     finally:
-        client.close()
+        await _close_openai_client(client)

@@ -74,6 +74,7 @@ async def create_session(body: SessionCreate) -> dict[str, Any]:
             "team_config": team_config,
             "jury_config": jury_config,
             "reasoning_config": reasoning_config,
+            "speech_config": body.speech_config.model_dump(),
             "mode_artifacts": [],
             "current_mode_report": None,
             "final_mode_report": None,

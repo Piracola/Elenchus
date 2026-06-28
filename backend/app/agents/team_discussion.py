@@ -12,7 +12,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.agents.context_builder import build_context_for_agent
 from app.agents.live_agent_config import refresh_agent_configs_for_session
-from app.agents.prompt_loader import get_debater_system_prompt
+from app.agents.prompt_loader import get_debater_system_prompt, get_steelman_prompt
 from app.agents.runtime_progress import (
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
     MODEL_INVOCATION_TIMEOUT_SECONDS,
@@ -78,7 +78,9 @@ def _build_discussion_history_block(entries: list[dict[str, Any]]) -> str:
 def _build_reasoning_directives(reasoning_config: dict[str, Any]) -> list[str]:
     directives: list[str] = []
     if bool(reasoning_config.get("steelman_enabled", True)):
-        directives.append("先用最强版本还原对手当前最有威胁的论点，再给出反驳。")
+        directive = get_steelman_prompt("team_discussion")
+        if directive:
+            directives.append(directive)
     if bool(reasoning_config.get("counterfactual_enabled", True)):
         directives.append("至少加入一个反事实推演，说明若关键前提变化，本方论证会如何调整。")
     return directives
@@ -236,6 +238,26 @@ async def team_discuss(state: dict[str, Any]) -> dict[str, Any]:
                     phase="preparing",
                 )
 
+            stream_entry = {
+                "role": "team_member",
+                "agent_name": agent_name,
+                "content": "",
+                "citations": [],
+                "turn": current_turn,
+                "discussion_kind": "team",
+                "team_side": side,
+                "team_round": round_index,
+                "team_member_index": member_index,
+                "team_specialty": specialty,
+                "source_role": side,
+            }
+            if session_id and runtime_event_emitter is not None:
+                await runtime_event_emitter.emit_discussion_stream_start(session_id, stream_entry)
+
+            async def handle_token(token: str) -> None:
+                if session_id and runtime_event_emitter is not None and token:
+                    await runtime_event_emitter.emit_discussion_stream_token(session_id, stream_entry, token)
+
             try:
                 content = await invoke_text_model(
                     [
@@ -243,6 +265,7 @@ async def team_discuss(state: dict[str, Any]) -> dict[str, Any]:
                         HumanMessage(content=instruction),
                     ],
                     override=override,
+                    on_token=handle_token,
                     on_progress=progress_callback,
                     timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
                     heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
@@ -298,6 +321,24 @@ async def team_discuss(state: dict[str, Any]) -> dict[str, Any]:
             phase="preparing",
         )
 
+    stream_summary_entry = {
+        "role": "team_summary",
+        "agent_name": _team_summary_name(side),
+        "content": "",
+        "citations": [],
+        "turn": current_turn,
+        "discussion_kind": "team",
+        "team_side": side,
+        "team_round": discussion_rounds - 1,
+        "source_role": side,
+    }
+    if session_id and runtime_event_emitter is not None:
+        await runtime_event_emitter.emit_discussion_stream_start(session_id, stream_summary_entry)
+
+    async def handle_summary_token(token: str) -> None:
+        if session_id and runtime_event_emitter is not None and token:
+            await runtime_event_emitter.emit_discussion_stream_token(session_id, stream_summary_entry, token)
+
     try:
         summary_content = await invoke_text_model(
             [
@@ -305,6 +346,7 @@ async def team_discuss(state: dict[str, Any]) -> dict[str, Any]:
                 HumanMessage(content=summary_instruction),
             ],
             override=override,
+            on_token=handle_summary_token,
             on_progress=progress_callback,
             timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
             heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,

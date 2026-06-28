@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -26,6 +27,7 @@ ROLE_LABELS = {
 
 MARKDOWN_EXPORT_CATEGORY_ORDER = (
     "debater_speeches",
+    "thinking_content",
     "group_discussion",
     "judge_messages",
     "jury_messages",
@@ -41,6 +43,55 @@ NON_DEBATER_DIALOGUE_ROLES = {
     "sophistry_round_report",
     "sophistry_final_report",
 }
+LEADING_WHITESPACE_RE = re.compile(r"\s*")
+THINK_OPEN_RE = re.compile(r"<think\b[^>]*>", re.IGNORECASE)
+THINK_CLOSE_RE = re.compile(r"</think\s*>", re.IGNORECASE)
+LEADING_LINE_BREAKS_RE = re.compile(r"^(?:[ \t]*\r?\n)+")
+LEADING_INLINE_SPACES_RE = re.compile(r"^[ \t]+")
+TRAILING_LINE_BREAKS_RE = re.compile(r"(?:\r?\n[ \t]*)+$")
+
+
+def _normalize_thinking_segment(value: str) -> str:
+    return TRAILING_LINE_BREAKS_RE.sub("", LEADING_LINE_BREAKS_RE.sub("", value))
+
+
+def _strip_response_padding(value: str) -> str:
+    without_leading_breaks = LEADING_LINE_BREAKS_RE.sub("", value)
+    if without_leading_breaks != value:
+        return without_leading_breaks
+    return LEADING_INLINE_SPACES_RE.sub("", value)
+
+
+def split_leading_thinking_content(content: Any) -> tuple[str | None, str]:
+    text = str(content or "")
+    if not text:
+        return None, ""
+
+    cursor = 0
+    thinking_segments: list[str] = []
+
+    while cursor < len(text):
+        leading_match = LEADING_WHITESPACE_RE.match(text, cursor)
+        open_tag_start = leading_match.end() if leading_match else cursor
+        open_tag_match = THINK_OPEN_RE.match(text, open_tag_start)
+        if not open_tag_match:
+            break
+
+        after_open_tag = open_tag_match.end()
+        close_tag_match = THINK_CLOSE_RE.search(text, after_open_tag)
+        if not close_tag_match:
+            return None, text
+
+        segment = _normalize_thinking_segment(text[after_open_tag:close_tag_match.start()])
+        if segment:
+            thinking_segments.append(segment)
+        cursor = close_tag_match.end()
+
+    if cursor == 0:
+        return None, text
+
+    thinking = "\n\n".join(thinking_segments) if thinking_segments else None
+    return thinking, _strip_response_padding(text[cursor:])
 
 
 def role_label(role: str) -> str:
@@ -80,7 +131,38 @@ def normalize_markdown_export_categories(categories: list[str] | tuple[str, ...]
     return ["debater_speeches"]
 
 
-def render_markdown_entry_block(lines: list[str], entry: dict[str, Any], index: int) -> None:
+def _should_include_thinking(categories: list[str] | None) -> bool:
+    return categories is None or "thinking_content" in categories
+
+
+def _render_markdown_content_with_optional_thinking(
+    lines: list[str],
+    content: Any,
+    *,
+    include_thinking: bool,
+) -> None:
+    thinking, response = split_leading_thinking_content(content)
+
+    if thinking and include_thinking:
+        lines.append("<details>")
+        lines.append("<summary>思维链</summary>")
+        lines.append("")
+        lines.append(thinking)
+        lines.append("")
+        lines.append("</details>")
+        lines.append("")
+
+    visible_content = response if thinking else str(content or "")
+    lines.append(visible_content if visible_content else "（无内容）")
+
+
+def render_markdown_entry_block(
+    lines: list[str],
+    entry: dict[str, Any],
+    index: int,
+    *,
+    include_thinking: bool = True,
+) -> None:
     content = entry.get("content", "")
     timestamp = entry.get("timestamp", "")
     citations = entry.get("citations", [])
@@ -89,7 +171,11 @@ def render_markdown_entry_block(lines: list[str], entry: dict[str, Any], index: 
     if timestamp:
         lines.append(f"*{timestamp}*")
     lines.append("")
-    lines.append(str(content) if content else "（无内容）")
+    _render_markdown_content_with_optional_thinking(
+        lines,
+        content,
+        include_thinking=include_thinking,
+    )
 
     if citations:
         lines.append("")
@@ -114,6 +200,7 @@ def append_markdown_transcript_sections(
     session_data: dict[str, Any],
     categories: list[str] | None,
 ) -> None:
+    include_thinking = _should_include_thinking(categories)
     history = session_data.get("dialogue_history", [])
     if not isinstance(history, list):
         history = []
@@ -125,7 +212,12 @@ def append_markdown_transcript_sections(
         lines.append("")
         for index, entry in enumerate(history, start=1):
             if isinstance(entry, dict):
-                render_markdown_entry_block(lines, entry, index)
+                render_markdown_entry_block(
+                    lines,
+                    entry,
+                    index,
+                    include_thinking=include_thinking,
+                )
         return
 
     participants_raw = session_data.get("participants", [])
@@ -154,6 +246,7 @@ def append_markdown_transcript_sections(
     }
     category_titles = {
         "debater_speeches": "## 辩手发言",
+        "thinking_content": "",
         "group_discussion": "## 组内讨论",
         "judge_messages": "## 裁判消息",
         "jury_messages": "## 审判团消息",
@@ -162,13 +255,20 @@ def append_markdown_transcript_sections(
 
     rendered_any = False
     for category in categories:
+        if category == "thinking_content":
+            continue
         entries = category_entries.get(category, [])
         if not entries:
             continue
         lines.append(category_titles[category])
         lines.append("")
         for index, entry in enumerate(entries, start=1):
-            render_markdown_entry_block(lines, entry, index)
+            render_markdown_entry_block(
+                lines,
+                entry,
+                index,
+                include_thinking=include_thinking,
+            )
         rendered_any = True
 
     if rendered_any:
@@ -180,7 +280,12 @@ def append_markdown_transcript_sections(
     lines.append(category_titles["debater_speeches"])
     lines.append("")
     for index, entry in enumerate(fallback_entries, start=1):
-        render_markdown_entry_block(lines, entry, index)
+        render_markdown_entry_block(
+            lines,
+            entry,
+            index,
+            include_thinking=include_thinking,
+        )
 
 
 def export_markdown(session_data: dict[str, Any], categories: list[str] | tuple[str, ...] | None = None) -> str:

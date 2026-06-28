@@ -12,7 +12,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.agents.context_builder import build_context_for_agent
 from app.agents.live_agent_config import refresh_agent_configs_for_session
-from app.agents.prompt_loader import get_judge_prompt
+from app.agents.prompt_loader import get_judge_prompt, get_steelman_prompt
 from app.agents.runtime_progress import (
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
     MODEL_INVOCATION_TIMEOUT_SECONDS,
@@ -95,7 +95,9 @@ def _build_member_instruction(
         context_block,
     ]
     if steelman_enabled:
-        parts.append("先用最强解释分别还原正反双方当前轮最值得认真对待的论点，再进行批评。")
+        directive = get_steelman_prompt("jury_discussion")
+        if directive:
+            parts.append(directive)
     if discussion_block:
         parts.append(discussion_block)
     return "\n\n".join(part for part in parts if part)
@@ -215,6 +217,24 @@ async def jury_discuss(state: dict[str, Any]) -> dict[str, Any]:
                     source="runtime.node.jury_discussion",
                     phase="preparing",
                 )
+            stream_entry = {
+                "role": "jury_member",
+                "agent_name": agent_name,
+                "content": "",
+                "citations": [],
+                "turn": current_turn,
+                "discussion_kind": "jury",
+                "jury_round": round_index,
+                "jury_member_index": juror_index,
+                "jury_perspective": perspective,
+            }
+            if session_id and runtime_event_emitter is not None:
+                await runtime_event_emitter.emit_discussion_stream_start(session_id, stream_entry)
+
+            async def handle_token(token: str) -> None:
+                if session_id and runtime_event_emitter is not None and token:
+                    await runtime_event_emitter.emit_discussion_stream_token(session_id, stream_entry, token)
+
             try:
                 content = await invoke_text_model(
                     [
@@ -222,6 +242,7 @@ async def jury_discuss(state: dict[str, Any]) -> dict[str, Any]:
                         HumanMessage(content=instruction),
                     ],
                     override=override,
+                    on_token=handle_token,
                     on_progress=progress_callback,
                     timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
                     heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
@@ -271,6 +292,22 @@ async def jury_discuss(state: dict[str, Any]) -> dict[str, Any]:
             source="runtime.node.jury_discussion",
             phase="preparing",
         )
+    stream_summary_entry = {
+        "role": "jury_summary",
+        "agent_name": _jury_summary_name(),
+        "content": "",
+        "citations": [],
+        "turn": current_turn,
+        "discussion_kind": "jury",
+        "jury_round": discussion_rounds - 1,
+    }
+    if session_id and runtime_event_emitter is not None:
+        await runtime_event_emitter.emit_discussion_stream_start(session_id, stream_summary_entry)
+
+    async def handle_summary_token(token: str) -> None:
+        if session_id and runtime_event_emitter is not None and token:
+            await runtime_event_emitter.emit_discussion_stream_token(session_id, stream_summary_entry, token)
+
     try:
         summary_content = await invoke_text_model(
             [
@@ -278,6 +315,7 @@ async def jury_discuss(state: dict[str, Any]) -> dict[str, Any]:
                 HumanMessage(content=summary_instruction),
             ],
             override=override,
+            on_token=handle_summary_token,
             on_progress=progress_callback,
             timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
             heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,

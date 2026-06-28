@@ -38,6 +38,10 @@ def _normalize_reasoning_content(response: AIMessage) -> AIMessage:
     """
     raw_content = getattr(response, "content", "")
     reasoning = getattr(response, "reasoning_content", None)
+    if not reasoning:
+        additional_kwargs = getattr(response, "additional_kwargs", None)
+        if isinstance(additional_kwargs, dict):
+            reasoning = additional_kwargs.get("reasoning_content")
 
     if reasoning and len(str(reasoning)) > 0:
         reasoning_str = str(reasoning)
@@ -118,16 +122,30 @@ async def invoke_chat_model(
     config = None
 
     for attempt in range(max_retries + 1):
+        used_raw_transport_this_attempt = False
         try:
             config = await resolve_llm_config(override)
             streaming = on_token is not None
-            llm = create_llm_from_config(config, streaming=streaming)
             llm_kwargs = {
                 "temperature": config.temperature,
                 "max_tokens": config.max_tokens,
                 "streaming": streaming,
             }
             bound_tools = list(tools or [])
+
+            if streaming and config.provider_type == "openai":
+                used_raw_transport_this_attempt = True
+                return await _invoke_openai_raw(
+                    messages=list(messages),
+                    config=config,
+                    tools=bound_tools,
+                    on_token=on_token,
+                    on_progress=on_progress,
+                    timeout_seconds=timeout_seconds,
+                    heartbeat_interval_seconds=heartbeat_interval_seconds,
+                )
+
+            llm = create_llm_from_config(config, streaming=streaming)
 
             if bound_tools:
                 llm = llm.bind_tools(bound_tools)
@@ -162,7 +180,7 @@ async def invoke_chat_model(
         except Exception as exc:
             last_exception = exc
             current_config = config if config is not None else await resolve_llm_config(override)
-            if not _should_use_openai_raw_fallback(current_config, exc):
+            if used_raw_transport_this_attempt or not _should_use_openai_raw_fallback(current_config, exc):
                 if attempt < max_retries:
                     logger.warning(
                         "Model invocation failed (attempt %d/%d), retrying: %s",
@@ -332,9 +350,7 @@ async def _invoke_chat_model_streaming(
 
     async for chunk in llm.astream(list(messages)):
         # Extract reasoning content if present (e.g. deep-thinking models)
-        reasoning_piece = _extract_stream_chunk_text(
-            getattr(chunk, "reasoning_content", "")
-        )
+        reasoning_piece = _extract_chunk_reasoning_text(chunk)
         if reasoning_piece:
             reasoning_parts.append(reasoning_piece)
 
@@ -395,6 +411,29 @@ def _extract_stream_chunk_text(value: Any) -> str:
         return "".join(parts)
 
     return extract_text_content(value)
+
+
+def _extract_chunk_reasoning_text(chunk: Any) -> str:
+    """Read reasoning text from both native attrs and provider kwargs."""
+    direct = _extract_stream_chunk_text(getattr(chunk, "reasoning_content", ""))
+    if direct:
+        return direct
+
+    additional_kwargs = getattr(chunk, "additional_kwargs", None)
+    if isinstance(additional_kwargs, dict):
+        for key in ("reasoning_content", "reasoning", "reasoning_text"):
+            text = _extract_stream_chunk_text(additional_kwargs.get(key, ""))
+            if text:
+                return text
+
+    response_metadata = getattr(chunk, "response_metadata", None)
+    if isinstance(response_metadata, dict):
+        for key in ("reasoning_content", "reasoning", "reasoning_text"):
+            text = _extract_stream_chunk_text(response_metadata.get(key, ""))
+            if text:
+                return text
+
+    return ""
 
 
 async def _run_with_heartbeat(

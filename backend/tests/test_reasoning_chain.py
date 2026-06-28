@@ -300,22 +300,22 @@ async def test_debater_flow_no_think_tags_emitted():
     async def capture_token(t: str) -> None:
         tokens.append(t)
 
-    # We mock the LLM to simulate a model that supports reasoning
-    mock_llm = MagicMock()
+    async def mock_raw_streaming(*, messages, config, tools=None, on_token=None, on_progress=None, timeout_seconds=120.0, heartbeat_interval_seconds=8.0):
+        for token in [
+            "<think>",
+            "Analyzing the topic...",
+            "Building arguments...",
+            "</think>\n\n",
+            "我认为",
+            "这个议题",
+            "非常重要。",
+        ]:
+            await on_token(token)
+        return AIMessage(
+            content="<think>Analyzing the topic...Building arguments...</think>\n\n我认为这个议题非常重要。"
+        )
 
-    async def mock_astream(messages):
-        from langchain_core.messages import AIMessageChunk
-        # Model thinks first
-        yield AIMessageChunk(content="", reasoning_content="Analyzing the topic...")
-        yield AIMessageChunk(content="", reasoning_content="Building arguments...")
-        # Then speaks
-        yield AIMessageChunk(content="我认为")
-        yield AIMessageChunk(content="这个议题")
-        yield AIMessageChunk(content="非常重要。")
-
-    mock_llm.astream = mock_astream
-
-    with patch("app.llm.invoke.create_llm_from_config", return_value=mock_llm):
+    with patch("app.llm.invoke._invoke_openai_raw", side_effect=mock_raw_streaming):
         with patch("app.llm.invoke.resolve_llm_config") as mock_resolve:
             mock_resolve.return_value = ResolvedLLMConfig(
                 model="gpt-4o",

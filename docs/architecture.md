@@ -196,7 +196,7 @@ Elenchus 的一个关键架构选择，是把“模式差异”放在运行链�
 
 ### 提示词资源
 
-- `backend/prompts/`：标准模式与事实核查相关提示词目录，包含辩手基础提示词、正反方补充提示词、裁判提示词、共识收敛提示词与事实核查提示词
+- `backend/prompts/`：标准模式与事实核查相关提示词目录，包含辩手基础提示词、正反方补充提示词、钢人论证提示词、裁判提示词、共识收敛提示词与事实核查提示词
 - `backend/prompts/sophistry/`：诡辩实验模式提示词目录，包含辩手基础提示词、正反方补充提示词与观察员提示词
 - `backend/app/agents/prompt_loader.py`：标准模式提示词加载入口，负责拼接基础辩手提示词与角色补充提示词，并提供裁判提示词与共识收敛提示词读取（`get_judge_prompt` / `get_consensus_prompt`）
 - `backend/app/agents/sophistry_prompt_loader.py`：诡辩模式提示词加载入口，负责拼接诡辩模式的基础辩手提示词与角色补充提示词，并提供观察员提示词读取

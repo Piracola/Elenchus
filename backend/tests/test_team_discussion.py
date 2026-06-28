@@ -13,7 +13,7 @@ from app.agents import team_discussion
 async def test_team_discuss_includes_side_previous_judge_feedback_in_member_and_summary_prompts(monkeypatch):
     captured_instructions: list[str] = []
 
-    async def fake_invoke_text_model(messages, *, override=None, tools=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+    async def fake_invoke_text_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
         captured_instructions.append(messages[-1].content)
         return "内部建议"
 
@@ -73,7 +73,7 @@ async def test_team_discuss_includes_side_previous_judge_feedback_in_member_and_
 async def test_team_discuss_falls_back_to_older_feedback_and_excludes_same_turn(monkeypatch):
     captured_instructions: list[str] = []
 
-    async def fake_invoke_text_model(messages, *, override=None, tools=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+    async def fake_invoke_text_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
         captured_instructions.append(messages[-1].content)
         return "内部建议"
 
@@ -136,14 +136,39 @@ async def test_team_discuss_falls_back_to_older_feedback_and_excludes_same_turn(
 @pytest.mark.asyncio
 async def test_team_discuss_emits_incremental_runtime_events(monkeypatch):
     emitted: list[tuple[str, dict[str, str]]] = []
+    stream_events: list[tuple[str, str, dict[str, str] | str]] = []
 
-    async def fake_invoke_text_model(messages, *, override=None, tools=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+    async def fake_invoke_text_model(
+        messages,
+        *,
+        override=None,
+        tools=None,
+        on_token=None,
+        on_progress=None,
+        timeout_seconds=None,
+        heartbeat_interval_seconds=None,
+    ):
         prompt = messages[-1].content
         if "内部总结员" in prompt:
+            if on_token is not None:
+                await on_token("总结")
+                await on_token("内容")
             return "总结内容"
+        if on_token is not None:
+            await on_token("组员")
+            await on_token("内容")
         return "组员内容"
 
     class _Emitter:
+        async def emit_runtime_event(self, **kwargs) -> None:
+            stream_events.append(("status", kwargs["session_id"], kwargs["payload"]))
+
+        async def emit_discussion_stream_start(self, session_id: str, entry: dict[str, str]) -> None:
+            stream_events.append(("start", session_id, entry))
+
+        async def emit_discussion_stream_token(self, session_id: str, entry: dict[str, str], token: str) -> None:
+            stream_events.append(("token", session_id, token))
+
         async def emit_discussion_entry(self, session_id: str, entry: dict[str, str]) -> None:
             emitted.append((session_id, entry))
 
@@ -169,4 +194,15 @@ async def test_team_discuss_emits_incremental_runtime_events(monkeypatch):
     )
 
     assert [entry["role"] for _, entry in emitted] == ["team_member", "team_member", "team_summary"]
+    assert [event_type for event_type, _, _ in stream_events if event_type in {"start", "token"}] == [
+        "start",
+        "token",
+        "token",
+        "start",
+        "token",
+        "token",
+        "start",
+        "token",
+        "token",
+    ]
     assert result["emitted_team_discussion_count"] == 3

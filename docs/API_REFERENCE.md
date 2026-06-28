@@ -333,6 +333,12 @@ GET /api/sessions/{session_id}/export
 **查询参数**：
 - `format`（string，默认 `json`）：`json`、`markdown` 或 `html`
 - `categories`（string[]，可选）：导出内容范围；适用于 `markdown` 和 `html`
+  - `debater_speeches`：辩手发言
+  - `thinking_content`：发言开头 `<think>...</think>` 思维链
+  - `group_discussion`：组内讨论
+  - `judge_messages`：裁判消息
+  - `jury_messages`：审判团消息
+  - `consensus_summary`：共识收敛消息
 
 **响应**：文件下载
 

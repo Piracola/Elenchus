@@ -5,6 +5,7 @@ Tests for safe model invocation fallbacks and response normalization.
 from __future__ import annotations
 
 import pytest
+from langchain_core.messages import HumanMessage
 from langchain_core.messages import AIMessage, AIMessageChunk
 
 from app.llm.config import DEFAULT_MAX_TOKENS, ResolvedLLMConfig
@@ -54,6 +55,64 @@ async def test_invoke_chat_model_streaming_aggregates():
     )
 
     assert result.content == "Hello world"
+
+
+@pytest.mark.asyncio
+async def test_invoke_chat_model_streaming_openai_uses_raw_transport(monkeypatch):
+    from app.llm import invoke
+
+    raw_calls: list[dict] = []
+
+    async def fake_raw(**kwargs):
+        raw_calls.append(kwargs)
+        return AIMessage(content="raw streaming result")
+
+    def fail_langchain_client(*args, **kwargs):
+        raise AssertionError("OpenAI-compatible streaming should use raw transport")
+
+    async def noop_on_token(token: str):
+        pass
+
+    monkeypatch.setattr(invoke, "resolve_llm_config", fake_resolve_llm_config)
+    monkeypatch.setattr(invoke, "create_llm_from_config", fail_langchain_client)
+    monkeypatch.setattr(invoke, "_invoke_openai_raw", fake_raw)
+
+    result = await invoke.invoke_chat_model(
+        [HumanMessage(content="hello")],
+        on_token=noop_on_token,
+        max_retries=0,
+    )
+
+    assert result.content == "raw streaming result"
+    assert raw_calls
+    assert raw_calls[0]["on_token"] is noop_on_token
+
+
+@pytest.mark.asyncio
+async def test_invoke_chat_model_streaming_reads_reasoning_from_additional_kwargs():
+    from app.llm.invoke import _invoke_chat_model_streaming
+
+    class StreamingModel:
+        async def astream(self, messages):
+            yield AIMessageChunk(
+                content="",
+                additional_kwargs={"reasoning_content": "hidden reasoning"},
+            )
+            yield AIMessageChunk(content="Final answer")
+
+        def bind_tools(self, tools):
+            return self
+
+    async def noop_on_token(token: str):
+        pass
+
+    result = await _invoke_chat_model_streaming(
+        llm=StreamingModel(),
+        messages=[],
+        on_token=noop_on_token,
+    )
+
+    assert result.content == "<think>hidden reasoning</think>\n\nFinal answer"
 
 
 @pytest.mark.asyncio

@@ -67,6 +67,13 @@ class ReasoningConfig(BaseModel):
     consensus_enabled: bool = True
 
 
+class SpeechConfig(BaseModel):
+    """Optional per-role visible speech length guidance."""
+
+    proposer_max_chars: int = Field(default=0, ge=0, le=20000)
+    opposer_max_chars: int = Field(default=0, ge=0, le=20000)
+
+
 class SophistryModeConfig(BaseModel):
     """Optional knobs for the standalone sophistry experiment mode."""
 
@@ -159,6 +166,7 @@ class SessionCreate(BaseModel):
     team_config: TeamConfig = Field(default_factory=TeamConfig)
     jury_config: JuryConfig = Field(default_factory=JuryConfig)
     reasoning_config: ReasoningConfig = Field(default_factory=ReasoningConfig)
+    speech_config: SpeechConfig = Field(default_factory=SpeechConfig)
     debate_mode: DebateMode = Field(default=DebateMode.STANDARD)
     mode_config: dict[str, Any] = Field(default_factory=dict)
 
@@ -327,6 +335,7 @@ class SessionResponse(BaseModel):
     team_config: TeamConfig = Field(default_factory=TeamConfig)
     jury_config: JuryConfig = Field(default_factory=JuryConfig)
     reasoning_config: ReasoningConfig = Field(default_factory=ReasoningConfig)
+    speech_config: SpeechConfig = Field(default_factory=SpeechConfig)
     mode_artifacts: list[dict[str, Any]] = Field(default_factory=list)
     current_mode_report: dict[str, Any] | None = None
     final_mode_report: dict[str, Any] | None = None

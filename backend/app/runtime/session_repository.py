@@ -9,7 +9,13 @@ from app.services import runtime_event_service, session_service
 from app.services.builtin_reference_service import ensure_builtin_mode_references
 from app.text_repair import repair_text_tree
 
-from .session_defaults import default_jury_config, default_mode_config, default_reasoning_config, default_team_config
+from .session_defaults import (
+    default_jury_config,
+    default_mode_config,
+    default_reasoning_config,
+    default_speech_config,
+    default_team_config,
+)
 from .session_dialogue_helpers import sanitize_dialogue_history
 from .session_snapshot_normalizer import normalize_resumable_snapshot
 
@@ -85,6 +91,12 @@ class SessionRuntimeRepository:
         )
         if not isinstance(reasoning_config, dict):
             reasoning_config = default_reasoning_config()
+        speech_config = session_snapshot.get(
+            "speech_config",
+            session_data.get("speech_config", default_speech_config()),
+        )
+        if not isinstance(speech_config, dict):
+            speech_config = default_speech_config()
         debate_mode = str(
             session_data.get("debate_mode")
             or (record.debate_mode if record is not None else DebateMode.STANDARD.value)
@@ -138,6 +150,7 @@ class SessionRuntimeRepository:
                 "team_config": team_config,
                 "jury_config": jury_config,
                 "reasoning_config": reasoning_config,
+                "speech_config": speech_config,
                 "mode_artifacts": session_snapshot.get("mode_artifacts", []),
                 "current_mode_report": session_snapshot.get("current_mode_report"),
                 "final_mode_report": session_snapshot.get("final_mode_report"),
@@ -197,6 +210,7 @@ class SessionRuntimeRepository:
                 "team_config": state.get("team_config", default_team_config()),
                 "jury_config": state.get("jury_config", default_jury_config()),
                 "reasoning_config": state.get("reasoning_config", default_reasoning_config()),
+                "speech_config": state.get("speech_config", default_speech_config()),
                 "mode_artifacts": state.get("mode_artifacts", []),
                 "current_mode_report": state.get("current_mode_report"),
                 "final_mode_report": state.get("final_mode_report"),

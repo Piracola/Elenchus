@@ -21,6 +21,9 @@ openai
 httpx==0.28.1
 ddgs>=6.0.0
 
+# Export rendering
+markdown-it-py>=4.0.0,<5
+
 # Provider key encryption
 cryptography>=42.0.0
 

@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING, Any
 
 from .emitters.discussion import emit_jury_discussion as _emit_jury_discussion
 from .emitters.discussion import emit_discussion_entry as _emit_discussion_entry
+from .emitters.discussion import emit_discussion_stream_cancel as _emit_discussion_stream_cancel
+from .emitters.discussion import emit_discussion_stream_start as _emit_discussion_stream_start
+from .emitters.discussion import emit_discussion_stream_token as _emit_discussion_stream_token
 from .emitters.discussion import emit_team_discussion as _emit_team_discussion
 from .emitters.report import emit_fact_check as _emit_fact_check
 from .emitters.report import emit_judge_scores as _emit_judge_scores
@@ -220,6 +223,41 @@ class RuntimeEventEmitter:
         entry: dict[str, Any],
     ) -> None:
         await _emit_discussion_entry(
+            self.emit_runtime_event,
+            session_id,
+            entry,
+        )
+
+    async def emit_discussion_stream_start(
+        self,
+        session_id: str,
+        entry: dict[str, Any],
+    ) -> None:
+        await _emit_discussion_stream_start(
+            self.emit_runtime_event,
+            session_id,
+            entry,
+        )
+
+    async def emit_discussion_stream_token(
+        self,
+        session_id: str,
+        entry: dict[str, Any],
+        token: str,
+    ) -> None:
+        await _emit_discussion_stream_token(
+            self.emit_runtime_event,
+            session_id,
+            entry,
+            token,
+        )
+
+    async def emit_discussion_stream_cancel(
+        self,
+        session_id: str,
+        entry: dict[str, Any],
+    ) -> None:
+        await _emit_discussion_stream_cancel(
             self.emit_runtime_event,
             session_id,
             entry,

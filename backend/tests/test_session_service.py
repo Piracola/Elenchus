@@ -30,6 +30,10 @@ async def test_create_session():
         "counterfactual_enabled": True,
         "consensus_enabled": True,
     }
+    assert result["speech_config"] == {
+        "proposer_max_chars": 0,
+        "opposer_max_chars": 0,
+    }
     assert result["team_dialogue_history"] == []
     assert result["jury_dialogue_history"] == []
 
@@ -307,6 +311,31 @@ async def test_create_session_persists_jury_and_reasoning_config():
         "steelman_enabled": False,
         "counterfactual_enabled": True,
         "consensus_enabled": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_create_session_persists_speech_config():
+    created = await session_service.create_session(
+        SessionCreate(
+            topic="Speech limits",
+            speech_config={
+                "proposer_max_chars": 900,
+                "opposer_max_chars": 700,
+            },
+        ),
+    )
+
+    assert created["speech_config"] == {
+        "proposer_max_chars": 900,
+        "opposer_max_chars": 700,
+    }
+
+    record = await session_service.get_session_record(created["id"])
+    assert record is not None
+    assert record.state_snapshot["speech_config"] == {
+        "proposer_max_chars": 900,
+        "opposer_max_chars": 700,
     }
 
 

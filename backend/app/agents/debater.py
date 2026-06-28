@@ -14,14 +14,23 @@ from langgraph.graph.message import RemoveMessage
 
 from app.agents.context_builder import build_context_for_agent
 from app.agents.live_agent_config import refresh_agent_configs_for_session
-from app.agents.prompt_loader import get_debater_system_prompt, load_prompt
+from app.agents.prompt_loader import get_debater_system_prompt, get_steelman_prompt, load_prompt
 from app.agents.runtime_progress import (
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
     MODEL_INVOCATION_TIMEOUT_SECONDS,
     build_status_heartbeat_callback,
 )
+from app.agents.speech_response import (
+    EMPTY_SPEECH_RETRY_INSTRUCTION,
+    is_usable_speech_content,
+    normalize_response_content,
+    visible_speech_text,
+)
+from app.agents.speech_limits import (
+    build_speech_limit_instruction,
+    get_role_speech_limit_chars,
+)
 from app.llm.invoke import (
-    extract_text_content,
     invoke_chat_model,
     invoke_text_model,
     normalize_model_text,
@@ -31,6 +40,7 @@ from app.tools import get_all_skills
 from app.constants import ROLE_NAMES
 
 logger = logging.getLogger(__name__)
+_MAX_SPEECH_ATTEMPTS = 3
 
 
 def _extract_user_visible_response_metadata(response: Any) -> dict[str, Any]:
@@ -90,9 +100,11 @@ def _build_reasoning_instruction(
     directives: list[str] = []
     if bool(reasoning_config.get("steelman_enabled", True)):
         if current_turn == 0 and role == "proposer":
-            directives.append("在推进己方主张前，主动预判并回应一个最强反对意见。")
+            directive = get_steelman_prompt("debater_opening")
         else:
-            directives.append("先用最强版本概括对手当前最有力的论点，再进行回应与反驳。")
+            directive = get_steelman_prompt("debater_response")
+        if directive:
+            directives.append(directive)
     return "\n".join(directives)
 
 
@@ -220,6 +232,12 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
     if reasoning_instruction:
         instruction = f"{instruction}\n\n{reasoning_instruction}"
 
+    speech_limit_instruction = build_speech_limit_instruction(
+        get_role_speech_limit_chars(state.get("speech_config", {}), role)
+    )
+    if speech_limit_instruction:
+        instruction = f"{instruction}\n\n{speech_limit_instruction}"
+
     payload_messages: list[BaseMessage] = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=instruction),
@@ -265,17 +283,8 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
             turn=current_turn,
         )
 
-    response = await invoke_chat_model(
-        payload_messages,
-        override=override,
-        tools=skills or None,
-        on_token=handle_token,
-        on_progress=progress_callback,
-        timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
-        heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
-    )
-
-    if hasattr(response, "tool_calls") and response.tool_calls:
+    async def cancel_stream_if_started() -> None:
+        nonlocal speech_started
         if speech_started and runtime_event_emitter:
             await runtime_event_emitter.emit_speech_cancel(
                 state.get("session_id", ""),
@@ -283,29 +292,66 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
                 agent_name=agent_name,
                 turn=current_turn,
             )
-        logger.info(
-            "Debater [%s] requested tools: %s",
-            role,
-            [call["name"] for call in response.tool_calls],
+        speech_started = False
+
+    response: Any | None = None
+    content = ""
+
+    for attempt in range(_MAX_SPEECH_ATTEMPTS):
+        attempt_messages = list(payload_messages)
+        if attempt > 0:
+            attempt_messages.append(HumanMessage(content=EMPTY_SPEECH_RETRY_INSTRUCTION))
+
+        response = await invoke_chat_model(
+            attempt_messages,
+            override=override,
+            tools=(skills or None) if attempt == 0 else None,
+            on_token=handle_token,
+            on_progress=progress_callback,
+            timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
+            heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
         )
-        return {
-            "messages": [response],
-            "speech_was_streamed": False,
-            "agent_configs": agent_configs,
-        }
 
-    response_content = response.content if hasattr(response, "content") else response
-    content = normalize_model_text(extract_text_content(response_content))
+        if hasattr(response, "tool_calls") and response.tool_calls:
+            await cancel_stream_if_started()
+            logger.info(
+                "Debater [%s] requested tools: %s",
+                role,
+                [call["name"] for call in response.tool_calls],
+            )
+            return {
+                "messages": [response],
+                "speech_was_streamed": False,
+                "agent_configs": agent_configs,
+            }
 
-    if _looks_like_search_dump(content):
+        content = normalize_response_content(response)
+
+        if _looks_like_search_dump(visible_speech_text(content)):
+            logger.warning(
+                "Debater [%s] produced a search dump instead of a speech; triggering repair pass.",
+                role,
+            )
+            try:
+                content = await _repair_search_dump(attempt_messages, override)
+            except Exception as exc:
+                logger.warning("Repair pass failed for [%s]: %s", role, exc)
+
+        if is_usable_speech_content(content):
+            break
+
+        await cancel_stream_if_started()
         logger.warning(
-            "Debater [%s] produced a search dump instead of a speech; triggering repair pass.",
+            "Debater [%s] returned no usable public speech on attempt %d/%d.",
             role,
+            attempt + 1,
+            _MAX_SPEECH_ATTEMPTS,
         )
-        try:
-            content = await _repair_search_dump(payload_messages, override)
-        except Exception as exc:
-            logger.warning("Repair pass failed for [%s]: %s", role, exc)
+    else:
+        raise RuntimeError(
+            f"Debater [{role}] returned no usable public speech after "
+            f"{_MAX_SPEECH_ATTEMPTS} attempts."
+        )
 
     citations = _extract_citations(content)
 

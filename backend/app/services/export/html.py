@@ -2,23 +2,22 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
-from html import escape
+from html import escape, unescape
 from typing import Any
+
+from markdown_it import MarkdownIt
 
 from .markdown import (
     is_debater_speech_entry,
     normalize_markdown_export_categories,
     role_label,
+    split_leading_thinking_content,
 )
 from .scoring import (
     DIM_LABELS,
-    DIM_WEIGHTS,
-    MODULE_LABELS,
-    MODULE_WEIGHTS,
-    format_cumulative_value,
     format_score,
     resolve_comprehensive_score,
-    resolve_module_scores,
+    weighted_average,
 )
 
 ROLE_ACCENTS = {
@@ -40,7 +39,46 @@ ACCENT_POOL = (
     ("#787b5f", "#f2f3ea"),
     ("#687f83", "#edf4f5"),
 )
+COMPACT_ROLE_LABELS = {
+    "proposer": "正方",
+    "opposer": "反方",
+    "judge": "裁判",
+    "system": "系统",
+    "fact_checker": "事实核查",
+    "audience": "观众",
+    "error": "错误",
+    "sophistry_round_report": "诡辩观察",
+    "sophistry_final_report": "诡辩总结",
+}
+PRIMARY_SCORE_ROLES = ("proposer", "opposer")
 URL_RE = re.compile(r"(https?://[^\s<>()]+)")
+FENCE_RE = re.compile(r"^\s*(```+|~~~+)")
+INLINE_CODE_RE = re.compile(r"(`+[^`]*`+)")
+HTML_TAG_RE = re.compile(r"<[^>]+>")
+TRAILING_TIMEZONE_RE = re.compile(r"(?:Z|[+-]\d{2}:?\d{2})$")
+
+
+def _build_markdown_renderer() -> MarkdownIt:
+    renderer = MarkdownIt(
+        "gfm-like",
+        {
+            "html": False,
+            "linkify": False,
+            "typographer": False,
+        },
+    )
+
+    def link_open(tokens, idx, options, env):
+        token = tokens[idx]
+        token.attrSet("target", "_blank")
+        token.attrSet("rel", "noopener noreferrer")
+        return renderer.renderer.renderToken(tokens, idx, options, env)
+
+    renderer.renderer.rules["link_open"] = link_open
+    return renderer
+
+
+MARKDOWN_RENDERER = _build_markdown_renderer()
 
 
 def _html(value: Any) -> str:
@@ -50,6 +88,22 @@ def _html(value: Any) -> str:
 def _plain(value: Any, fallback: str = "-") -> str:
     text = str(value or "").strip()
     return text or fallback
+
+
+def _format_minute_timestamp(value: Any, fallback: str = "-") -> str:
+    text = str(value or "").strip()
+    if not text:
+        return fallback
+
+    normalized = text.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        compact = text.replace("T", " ")
+        compact = TRAILING_TIMEZONE_RE.sub("", compact)
+        return compact[:16] if len(compact) >= 16 else compact
+
+    return parsed.strftime("%Y-%m-%d %H:%M")
 
 
 def _slug(value: str) -> str:
@@ -80,9 +134,22 @@ def _role_heading(entry: dict[str, Any]) -> str:
     return label
 
 
+def _compact_role_label(role: str) -> str:
+    return COMPACT_ROLE_LABELS.get(role, re.sub(r"\s*\([^)]*\)$", "", role_label(role)))
+
+
+def _compact_entry_role_heading(entry: dict[str, Any]) -> str:
+    role = str(entry.get("role", "unknown"))
+    target_role = entry.get("target_role")
+    label = _compact_role_label(role)
+    if role == "judge" and isinstance(target_role, str) and target_role:
+        return f"{label} -> {_compact_role_label(target_role)}"
+    return label
+
+
 def _agent_label(entry: dict[str, Any]) -> str:
     agent_name = str(entry.get("agent_name") or "").strip()
-    return agent_name or _role_heading(entry)
+    return agent_name or _compact_entry_role_heading(entry)
 
 
 def _accent_for_role(role: str) -> tuple[str, str]:
@@ -92,29 +159,88 @@ def _accent_for_role(role: str) -> tuple[str, str]:
     return ACCENT_POOL[checksum % len(ACCENT_POOL)]
 
 
-def _render_text_content(content: Any) -> str:
+def _autolink_plain_urls_outside_code(text: str) -> str:
+    """Convert bare URLs into Markdown autolinks without touching fenced or inline code."""
+    lines: list[str] = []
+    in_fence = False
+
+    for line in text.splitlines():
+        if FENCE_RE.match(line):
+            in_fence = not in_fence
+            lines.append(line)
+            continue
+
+        if in_fence:
+            lines.append(line)
+            continue
+
+        parts = INLINE_CODE_RE.split(line)
+        for index in range(0, len(parts), 2):
+            part = parts[index]
+
+            def replace(match: re.Match[str]) -> str:
+                start, end = match.span()
+                before = part[start - 1] if start > 0 else ""
+                after = part[end] if end < len(part) else ""
+                if before == "<" and after == ">":
+                    return match.group(1)
+                return f"<{match.group(1)}>"
+
+            parts[index] = URL_RE.sub(replace, part)
+
+        lines.append("".join(parts))
+
+    return "\n".join(lines)
+
+
+def _should_include_thinking(categories: list[str] | None) -> bool:
+    return categories is None or "thinking_content" in categories
+
+
+def _render_markdown_content(content: Any) -> str:
     text = str(content or "")
     if not text.strip():
         return '<p class="empty-content">（无内容）</p>'
+    prepared_text = _autolink_plain_urls_outside_code(text.strip())
+    return MARKDOWN_RENDERER.render(prepared_text)
 
-    paragraphs = re.split(r"\n{2,}", text.strip())
-    rendered: list[str] = []
-    for paragraph in paragraphs:
-        parts: list[str] = []
-        last_index = 0
-        for match in URL_RE.finditer(paragraph):
-            parts.append(_html(paragraph[last_index:match.start()]).replace("\n", "<br>"))
-            url = match.group(1)
-            safe_url = _html(url)
-            parts.append(f'<a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_url}</a>')
-            last_index = match.end()
-        parts.append(_html(paragraph[last_index:]).replace("\n", "<br>"))
-        rendered.append(f"<p>{''.join(parts)}</p>")
-    return "\n".join(rendered)
+
+def _markdown_visible_text(content: Any) -> str:
+    text = str(content or "")
+    if not text.strip():
+        return ""
+    rendered = MARKDOWN_RENDERER.render(_autolink_plain_urls_outside_code(text.strip()))
+    return unescape(HTML_TAG_RE.sub(" ", rendered))
+
+
+def _content_stat_count(content: Any) -> int:
+    thinking, response = split_leading_thinking_content(content)
+    visible_content = response if thinking else str(content or "")
+    visible_text = _markdown_visible_text(visible_content)
+    return len(re.sub(r"\s+", "", visible_text))
+
+
+def _render_text_content(content: Any, *, include_thinking: bool) -> str:
+    thinking, response = split_leading_thinking_content(content)
+    parts: list[str] = []
+
+    if thinking and include_thinking:
+        parts.append(
+            '<details class="thinking-panel">'
+            '<summary><span>思维链</span><small>默认已折叠</small></summary>'
+            f'<div class="thinking-body markdown-body">{_render_markdown_content(thinking)}</div>'
+            "</details>"
+        )
+
+    visible_content = response if thinking else content
+    parts.append(_render_markdown_content(visible_content))
+    return "\n".join(parts)
 
 
 def _entry_summary(entry: dict[str, Any]) -> str:
-    content = re.sub(r"\s+", " ", str(entry.get("content") or "")).strip()
+    thinking, response = split_leading_thinking_content(entry.get("content"))
+    content_value = response if thinking else str(entry.get("content") or "")
+    content = re.sub(r"\s+", " ", content_value).strip()
     if not content:
         return "无内容"
     if len(content) <= 120:
@@ -199,20 +325,62 @@ def _collect_roles(sections: list[tuple[str, str, list[dict[str, Any]]]], partic
     return roles
 
 
-def _render_meta_grid(session_data: dict[str, Any]) -> str:
-    participants = session_data.get("participants", [])
-    participant_text = ", ".join(role_label(str(p)) for p in participants) if isinstance(participants, list) else "-"
+def _collect_speech_text_stats(session_data: dict[str, Any]) -> dict[str, int]:
+    stats = {"proposer": 0, "opposer": 0}
+    history = session_data.get("dialogue_history", [])
+    if not isinstance(history, list):
+        return stats
+
+    for entry in history:
+        if not isinstance(entry, dict):
+            continue
+        role = str(entry.get("role", ""))
+        if role in stats:
+            stats[role] += _content_stat_count(entry.get("content"))
+    return stats
+
+
+def _render_meta_strip(session_data: dict[str, Any]) -> str:
     items = [
-        ("状态", _plain(session_data.get("status"))),
         ("轮次", f"{_plain(session_data.get('current_turn'), '0')} / {_plain(session_data.get('max_turns'), '0')}"),
-        ("参与者", participant_text or "-"),
-        ("创建时间", _plain(session_data.get("created_at"))),
-        ("导出时间", datetime.now(UTC).isoformat()),
+        ("创建", _format_minute_timestamp(session_data.get("created_at"))),
+        ("导出", _format_minute_timestamp(datetime.now(UTC))),
     ]
     return "\n".join(
-        f'<div class="meta-item"><span>{_html(label)}</span><strong>{_html(value)}</strong></div>'
+        f'<span class="meta-item"><span>{_html(label)}</span><strong>{_html(value)}</strong></span>'
         for label, value in items
     )
+
+
+def _render_speech_stats(stats: dict[str, int]) -> str:
+    proposer_count = stats.get("proposer", 0)
+    opposer_count = stats.get("opposer", 0)
+    total_count = proposer_count + opposer_count
+    items = [
+        ("正方", proposer_count, "proposer"),
+        ("反方", opposer_count, "opposer"),
+        ("合计", total_count, "total"),
+    ]
+    rendered_items = "\n".join(
+        '<div class="speech-stat-item" data-role="'
+        f'{_html(role)}">'
+        f'<span>{_html(label)}</span>'
+        f'<strong>{_html(f"{count:,}")}</strong>'
+        "<small>字符</small>"
+        "</div>"
+        for label, count, role in items
+    )
+    return f"""
+<section class="speech-stats" aria-label="发言文本量统计">
+  <div class="speech-stats-heading">
+    <span>发言文本量</span>
+    <small>不含思维链</small>
+  </div>
+  <div class="speech-stats-grid">
+    {rendered_items}
+  </div>
+</section>
+""".strip()
 
 
 def _render_legend(roles: list[str]) -> str:
@@ -225,7 +393,7 @@ def _render_legend(roles: list[str]) -> str:
             '<span class="legend-item" style="--agent-accent: '
             f'{_html(accent)}; --agent-soft: {_html(soft)};">'
             '<i></i>'
-            f"{_html(role_label(role))}"
+            f"{_html(_compact_role_label(role))}"
             "</span>"
         )
     return f'<section class="legend" aria-label="智能体颜色图例">{"".join(items)}</section>'
@@ -241,7 +409,7 @@ def _render_turn_nav(turns: list[int]) -> str:
     return f'<nav class="turn-nav" aria-label="轮次导航">{links}</nav>'
 
 
-def _render_entry(entry: dict[str, Any], index: int) -> str:
+def _render_entry(entry: dict[str, Any], index: int, *, include_thinking: bool) -> str:
     role = str(entry.get("role", "unknown"))
     accent, soft = _accent_for_role(role)
     citations = entry.get("citations", [])
@@ -256,31 +424,50 @@ def _render_entry(entry: dict[str, Any], index: int) -> str:
             citation_links = f'<div class="citations"><strong>引用来源</strong><ul>{items}</ul></div>'
 
     agent = _agent_label(entry)
-    role_heading = _role_heading(entry)
+    role_heading = _compact_entry_role_heading(entry)
     summary = _entry_summary(entry)
     timestamp = str(entry.get("timestamp") or "").strip()
-    timestamp_html = f'<span class="message-time">{_html(timestamp)}</span>' if timestamp else ""
+    timestamp_text = _format_minute_timestamp(timestamp, "") if timestamp else ""
+    timestamp_html = f'<span class="message-time">{_html(timestamp_text)}</span>' if timestamp_text else ""
+    agent_html = f'<strong class="agent-name">{_html(agent)}</strong>' if agent != role_heading else ""
 
     return f"""
-<details class="message-card" open style="--agent-accent: {_html(accent)}; --agent-soft: {_html(soft)};">
-  <summary>
-    <span class="message-summary-main">
-      <span class="agent-pill">{_html(role_heading)}</span>
-      <span class="agent-name">{_html(agent)}</span>
-      <span class="turn-badge">{_html(_turn_label(entry, index))}</span>
-      {timestamp_html}
+<details class="message-card" open data-role="{_html(role)}" style="--agent-accent: {_html(accent)}; --agent-soft: {_html(soft)};">
+  <summary class="message-header">
+    <span class="message-identity">
+      <span class="speaker-mark" aria-hidden="true"></span>
+      <span class="speaker-text">
+        <span class="speaker-row">
+          <span class="agent-pill">{_html(role_heading)}</span>
+          {agent_html}
+        </span>
+        <span class="message-context">
+          <span class="turn-badge">{_html(_turn_label(entry, index))}</span>
+          {timestamp_html}
+        </span>
+      </span>
+    </span>
+    <span class="message-toggle" aria-hidden="true">
+      <span class="toggle-open">收起</span>
+      <span class="toggle-closed">展开</span>
     </span>
     <span class="message-summary-text">{_html(summary)}</span>
   </summary>
-  <div class="message-body">
-    {_render_text_content(entry.get("content"))}
-    {citation_links}
+  <div class="message-body-wrap">
+    <div class="message-body markdown-body">
+      {_render_text_content(entry.get("content"), include_thinking=include_thinking)}
+      {citation_links}
+    </div>
   </div>
 </details>
 """.strip()
 
 
-def _render_transcript_sections(sections: list[tuple[str, str, list[dict[str, Any]]]]) -> tuple[str, list[int]]:
+def _render_transcript_sections(
+    sections: list[tuple[str, str, list[dict[str, Any]]]],
+    *,
+    include_thinking: bool,
+) -> tuple[str, list[int]]:
     rendered_sections: list[str] = []
     all_turns: list[int] = []
     seen_turns: set[int] = set()
@@ -312,7 +499,13 @@ def _render_transcript_sections(sections: list[tuple[str, str, list[dict[str, An
                 section_parts.append('<div class="turn-group">')
                 section_parts.append("<h3>未标记轮次</h3>")
 
-            section_parts.append(_render_entry(entry, entry_global_index or local_index))
+            section_parts.append(
+                _render_entry(
+                    entry,
+                    entry_global_index or local_index,
+                    include_thinking=include_thinking,
+                )
+            )
             entry_global_index += 1
 
         if current_turn is not None:
@@ -323,93 +516,275 @@ def _render_transcript_sections(sections: list[tuple[str, str, list[dict[str, An
     return "\n".join(rendered_sections), sorted(all_turns)
 
 
+def _is_numeric_score(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _format_score_plain(score: float | None) -> str:
+    if score is None:
+        return "-"
+    rounded = round(score, 1)
+    return str(int(rounded)) if rounded.is_integer() else f"{rounded:.1f}"
+
+
+def _format_score_delta(delta: float) -> str:
+    rounded = round(abs(delta), 1)
+    return str(int(rounded)) if rounded.is_integer() else f"{rounded:.1f}"
+
+
+def _score_bar_width(score: float | None) -> str:
+    if score is None:
+        return "0%"
+    clamped = min(max(score, 0), 10)
+    return f"{clamped * 10:.1f}%"
+
+
+def _score_role_sort_key(role: str) -> tuple[int, str]:
+    if role in PRIMARY_SCORE_ROLES:
+        return (PRIMARY_SCORE_ROLES.index(role), role)
+    return (len(PRIMARY_SCORE_ROLES), role)
+
+
+def _score_value_at(value: Any, round_index: int) -> float | None:
+    if isinstance(value, (list, tuple)):
+        if round_index >= len(value):
+            return None
+        item = value[round_index]
+        return float(item) if _is_numeric_score(item) else None
+    if round_index == 0 and _is_numeric_score(value):
+        return float(value)
+    return None
+
+
+def _cumulative_round_count(score_data: dict[str, Any]) -> int:
+    round_count = 0
+    for dim_key in DIM_LABELS:
+        value = score_data.get(dim_key)
+        if isinstance(value, (list, tuple)):
+            round_count = max(round_count, len(value))
+        elif _is_numeric_score(value):
+            round_count = max(round_count, 1)
+    return round_count
+
+
+def _weighted_score_for_round(score_data: dict[str, Any], round_index: int) -> float | None:
+    score_map: dict[str, float] = {}
+    for dim_key in DIM_LABELS:
+        score = _score_value_at(score_data.get(dim_key), round_index)
+        if score is not None:
+            score_map[dim_key] = score
+    return weighted_average(score_map, tuple(score_map.keys()))
+
+
+def _collect_cumulative_score_series(cumulative_scores: Any) -> dict[str, list[float | None]]:
+    if not isinstance(cumulative_scores, dict):
+        return {}
+
+    series: dict[str, list[float | None]] = {}
+    for role, score_data in sorted(cumulative_scores.items(), key=lambda item: _score_role_sort_key(str(item[0]))):
+        if not isinstance(score_data, dict):
+            continue
+        round_count = _cumulative_round_count(score_data)
+        values = [_weighted_score_for_round(score_data, index) for index in range(round_count)]
+        if any(value is not None for value in values):
+            series[str(role)] = values
+    return series
+
+
+def _collect_current_score_series(current_scores: Any) -> dict[str, list[float | None]]:
+    if not isinstance(current_scores, dict):
+        return {}
+
+    series: dict[str, list[float | None]] = {}
+    for role, score_data in sorted(current_scores.items(), key=lambda item: _score_role_sort_key(str(item[0]))):
+        if not isinstance(score_data, dict):
+            continue
+        score = resolve_comprehensive_score(score_data)
+        if score is not None:
+            series[str(role)] = [score]
+    return series
+
+
+def _last_score(values: list[float | None]) -> float | None:
+    for value in reversed(values):
+        if value is not None:
+            return value
+    return None
+
+
+def _average_score(values: list[float | None]) -> float | None:
+    numeric_values = [value for value in values if value is not None]
+    if not numeric_values:
+        return None
+    return round(sum(numeric_values) / len(numeric_values), 1)
+
+
+def _round_leader_text(round_scores: dict[str, float | None]) -> str:
+    available = [
+        (role, score)
+        for role, score in round_scores.items()
+        if score is not None
+    ]
+    if not available:
+        return "暂无评分"
+    if len(available) == 1:
+        role, score = available[0]
+        return f"{_compact_role_label(role)} {_format_score_plain(score)} 分"
+
+    ordered = sorted(available, key=lambda item: item[1], reverse=True)
+    best_role, best_score = ordered[0]
+    _, second_score = ordered[1]
+    delta = round(best_score - second_score, 1)
+    if delta <= 0:
+        return "本轮持平"
+    return f"{_compact_role_label(best_role)}领先 {_format_score_delta(delta)} 分"
+
+
+def _render_score_outcome(series: dict[str, list[float | None]]) -> str:
+    latest_scores = {
+        role: _last_score(values)
+        for role, values in series.items()
+    }
+    preferred_scores = {
+        role: latest_scores.get(role)
+        for role in PRIMARY_SCORE_ROLES
+        if latest_scores.get(role) is not None
+    }
+    comparison_scores = preferred_scores if len(preferred_scores) >= 2 else latest_scores
+    available = [
+        (role, score)
+        for role, score in comparison_scores.items()
+        if score is not None
+    ]
+    if len(available) < 2:
+        return ""
+
+    ordered = sorted(available, key=lambda item: item[1], reverse=True)
+    best_role, best_score = ordered[0]
+    second_role, second_score = ordered[1]
+    delta = round(best_score - second_score, 1)
+    if delta <= 0:
+        headline = "最终轮双方持平"
+        detail = f"{_compact_role_label(best_role)}与{_compact_role_label(second_role)}同为 {_format_score_plain(best_score)} 分"
+    else:
+        headline = f"{_compact_role_label(best_role)}暂时领先"
+        detail = f"领先{_compact_role_label(second_role)} {_format_score_delta(delta)} 分"
+
+    return f"""
+<div class="score-outcome">
+  <span>最终轮概览</span>
+  <strong>{_html(headline)}</strong>
+  <small>{_html(detail)}</small>
+</div>
+""".strip()
+
+
+def _render_score_summary(series: dict[str, list[float | None]]) -> str:
+    items: list[str] = []
+    for role, values in series.items():
+        accent, soft = _accent_for_role(role)
+        latest = _last_score(values)
+        average = _average_score(values)
+        round_count = len([value for value in values if value is not None])
+        items.append(
+            '<div class="score-summary-card" style="--agent-accent: '
+            f'{_html(accent)}; --agent-soft: {_html(soft)};">'
+            f'<span>{_html(_compact_role_label(role))}</span>'
+            f'<strong>{_html(format_score(latest))}</strong>'
+            f'<small>平均 {_html(format_score(average))} · {_html(round_count)} 轮</small>'
+            "</div>"
+        )
+    return f'<div class="score-summary-grid">{"".join(items)}</div>' if items else ""
+
+
+def _render_score_timeline(series: dict[str, list[float | None]]) -> str:
+    if not series:
+        return ""
+
+    role_order = list(series.keys())
+    round_count = max((len(values) for values in series.values()), default=0)
+    rounds: list[str] = []
+    for round_index in range(round_count):
+        round_scores = {
+            role: values[round_index] if round_index < len(values) else None
+            for role, values in series.items()
+        }
+        bar_rows: list[str] = []
+        for role in role_order:
+            score = round_scores.get(role)
+            if score is None:
+                continue
+            accent, soft = _accent_for_role(role)
+            bar_rows.append(
+                '<div class="score-bar-row" style="--agent-accent: '
+                f'{_html(accent)}; --agent-soft: {_html(soft)};">'
+                f'<span class="score-bar-label">{_html(_compact_role_label(role))}</span>'
+                '<span class="score-bar-track">'
+                f'<span class="score-bar-fill" style="--score-size: {_html(_score_bar_width(score))};"></span>'
+                "</span>"
+                f'<strong>{_html(_format_score_plain(score))}</strong>'
+                "</div>"
+            )
+        if not bar_rows:
+            continue
+        rounds.append(
+            '<article class="score-round">'
+            '<div class="score-round-head">'
+            f'<span>第 {round_index + 1} 轮</span>'
+            f'<strong>{_html(_round_leader_text(round_scores))}</strong>'
+            "</div>"
+            f'<div class="score-bars">{"".join(bar_rows)}</div>'
+            "</article>"
+        )
+
+    return f'<div class="score-timeline">{"".join(rounds)}</div>' if rounds else ""
+
+
 def _render_scores(session_data: dict[str, Any]) -> str:
-    current_scores = session_data.get("current_scores", {})
-    cumulative_scores = session_data.get("cumulative_scores", {})
-    parts: list[str] = []
+    cumulative_series = _collect_cumulative_score_series(session_data.get("cumulative_scores", {}))
+    series = cumulative_series or _collect_current_score_series(session_data.get("current_scores", {}))
+    if not series:
+        return ""
 
-    if isinstance(current_scores, dict) and current_scores:
-        parts.append('<section class="score-section"><h2>当前评分</h2>')
-        for role, scores in current_scores.items():
-            if not isinstance(scores, dict):
-                continue
-            parts.append(f"<h3>{_html(role_label(str(role)))}</h3>")
-            comprehensive_score = resolve_comprehensive_score(scores)
-            if comprehensive_score is not None:
-                parts.append(f'<p class="score-highlight">综合评分：{_html(format_score(comprehensive_score))}</p>')
+    is_cumulative = bool(cumulative_series)
+    title = "逐轮综合分走势" if is_cumulative else "最新评分概览"
+    note = (
+        "按六项评分权重汇总每轮结果，已隐藏最后一轮逐项评分表。"
+        if is_cumulative
+        else "当前导出只包含最新轮评分，因此仅保留综合分概览。"
+    )
 
-            module_scores = resolve_module_scores(scores)
-            if module_scores:
-                rows = []
-                for module_key, module_label in MODULE_LABELS.items():
-                    rows.append(
-                        "<tr>"
-                        f"<td>{_html(module_label)}</td>"
-                        f"<td>{MODULE_WEIGHTS[module_key]}%</td>"
-                        f"<td>{_html(format_score(module_scores.get(module_key)))}</td>"
-                        "</tr>"
-                    )
-                parts.append(
-                    '<div class="table-wrap"><table><thead><tr><th>模块</th><th>占比</th><th>得分</th></tr></thead>'
-                    f"<tbody>{''.join(rows)}</tbody></table></div>"
-                )
-
-            dim_rows = []
-            for dim_key, dim_label in DIM_LABELS.items():
-                dim_data = scores.get(dim_key, {})
-                if isinstance(dim_data, dict):
-                    score = format_score(dim_data.get("score"))
-                    rationale = dim_data.get("rationale") or "-"
-                else:
-                    score = "-"
-                    rationale = "-"
-                dim_rows.append(
-                    "<tr>"
-                    f"<td>{_html(dim_label)}</td>"
-                    f"<td>{DIM_WEIGHTS[dim_key]}%</td>"
-                    f"<td>{_html(score)}</td>"
-                    f"<td>{_html(rationale)}</td>"
-                    "</tr>"
-                )
-            parts.append(
-                '<div class="table-wrap"><table><thead><tr><th>底层维度</th><th>权重</th><th>得分</th><th>评语</th></tr></thead>'
-                f"<tbody>{''.join(dim_rows)}</tbody></table></div>"
-            )
-
-            overall = scores.get("overall_comment")
-            if overall:
-                parts.append(f'<p class="overall-comment">整体评语：{_html(overall)}</p>')
-        parts.append("</section>")
-
-    if isinstance(cumulative_scores, dict) and cumulative_scores:
-        parts.append('<section class="score-section"><h2>累计得分趋势</h2>')
-        for role, score_data in cumulative_scores.items():
-            if not isinstance(score_data, dict):
-                continue
-            parts.append(f"<h3>{_html(role_label(str(role)))}</h3>")
-            items = "\n".join(
-                f"<li><span>{_html(dim_label)}</span><strong>{_html(format_cumulative_value(score_data.get(dim_key)))}</strong></li>"
-                for dim_key, dim_label in DIM_LABELS.items()
-            )
-            parts.append(f'<ul class="trend-list">{items}</ul>')
-        parts.append("</section>")
-
-    return "\n".join(parts)
+    return f"""
+<section class="score-section score-trend-section" aria-label="{_html(title)}">
+  <div class="score-section-head">
+    <div>
+      <p class="section-kicker">评分</p>
+      <h2>{_html(title)}</h2>
+    </div>
+    <p>{_html(note)}</p>
+  </div>
+  {_render_score_outcome(series)}
+  {_render_score_summary(series)}
+  {_render_score_timeline(series)}
+</section>
+""".strip()
 
 
 def _styles() -> str:
     return """
 :root {
   color-scheme: light;
-  --page-bg: #f6f6f4;
+  --page-bg: #f7f8fa;
   --surface: #ffffff;
-  --surface-muted: #f2f2ef;
-  --text: #1f1f1f;
-  --text-secondary: #5f5f5f;
-  --text-muted: #878787;
-  --border: #deded8;
-  --border-strong: #c8c8c0;
-  --shadow: 0 8px 24px rgba(20, 20, 20, 0.06);
+  --surface-muted: #f2f4f7;
+  --surface-hover: #eef1f5;
+  --text: #1d232b;
+  --text-secondary: #56616f;
+  --text-muted: #7d8794;
+  --border: #dce1e8;
+  --border-strong: #c6ced8;
+  --focus: #516a8d;
+  --shadow: 0 10px 28px rgba(29, 35, 43, 0.06);
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -421,7 +796,7 @@ body {
   font-size: 15px;
   line-height: 1.7;
 }
-a { color: #3f5f75; overflow-wrap: anywhere; }
+a { color: #3f6382; overflow-wrap: anywhere; }
 .page {
   width: min(100%, 980px);
   margin: 0 auto;
@@ -430,48 +805,124 @@ a { color: #3f5f75; overflow-wrap: anywhere; }
 .hero {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 28px;
+  border-radius: 10px;
+  padding: 18px 20px;
   box-shadow: var(--shadow);
 }
+.hero-main {
+  display: block;
+}
+.title-block {
+  min-width: 0;
+}
 .eyebrow {
-  margin: 0 0 8px;
+  margin: 0 0 5px;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
 }
 h1 {
   margin: 0;
-  font-size: clamp(24px, 4vw, 36px);
+  font-size: clamp(22px, 3vw, 30px);
   line-height: 1.25;
   letter-spacing: 0;
 }
-.meta-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 22px;
+.meta-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 6px;
+  margin-top: 10px;
 }
 .meta-item {
   min-width: 0;
-  padding: 10px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 8px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--surface-muted);
 }
 .meta-item span {
-  display: block;
   color: var(--text-muted);
   font-size: 12px;
 }
 .meta-item strong {
-  display: block;
-  margin-top: 2px;
   color: var(--text);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 650;
   overflow-wrap: anywhere;
+}
+.speech-stats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.speech-stats-heading {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.speech-stats-heading span {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 750;
+}
+.speech-stats-heading small {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.speech-stats-grid {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.speech-stat-item {
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.speech-stat-item::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--border-strong);
+}
+.speech-stat-item[data-role="proposer"]::before {
+  background: #5b8073;
+}
+.speech-stat-item[data-role="opposer"]::before {
+  background: #9a6a72;
+}
+.speech-stat-item span,
+.speech-stat-item small {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+.speech-stat-item strong {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.15;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
 }
 .toolbar {
   position: sticky;
@@ -482,9 +933,9 @@ h1 {
   gap: 8px;
   margin: 16px 0;
   padding: 10px;
-  background: rgba(246, 246, 244, 0.94);
+  background: rgba(247, 248, 250, 0.94);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   backdrop-filter: blur(8px);
 }
 .toolbar button {
@@ -492,20 +943,24 @@ h1 {
   border: 1px solid var(--border-strong);
   background: var(--surface);
   color: var(--text);
-  border-radius: 8px;
+  border-radius: 7px;
   padding: 7px 11px;
   font: inherit;
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
 }
+.toolbar button:hover {
+  background: var(--surface-hover);
+}
 .toolbar button:focus-visible,
 .turn-link:focus-visible,
 summary:focus-visible {
-  outline: 2px solid #6f7892;
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 .turn-nav {
+  min-width: 0;
   display: flex;
   gap: 8px;
   overflow-x: auto;
@@ -525,6 +980,9 @@ summary:focus-visible {
   font-size: 12px;
   font-weight: 650;
   text-decoration: none;
+}
+.turn-link:hover {
+  background: var(--surface-hover);
 }
 .legend {
   display: flex;
@@ -555,7 +1013,7 @@ summary:focus-visible {
   margin-top: 18px;
   padding: 24px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--surface);
 }
 h2 {
@@ -565,84 +1023,188 @@ h2 {
 }
 .turn-group {
   scroll-margin-top: 96px;
-  margin-top: 18px;
+  margin-top: 22px;
 }
-.turn-group h3,
-.score-section h3 {
-  margin: 0 0 10px;
+.turn-group h3 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
   color: var(--text-secondary);
   font-size: 15px;
   line-height: 1.5;
 }
+.turn-group h3::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--border);
+}
 .message-card {
-  margin: 10px 0;
+  position: relative;
+  margin: 12px 0;
   border: 1px solid var(--border);
-  border-left: 4px solid var(--agent-accent);
   border-radius: 8px;
   background: var(--surface);
   overflow: hidden;
 }
-.message-card[open] {
-  background: linear-gradient(90deg, var(--agent-soft), #fff 34%);
+.message-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--agent-accent);
 }
-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 12px 14px;
+.message-card[open] {
+  border-color: var(--border-strong);
+}
+.message-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  padding: 12px 14px 12px 18px;
   cursor: pointer;
   list-style: none;
+  background: var(--surface);
+}
+.message-header:hover {
+  background: var(--surface-muted);
 }
 summary::-webkit-details-marker { display: none; }
-summary::after {
-  content: "展开";
-  align-self: flex-start;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 650;
+.message-identity {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
 }
-.message-card[open] summary::after { content: "收起"; }
-.message-summary-main {
+.speaker-mark {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  margin-top: 9px;
+  border-radius: 999px;
+  background: var(--agent-accent);
+  box-shadow: 0 0 0 4px var(--agent-soft);
+}
+.speaker-text {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.speaker-row {
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 7px;
-  min-width: 0;
+  gap: 8px;
 }
 .agent-pill {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  min-height: 24px;
+  padding: 2px 9px;
   border-radius: 999px;
   background: var(--agent-soft);
   color: var(--agent-accent);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 760;
 }
 .agent-name {
   color: var(--text);
   font-size: 13px;
   font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.message-context {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 .turn-badge,
 .message-time {
   color: var(--text-muted);
   font-size: 12px;
 }
+.message-time::before {
+  content: "·";
+  margin-right: 6px;
+  color: var(--border-strong);
+}
+.message-toggle {
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  min-height: 26px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+.message-card:not([open]) .toggle-open,
+.message-card[open] .toggle-closed {
+  display: none;
+}
 .message-summary-text {
+  grid-column: 1 / -1;
+  padding-left: 18px;
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
 .message-card[open] .message-summary-text { display: none; }
+.message-body-wrap {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
 .message-body {
-  padding: 0 18px 16px;
+  padding: 16px 18px 18px;
   color: var(--text);
   overflow-wrap: anywhere;
 }
-.message-body p {
-  margin: 0 0 12px;
+.thinking-panel {
+  margin: 0 0 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--agent-accent);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  overflow: hidden;
+}
+.thinking-panel summary {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface-muted);
+}
+.thinking-panel summary::after {
+  content: "";
+  display: none;
+}
+.thinking-panel summary span {
+  color: var(--agent-accent);
+  font-size: 12px;
+  font-weight: 750;
+}
+.thinking-panel summary small {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.thinking-body {
+  padding: 0 12px 12px;
 }
 .empty-content {
   color: var(--text-muted);
@@ -662,55 +1224,250 @@ summary::after {
   margin: 0;
   padding-left: 18px;
 }
-.table-wrap {
-  width: 100%;
+.markdown-body {
+  color: var(--text);
+  line-height: 1.72;
+}
+.markdown-body > :first-child {
+  margin-top: 0;
+}
+.markdown-body > :last-child {
+  margin-bottom: 0;
+}
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin: 1.35em 0 0.65em;
+  color: var(--text);
+  line-height: 1.35;
+  font-weight: 700;
+}
+.markdown-body h1 { font-size: 1.55em; }
+.markdown-body h2 { font-size: 1.35em; }
+.markdown-body h3 { font-size: 1.18em; }
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 { font-size: 1em; }
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body blockquote,
+.markdown-body pre,
+.markdown-body table {
+  margin: 0.75em 0;
+}
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.5em;
+}
+.markdown-body li {
+  margin: 0.25em 0;
+}
+.markdown-body code {
+  padding: 0.15em 0.35em;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.9em;
+}
+.markdown-body pre {
   overflow-x: auto;
-  margin: 10px 0 18px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
+  background: var(--surface-muted);
 }
-table {
+.markdown-body pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.markdown-body blockquote {
+  margin-left: 0;
+  margin-right: 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--agent-accent);
+  border-radius: 0 8px 8px 0;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+}
+.markdown-body table {
+  display: block;
   width: 100%;
+  overflow-x: auto;
   border-collapse: collapse;
-  min-width: 620px;
+  font-size: 0.95em;
 }
-th,
-td {
-  padding: 9px 11px;
-  border-bottom: 1px solid var(--border);
+.markdown-body th,
+.markdown-body td {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
   text-align: left;
   vertical-align: top;
 }
-th {
+.markdown-body th {
   background: var(--surface-muted);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-weight: 700;
 }
-tr:last-child td { border-bottom: 0; }
-.score-highlight,
-.overall-comment {
-  margin: 8px 0 14px;
-  padding: 10px 12px;
+.markdown-body tr:nth-child(even) {
+  background: #fafbfc;
+}
+.markdown-body hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1.4em 0;
+}
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+.score-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.score-section-head h2 {
+  margin-bottom: 0;
+}
+.score-section-head p:last-child {
+  max-width: 360px;
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: right;
+}
+.section-kicker {
+  margin: 0 0 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+.score-outcome {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface-muted);
 }
-.trend-list {
-  display: grid;
-  gap: 8px;
-  margin: 0 0 18px;
-  padding: 0;
-  list-style: none;
+.score-outcome span,
+.score-outcome small {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 650;
 }
-.trend-list li {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 9px 11px;
+.score-outcome strong {
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.35;
+}
+.score-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.score-summary-card {
+  display: grid;
+  gap: 4px;
+  padding: 12px 13px;
   border: 1px solid var(--border);
   border-radius: 8px;
+  background: var(--surface);
+  box-shadow: inset 3px 0 0 var(--agent-accent);
 }
-.trend-list span { color: var(--text-secondary); }
+.score-summary-card span {
+  color: var(--agent-accent);
+  font-size: 12px;
+  font-weight: 760;
+}
+.score-summary-card strong {
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.score-summary-card small {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.score-timeline {
+  display: grid;
+  gap: 10px;
+}
+.score-round {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.score-round-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.score-round-head span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.score-round-head strong {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 750;
+  text-align: right;
+}
+.score-bars {
+  display: grid;
+  gap: 8px;
+}
+.score-bar-row {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) 42px;
+  align-items: center;
+  gap: 10px;
+}
+.score-bar-label {
+  min-width: 0;
+  color: var(--agent-accent);
+  font-size: 12px;
+  font-weight: 760;
+  white-space: nowrap;
+}
+.score-bar-track {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  overflow: hidden;
+}
+.score-bar-fill {
+  display: block;
+  width: var(--score-size);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--agent-accent);
+}
+.score-bar-row strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 760;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .footer {
   margin-top: 24px;
   color: var(--text-muted);
@@ -723,18 +1480,111 @@ tr:last-child td { border-bottom: 0; }
   .hero,
   .transcript-section,
   .score-section { padding: 18px; border-radius: 10px; }
-  .meta-grid { grid-template-columns: 1fr; }
+  .hero-main {
+    display: block;
+  }
+  .meta-strip {
+    justify-content: flex-start;
+    margin-top: 10px;
+  }
+  .speech-stats {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 12px;
+  }
+  .speech-stats-grid {
+    width: 100%;
+    gap: 6px;
+  }
+  .speech-stat-item {
+    padding: 4px 8px;
+  }
+  .speech-stat-item strong {
+    font-size: 14px;
+  }
   .toolbar {
-    align-items: stretch;
-    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 12px 0;
+    padding: 6px;
+    overflow: hidden;
   }
-  .toolbar button { flex: 1 1 120px; }
+  .toolbar button {
+    flex: 0 0 auto;
+    min-height: 30px;
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 1.35;
+  }
   .turn-nav {
-    flex-basis: 100%;
+    flex: 1 1 auto;
     margin-left: 0;
+    gap: 6px;
+    padding: 0 0 1px;
   }
-  summary { padding: 11px 12px; }
-  .message-body { padding: 0 14px 14px; }
+  .turn-link {
+    min-height: 28px;
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+  .message-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 11px 12px 11px 16px;
+  }
+  .message-identity {
+    gap: 9px;
+  }
+  .message-toggle {
+    min-width: 38px;
+    min-height: 24px;
+    padding: 2px 7px;
+  }
+  .message-summary-text {
+    padding-left: 17px;
+  }
+  .message-body { padding: 14px; }
+  .score-section-head {
+    display: grid;
+    gap: 8px;
+  }
+  .score-section-head p:last-child {
+    max-width: none;
+    text-align: left;
+  }
+  .score-summary-grid {
+    grid-template-columns: 1fr;
+  }
+  .score-round {
+    padding: 11px 12px;
+  }
+  .score-round-head {
+    align-items: flex-start;
+  }
+  .score-bar-row {
+    grid-template-columns: 44px minmax(0, 1fr) 36px;
+    gap: 8px;
+  }
+}
+@media (max-width: 420px) {
+  .speech-stats-heading {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+  .message-header {
+    grid-template-columns: 1fr;
+  }
+  .message-toggle {
+    justify-self: start;
+  }
+  .score-round-head {
+    display: grid;
+    gap: 4px;
+  }
+  .score-round-head strong {
+    text-align: left;
+  }
 }
 @media print {
   body { background: #fff; }
@@ -767,9 +1617,13 @@ def _script() -> str:
 def export_html(session_data: dict[str, Any], categories: list[str] | tuple[str, ...] | None = None) -> str:
     normalized_categories = normalize_markdown_export_categories(categories)
     sections = _collect_category_entries(session_data, normalized_categories)
-    transcript_html, turns = _render_transcript_sections(sections)
+    transcript_html, turns = _render_transcript_sections(
+        sections,
+        include_thinking=_should_include_thinking(normalized_categories),
+    )
     participants = session_data.get("participants", [])
     roles = _collect_roles(sections, participants if isinstance(participants, list) else [])
+    speech_stats = _collect_speech_text_stats(session_data)
     topic = _plain(session_data.get("topic"), "未命名辩题")
     empty_state = '<section class="transcript-section"><h2>辩论正文</h2><p class="empty-content">暂无可导出的发言。</p></section>'
 
@@ -784,11 +1638,16 @@ def export_html(session_data: dict[str, Any], categories: list[str] | tuple[str,
 <body>
   <main class="page">
     <header class="hero">
-      <p class="eyebrow">Elenchus 辩论记录</p>
-      <h1>{_html(topic)}</h1>
-      <div class="meta-grid">
-        {_render_meta_grid(session_data)}
+      <div class="hero-main">
+        <div class="title-block">
+          <p class="eyebrow">Elenchus 辩论记录</p>
+          <h1>{_html(topic)}</h1>
+        </div>
+        <div class="meta-strip" aria-label="导出摘要">
+          {_render_meta_strip(session_data)}
+        </div>
       </div>
+      {_render_speech_stats(speech_stats)}
     </header>
 
     <section class="toolbar" aria-label="阅读工具">

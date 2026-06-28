@@ -137,6 +137,177 @@ async def test_debater_streams_tokens_through_runtime_event_emitter(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_debater_retries_empty_public_speech(monkeypatch):
+    captured_instructions: list[str] = []
+    calls = 0
+
+    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+        nonlocal calls
+        calls += 1
+        captured_instructions.append(messages[-1].content)
+        return AIMessage(content="" if calls == 1 else "这是重试后的正式发言。")
+
+    monkeypatch.setattr(debater, "get_debater_system_prompt", lambda role: "系统提示")
+    monkeypatch.setattr(debater, "invoke_chat_model", fake_invoke_chat_model)
+    monkeypatch.setattr(debater, "get_all_skills", lambda: [])
+
+    result = await debater.debater_speak(
+        {
+            "current_speaker": "proposer",
+            "topic": "测试空发言重试",
+            "current_turn": 2,
+            "max_turns": 5,
+            "dialogue_history": [],
+            "shared_knowledge": [],
+            "messages": [],
+            "agent_configs": {},
+        }
+    )
+
+    assert calls == 2
+    assert "没有产生可展示的正式辩论发言" in captured_instructions[-1]
+    assert result["dialogue_history"][0]["content"] == "这是重试后的正式发言。"
+
+
+@pytest.mark.asyncio
+async def test_debater_injects_role_specific_speech_limit(monkeypatch):
+    captured_instructions: list[str] = []
+
+    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+        captured_instructions.append(messages[1].content)
+        return AIMessage(content="正式发言")
+
+    monkeypatch.setattr(debater, "get_debater_system_prompt", lambda role: "系统提示")
+    monkeypatch.setattr(debater, "invoke_chat_model", fake_invoke_chat_model)
+    monkeypatch.setattr(debater, "get_all_skills", lambda: [])
+
+    await debater.debater_speak(
+        {
+            "current_speaker": "opposer",
+            "topic": "测试字数限制",
+            "current_turn": 1,
+            "max_turns": 3,
+            "dialogue_history": [],
+            "shared_knowledge": [],
+            "messages": [],
+            "agent_configs": {},
+            "speech_config": {
+                "proposer_max_chars": 1200,
+                "opposer_max_chars": 800,
+            },
+        }
+    )
+
+    assert captured_instructions
+    assert "## 发言长度限制" in captured_instructions[0]
+    assert "800 个中文字符以内" in captured_instructions[0]
+    assert "1200 个中文字符以内" not in captured_instructions[0]
+
+
+@pytest.mark.asyncio
+async def test_debater_treats_think_only_response_as_empty(monkeypatch):
+    calls = 0
+
+    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return AIMessage(content="<think>只有思考，没有公开发言。</think>")
+        return AIMessage(content="<think>草稿</think>\n\n这是公开正式发言。")
+
+    monkeypatch.setattr(debater, "get_debater_system_prompt", lambda role: "系统提示")
+    monkeypatch.setattr(debater, "invoke_chat_model", fake_invoke_chat_model)
+    monkeypatch.setattr(debater, "get_all_skills", lambda: [])
+
+    result = await debater.debater_speak(
+        {
+            "current_speaker": "proposer",
+            "topic": "测试思维链空发言",
+            "current_turn": 1,
+            "max_turns": 3,
+            "dialogue_history": [],
+            "shared_knowledge": [],
+            "messages": [],
+            "agent_configs": {},
+        }
+    )
+
+    assert calls == 2
+    assert result["dialogue_history"][0]["content"].endswith("这是公开正式发言。")
+
+
+@pytest.mark.asyncio
+async def test_debater_cancels_stream_before_retrying_empty_speech(monkeypatch):
+    emitted: list[str] = []
+    calls = 0
+
+    class _RuntimeEmitter:
+        async def emit_speech_start(self, session_id, *, role, agent_name, turn):
+            emitted.append("speech_start")
+
+        async def emit_speech_token(self, session_id, *, role, agent_name, token, turn):
+            emitted.append(f"speech_token:{token}")
+
+        async def emit_speech_cancel(self, session_id, *, role, agent_name, turn):
+            emitted.append("speech_cancel")
+
+    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            await on_token("<think>草稿</think>")
+            return AIMessage(content="<think>草稿</think>")
+        return AIMessage(content="取消后重新生成的正式发言。")
+
+    monkeypatch.setattr(debater, "get_debater_system_prompt", lambda role: "系统提示")
+    monkeypatch.setattr(debater, "invoke_chat_model", fake_invoke_chat_model)
+    monkeypatch.setattr(debater, "get_all_skills", lambda: [])
+
+    result = await debater.debater_speak(
+        {
+            "session_id": "abc123def456",
+            "current_speaker": "proposer",
+            "topic": "测试取消流式空发言",
+            "current_turn": 1,
+            "max_turns": 3,
+            "dialogue_history": [],
+            "shared_knowledge": [],
+            "messages": [],
+            "agent_configs": {},
+            "runtime_event_emitter": _RuntimeEmitter(),
+        }
+    )
+
+    assert emitted == ["speech_start", "speech_token:<think>草稿</think>", "speech_cancel"]
+    assert result["dialogue_history"][0]["content"] == "取消后重新生成的正式发言。"
+    assert result["speech_was_streamed"] is False
+
+
+@pytest.mark.asyncio
+async def test_debater_raises_after_repeated_empty_speech(monkeypatch):
+    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+        return AIMessage(content="")
+
+    monkeypatch.setattr(debater, "get_debater_system_prompt", lambda role: "系统提示")
+    monkeypatch.setattr(debater, "invoke_chat_model", fake_invoke_chat_model)
+    monkeypatch.setattr(debater, "get_all_skills", lambda: [])
+
+    with pytest.raises(RuntimeError, match="no usable public speech"):
+        await debater.debater_speak(
+            {
+                "current_speaker": "proposer",
+                "topic": "测试连续空发言",
+                "current_turn": 1,
+                "max_turns": 3,
+                "dialogue_history": [],
+                "shared_knowledge": [],
+                "messages": [],
+                "agent_configs": {},
+            }
+        )
+
+
+@pytest.mark.asyncio
 async def test_debater_includes_only_own_previous_judge_feedback(monkeypatch):
     captured_instructions: list[str] = []
 

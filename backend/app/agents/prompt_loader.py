@@ -50,3 +50,7 @@ def get_judge_prompt() -> str:
 
 def get_consensus_prompt() -> str:
     return load_prompt("consensus_system.md")
+
+
+def get_steelman_prompt(prompt_name: str) -> str:
+    return load_prompt(f"steelman/{prompt_name}.md").strip()

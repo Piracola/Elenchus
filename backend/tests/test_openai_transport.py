@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -123,3 +124,65 @@ async def test_invoke_openai_chat_raw_rejects_html_response(monkeypatch):
             messages=[HumanMessage(content="hello")],
             config=_config(),
         )
+
+
+@pytest.mark.asyncio
+async def test_invoke_openai_chat_raw_streaming_wraps_reasoning_tokens(monkeypatch):
+    class _Delta:
+        def __init__(self, *, reasoning_content=None, content=None) -> None:
+            self.reasoning_content = reasoning_content
+            self.content = content
+
+    class _Choice:
+        def __init__(self, delta: _Delta) -> None:
+            self.delta = delta
+
+    class _Chunk:
+        def __init__(self, delta: dict[str, str]) -> None:
+            self._delta = delta
+            self.choices = [_Choice(_Delta(**delta))]
+
+        def model_dump_json(self) -> str:
+            return json.dumps({"choices": [{"delta": self._delta}]})
+
+    class _FakeStream:
+        def __init__(self) -> None:
+            self._chunks = [
+                _Chunk({"reasoning_content": "先想一下", "content": ""}),
+                _Chunk({"content": "正式回答"}),
+            ]
+
+        def __aiter__(self):
+            return self._iter()
+
+        async def _iter(self):
+            for chunk in self._chunks:
+                yield chunk
+
+    class _FakeClient:
+        def __init__(self, *args, **kwargs) -> None:
+            self.chat = SimpleNamespace(
+                completions=SimpleNamespace(create=self.create)
+            )
+
+        async def create(self, **kwargs):
+            return _FakeStream()
+
+        def close(self) -> None:
+            return None
+
+    tokens: list[str] = []
+
+    async def capture_token(token: str) -> None:
+        tokens.append(token)
+
+    monkeypatch.setattr(transport, "AsyncOpenAI", _FakeClient)
+
+    result = await transport.invoke_openai_chat_raw_streaming(
+        messages=[HumanMessage(content="hello")],
+        config=_config(),
+        on_token=capture_token,
+    )
+
+    assert tokens == ["<think>", "先想一下", "</think>\n\n", "正式回答"]
+    assert result.content == "<think>先想一下</think>\n\n正式回答"

@@ -134,6 +134,10 @@ def test_normalize_markdown_export_categories_preserves_stable_order_and_fallbac
         "jury_messages",
         "group_discussion",
     ]
+    assert export_service.normalize_markdown_export_categories(["thinking_content", "group_discussion"]) == [
+        "thinking_content",
+        "group_discussion",
+    ]
     assert export_service.normalize_markdown_export_categories(["invalid"]) == ["debater_speeches"]
 
 
@@ -146,6 +150,24 @@ def test_export_markdown_falls_back_to_debater_speeches_when_categories_invalid(
     assert "## 辩手发言" in markdown
     assert "AI 可以显著提升个性化教学效果。" in markdown
     assert "## 裁判消息" not in markdown
+
+
+def test_export_markdown_can_include_or_hide_leading_thinking_content():
+    payload = build_markdown_session_payload()
+    payload["dialogue_history"][0]["content"] = (
+        "<think>**内部推理**\n\n- 检查定义</think>\n\n正式发言。"
+    )
+
+    hidden = export_service.export_markdown(payload, ["debater_speeches"])
+    visible = export_service.export_markdown(payload, ["debater_speeches", "thinking_content"])
+
+    assert "正式发言。" in hidden
+    assert "内部推理" not in hidden
+    assert "<think>" not in hidden
+    assert "<summary>思维链</summary>" in visible
+    assert "**内部推理**" in visible
+    assert "- 检查定义" in visible
+    assert "正式发言。" in visible
 
 
 def test_export_json_preserves_unicode_content():
@@ -167,9 +189,96 @@ def test_export_html_renders_static_reading_page_with_controls():
     assert "AI 可以显著提升个性化教学效果。" in html
     assert "论证结构完整，举例清晰。" in html
     assert "正方证据更完整。" not in html
-    assert "当前评分" in html
-    assert "综合评分：7.5/10" in html
+    assert "当前评分" not in html
+    assert "逐轮综合分走势" in html
+    assert "第 1 轮" in html
+    assert "第 2 轮" in html
     assert "由 Elenchus 导出" in html
+
+
+def test_export_html_uses_compact_header_and_speech_stats_without_thinking():
+    payload = build_markdown_session_payload()
+    payload["dialogue_history"][0]["content"] = "<think>内部推理很长很长</think>\n\n正式发言。"
+    payload["dialogue_history"].append(
+        {
+            "role": "opposer",
+            "agent_name": "反方",
+            "content": "反方回应。",
+            "citations": [],
+            "timestamp": "2026-03-18T10:03:00Z",
+            "turn": 0,
+        }
+    )
+
+    html = export_service.export_html(payload, ["debater_speeches", "thinking_content"])
+
+    assert "发言文本量" in html
+    assert "不含思维链" in html
+    assert '<span>创建</span><strong>2026-03-18 10:00</strong>' in html
+    assert "2026-03-18T10:00:00Z" not in html
+    assert ">状态<" not in html
+    assert ">参与者<" not in html
+    assert 'data-role="proposer"><span>正方</span><strong>5</strong><small>字符</small>' in html
+    assert 'data-role="opposer"><span>反方</span><strong>5</strong><small>字符</small>' in html
+    assert 'data-role="total"><span>合计</span><strong>10</strong><small>字符</small>' in html
+
+
+def test_export_html_renders_markdown_content_and_uses_restrained_message_style():
+    payload = build_markdown_session_payload()
+    payload["dialogue_history"][0]["content"] = "\n".join(
+        [
+            "## 核心观点",
+            "",
+            "- **个性化** 学习",
+            "- 支持代码 `score`",
+            "",
+            "| 维度 | 结论 |",
+            "| --- | --- |",
+            "| 效率 | 提升 |",
+            "",
+            "> 需要配套治理。",
+            "",
+            "```python",
+            "print('safe')",
+            "```",
+            "",
+            "https://example.com/report",
+        ]
+    )
+
+    html = export_service.export_html(payload)
+
+    assert '<div class="message-body markdown-body">' in html
+    assert "<h2>核心观点</h2>" in html
+    assert "<strong>个性化</strong>" in html
+    assert "<code>score</code>" in html
+    assert "<table>" in html
+    assert "<blockquote>" in html
+    assert 'class="language-python"' in html
+    assert '<a href="https://example.com/report" target="_blank" rel="noopener noreferrer">' in html
+    assert ".message-card[open] {\n  background: linear-gradient" not in html
+    assert ".message-card::before" in html
+    assert "width: 3px;" in html
+
+
+def test_export_html_can_include_or_hide_leading_thinking_content():
+    payload = build_markdown_session_payload()
+    payload["dialogue_history"][0]["content"] = (
+        "<think>**内部推理**\n\n- 检查定义</think>\n\n正式发言。"
+    )
+
+    hidden = export_service.export_html(payload, ["debater_speeches"])
+    visible = export_service.export_html(payload, ["debater_speeches", "thinking_content"])
+
+    assert "正式发言。" in hidden
+    assert "内部推理" not in hidden
+    assert "&lt;think&gt;" not in hidden
+    assert '<details class="thinking-panel">' in visible
+    assert "<span>思维链</span>" in visible
+    assert "<strong>内部推理</strong>" in visible
+    assert "<li>检查定义</li>" in visible
+    assert "正式发言。" in visible
+    assert "&lt;think&gt;" not in visible
 
 
 def test_export_html_supports_category_filtered_sections():
