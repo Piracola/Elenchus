@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { ChevronDown, FileText } from 'lucide-react';
 import type { MarkdownExportCategory } from '../../types';
 
-const MARKDOWN_EXPORT_OPTIONS: { value: MarkdownExportCategory; label: string }[] = [
+const EXPORT_CONTENT_OPTIONS: { value: MarkdownExportCategory; label: string }[] = [
+  { value: 'thinking_content', label: '思维链' },
   { value: 'group_discussion', label: '组内讨论' },
   { value: 'judge_messages', label: '裁判消息' },
   { value: 'jury_messages', label: '陪审团消息' },
@@ -12,14 +13,14 @@ const MARKDOWN_EXPORT_OPTIONS: { value: MarkdownExportCategory; label: string }[
 
 type ExportMenuProps = {
   exportingFormat: 'markdown' | 'json' | 'html' | null;
-  markdownExportCategories: MarkdownExportCategory[];
+  exportCategories: MarkdownExportCategory[];
   onToggleCategory: (category: MarkdownExportCategory) => void;
   onExport: (format: 'markdown' | 'json' | 'html') => void;
 };
 
 export default function ExportMenu({
   exportingFormat,
-  markdownExportCategories,
+  exportCategories,
   onToggleCategory,
   onExport,
 }: ExportMenuProps) {
@@ -172,6 +173,50 @@ export default function ExportMenu({
               </span>
             </div>
 
+            {/* 内容范围 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                内容范围
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', paddingLeft: '2px' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '11px',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  <input type="checkbox" checked readOnly style={{ pointerEvents: 'none' }} />
+                  <span>辩手发言（默认）</span>
+                </div>
+                {EXPORT_CONTENT_OPTIONS.map((option) => (
+                  <label
+                    key={option.value}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '11px',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={exportCategories.includes(option.value)}
+                      onChange={() => onToggleCategory(option.value)}
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* 分隔线 */}
+            <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
+
             {/* Markdown 部分 */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div
@@ -223,41 +268,6 @@ export default function ExportMenu({
                 </button>
               </div>
 
-              {/* Markdown 选项 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', paddingLeft: '2px' }}>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontSize: '11px',
-                    color: 'var(--text-muted)',
-                  }}
-                >
-                  <input type="checkbox" checked readOnly style={{ pointerEvents: 'none' }} />
-                  <span>辩手发言（默认）</span>
-                </div>
-                {MARKDOWN_EXPORT_OPTIONS.map((option) => (
-                  <label
-                    key={option.value}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      fontSize: '11px',
-                      color: 'var(--text-secondary)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={markdownExportCategories.includes(option.value)}
-                      onChange={() => onToggleCategory(option.value)}
-                    />
-                    <span>{option.label}</span>
-                  </label>
-                ))}
-              </div>
             </div>
 
             {/* 分隔线 */}
@@ -308,7 +318,7 @@ export default function ExportMenu({
                 </button>
               </div>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)', paddingLeft: '4px' }}>
-                生成可离线阅读的静态网页，支持收起、展开和轮次跳转。
+                使用上方内容范围生成静态网页，支持收起、展开和轮次跳转。
               </span>
             </div>
 

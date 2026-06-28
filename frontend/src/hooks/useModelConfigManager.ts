@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { toast } from '../utils/chat/toast';
 import type { ModelConfig, ModelConfigCreatePayload, ProviderFormData, RemoteModelCandidate } from '../types';
 import { formatCustomParameters, parseCustomParametersInput } from '../utils/agent/customParameters';
+import { notifyModelConfigsChanged } from '../utils/agent/modelConfigEvents';
 
 function createEmptyFormData(): ProviderFormData {
     return {
@@ -189,6 +190,7 @@ export function useModelConfigManager() {
         try {
             await api.models.delete(id);
             await fetchConfigs();
+            notifyModelConfigsChanged();
         } catch (err) {
             console.error('Delete failed', err);
         }
@@ -220,6 +222,7 @@ export function useModelConfigManager() {
                 const nextActiveIndex = findProviderIndexById(nextProviders, created.id, activeIndex);
                 setActiveIndex(nextActiveIndex);
                 fillForm(nextProviders[nextActiveIndex]);
+                notifyModelConfigsChanged();
                 return;
             }
 
@@ -229,6 +232,7 @@ export function useModelConfigManager() {
             }
             await api.models.update(currentId, payload);
             await fetchConfigs();
+            notifyModelConfigsChanged();
         } catch (err) {
             console.error('Save failed', err);
             alert(`保存失败：${err instanceof Error ? err.message : '未知错误'}`);

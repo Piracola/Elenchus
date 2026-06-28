@@ -16,7 +16,8 @@ import {
   HEADER_TOOLBAR_PRIMARY_BUTTON_STYLE,
 } from './toolbarStyles';
 
-const MARKDOWN_EXPORT_OPTIONS: { value: MarkdownExportCategory; label: string }[] = [
+const EXPORT_CONTENT_OPTIONS: { value: MarkdownExportCategory; label: string }[] = [
+  { value: 'thinking_content', label: '思维链' },
   { value: 'group_discussion', label: '组内讨论' },
   { value: 'judge_messages', label: '裁判消息' },
   { value: 'jury_messages', label: '陪审团消息' },
@@ -63,14 +64,14 @@ export default function ChatHeaderOverlay({
   const [exportingFormat, setExportingFormat] = useState<'markdown' | 'json' | 'html' | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showDebaterSettings, setShowDebaterSettings] = useState(false);
-  const [markdownExportCategories, setMarkdownExportCategories] = useState<MarkdownExportCategory[]>([]);
+  const [exportCategories, setExportCategories] = useState<MarkdownExportCategory[]>([]);
   const debaterSettingsButtonRef = useRef<HTMLButtonElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const exportButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setShowExportMenu(false);
-    setMarkdownExportCategories([]);
+    setExportCategories([]);
   }, [currentSessionId]);
 
   useEffect(() => {
@@ -104,8 +105,8 @@ export default function ChatHeaderOverlay({
     };
   }, [showExportMenu]);
 
-  const toggleMarkdownExportCategory = (category: MarkdownExportCategory) => {
-    setMarkdownExportCategories((current) => (
+  const toggleExportCategory = (category: MarkdownExportCategory) => {
+    setExportCategories((current) => (
       current.includes(category)
         ? current.filter((value) => value !== category)
         : [...current, category]
@@ -117,16 +118,16 @@ export default function ChatHeaderOverlay({
       return;
     }
 
-    const markdownCategories = ['debater_speeches', ...markdownExportCategories] as MarkdownExportCategory[];
-    const normalizedMarkdownCategories = Array.from(new Set(markdownCategories));
+    const selectedCategories = ['debater_speeches', ...exportCategories] as MarkdownExportCategory[];
+    const normalizedExportCategories = Array.from(new Set(selectedCategories));
 
     setExportingFormat(format);
     try {
       if (format === 'markdown') {
-        await api.sessions.exportMarkdown(currentSessionId, currentTopic, normalizedMarkdownCategories);
+        await api.sessions.exportMarkdown(currentSessionId, currentTopic, normalizedExportCategories);
         toast('已导出 Markdown 辩论记录', 'success');
       } else if (format === 'html') {
-        await api.sessions.exportHtml(currentSessionId, currentTopic, normalizedMarkdownCategories);
+        await api.sessions.exportHtml(currentSessionId, currentTopic, normalizedExportCategories);
         toast('已导出 HTML 阅读页', 'success');
       } else {
         await api.sessions.exportJson(currentSessionId, currentTopic);
@@ -343,6 +344,50 @@ export default function ChatHeaderOverlay({
                     </span>
                   </div>
 
+                  {/* 内容范围 */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      内容范围
+                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', paddingLeft: '2px' }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '11px',
+                          color: 'var(--text-muted)',
+                        }}
+                      >
+                        <input type="checkbox" checked readOnly style={{ pointerEvents: 'none' }} />
+                        <span>辩手发言（默认）</span>
+                      </div>
+                      {EXPORT_CONTENT_OPTIONS.map((option) => (
+                        <label
+                          key={option.value}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontSize: '11px',
+                            color: 'var(--text-secondary)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={exportCategories.includes(option.value)}
+                            onChange={() => toggleExportCategory(option.value)}
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 分隔线 */}
+                  <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
+
                   {/* Markdown 部分 */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div
@@ -376,42 +421,6 @@ export default function ChatHeaderOverlay({
                         {exportingFormat === 'markdown' ? '导出中...' : '导出'}
                       </motion.button>
                     </div>
-
-                    {/* Markdown 选项 */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', paddingLeft: '2px' }}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          fontSize: '11px',
-                          color: 'var(--text-muted)',
-                        }}
-                      >
-                        <input type="checkbox" checked readOnly style={{ pointerEvents: 'none' }} />
-                        <span>辩手发言（默认）</span>
-                      </div>
-                      {MARKDOWN_EXPORT_OPTIONS.map((option) => (
-                        <label
-                          key={option.value}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            fontSize: '11px',
-                            color: 'var(--text-secondary)',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={markdownExportCategories.includes(option.value)}
-                            onChange={() => toggleMarkdownExportCategory(option.value)}
-                          />
-                          <span>{option.label}</span>
-                        </label>
-                      ))}
-                    </div>
                   </div>
 
                   {/* 分隔线 */}
@@ -442,7 +451,7 @@ export default function ChatHeaderOverlay({
                       </motion.button>
                     </div>
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)', paddingLeft: '4px' }}>
-                      生成可离线阅读的静态网页，支持收起、展开和轮次跳转。
+                      使用上方内容范围生成静态网页，支持收起、展开和轮次跳转。
                     </span>
                   </div>
 

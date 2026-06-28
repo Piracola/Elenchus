@@ -8,7 +8,12 @@ import { useAgentConfigs } from '../../hooks/useAgentConfigs';
 import { useConnectionViewState, useSessionViewState } from '../../hooks/useDebateViewState';
 import { useDebateWebSocket } from '../../hooks/useDebateWebSocket';
 import { useSessionCreate } from '../../hooks/useSessionCreate';
-import { DEFAULT_MAX_TURNS, parseMaxTurnsInput } from '../../utils/agent/debateSession';
+import {
+    DEFAULT_MAX_TURNS,
+    DEFAULT_SPEECH_MAX_CHARS,
+    parseMaxTurnsInput,
+    parseSpeechMaxCharsInput,
+} from '../../utils/agent/debateSession';
 import AgentConfigPanel from '../shared/AgentConfigPanel';
 import { useDemoModeStore } from '../../stores/demoModeStore';
 
@@ -215,6 +220,8 @@ function ActiveSessionControls() {
 function SessionCreator() {
     const [topic, setTopic] = useState('');
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
+    const [proposerSpeechLimitInput, setProposerSpeechLimitInput] = useState('');
+    const [opposerSpeechLimitInput, setOpposerSpeechLimitInput] = useState('');
     const { isCreating, createSession } = useSessionCreate();
     const {
         showAdvanced,
@@ -224,23 +231,34 @@ function SessionCreator() {
         selectedConfigIds,
         selectedPersonaIds,
         temperatureInputs,
-        enableThinking,
         showConfigManager,
         setShowConfigManager,
         handleConfigSelect,
         handlePersonaSelect,
         handleTemperatureChange,
-        handleThinkingToggle,
         buildAgentConfigs,
     } = useAgentConfigs();
     const { demoMode, isAdmin } = useDemoModeStore();
     const isInDemo = demoMode && !isAdmin;
 
     const maxTurns = parseMaxTurnsInput(maxTurnsInput);
+    const proposerSpeechLimit = parseSpeechMaxCharsInput(proposerSpeechLimitInput);
+    const opposerSpeechLimit = parseSpeechMaxCharsInput(opposerSpeechLimitInput);
 
     const handleStart = async () => {
         if (!topic.trim()) return;
-        await createSession(topic, maxTurns, buildAgentConfigs());
+        await createSession(
+            topic,
+            maxTurns,
+            buildAgentConfigs(),
+            undefined,
+            undefined,
+            undefined,
+            {
+                proposer_max_chars: proposerSpeechLimit,
+                opposer_max_chars: opposerSpeechLimit,
+            },
+        );
         setTopic('');
     };
 
@@ -262,14 +280,83 @@ function SessionCreator() {
                             selectedConfigIds={selectedConfigIds}
                             selectedPersonaIds={selectedPersonaIds}
                             temperatureInputs={temperatureInputs}
-                            enableThinking={enableThinking}
                             showConfigManager={showConfigManager}
                             setShowConfigManager={setShowConfigManager}
                             handleConfigSelect={handleConfigSelect}
                             handlePersonaSelect={handlePersonaSelect}
                             handleTemperatureChange={handleTemperatureChange}
-                            handleThinkingToggle={handleThinkingToggle}
                         />
+                        <div
+                            style={{
+                                marginTop: '10px',
+                                padding: '10px 12px',
+                                borderRadius: 'var(--radius-md)',
+                                background: 'var(--bg-card)',
+                                border: '1px solid var(--border-subtle)',
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                                gap: '10px',
+                            }}
+                        >
+                            <label
+                                style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '5px',
+                                    color: 'var(--text-secondary)',
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                }}
+                            >
+                                正方字数上限
+                                <input
+                                    type="number"
+                                    value={proposerSpeechLimitInput}
+                                    onChange={(event) => setProposerSpeechLimitInput(event.target.value)}
+                                    placeholder={String(DEFAULT_SPEECH_MAX_CHARS)}
+                                    min={0}
+                                    max={20000}
+                                    style={{
+                                        height: '32px',
+                                        padding: '0 10px',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid transparent',
+                                        background: 'var(--bg-tertiary)',
+                                        color: 'var(--text-primary)',
+                                        outline: 'none',
+                                    }}
+                                />
+                            </label>
+                            <label
+                                style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '5px',
+                                    color: 'var(--text-secondary)',
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                }}
+                            >
+                                反方字数上限
+                                <input
+                                    type="number"
+                                    value={opposerSpeechLimitInput}
+                                    onChange={(event) => setOpposerSpeechLimitInput(event.target.value)}
+                                    placeholder={String(DEFAULT_SPEECH_MAX_CHARS)}
+                                    min={0}
+                                    max={20000}
+                                    style={{
+                                        height: '32px',
+                                        padding: '0 10px',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid transparent',
+                                        background: 'var(--bg-tertiary)',
+                                        color: 'var(--text-primary)',
+                                        outline: 'none',
+                                    }}
+                                />
+                            </label>
+                        </div>
                     </motion.div>
                 )}
             </AnimatePresence>

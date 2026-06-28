@@ -93,7 +93,7 @@ describe('MessageRow', () => {
 
         expect(markup).toContain('观察报告');
         expect(markup).toContain('Detected a false dichotomy.');
-        expect(markup).not.toContain('裁判评分表');
+        expect(markup).not.toContain('概念边界评分表');
     });
 
     it('renders unsupported non-OpenAI parameter notices inline with the agent message', () => {

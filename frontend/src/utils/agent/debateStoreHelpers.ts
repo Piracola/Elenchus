@@ -185,7 +185,7 @@ export function sanitizeRuntimeEvent(event: RuntimeEvent): RuntimeEvent {
 }
 
 export function shouldRecordRuntimeEvent(event: RuntimeEvent): boolean {
-    return event.type !== 'speech_token';
+    return event.type !== 'speech_token' && event.type !== 'discussion_stream_token';
 }
 
 function sortRuntimeEvents(a: RuntimeEvent, b: RuntimeEvent): number {
@@ -238,6 +238,10 @@ export function sanitizeSession(session: Session | null): Session | null {
             steelman_enabled: true,
             counterfactual_enabled: true,
             consensus_enabled: true,
+        },
+        speech_config: session.speech_config ?? {
+            proposer_max_chars: 0,
+            opposer_max_chars: 0,
         },
         mode_artifacts: Array.isArray(session.mode_artifacts) ? session.mode_artifacts : [],
         current_mode_report: session.current_mode_report ?? null,

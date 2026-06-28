@@ -1,10 +1,30 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type ProxyOptions } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const backendPort = process.env.VITE_BACKEND_PORT || env.VITE_BACKEND_PORT || '8001'
   const backendHost = '127.0.0.1'
+  const devServerPort = Number.parseInt(process.env.PORT || env.PORT || '5173', 10)
+  const strictDevPort = process.env.ELENCHUS_STRICT_FRONTEND_PORT === '1' || Boolean(process.env.PORT || env.PORT)
+  const hmrEnabled = process.env.ELENCHUS_DISABLE_HMR !== '1'
+  const proxy: Record<string, ProxyOptions> = {
+    '/api/ws': {
+      target: `ws://${backendHost}:${backendPort}`,
+      ws: true,
+      changeOrigin: true,
+      configure: (proxy) => {
+        proxy.on('error', () => { /* suppress ECONNABORTED noise */ });
+      },
+    },
+    '/api': {
+      target: `http://${backendHost}:${backendPort}`,
+      changeOrigin: true,
+      configure: (proxy) => {
+        proxy.on('error', () => { /* suppress proxy noise */ });
+      },
+    },
+  }
 
   const manualChunks = (id: string) => {
     if (!id.includes('node_modules')) return undefined
@@ -45,25 +65,16 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       host: backendHost,
-      port: 5173,
-      strictPort: true,
-      proxy: {
-        '/api/ws': {
-          target: `ws://${backendHost}:${backendPort}`,
-          ws: true,
-          changeOrigin: true,
-          configure: (proxy) => {
-            proxy.on('error', () => { /* suppress ECONNABORTED noise */ });
-          },
-        },
-        '/api': {
-          target: `http://${backendHost}:${backendPort}`,
-          changeOrigin: true,
-          configure: (proxy) => {
-            proxy.on('error', () => { /* suppress proxy noise */ });
-          },
-        },
-      },
+      port: Number.isInteger(devServerPort) && devServerPort > 0 ? devServerPort : 5173,
+      strictPort: strictDevPort,
+      hmr: hmrEnabled,
+      proxy,
+    },
+    preview: {
+      host: backendHost,
+      port: Number.isInteger(devServerPort) && devServerPort > 0 ? devServerPort : 5173,
+      strictPort: strictDevPort,
+      proxy,
     },
   }
 })

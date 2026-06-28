@@ -63,7 +63,7 @@ export const MODULE_DIMENSIONS: Record<ScoreModuleKey, ScoreDimensionKey[]> = {
     foundation: ['evidence_quality', 'topic_focus'],
     confrontation: ['logical_rigor', 'rebuttal_strength'],
     stability: ['consistency'],
-    vision: ['persuasiveness'],
+    vision: ['boundary_contribution'],
 };
 
 export const STATIC_MOTION_PROPS = {

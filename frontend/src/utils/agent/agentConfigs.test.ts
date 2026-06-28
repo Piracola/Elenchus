@@ -103,7 +103,6 @@ describe('agentConfigs utils', () => {
                 judge: '',
                 fact_checker: '',
             },
-            undefined,
             {
                 proposer: 'persona-proposer',
                 opposer: 'persona-opposer',

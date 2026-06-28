@@ -11,11 +11,9 @@ const THINKING_PANEL_HIDE_TITLE = '\u6298\u53e0\u601d\u7ef4\u94fe';
 
 function thinkingPanelStyle(accentColor: string) {
     return {
-        background: 'var(--bg-secondary)',
-        border: '1px solid var(--border-subtle)',
-        borderLeft: `3px solid ${accentColor}`,
-        borderRadius: 'var(--radius-lg)',
-        boxShadow: 'var(--shadow-xs)',
+        background: 'color-mix(in srgb, var(--bg-tertiary) 54%, transparent)',
+        borderLeft: `2px solid ${accentColor}`,
+        borderRadius: 'var(--radius-md)',
         overflow: 'hidden',
     } as const;
 }
@@ -25,46 +23,58 @@ function thinkingHeaderStyle() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: '12px',
-        padding: '12px 16px',
+        gap: '10px',
+        minHeight: '34px',
+        padding: '7px 10px 7px 12px',
     } as const;
 }
 
-function thinkingLabelStyle(accentColor: string) {
+function thinkingLabelStyle() {
     return {
         display: 'inline-flex',
         alignItems: 'center',
-        gap: '8px',
-        fontSize: '12px',
+        gap: '6px',
+        minWidth: 0,
+        fontSize: '11px',
         fontWeight: 700,
-        color: accentColor,
+        color: 'var(--text-secondary)',
+        lineHeight: 1.2,
     } as const;
 }
 
 function thinkingToggleStyle(expanded: boolean) {
     return {
-        border: '1px solid var(--border-subtle)',
-        background: expanded ? 'var(--bg-tertiary)' : 'var(--bg-card)',
+        border: 'none',
+        background: expanded ? 'var(--bg-hover)' : 'transparent',
         color: 'var(--text-secondary)',
-        borderRadius: 'var(--radius-full)',
-        padding: '6px 12px',
-        fontSize: '12px',
+        borderRadius: 'var(--radius-sm)',
+        padding: '4px 7px',
+        fontSize: '11px',
         fontWeight: 600,
         cursor: 'pointer',
         display: 'inline-flex',
         alignItems: 'center',
-        gap: '6px',
-        boxShadow: 'var(--shadow-xs)',
+        gap: '4px',
         flexShrink: 0,
     } as const;
 }
 
 function thinkingHintStyle() {
     return {
-        padding: '0 16px 16px',
+        padding: '0 12px 9px',
         color: 'var(--text-muted)',
-        fontSize: '12px',
-        lineHeight: 1.6,
+        fontSize: '11px',
+        lineHeight: 1.45,
+    } as const;
+}
+
+function thinkingAccentDotStyle(accentColor: string) {
+    return {
+        width: '6px',
+        height: '6px',
+        borderRadius: 'var(--radius-full)',
+        background: accentColor,
+        flexShrink: 0,
     } as const;
 }
 
@@ -94,8 +104,8 @@ export function ThinkingBlock({
             style={thinkingPanelStyle(accentColor)}
         >
             <div style={thinkingHeaderStyle()}>
-                <span style={thinkingLabelStyle(accentColor)}>
-                    <span aria-hidden="true">{expanded ? '-' : '+'}</span>
+                <span style={thinkingLabelStyle()}>
+                    <span aria-hidden="true" style={thinkingAccentDotStyle(accentColor)} />
                     <span>{THINKING_PANEL_LABEL}</span>
                 </span>
                 <button
@@ -116,7 +126,8 @@ export function ThinkingBlock({
                     data-thinking-content="visible"
                     style={{
                         ...markdownBodyStyle(fontSize, textColor),
-                        padding: '0 16px 16px',
+                        padding: '0 12px 10px',
+                        lineHeight: 1.62,
                     }}
                 >
                     <MessageMarkdown text={content} />

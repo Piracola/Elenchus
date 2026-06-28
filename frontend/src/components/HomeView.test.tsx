@@ -77,7 +77,6 @@ vi.mock('../hooks/useAgentConfigs', () => ({
             selectedConfigIds: {},
             selectedPersonaIds: {},
             temperatureInputs: {},
-            enableThinking: {},
             showConfigManager: false,
             setShowConfigManager: vi.fn(),
             isLoading: false,
@@ -86,7 +85,6 @@ vi.mock('../hooks/useAgentConfigs', () => ({
             handleConfigSelect: vi.fn(),
             handlePersonaSelect: vi.fn(),
             handleTemperatureChange: vi.fn(),
-            handleThinkingToggle: vi.fn(),
             buildAgentConfigs: () => ({}),
         };
     },

@@ -2,6 +2,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../api/client';
+import { notifyModelConfigsChanged } from '../utils/agent/modelConfigEvents';
 import { useAgentConfigs } from './useAgentConfigs';
 
 vi.mock('../api/client', async () => {
@@ -134,6 +135,33 @@ describe('useAgentConfigs', () => {
 
         expect(personasListMock).toHaveBeenCalledTimes(1);
         expect(result.current.savedConfigs[0]?.id).toBe('provider-2');
+    });
+
+    it('refreshes models when provider settings change elsewhere', async () => {
+        modelsListMock
+            .mockResolvedValueOnce(modelFixture)
+            .mockResolvedValueOnce([{
+                ...modelFixture[0],
+                models: ['gpt-4o', 'gpt-4.1'],
+            }]);
+        personasListMock.mockResolvedValue(personaFixture);
+
+        const { result } = renderHook(() => useAgentConfigs());
+
+        await waitFor(() => {
+            expect(result.current.isLoading).toBe(false);
+        });
+
+        await act(async () => {
+            notifyModelConfigsChanged();
+        });
+
+        await waitFor(() => {
+            expect(modelsListMock).toHaveBeenCalledTimes(2);
+        });
+
+        expect(personasListMock).toHaveBeenCalledTimes(1);
+        expect(result.current.savedConfigs[0]?.models).toEqual(['gpt-4o', 'gpt-4.1']);
     });
 
     it('keeps personas available if the manager closes before the initial load finishes', async () => {

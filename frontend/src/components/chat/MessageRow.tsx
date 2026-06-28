@@ -34,9 +34,9 @@ function renderUnsupportedParamsNotice(entry?: DialogueEntry | null) {
                 marginBottom: '12px',
                 padding: '10px 12px',
                 borderRadius: 'var(--radius-md)',
-                border: '1px solid rgba(217, 119, 6, 0.28)',
-                background: 'rgba(245, 158, 11, 0.12)',
-                color: '#92400e',
+                border: '1px solid var(--accent-amber-alpha)',
+                background: 'var(--accent-amber-alpha)',
+                color: 'var(--text-secondary)',
                 fontSize: '12px',
                 lineHeight: 1.55,
             }}
@@ -87,10 +87,8 @@ function MessageRow({
     const agentTurnLabel = formatTurnPill(agentEntry?.turn);
     const collapsedHint = formatCollapsedHint(agentEntry);
 
-    // 根据正方/反方设置颜色
-    const isProposer = agentVisual.label === '正方' || agentEntry?.role === 'proposer';
-    const badgeColor = '#fff';
-    const badgeBg = isProposer ? '#22c55e' : '#ef4444';
+    const agentAccentColor = agentVisual.color;
+    const badgeTextColor = '#fff';
 
     if (systemEntry) {
         if (systemEntry.role === 'audience') {
@@ -175,81 +173,89 @@ function MessageRow({
             style={{
                 position: 'relative',
                 background: 'var(--bg-card)',
-                padding: '20px 28px 28px 28px',
+                padding: '16px 24px 24px',
                 borderRadius: 'var(--radius-xl)',
-                boxShadow: '0 2px 12px rgba(224, 224, 224, 0.5)',
+                border: '1px solid var(--border-subtle)',
+                boxShadow: 'var(--shadow-sm)',
             }}
         >
-            {/* 统一头部行：头像 + 身份 + 轮数 + 模型 + 折叠按钮 居中对齐 */}
             <div
                 style={{
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '10px',
-                    marginBottom: '12px',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    marginBottom: '10px',
+                    minWidth: 0,
                 }}
             >
-                <motion.div
-                    {...(animated ? { whileHover: { scale: 1.05 } } : STATIC_MOTION_PROPS)}
+                <div
                     style={{
-                        width: '36px',
-                        height: '36px',
-                        background: badgeBg,
-                        borderRadius: 'var(--radius-md)',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        color: badgeColor,
-                        fontWeight: 700,
-                        fontSize: '15px',
-                        boxShadow: '0 2px 8px rgba(224, 224, 224, 0.6)',
-                        flexShrink: 0,
+                        gap: '9px',
+                        minWidth: 0,
+                        flexWrap: 'wrap',
                     }}
                 >
-                    {agentVisual.badge}
-                </motion.div>
-                <span
-                    style={{
-                        fontSize: '13px',
-                        color: '#333333',
-                        border: '1px solid #CCCCCC',
-                        padding: '5px 12px',
-                        borderRadius: 'var(--radius-full)',
-                        fontWeight: 500,
-                        whiteSpace: 'nowrap',
-                    }}
-                >
-                    {agentVisual.label}
-                </span>
-                {agentTurnLabel && (
+                    <motion.div
+                        {...(animated ? { whileHover: { scale: 1.04 } } : STATIC_MOTION_PROPS)}
+                        style={{
+                            width: '32px',
+                            height: '32px',
+                            background: agentAccentColor,
+                            borderRadius: 'var(--radius-md)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: badgeTextColor,
+                            fontWeight: 700,
+                            fontSize: '14px',
+                            boxShadow: 'var(--shadow-xs)',
+                            flexShrink: 0,
+                        }}
+                    >
+                        {agentVisual.badge}
+                    </motion.div>
                     <span
                         style={{
-                            fontSize: '12px',
-                            color: 'var(--text-muted)',
-                            background: 'var(--bg-tertiary)',
-                            padding: '4px 10px',
-                            borderRadius: 'var(--radius-full)',
+                            fontSize: '13px',
+                            color: 'var(--text-primary)',
+                            fontWeight: 700,
                             whiteSpace: 'nowrap',
                         }}
                     >
-                        {agentTurnLabel}
+                        {agentVisual.label}
                     </span>
-                )}
-                {agentModel && (
-                    <span
-                        style={{
-                            fontSize: '11px',
-                            color: 'var(--text-muted)',
-                            background: 'var(--bg-tertiary)',
-                            padding: '3px 8px',
-                            borderRadius: 'var(--radius-full)',
-                            whiteSpace: 'nowrap',
-                        }}
-                    >
-                        {agentModel}
-                    </span>
-                )}
+                    {agentTurnLabel && (
+                        <span
+                            style={{
+                                fontSize: '11px',
+                                color: 'var(--text-muted)',
+                                background: 'var(--bg-tertiary)',
+                                padding: '3px 8px',
+                                borderRadius: 'var(--radius-full)',
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {agentTurnLabel}
+                        </span>
+                    )}
+                    {agentModel && (
+                        <span
+                            style={{
+                                fontSize: '11px',
+                                color: 'var(--text-muted)',
+                                background: 'var(--bg-tertiary)',
+                                padding: '3px 8px',
+                                borderRadius: 'var(--radius-full)',
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {agentModel}
+                        </span>
+                    )}
+                </div>
                 <button
                     type="button"
                     onClick={onToggleAgentCollapsed}
@@ -271,15 +277,15 @@ function MessageRow({
                         lineHeight: 1.7,
                         padding: '14px 16px',
                         borderRadius: 'var(--radius-lg)',
-                        border: `2px dashed ${badgeBg}`,
+                        border: `1px dashed ${agentAccentColor}`,
                     }}>
                         {collapsedHint}
                     </div>
                 ) : (
-                    <div data-agent-content="visible" style={messageContentWrapperStyle('16px')}>
+                    <div data-agent-content="visible" style={messageContentWrapperStyle('10px')}>
                         <ThinkingBlock
                             content={agentContent.thinking}
-                            accentColor={badgeColor}
+                            accentColor={agentAccentColor}
                             fontSize={messageFontSizes.body}
                             textColor="var(--text-primary)"
                         />
@@ -312,32 +318,31 @@ function MessageRow({
                 borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border-subtle)',
                 overflow: 'hidden',
-                boxShadow: '0 2px 12px rgba(224, 224, 224, 0.5)',
+                boxShadow: 'var(--shadow-sm)',
             }}
         >
-            {/* 裁判头部栏 */}
             <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                gap: '10px',
-                padding: '14px 16px 10px 16px',
+                justifyContent: 'flex-start',
+                gap: '9px',
+                padding: '12px 14px 8px',
                 background: 'var(--bg-card)',
             }}>
                 <motion.div
-                    {...(animated ? { whileHover: { scale: 1.05 } } : STATIC_MOTION_PROPS)}
+                    {...(animated ? { whileHover: { scale: 1.04 } } : STATIC_MOTION_PROPS)}
                     style={{
-                        width: '36px',
-                        height: '36px',
-                        background: '#d97706',
+                        width: '32px',
+                        height: '32px',
+                        background: 'var(--color-judge)',
                         borderRadius: 'var(--radius-md)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: '#fff',
+                        color: badgeTextColor,
                         fontWeight: 700,
-                        fontSize: '15px',
-                        boxShadow: '0 2px 8px rgba(224, 224, 224, 0.6)',
+                        fontSize: '14px',
+                        boxShadow: 'var(--shadow-xs)',
                         flexShrink: 0,
                     }}
                 >
@@ -345,11 +350,8 @@ function MessageRow({
                 </motion.div>
                 <span style={{
                     fontSize: '13px',
-                    color: '#333333',
-                    border: '1px solid #CCCCCC',
-                    padding: '5px 12px',
-                    borderRadius: 'var(--radius-full)',
-                    fontWeight: 500,
+                    color: 'var(--text-primary)',
+                    fontWeight: 700,
                     whiteSpace: 'nowrap',
                 }}>
                     {judgeVisual.label}
@@ -366,11 +368,11 @@ function MessageRow({
                     裁判评分已折叠
                 </div>
             ) : (
-                <div style={{ padding: '0px 16px 12px 16px' }}>
-                <div style={messageContentWrapperStyle('12px')}>
+                <div style={{ padding: '0 14px 12px' }}>
+                <div style={messageContentWrapperStyle('10px')}>
                     <ThinkingBlock
                         content={judgeContent.thinking}
-                        accentColor="#d97706"
+                        accentColor="var(--color-judge)"
                         fontSize={judgeOnly ? messageFontSizes.judgeBody : messageFontSizes.judgeBodyCompact}
                         textColor="var(--text-secondary)"
                     />

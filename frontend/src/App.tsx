@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
 import ChatPanel from './components/ChatPanel';
 import HomeView from './components/HomeView';
 import SessionList from './components/sidebar/SessionList';
@@ -13,6 +13,7 @@ import { useThemeStore } from './stores/themeStore';
 import { useDemoModeStore } from './stores/demoModeStore';
 
 const MOBILE_SIDEBAR_BREAKPOINT = 760;
+const previewSafeMotion = import.meta.env.VITE_ELENCHUS_PREVIEW_SAFE_MOTION === '1';
 
 function isMobileSidebarViewport() {
   return typeof window !== 'undefined' && window.innerWidth < MOBILE_SIDEBAR_BREAKPOINT;
@@ -69,6 +70,7 @@ function App() {
   };
 
   return (
+    <MotionConfig reducedMotion={previewSafeMotion ? 'always' : 'never'}>
     <ErrorBoundary>
       <BackendHealthCheck>
         <div
@@ -255,6 +257,7 @@ function App() {
         />
       </BackendHealthCheck>
     </ErrorBoundary>
+    </MotionConfig>
   );
 }
 

@@ -45,13 +45,11 @@ export default function DebaterSettingsModal({
         selectedConfigIds,
         selectedPersonaIds,
         temperatureInputs,
-        enableThinking,
         showConfigManager,
         setShowConfigManager,
         handleConfigSelect,
         handlePersonaSelect,
         handleTemperatureChange,
-        handleThinkingToggle,
         reload,
         buildAgentConfigs,
         isLoading: agentConfigsLoading,
@@ -84,7 +82,6 @@ export default function DebaterSettingsModal({
             }
 
             handleTemperatureChange(role, cfg.temperature !== undefined ? String(cfg.temperature) : '');
-            handleThinkingToggle(role, Boolean(cfg.enable_thinking));
             handlePersonaSelect(role, cfg.persona_id ?? '');
         }
     }, [
@@ -92,7 +89,6 @@ export default function DebaterSettingsModal({
         savedConfigs,
         handleConfigSelect,
         handleTemperatureChange,
-        handleThinkingToggle,
         handlePersonaSelect,
     ]);
 
@@ -272,13 +268,11 @@ export default function DebaterSettingsModal({
                             selectedConfigIds={selectedConfigIds}
                             selectedPersonaIds={selectedPersonaIds}
                             temperatureInputs={temperatureInputs}
-                            enableThinking={enableThinking}
                             showConfigManager={showConfigManager}
                             setShowConfigManager={setShowConfigManager}
                             handleConfigSelect={handleConfigSelect}
                             handlePersonaSelect={handlePersonaSelect}
                             handleTemperatureChange={handleTemperatureChange}
-                            handleThinkingToggle={handleThinkingToggle}
                             manageButtonLabel="管理配置"
                         />
                     </div>

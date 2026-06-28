@@ -26,6 +26,11 @@ export interface ReasoningConfig {
     consensus_enabled: boolean;
 }
 
+export interface SpeechConfig {
+    proposer_max_chars: number;
+    opposer_max_chars: number;
+}
+
 export interface ModeArtifact {
     type: string;
     title?: string;
@@ -76,7 +81,6 @@ export interface AgentConfig {
     provider_id?: string;
     api_base_url?: string;
     temperature?: number;
-    enable_thinking?: boolean;
     persona_id?: string;
     persona_name?: string;
     persona_filename?: string;
@@ -105,6 +109,7 @@ export interface Session {
     team_config: TeamConfig;
     jury_config: JuryConfig;
     reasoning_config: ReasoningConfig;
+    speech_config?: SpeechConfig;
     mode_artifacts: ModeArtifact[];
     current_mode_report?: ModeArtifact | Record<string, unknown> | null;
     final_mode_report?: ModeArtifact | Record<string, unknown> | null;
@@ -130,6 +135,7 @@ export interface SessionCreatePayload {
     team_config?: TeamConfig;
     jury_config?: JuryConfig;
     reasoning_config?: ReasoningConfig;
+    speech_config?: SpeechConfig;
 }
 
 export interface SessionAgentConfigsUpdatePayload {

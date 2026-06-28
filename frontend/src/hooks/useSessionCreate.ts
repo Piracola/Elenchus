@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { api } from '../api/client';
 import { useSessionActions } from './useDebateViewState';
-import type { AgentConfigResult, DebateMode, JuryConfig, ReasoningConfig, TeamConfig } from '../types';
+import type { AgentConfigResult, DebateMode, JuryConfig, ReasoningConfig, SpeechConfig, TeamConfig } from '../types';
 
 interface UseSessionCreateResult {
     isCreating: boolean;
@@ -13,6 +13,7 @@ interface UseSessionCreateResult {
         teamConfig?: TeamConfig,
         juryConfig?: JuryConfig,
         reasoningConfig?: ReasoningConfig,
+        speechConfig?: SpeechConfig,
         debateMode?: DebateMode,
         modeConfig?: Record<string, unknown>,
     ) => Promise<string | null>;
@@ -31,6 +32,7 @@ export function useSessionCreate(): UseSessionCreateResult {
         teamConfig?: TeamConfig,
         juryConfig?: JuryConfig,
         reasoningConfig?: ReasoningConfig,
+        speechConfig?: SpeechConfig,
         debateMode: DebateMode = 'standard',
         modeConfig?: Record<string, unknown>,
     ): Promise<string | null> => {
@@ -46,6 +48,7 @@ export function useSessionCreate(): UseSessionCreateResult {
                 team_config: teamConfig,
                 jury_config: juryConfig,
                 reasoning_config: reasoningConfig,
+                speech_config: speechConfig,
                 debate_mode: debateMode,
                 mode_config: modeConfig,
             });

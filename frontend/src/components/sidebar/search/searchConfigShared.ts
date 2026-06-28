@@ -19,29 +19,30 @@ export const PROVIDER_INFO: Record<SearchProviderType, { label: string; descript
 
 export const inputStyle: CSSProperties = {
     width: '100%',
-    padding: '14px 16px',
+    minHeight: '40px',
+    padding: '9px 12px',
     borderRadius: 'var(--radius-md)',
     background: 'var(--bg-secondary)',
     border: '1px solid var(--border-subtle)',
     color: 'var(--text-primary)',
-    fontSize: '17px',
+    fontSize: '14px',
     outline: 'none',
     transition: 'border-color 0.15s ease',
 };
 
 export const labelStyle: CSSProperties = {
     display: 'block',
-    fontSize: '16px',
-    marginBottom: '10px',
+    fontSize: '13px',
+    marginBottom: '8px',
     color: 'var(--text-secondary)',
-    fontWeight: 600,
+    fontWeight: 700,
 };
 
 export const helperTextStyle: CSSProperties = {
-    marginTop: '10px',
-    fontSize: '16px',
+    marginTop: '8px',
+    fontSize: '12px',
     color: 'var(--text-muted)',
-    lineHeight: 1.8,
+    lineHeight: 1.55,
 };
 
 export function getProviderLabel(provider: SearchProviderType | string): string {

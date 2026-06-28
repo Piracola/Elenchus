@@ -14,7 +14,7 @@ export function SettingsProvidersTab({
     onClose,
 }: SettingsProvidersTabProps) {
     return (
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden', gap: '0' }}>
+        <div className="settings-providers-layout">
             <ProviderSidebar
                 providers={modelConfig.providers}
                 isLoading={modelConfig.isLoading}

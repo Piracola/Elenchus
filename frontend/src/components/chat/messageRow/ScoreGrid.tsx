@@ -10,7 +10,16 @@ function formatScoreValue(score: number): string {
 
 function getDimensionScore(scores: TurnScore, key: ScoreDimensionKey): number | null {
     const scoreValue = scores[key]?.score;
-    return typeof scoreValue === 'number' ? scoreValue : null;
+    if (typeof scoreValue === 'number') {
+        return scoreValue;
+    }
+
+    const legacyPersuasiveness = scores.persuasiveness?.score;
+    if (key === 'boundary_contribution' && typeof legacyPersuasiveness === 'number') {
+        return legacyPersuasiveness;
+    }
+
+    return null;
 }
 
 function getWeightedAverage(scores: TurnScore, dimensions: ScoreDimensionKey[]): number | null {
@@ -92,7 +101,7 @@ export function ScoreGrid({ judgeEntry, animated }: ScoreGridProps) {
                     letterSpacing: '0.05em',
                 }}
             >
-                裁判评分表
+                概念边界评分表
             </div>
             {comprehensiveScore !== null && (
                 <motion.div
@@ -119,7 +128,7 @@ export function ScoreGrid({ judgeEntry, animated }: ScoreGridProps) {
                             gap: '8px',
                         }}
                     >
-                        <span>综合评分</span>
+                        <span>综合认知贡献</span>
                         <span
                             style={{
                                 padding: '4px 8px',

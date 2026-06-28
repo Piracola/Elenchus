@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
 import type { AgentPersonaSummary, ModelConfig } from '../types';
-import { buildAgentConfigsPayload, createEmptyAgentFieldMap, createEmptyThinkingMap, type AgentRole } from '../utils/agent/agentConfigs';
+import { buildAgentConfigsPayload, createEmptyAgentFieldMap, type AgentRole } from '../utils/agent/agentConfigs';
+import { subscribeModelConfigsChanged } from '../utils/agent/modelConfigEvents';
 
 function getErrorMessage(error: unknown): string {
     if (error instanceof Error && error.message.trim()) {
@@ -16,7 +17,6 @@ export function useAgentConfigs() {
     const [selectedConfigIds, setSelectedConfigIds] = useState<Record<AgentRole, string>>(createEmptyAgentFieldMap);
     const [selectedPersonaIds, setSelectedPersonaIds] = useState<Record<AgentRole, string>>(createEmptyAgentFieldMap);
     const [temperatureInputs, setTemperatureInputs] = useState<Record<AgentRole, string>>(createEmptyAgentFieldMap);
-    const [enableThinking, setEnableThinking] = useState<Record<AgentRole, boolean>>(createEmptyThinkingMap);
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [showConfigManager, setShowConfigManager] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -76,6 +76,12 @@ export function useAgentConfigs() {
     }, [loadAgentConfigs]);
 
     useEffect(() => {
+        return subscribeModelConfigsChanged(() => {
+            void loadAgentConfigs({ includePersonas: false });
+        });
+    }, [loadAgentConfigs]);
+
+    useEffect(() => {
         if (showConfigManager) {
             wasConfigManagerOpenRef.current = true;
             return;
@@ -99,19 +105,14 @@ export function useAgentConfigs() {
         setTemperatureInputs(prev => ({ ...prev, [agent]: value }));
     }, []);
 
-    const handleThinkingToggle = useCallback((agent: AgentRole, value: boolean) => {
-        setEnableThinking(prev => ({ ...prev, [agent]: value }));
-    }, []);
-
     const buildAgentConfigs = useCallback(() => {
         return buildAgentConfigsPayload(
             savedConfigs,
             selectedConfigIds,
             temperatureInputs,
-            enableThinking,
             selectedPersonaIds,
         );
-    }, [savedConfigs, selectedConfigIds, temperatureInputs, enableThinking, selectedPersonaIds]);
+    }, [savedConfigs, selectedConfigIds, temperatureInputs, selectedPersonaIds]);
 
     return {
         savedConfigs,
@@ -119,7 +120,6 @@ export function useAgentConfigs() {
         selectedConfigIds,
         selectedPersonaIds,
         temperatureInputs,
-        enableThinking,
         showAdvanced,
         setShowAdvanced,
         showConfigManager,
@@ -130,7 +130,6 @@ export function useAgentConfigs() {
         handleConfigSelect,
         handlePersonaSelect,
         handleTemperatureChange,
-        handleThinkingToggle,
         buildAgentConfigs,
     };
 }

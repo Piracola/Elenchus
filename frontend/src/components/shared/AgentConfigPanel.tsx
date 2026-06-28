@@ -4,7 +4,7 @@
  */
 
 import { motion } from 'framer-motion';
-import { Brain, Settings2, Thermometer } from 'lucide-react';
+import { Settings2, Thermometer } from 'lucide-react';
 import CustomSelect from './CustomSelect';
 import SettingsPanel from '../sidebar/SettingsPanel';
 import type { AgentPersonaSummary, ModelConfig } from '../../types';
@@ -24,26 +24,17 @@ const AGENT_LABELS: Record<string, string> = {
     fact_checker: '事实核查',
 };
 
-const AGENT_ICONS: Record<string, string> = {
-    proposer: '▲',
-    opposer: '▼',
-    judge: '◆',
-    fact_checker: '●',
-};
-
 interface AgentConfigPanelProps {
     savedConfigs: ModelConfig[];
     agentPersonas?: AgentPersonaSummary[];
     selectedConfigIds: Record<AgentRole, string>;
     selectedPersonaIds?: Record<AgentRole, string>;
     temperatureInputs: Record<AgentRole, string>;
-    enableThinking?: Record<AgentRole, boolean>;
     showConfigManager: boolean;
     setShowConfigManager: (v: boolean) => void;
     handleConfigSelect: (agent: AgentRole, value: string) => void;
     handlePersonaSelect?: (agent: AgentRole, value: string) => void;
     handleTemperatureChange: (agent: AgentRole, value: string) => void;
-    handleThinkingToggle?: (agent: AgentRole, value: boolean) => void;
     readOnly?: boolean;
     manageButtonLabel?: string;
 }
@@ -51,8 +42,7 @@ interface AgentConfigPanelProps {
 export default function AgentConfigPanel({
     savedConfigs, agentPersonas = [], selectedConfigIds, selectedPersonaIds,
     temperatureInputs,
-    enableThinking,
-    showConfigManager, setShowConfigManager, handleConfigSelect, handlePersonaSelect, handleTemperatureChange, handleThinkingToggle,
+    showConfigManager, setShowConfigManager, handleConfigSelect, handlePersonaSelect, handleTemperatureChange,
     readOnly = false,
     manageButtonLabel = '管理配置',
 }: AgentConfigPanelProps) {
@@ -92,114 +82,73 @@ export default function AgentConfigPanel({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
-                style={{
-                    width: '100%',
-                    overflow: 'visible',
-                    padding: '16px',
-                    background: 'var(--bg-card)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 'var(--radius-lg)',
-                    boxShadow: 'var(--shadow-sm)',
-                }}
             >
-                <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center', 
-                    marginBottom: '14px' 
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Settings2 size={16} style={{ color: 'var(--text-muted)' }} />
-                        <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>模型配置</h4>
+                <div className="agent-config-panel__header">
+                    <div className="agent-config-panel__title-wrap">
+                        <span className="agent-config-panel__title-icon">
+                            <Settings2 size={15} />
+                        </span>
+                        <div style={{ minWidth: 0 }}>
+                            <h4 className="agent-config-panel__title">执行模型</h4>
+                            <p className="agent-config-panel__description">
+                                为每个角色指定模型、人设与温度；深度思考由设置页的服务商选项统一控制。
+                            </p>
+                        </div>
                     </div>
-                    <button 
-                        onClick={() => setShowConfigManager(true)} 
-                        style={{ 
-                            background: 'transparent', 
-                            border: '1px solid var(--border-subtle)', 
-                            color: 'var(--text-secondary)', 
-                            padding: '4px 10px', 
-                            borderRadius: 'var(--radius-md)', 
-                            cursor: 'pointer', 
-                            fontSize: '12px',
-                            fontWeight: 500,
-                        }}
+                    <button
+                        type="button"
+                        onClick={() => setShowConfigManager(true)}
+                        className="agent-config-panel__manage-button"
                     >
                         {manageButtonLabel}
                     </button>
                 </div>
-                <div className="agent-config-panel__grid">
+
+                <div className="agent-config-panel__rows">
                     {AGENT_ROLES.map(agent => (
-                        <div key={agent} className="agent-config-panel__card" style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '8px',
-                            minWidth: 0,
-                            padding: '12px',
-                            background: 'var(--bg-secondary)',
-                            border: '1px solid var(--border-subtle)',
-                            borderRadius: 'var(--radius-md)',
-                        }}>
-                            <div style={{ 
-                                fontSize: '11px', 
-                                fontWeight: 600, 
-                                color: 'var(--text-muted)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                minWidth: 0,
-                            }}>
-                                <span style={{ fontSize: '10px' }}>{AGENT_ICONS[agent]}</span>
-                                {AGENT_LABELS[agent]}
+                        <div key={agent} className="agent-config-panel__row">
+                            <div className="agent-config-panel__role">
+                                <span className="agent-config-panel__role-name">
+                                    {AGENT_LABELS[agent]}
+                                </span>
+                                <span className="agent-config-panel__role-description">
+                                    {agentRoleSupportsPersona(agent) ? '可绑定角色人设' : '使用模型配置执行'}
+                                </span>
                             </div>
-                            <CustomSelect
-                                value={selectedConfigIds[agent]}
-                                options={options}
-                                onChange={(value) => handleConfigSelect(agent, value)}
-                                size="sm"
-                                width="100%"
-                                disabled={readOnly}
-                            />
-                            {handlePersonaSelect && agentRoleSupportsPersona(agent) && (
-                                <CustomSelect
-                                    value={selectedPersonaIds?.[agent] ?? ''}
-                                    options={buildPersonaOptions(agent)}
-                                    onChange={(value) => handlePersonaSelect(agent, value)}
-                                    size="sm"
-                                    width="100%"
-                                    disabled={readOnly}
-                                />
-                            )}
-                            <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: handleThinkingToggle
-                                    ? 'minmax(0, 1fr) auto'
-                                    : 'minmax(0, 1fr)',
-                                alignItems: 'stretch',
-                                gap: '8px',
-                                minWidth: 0,
-                            }}>
-                                <div style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: 'auto minmax(0, 1fr)',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    minWidth: 0,
-                                    padding: '0 10px',
-                                    borderRadius: 'var(--radius-md)',
-                                    border: '1px solid var(--border-subtle)',
-                                    background: 'var(--bg-card)',
-                                }}>
-                                    <span style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '6px',
-                                        minWidth: '42px',
-                                        fontSize: '11px',
-                                        color: 'var(--text-muted)',
-                                        fontWeight: 600,
-                                        whiteSpace: 'nowrap',
-                                    }}>
+
+                            <div
+                                className={`agent-config-panel__controls ${
+                                    handlePersonaSelect && agentRoleSupportsPersona(agent)
+                                        ? 'agent-config-panel__controls--with-persona'
+                                        : ''
+                                }`}
+                            >
+                                <div className="agent-config-panel__control agent-config-panel__control--model">
+                                    <span className="agent-config-panel__control-label">模型</span>
+                                    <CustomSelect
+                                        value={selectedConfigIds[agent]}
+                                        options={options}
+                                        onChange={(value) => handleConfigSelect(agent, value)}
+                                        size="sm"
+                                        width="100%"
+                                        disabled={readOnly}
+                                    />
+                                </div>
+                                {handlePersonaSelect && agentRoleSupportsPersona(agent) && (
+                                    <div className="agent-config-panel__control agent-config-panel__control--persona">
+                                        <span className="agent-config-panel__control-label">人设</span>
+                                        <CustomSelect
+                                            value={selectedPersonaIds?.[agent] ?? ''}
+                                            options={buildPersonaOptions(agent)}
+                                            onChange={(value) => handlePersonaSelect(agent, value)}
+                                            size="sm"
+                                            width="100%"
+                                            disabled={readOnly}
+                                        />
+                                    </div>
+                                )}
+                                <label className="agent-config-panel__temperature">
+                                    <span className="agent-config-panel__temperature-label">
                                         <Thermometer size={12} />
                                         Temp
                                     </span>
@@ -212,69 +161,18 @@ export default function AgentConfigPanel({
                                         max={2}
                                         step={0.1}
                                         disabled={readOnly}
-                                        style={{
-                                            width: '100%',
-                                            minWidth: 0,
-                                            padding: '8px 0',
-                                            border: 'none',
-                                            background: 'transparent',
-                                            color: readOnly ? 'var(--text-secondary)' : 'var(--text-primary)',
-                                            fontSize: '12px',
-                                            outline: 'none',
-                                            boxSizing: 'border-box',
-                                            cursor: readOnly ? 'not-allowed' : 'text',
-                                        }}
+                                        className="agent-config-panel__temperature-input"
                                     />
-                                </div>
-                                {handleThinkingToggle && (
-                                    <label
-                                        htmlFor={`thinking-${agent}`}
-                                        style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '8px',
-                                            minWidth: 0,
-                                            padding: '0 12px',
-                                            borderRadius: 'var(--radius-md)',
-                                            border: '1px solid var(--border-subtle)',
-                                            background: (enableThinking?.[agent] ?? false)
-                                                ? 'rgba(99, 102, 241, 0.08)'
-                                                : 'var(--bg-card)',
-                                            color: (enableThinking?.[agent] ?? false)
-                                                ? 'var(--accent-indigo)'
-                                                : 'var(--text-secondary)',
-                                            cursor: readOnly ? 'not-allowed' : 'pointer',
-                                            fontWeight: 500,
-                                            fontSize: '11px',
-                                            whiteSpace: 'nowrap',
-                                            opacity: readOnly ? 0.7 : 1,
-                                        }}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            id={`thinking-${agent}`}
-                                            checked={enableThinking?.[agent] ?? false}
-                                            onChange={(event) => handleThinkingToggle(agent, event.target.checked)}
-                                            disabled={readOnly}
-                                            style={{ cursor: 'pointer', width: '14px', height: '14px', margin: 0 }}
-                                        />
-                                        <Brain size={12} />
-                                        深度思考
-                                    </label>
-                                )}
+                                </label>
                             </div>
                         </div>
                     ))}
                 </div>
-                <div style={{
-                    marginTop: '12px',
-                    fontSize: '11px',
-                    color: 'var(--text-muted)',
-                    lineHeight: 1.6,
-                }}>
+
+                <div className="agent-config-panel__hint">
                     {readOnly
                         ? '当前面板为只读视图，用于核对本次会话实际使用的参数。'
-                        : `Temperature 范围为 0-2。留空时使用默认值（${DEFAULT_AGENT_TEMPERATURE}）。人设文件位于 runtime/agent_personas。`}
+                        : `Temperature 范围为 0-2。留空时使用默认值（${DEFAULT_AGENT_TEMPERATURE}）。服务商级深度思考在设置页统一配置。`}
                 </div>
             </motion.div>
             <SettingsPanel

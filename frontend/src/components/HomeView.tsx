@@ -10,12 +10,12 @@ import {
     parseJuryAgentsInput,
     parseJuryDiscussionRoundsInput,
     parseMaxTurnsInput,
+    parseSpeechMaxCharsInput,
     parseTeamAgentsInput,
     parseTeamDiscussionRoundsInput,
 } from '../utils/agent/debateSession';
 import { HomeComposerCard } from './home/HomeComposerCard';
 import type { PendingReferenceDocument } from './home/HomeComposerCard';
-import { HomeModeSelector } from './home/HomeModeSelector';
 import { HomeStatusLegend } from './home/HomeStatusLegend';
 import AgentConfigPanel from './shared/AgentConfigPanel';
 import BrandIcon from './shared/BrandIcon';
@@ -53,6 +53,8 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
     const [teamRoundsInput, setTeamRoundsInput] = useState('');
     const [juryAgentsInput, setJuryAgentsInput] = useState('');
     const [juryRoundsInput, setJuryRoundsInput] = useState('');
+    const [proposerSpeechLimitInput, setProposerSpeechLimitInput] = useState('');
+    const [opposerSpeechLimitInput, setOpposerSpeechLimitInput] = useState('');
     const [steelmanEnabled, setSteelmanEnabled] = useState(true);
     const [pendingDocuments, setPendingDocuments] = useState<PendingReferenceDocument[]>([]);
     const { isCreating, error: createError, createSession, clearError } = useSessionCreate();
@@ -64,14 +66,12 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
         selectedConfigIds,
         selectedPersonaIds,
         temperatureInputs,
-        enableThinking,
         showConfigManager,
         setShowConfigManager,
         error: agentConfigsError,
         handleConfigSelect,
         handlePersonaSelect,
         handleTemperatureChange,
-        handleThinkingToggle,
         buildAgentConfigs,
     } = useAgentConfigs();
     const { demoMode, isAdmin } = useDemoModeStore();
@@ -87,6 +87,8 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
     const teamDiscussionRounds = parseTeamDiscussionRoundsInput(teamRoundsInput);
     const juryAgents = parseJuryAgentsInput(juryAgentsInput);
     const juryDiscussionRounds = parseJuryDiscussionRoundsInput(juryRoundsInput);
+    const proposerSpeechLimit = parseSpeechMaxCharsInput(proposerSpeechLimitInput);
+    const opposerSpeechLimit = parseSpeechMaxCharsInput(opposerSpeechLimitInput);
 
     useEffect(() => {
         const scrollContainer = homeScrollRef.current;
@@ -200,6 +202,10 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                         counterfactual_enabled: true,
                         consensus_enabled: true,
                     },
+                {
+                    proposer_max_chars: proposerSpeechLimit,
+                    opposer_max_chars: opposerSpeechLimit,
+                },
                 debateMode,
                 isSophistryMode
                     ? {
@@ -249,7 +255,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                justifyContent: 'flex-start',
+                justifyContent: advancedPanelVisible ? 'flex-start' : 'center',
                 background: 'var(--bg-primary)',
                 position: 'relative',
                 overflowY: 'auto',
@@ -288,7 +294,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                 transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
                 style={{
                     width: '100%',
-                    maxWidth: '980px',
+                    maxWidth: '900px',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'stretch',
@@ -348,15 +354,10 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                     <HomeStatusLegend isSophistryMode={isSophistryMode} compact />
                 </motion.div>
 
-                <HomeModeSelector
-                    debateMode={debateMode}
-                    homeFontSizes={homeFontSizes}
-                    onModeChange={setDebateMode}
-                />
-
                 <div ref={composerAnchorRef} style={{ width: '100%' }}>
                     <HomeComposerCard
                         topic={topic}
+                        debateMode={debateMode}
                         isCreating={isCreating}
                         isSophistryMode={isSophistryMode}
                         showAdvanced={showAdvanced}
@@ -365,9 +366,12 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                         teamRoundsInput={teamRoundsInput}
                         juryAgentsInput={juryAgentsInput}
                         juryRoundsInput={juryRoundsInput}
+                        proposerSpeechLimitInput={proposerSpeechLimitInput}
+                        opposerSpeechLimitInput={opposerSpeechLimitInput}
                         steelmanEnabled={steelmanEnabled}
                         homeFontSizes={homeFontSizes}
                         pendingDocuments={pendingDocuments}
+                        onDebateModeChange={setDebateMode}
                         onDocumentsChange={setPendingDocuments}
                         onTopicChange={(value) => {
                             if (createError) {
@@ -381,6 +385,8 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                         onTeamRoundsChange={setTeamRoundsInput}
                         onJuryAgentsChange={setJuryAgentsInput}
                         onJuryRoundsChange={setJuryRoundsInput}
+                        onProposerSpeechLimitChange={setProposerSpeechLimitInput}
+                        onOpposerSpeechLimitChange={setOpposerSpeechLimitInput}
                         onSteelmanToggle={() => setSteelmanEnabled((value) => !value)}
                         onCreateDebate={() => {
                             void handleCreateDebate();
@@ -442,13 +448,11 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                                 selectedConfigIds={selectedConfigIds}
                                 selectedPersonaIds={selectedPersonaIds}
                                 temperatureInputs={temperatureInputs}
-                                enableThinking={enableThinking}
                                 showConfigManager={showConfigManager}
                                 setShowConfigManager={setShowConfigManager}
                                 handleConfigSelect={handleConfigSelect}
                                 handlePersonaSelect={handlePersonaSelect}
                                 handleTemperatureChange={handleTemperatureChange}
-                                handleThinkingToggle={handleThinkingToggle}
                             />
                         </motion.div>
                     )}

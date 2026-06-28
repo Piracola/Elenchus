@@ -48,7 +48,7 @@ function makeRuntimeEventWithContent(index: number, type: string = 'speech_end')
                     topic_focus: { score: 8, rationale: 'ok' },
                     rebuttal_strength: { score: 8, rationale: 'ok' },
                     consistency: { score: 8, rationale: 'ok' },
-                    persuasiveness: { score: 8, rationale: 'ok' },
+                    boundary_contribution: { score: 8, rationale: 'ok' },
                     module_scores: { foundation: 8, confrontation: 8, stability: 8, vision: 8 },
                     comprehensive_score: 8,
                     overall_comment: '评分事件',

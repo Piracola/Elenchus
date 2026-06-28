@@ -102,13 +102,11 @@ function handleStatus(
     return patch;
 }
 
-function handleTeamDiscussion(
-    state: DebateState,
+function createTeamDiscussionEntry(
     payload: Record<string, unknown>,
     event: RuntimeEvent,
-): Partial<DebateState> {
-    if (!state.currentSession) return {};
-    const entry: DialogueEntry = {
+): DialogueEntry {
+    return {
         role: getPayloadString(payload, 'role') ?? (event.type === 'team_summary' ? 'team_summary' : 'team_member'),
         agent_name: getPayloadString(payload, 'agent_name') ?? '',
         content: sanitizeIncomingContent(getPayloadString(payload, 'content')),
@@ -123,8 +121,20 @@ function handleTeamDiscussion(
         team_specialty: getPayloadString(payload, 'team_specialty'),
         source_role: getPayloadString(payload, 'source_role'),
     };
+}
+
+function handleTeamDiscussion(
+    state: DebateState,
+    payload: Record<string, unknown>,
+    event: RuntimeEvent,
+): Partial<DebateState> {
+    if (!state.currentSession) return {};
+    const entry = createTeamDiscussionEntry(payload, event);
 
     return {
+        streamingRole: '',
+        streamingContent: '',
+        streamingEntry: null,
         currentSession: {
             ...state.currentSession,
             team_dialogue_history: appendDialogueWithDedupe(
@@ -135,19 +145,17 @@ function handleTeamDiscussion(
     };
 }
 
-function handleJuryDiscussion(
-    state: DebateState,
+function createJuryDiscussionEntry(
     payload: Record<string, unknown>,
     event: RuntimeEvent,
-): Partial<DebateState> {
-    if (!state.currentSession) return {};
+): DialogueEntry {
     const fallbackRole =
         event.type === 'jury_summary'
             ? 'jury_summary'
             : event.type === 'consensus_summary'
                 ? 'consensus_summary'
                 : 'jury_member';
-    const entry: DialogueEntry = {
+    return {
         role: getPayloadString(payload, 'role') ?? fallbackRole,
         agent_name: getPayloadString(payload, 'agent_name') ?? '',
         content: sanitizeIncomingContent(getPayloadString(payload, 'content')),
@@ -160,8 +168,20 @@ function handleJuryDiscussion(
         jury_member_index: getPayloadNumber(payload, 'jury_member_index'),
         jury_perspective: getPayloadString(payload, 'jury_perspective'),
     };
+}
+
+function handleJuryDiscussion(
+    state: DebateState,
+    payload: Record<string, unknown>,
+    event: RuntimeEvent,
+): Partial<DebateState> {
+    if (!state.currentSession) return {};
+    const entry = createJuryDiscussionEntry(payload, event);
 
     return {
+        streamingRole: '',
+        streamingContent: '',
+        streamingEntry: null,
         currentSession: {
             ...state.currentSession,
             jury_dialogue_history: appendDialogueWithDedupe(
@@ -176,10 +196,19 @@ function handleSpeechStart(
     _state: DebateState,
     payload: Record<string, unknown>,
 ): Partial<DebateState> {
+    const role = getPayloadString(payload, 'role') ?? '';
     return {
         isDebating: true,
-        streamingRole: getPayloadString(payload, 'role') ?? '',
+        streamingRole: role,
         streamingContent: '',
+        streamingEntry: {
+            role,
+            agent_name: getPayloadString(payload, 'agent_name') ?? role,
+            content: '',
+            citations: [],
+            timestamp: '',
+            turn: getPayloadNumber(payload, 'turn'),
+        },
     };
 }
 
@@ -192,7 +221,7 @@ function handleSpeechToken(
 }
 
 function handleSpeechCancel(): Partial<DebateState> {
-    return { streamingRole: '', streamingContent: '' };
+    return { streamingRole: '', streamingContent: '', streamingEntry: null };
 }
 
 function handleSpeechEnd(
@@ -200,7 +229,7 @@ function handleSpeechEnd(
     payload: Record<string, unknown>,
     event: RuntimeEvent,
 ): Partial<DebateState> {
-    const patch: Partial<DebateState> = { streamingRole: '', streamingContent: '' };
+    const patch: Partial<DebateState> = { streamingRole: '', streamingContent: '', streamingEntry: null };
     if (!state.currentSession) return patch;
 
     const entry: DialogueEntry = {
@@ -225,12 +254,43 @@ function handleSpeechEnd(
     return patch;
 }
 
+function handleDiscussionStreamStart(
+    _state: DebateState,
+    payload: Record<string, unknown>,
+    event: RuntimeEvent,
+): Partial<DebateState> {
+    const kind = getPayloadString(payload, 'discussion_kind') ?? 'team';
+    const entry = kind === 'jury'
+        ? createJuryDiscussionEntry(payload, event)
+        : createTeamDiscussionEntry(payload, event);
+    return {
+        isDebating: true,
+        streamingRole: entry.role,
+        streamingContent: '',
+        streamingEntry: {
+            ...entry,
+            content: '',
+        },
+    };
+}
+
+function handleDiscussionStreamToken(
+    state: DebateState,
+    payload: Record<string, unknown>,
+): Partial<DebateState> {
+    return handleSpeechToken(state, payload);
+}
+
+function handleDiscussionStreamCancel(): Partial<DebateState> {
+    return { streamingRole: '', streamingContent: '', streamingEntry: null };
+}
+
 function handleSophistryReport(
     state: DebateState,
     payload: Record<string, unknown>,
     event: RuntimeEvent,
 ): Partial<DebateState> {
-    const patch: Partial<DebateState> = { streamingRole: '', streamingContent: '' };
+    const patch: Partial<DebateState> = { streamingRole: '', streamingContent: '', streamingEntry: null };
     if (!state.currentSession) return patch;
 
     const reportRaw = payload.report;
@@ -456,6 +516,9 @@ const eventHandlers: Record<string, EventHandler> = {
     jury_discussion: handleJuryDiscussion,
     jury_summary: handleJuryDiscussion,
     consensus_summary: handleJuryDiscussion,
+    discussion_stream_start: handleDiscussionStreamStart,
+    discussion_stream_token: handleDiscussionStreamToken,
+    discussion_stream_cancel: handleDiscussionStreamCancel,
     speech_start: handleSpeechStart,
     speech_token: handleSpeechToken,
     speech_cancel: handleSpeechCancel,

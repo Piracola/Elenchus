@@ -66,6 +66,7 @@ export interface DebateConnectionSlice {
 export interface DebateStreamingSlice {
     streamingRole: string;
     streamingContent: string;
+    streamingEntry: DialogueEntry | null;
 }
 
 export interface DebateSearchSlice {
@@ -144,6 +145,7 @@ const initialConnectionState: DebateConnectionSlice = {
 const initialStreamingState: DebateStreamingSlice = {
     streamingRole: '',
     streamingContent: '',
+    streamingEntry: null,
 };
 
 const initialSearchState: DebateSearchSlice = {
@@ -234,6 +236,7 @@ export const useDebateStore = create<DebateState>((set) => ({
                 hasOlderRuntimeEvents: false,
                 streamingRole: '',
                 streamingContent: '',
+                streamingEntry: null,
                 isDebating: runtimeFallback.isDebating,
                 phase: runtimeFallback.phase,
                 currentStatus: runtimeFallback.status,
@@ -300,13 +303,13 @@ export const useDebateStore = create<DebateState>((set) => ({
             };
         }),
 
-    startStreaming: (role) => set({ streamingRole: role, streamingContent: '' }),
+    startStreaming: (role) => set({ streamingRole: role, streamingContent: '', streamingEntry: null }),
     appendStreamToken: (token) =>
         set((state) => ({ streamingContent: state.streamingContent + token })),
     endStreaming: (role, content, citations, agentName) =>
         set((state) => {
             if (!state.currentSession) {
-                return { streamingRole: '', streamingContent: '' };
+                return { streamingRole: '', streamingContent: '', streamingEntry: null };
             }
 
             const entry: DialogueEntry = {
@@ -319,6 +322,7 @@ export const useDebateStore = create<DebateState>((set) => ({
             return {
                 streamingRole: '',
                 streamingContent: '',
+                streamingEntry: null,
                 currentSession: {
                     ...state.currentSession,
                     dialogue_history: appendDialogueWithDedupe(state.currentSession.dialogue_history, entry),

@@ -1,10 +1,13 @@
 import type { ChangeEventHandler } from 'react';
+import { KeyRound, Save, Trash2 } from 'lucide-react';
 
 import {
-    helperTextStyle,
-    inputStyle,
-    labelStyle,
-} from './searchConfigShared';
+    SettingsButton,
+    SettingsField,
+    SettingsInput,
+    SettingsNotice,
+    SettingsSection,
+} from '../settings/SettingsPrimitives';
 
 type SearchProviderField = {
     label: string;
@@ -52,84 +55,56 @@ export function SearchProviderSettingsCard({
     const shouldShowSaveButton = saveIdleLabel.trim().length > 0;
 
     return (
-        <div
-            style={{
-                padding: '22px 24px',
-                borderRadius: 'var(--radius-lg)',
-                border: '1px solid var(--border-subtle)',
-                background: 'var(--bg-card)',
-                boxShadow: 'var(--shadow-xs)',
-            }}
+        <SettingsSection
+            title={title}
+            description={description}
+            icon={<KeyRound size={15} />}
         >
-            <div style={{ marginBottom: '18px' }}>
-                <div style={{ fontSize: '22px', color: 'var(--text-primary)', fontWeight: 700 }}>
-                    {title}
+            {fields.length === 0 ? (
+                <SettingsNotice>
+                    该搜索引擎无需单独配置即可使用。
+                </SettingsNotice>
+            ) : (
+                <div className="settings-form-grid">
+                    {fields.map((field) => (
+                        <SettingsField key={field.label} label={field.label} hint={field.helperText}>
+                            <SettingsInput
+                                type={field.type ?? 'text'}
+                                autoComplete={field.autoComplete}
+                                value={field.value}
+                                onChange={field.onChange}
+                                placeholder={field.placeholder}
+                            />
+                        </SettingsField>
+                    ))}
                 </div>
-                <div style={{ ...helperTextStyle, marginTop: '8px' }}>
-                    {description}
+            )}
+
+            {(shouldShowSaveButton || showClearButton) && (
+                <div className="settings-inline-controls">
+                    {shouldShowSaveButton && (
+                        <SettingsButton
+                            variant="primary"
+                            onClick={onSave}
+                            disabled={isBusy}
+                            icon={<Save size={15} />}
+                        >
+                            {activeAction === saveActionId ? saveBusyLabel : saveIdleLabel}
+                        </SettingsButton>
+                    )}
+
+                    {showClearButton && onClear && clearActionId && clearIdleLabel && clearBusyLabel && (
+                        <SettingsButton
+                            variant="danger"
+                            onClick={onClear}
+                            disabled={isBusy}
+                            icon={<Trash2 size={15} />}
+                        >
+                            {activeAction === clearActionId ? clearBusyLabel : clearIdleLabel}
+                        </SettingsButton>
+                    )}
                 </div>
-            </div>
-
-            <div style={{ display: 'grid', gap: '16px' }}>
-                {fields.map((field) => (
-                    <div key={field.label}>
-                        <label style={labelStyle}>{field.label}</label>
-                        <input
-                            type={field.type ?? 'text'}
-                            autoComplete={field.autoComplete}
-                            value={field.value}
-                            onChange={field.onChange}
-                            placeholder={field.placeholder}
-                            style={inputStyle}
-                        />
-                        <div style={helperTextStyle}>
-                            {field.helperText}
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px', marginTop: '18px', flexWrap: 'wrap' }}>
-                {shouldShowSaveButton && (
-                    <button
-                        onClick={onSave}
-                        disabled={isBusy}
-                        style={{
-                            padding: '12px 18px',
-                            background: 'var(--text-primary)',
-                            color: 'var(--bg-primary)',
-                            border: 'none',
-                            borderRadius: 'var(--radius-md)',
-                            fontWeight: 600,
-                            fontSize: '16px',
-                            cursor: isBusy ? 'not-allowed' : 'pointer',
-                            opacity: isBusy ? 0.7 : 1,
-                        }}
-                    >
-                        {activeAction === saveActionId ? saveBusyLabel : saveIdleLabel}
-                    </button>
-                )}
-
-                {showClearButton && onClear && clearActionId && clearIdleLabel && clearBusyLabel && (
-                    <button
-                        onClick={onClear}
-                        disabled={isBusy}
-                        style={{
-                            padding: '12px 18px',
-                            background: 'transparent',
-                            color: 'var(--text-secondary)',
-                            border: '1px solid var(--border-subtle)',
-                            borderRadius: 'var(--radius-md)',
-                            fontWeight: 600,
-                            fontSize: '16px',
-                            cursor: isBusy ? 'not-allowed' : 'pointer',
-                            opacity: isBusy ? 0.7 : 1,
-                        }}
-                    >
-                        {activeAction === clearActionId ? clearBusyLabel : clearIdleLabel}
-                    </button>
-                )}
-            </div>
-        </div>
+            )}
+        </SettingsSection>
     );
 }

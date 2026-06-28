@@ -22,15 +22,6 @@ export function createEmptyAgentFieldMap(): Record<AgentRole, string> {
     };
 }
 
-export function createEmptyThinkingMap(): Record<AgentRole, boolean> {
-    return {
-        proposer: false,
-        opposer: false,
-        judge: false,
-        fact_checker: false,
-    };
-}
-
 export function parseAgentTemperatureInput(input: string): number | undefined {
     const trimmed = input.trim();
     if (!trimmed) {
@@ -64,7 +55,6 @@ export function buildAgentConfigsPayload(
     savedConfigs: ModelConfig[],
     selectedConfigIds: Record<string, string>,
     temperatureInputs: Record<string, string>,
-    enableThinkingInputs?: Record<string, boolean>,
     selectedPersonaIds?: Record<string, string>,
 ): Record<string, AgentConfigResult> | undefined {
     const result: Record<string, AgentConfigResult> = {};
@@ -75,12 +65,11 @@ export function buildAgentConfigsPayload(
     for (const role of AGENT_ROLES) {
         const selectedKey = selectedConfigIds[role] ?? '';
         const temperature = parseAgentTemperatureInput(temperatureInputs[role] ?? '');
-        const enableThinking = enableThinkingInputs?.[role] ?? false;
         const personaId = agentRoleSupportsPersona(role)
             ? (selectedPersonaIds?.[role]?.trim() ?? '')
             : '';
 
-        if (!selectedKey && temperature === undefined && !enableThinking && !personaId) {
+        if (!selectedKey && temperature === undefined && !personaId) {
             continue;
         }
 
@@ -108,7 +97,6 @@ export function buildAgentConfigsPayload(
                 api_base_url: configDef.api_base_url || undefined,
             } : {}),
             ...(temperature !== undefined ? { temperature } : {}),
-            ...(enableThinking ? { enable_thinking: true } : {}),
             ...(personaId ? { persona_id: personaId } : {}),
             ...(configDef?.custom_parameters && Object.keys(configDef.custom_parameters).length > 0
                 ? { custom_parameters: configDef.custom_parameters }

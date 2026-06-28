@@ -24,6 +24,7 @@ export default function StreamingMessage() {
     // Subscribe to store - only re-renders when these specific fields change
     const streamingRole = useDebateStore((state) => state.streamingRole);
     const streamingContent = useDebateStore((state) => state.streamingContent);
+    const streamingEntry = useDebateStore((state) => state.streamingEntry);
 
     const rafRef = useRef<number | null>(null);
     const isStreamingRef = useRef(false);
@@ -89,18 +90,21 @@ export default function StreamingMessage() {
     // Build a fake DialogueEntry for getAgentVisual
     const agentVisual = useMemo(() => {
         if (!streamingRole) return null;
-        return getAgentVisual({
+        return getAgentVisual(streamingEntry ?? {
             role: streamingRole,
             agent_name: streamingRole === 'proposer' ? '正方' : streamingRole === 'opposer' ? '反方' : streamingRole,
             content: '',
             citations: [],
             timestamp: '',
         } as DialogueEntry);
-    }, [streamingRole]);
+    }, [streamingEntry, streamingRole]);
 
-    // Determine badge color like MessageRow does
-    const isProposer = agentVisual?.label === '正方' || streamingRole === 'proposer';
-    const badgeBg = isProposer ? '#22c55e' : '#ef4444';
+    const badgeBg = agentVisual?.color ?? 'var(--accent-indigo)';
+    const streamingStatus = streamingEntry?.discussion_kind === 'jury'
+        ? '正在评议...'
+        : streamingEntry?.discussion_kind === 'team'
+            ? '正在讨论...'
+            : '正在发言...';
 
     const splitContent = useMemo(
         () => splitLeadingThinkingContent(renderedContent),
@@ -146,25 +150,27 @@ export default function StreamingMessage() {
                     style={{
                         position: 'relative',
                         background: 'var(--bg-card)',
-                        padding: '20px 28px 28px 28px',
+                        padding: '16px 24px 24px',
                         borderRadius: 'var(--radius-xl)',
-                        boxShadow: '0 2px 12px rgba(224, 224, 224, 0.5)',
+                        border: '1px solid var(--border-subtle)',
+                        boxShadow: 'var(--shadow-sm)',
                     }}
                 >
-                    {/* 统一头部行：头像 + 身份 + 流式指示器 居中对齐 */}
                     <div
                         style={{
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '10px',
-                            marginBottom: '12px',
+                            justifyContent: 'flex-start',
+                            gap: '9px',
+                            marginBottom: '10px',
+                            minWidth: 0,
+                            flexWrap: 'wrap',
                         }}
                     >
                         <div
                             style={{
-                                width: '36px',
-                                height: '36px',
+                                width: '32px',
+                                height: '32px',
                                 background: badgeBg,
                                 borderRadius: 'var(--radius-md)',
                                 display: 'flex',
@@ -172,8 +178,8 @@ export default function StreamingMessage() {
                                 justifyContent: 'center',
                                 color: '#fff',
                                 fontWeight: 700,
-                                fontSize: '15px',
-                                boxShadow: '0 2px 8px rgba(224, 224, 224, 0.6)',
+                                fontSize: '14px',
+                                boxShadow: 'var(--shadow-xs)',
                                 flexShrink: 0,
                             }}
                         >
@@ -182,11 +188,8 @@ export default function StreamingMessage() {
                         <span
                             style={{
                                 fontSize: '13px',
-                                color: '#333333',
-                                border: '1px solid #CCCCCC',
-                                padding: '5px 12px',
-                                borderRadius: 'var(--radius-full)',
-                                fontWeight: 500,
+                                color: 'var(--text-primary)',
+                                fontWeight: 700,
                                 whiteSpace: 'nowrap',
                             }}
                         >
@@ -213,15 +216,15 @@ export default function StreamingMessage() {
                                     animation: 'pulse 1s ease-in-out infinite',
                                 }}
                             />
-                            正在发言...
+                            {streamingStatus}
                         </span>
                     </div>
 
                     {/* Content body */}
-                    <div style={messageContentWrapperStyle('16px')}>
+                    <div style={messageContentWrapperStyle('10px')}>
                         <ThinkingBlock
                             content={splitContent.thinking}
-                            accentColor="#fff"
+                            accentColor={badgeBg}
                             fontSize={messageFontSizes.body}
                             textColor="var(--text-primary)"
                         />
@@ -240,7 +243,7 @@ export default function StreamingMessage() {
                                     color: 'var(--text-muted)',
                                 }}
                             >
-                                正在发言...
+                                {streamingStatus}
                             </span>
                         )}
                     </div>

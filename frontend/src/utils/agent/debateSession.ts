@@ -3,6 +3,7 @@ export const DEFAULT_TEAM_AGENTS_PER_TEAM = 0;
 export const DEFAULT_TEAM_DISCUSSION_ROUNDS = 0;
 export const DEFAULT_JURY_AGENTS_PER_JURY = 0;
 export const DEFAULT_JURY_DISCUSSION_ROUNDS = 0;
+export const DEFAULT_SPEECH_MAX_CHARS = 0;
 
 function parseBoundedIntegerInput(
     input: string,
@@ -78,5 +79,16 @@ export function parseJuryDiscussionRoundsInput(
         fallback,
         min: 0,
         max: 10,
+    });
+}
+
+export function parseSpeechMaxCharsInput(
+    input: string,
+    fallback: number = DEFAULT_SPEECH_MAX_CHARS,
+): number {
+    return parseBoundedIntegerInput(input, {
+        fallback,
+        min: 0,
+        max: 20000,
     });
 }

@@ -51,7 +51,7 @@ export interface ProviderFormData {
     customParametersText: string;
     models: string[];
     isDefault: boolean;
-    enableThinking: boolean;  // 新增：思考模式开关
+    enableThinking: boolean;
 }
 
 export interface RemoteModelCandidate {
@@ -68,7 +68,6 @@ export interface AgentConfigResult {
     temperature?: number;
     max_input_tokens?: number;
     max_tokens?: number;
-    enable_thinking?: boolean;
     custom_parameters?: Record<string, unknown>;
     persona_id?: string;
     persona_name?: string;

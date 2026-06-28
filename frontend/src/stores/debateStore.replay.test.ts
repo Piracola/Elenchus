@@ -42,7 +42,7 @@ function makeScores(comment: string): TurnScore {
         topic_focus: { score: 8, rationale: 'ok' },
         rebuttal_strength: { score: 8, rationale: 'ok' },
         consistency: { score: 8, rationale: 'ok' },
-        persuasiveness: { score: 8, rationale: 'ok' },
+        boundary_contribution: { score: 8, rationale: 'ok' },
         module_scores: {
             foundation: 8,
             confrontation: 8,
@@ -506,6 +506,151 @@ describe('debateStore replay state', () => {
         expect(state.runtimeEvents.map((event) => event.type)).toEqual(['speech_start']);
         expect(state.visibleRuntimeEvents.map((event) => event.type)).toEqual(['speech_start']);
         expect(state.lastEventSeq).toBe(2);
+    });
+
+    it('streams team discussion content before finalizing it into team history', () => {
+        const store = useDebateStore.getState();
+
+        store.applyRuntimeEvent(
+            makeRuntimeEvent({
+                event_id: 'evt_team_stream_start',
+                session_id: 'session_1',
+                seq: 1,
+                type: 'discussion_stream_start',
+                payload: {
+                    role: 'team_member',
+                    agent_name: '正方组员1',
+                    discussion_kind: 'team',
+                    team_side: 'proposer',
+                    team_round: 0,
+                    team_member_index: 0,
+                    team_specialty: '证据审查',
+                    source_role: 'proposer',
+                    turn: 0,
+                },
+            }),
+        );
+        store.applyRuntimeEvent(
+            makeRuntimeEvent({
+                event_id: 'evt_team_stream_token',
+                session_id: 'session_1',
+                seq: 2,
+                type: 'discussion_stream_token',
+                payload: { token: '先补证据' },
+            }),
+        );
+
+        let state = useDebateStore.getState();
+        expect(state.streamingRole).toBe('team_member');
+        expect(state.streamingEntry).toMatchObject({
+            agent_name: '正方组员1',
+            discussion_kind: 'team',
+            team_specialty: '证据审查',
+        });
+        expect(state.streamingContent).toBe('先补证据');
+        expect(state.currentSession?.team_dialogue_history).toEqual([]);
+        expect(state.runtimeEvents.map((event) => event.type)).toEqual(['discussion_stream_start']);
+
+        store.applyRuntimeEvent(
+            makeRuntimeEvent({
+                event_id: 'evt_team_final',
+                session_id: 'session_1',
+                seq: 3,
+                type: 'team_discussion',
+                payload: {
+                    role: 'team_member',
+                    agent_name: '正方组员1',
+                    content: '先补证据',
+                    discussion_kind: 'team',
+                    team_side: 'proposer',
+                    team_round: 0,
+                    team_member_index: 0,
+                    team_specialty: '证据审查',
+                    source_role: 'proposer',
+                    turn: 0,
+                },
+            }),
+        );
+
+        state = useDebateStore.getState();
+        expect(state.streamingRole).toBe('');
+        expect(state.streamingContent).toBe('');
+        expect(state.streamingEntry).toBeNull();
+        expect(state.currentSession?.team_dialogue_history).toHaveLength(1);
+        expect(state.currentSession?.team_dialogue_history[0]).toMatchObject({
+            role: 'team_member',
+            content: '先补证据',
+            team_specialty: '证据审查',
+        });
+    });
+
+    it('streams jury discussion content before finalizing it into jury history', () => {
+        const store = useDebateStore.getState();
+
+        store.applyRuntimeEvent(
+            makeRuntimeEvent({
+                event_id: 'evt_jury_stream_start',
+                session_id: 'session_1',
+                seq: 1,
+                type: 'discussion_stream_start',
+                payload: {
+                    role: 'jury_member',
+                    agent_name: '陪审员1',
+                    discussion_kind: 'jury',
+                    jury_round: 0,
+                    jury_member_index: 0,
+                    jury_perspective: '逻辑审查',
+                    turn: 0,
+                },
+            }),
+        );
+        store.applyRuntimeEvent(
+            makeRuntimeEvent({
+                event_id: 'evt_jury_stream_token',
+                session_id: 'session_1',
+                seq: 2,
+                type: 'discussion_stream_token',
+                payload: { token: '双方争点仍在因果链' },
+            }),
+        );
+
+        let state = useDebateStore.getState();
+        expect(state.streamingRole).toBe('jury_member');
+        expect(state.streamingEntry).toMatchObject({
+            agent_name: '陪审员1',
+            discussion_kind: 'jury',
+            jury_perspective: '逻辑审查',
+        });
+        expect(state.streamingContent).toBe('双方争点仍在因果链');
+        expect(state.currentSession?.jury_dialogue_history).toEqual([]);
+
+        store.applyRuntimeEvent(
+            makeRuntimeEvent({
+                event_id: 'evt_jury_final',
+                session_id: 'session_1',
+                seq: 3,
+                type: 'jury_discussion',
+                payload: {
+                    role: 'jury_member',
+                    agent_name: '陪审员1',
+                    content: '双方争点仍在因果链',
+                    discussion_kind: 'jury',
+                    jury_round: 0,
+                    jury_member_index: 0,
+                    jury_perspective: '逻辑审查',
+                    turn: 0,
+                },
+            }),
+        );
+
+        state = useDebateStore.getState();
+        expect(state.streamingEntry).toBeNull();
+        expect(state.currentSession?.jury_dialogue_history).toHaveLength(1);
+        expect(state.currentSession?.jury_dialogue_history[0]).toMatchObject({
+            role: 'jury_member',
+            content: '双方争点仍在因果链',
+            jury_perspective: '逻辑审查',
+        });
     });
 
     it('appends the final speech on speech_end after ignoring token updates', () => {
