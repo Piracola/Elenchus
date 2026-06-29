@@ -25,6 +25,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
         cumulative_scores: {},
         reasoning_config: {
             consensus_enabled: false,
+            group_discussion_rounds: 0,
         },
         mode_artifacts: [{ type: 'report', content: 'artifact' }],
         current_mode_report: null,
@@ -66,8 +67,19 @@ describe('useDebateViewState', () => {
         expect(result.current.currentSessionId).toBe('session_view');
         expect(result.current.currentTopic).toBe('Selector coverage');
         expect(result.current.debateMode).toBe('sophistry_experiment');
+        expect(result.current.currentTurn).toBe(3);
+        expect(result.current.displayTurn).toBe(4);
         expect(result.current.modeArtifactsLength).toBe(1);
         expect(result.current.hasCurrentSession).toBe(true);
+    });
+
+    it('keeps completed sessions on their final finished turn for display', () => {
+        useDebateStore.getState().setCurrentSession(makeSession({ status: 'completed' }));
+
+        const { result } = renderHook(() => useSessionViewState());
+
+        expect(result.current.currentTurn).toBe(3);
+        expect(result.current.displayTurn).toBe(3);
     });
 
     it('returns grouped runtime and transcript state for the active session', () => {
@@ -83,5 +95,28 @@ describe('useDebateViewState', () => {
         expect(runtime.result.current.currentNode).toBe('speaker');
         expect(transcript.result.current.currentSessionId).toBe('session_view');
         expect(transcript.result.current.collapsedAgentMessages['event:evt_selector']).toBe(true);
+    });
+
+    it('keeps group discussion entries available in the transcript view', () => {
+        useDebateStore.getState().setCurrentSession(makeSession({
+            dialogue_history: [
+                {
+                    role: 'group_discussion',
+                    agent_name: '组内讨论',
+                    content: '赛前简报',
+                    citations: [],
+                    timestamp: '2026-03-24T00:00:00Z',
+                    event_id: 'evt_group_1',
+                    turn: 3,
+                    discussion_kind: 'group_discussion',
+                    discussion_round: 1,
+                },
+            ],
+        }));
+
+        const transcript = renderHook(() => useTranscriptViewState());
+
+        expect(transcript.result.current.currentSessionId).toBe('session_view');
+        expect(transcript.result.current.collapsedAgentMessages).toEqual({});
     });
 });

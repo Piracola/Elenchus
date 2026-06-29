@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSessionViewState, useTranscriptActions, useTranscriptViewState } from '../useDebateViewState';
 import {
+    buildAgentCollapseKey,
     buildTranscriptViewModel,
     getTranscriptCollapseSummary,
 } from '../../utils/chat/transcriptViewModel';
@@ -12,6 +13,7 @@ export function useTranscriptPanelState() {
         currentSessionId,
         debateMode,
         currentTurn,
+        displayTurn,
         maxTurns,
         modeArtifactsLength,
         hasCurrentSession,
@@ -33,9 +35,11 @@ export function useTranscriptPanelState() {
     } = useTranscriptViewState();
     const { setAllAgentMessagesCollapsed } = useTranscriptActions();
     const transcriptGroupingStateRef = useRef<DialogueGroupingState | null>(null);
+    const autoCollapsedGroupDiscussionKeysRef = useRef<Set<string>>(new Set());
 
     useEffect(() => {
         transcriptGroupingStateRef.current = null;
+        autoCollapsedGroupDiscussionKeysRef.current = new Set();
     }, [currentSessionId, participants]);
 
     const transcriptViewModel = useMemo(() => {
@@ -82,6 +86,40 @@ export function useTranscriptPanelState() {
         [collapsedAgentMessages, transcriptViewModel.rowViewModels],
     );
 
+    useEffect(() => {
+        if (!currentSessionId) {
+            return;
+        }
+
+        const nextGroupDiscussionKeys = transcriptViewModel.rowViewModels
+            .filter((viewModel) => viewModel.row.agent?.role === 'group_discussion')
+            .map((viewModel) => buildAgentCollapseKey(viewModel.row.agent))
+            .filter((value): value is string => Boolean(value));
+
+        if (!nextGroupDiscussionKeys.length) {
+            autoCollapsedGroupDiscussionKeysRef.current = new Set();
+            return;
+        }
+
+        const unseenKeys = nextGroupDiscussionKeys.filter((key) => (
+            !autoCollapsedGroupDiscussionKeysRef.current.has(key)
+            && !collapsedAgentMessages[key]
+        ));
+
+        autoCollapsedGroupDiscussionKeysRef.current = new Set(nextGroupDiscussionKeys);
+
+        if (!unseenKeys.length) {
+            return;
+        }
+
+        setAllAgentMessagesCollapsed(currentSessionId, unseenKeys, true);
+    }, [
+        collapsedAgentMessages,
+        currentSessionId,
+        setAllAgentMessagesCollapsed,
+        transcriptViewModel.rowViewModels,
+    ]);
+
     const bulkCollapseLabel = transcriptCollapseSummary.allCollapsed ? '展开辩手发言' : '折叠辩手发言';
 
     const handleToggleAllAgentMessages = useCallback(() => {
@@ -100,6 +138,7 @@ export function useTranscriptPanelState() {
         currentTopic,
         debateMode,
         currentTurn,
+        displayTurn,
         maxTurns,
         modeArtifactsLength,
         hasCurrentSession,

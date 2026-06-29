@@ -13,6 +13,13 @@ export function useSessionViewState() {
         debateMode: currentSession?.debate_mode ?? 'standard',
         participants: currentSession?.participants,
         currentTurn: currentSession?.current_turn ?? 0,
+        displayTurn: currentSession
+            ? (
+                currentSession.status === 'in_progress'
+                    ? Math.min((currentSession.current_turn ?? 0) + 1, currentSession.max_turns ?? 0)
+                    : (currentSession.current_turn ?? 0)
+            )
+            : 0,
         maxTurns: currentSession?.max_turns ?? 0,
         modeArtifactsLength: currentSession?.mode_artifacts?.length ?? 0,
         sessionStatus: currentSession?.status ?? null,
@@ -70,7 +77,7 @@ export function useRuntimeViewState() {
 }
 
 export function useTranscriptViewState() {
-    const { currentSessionId, debateMode, participants, currentTurn, maxTurns, modeArtifactsLength } = useSessionViewState();
+    const { currentSessionId, debateMode, participants, currentTurn, displayTurn, maxTurns, modeArtifactsLength } = useSessionViewState();
     const { isDocumentVisible, visibilityResumeToken } = useChatUiState();
     const dialogueHistory = useForegroundDebateSelector((state) => state.currentSession?.dialogue_history ?? []);
     const runtimeEvents = useForegroundDebateSelector((state) => state.runtimeEvents);
@@ -89,6 +96,7 @@ export function useTranscriptViewState() {
         debateMode,
         participants,
         currentTurn,
+        displayTurn,
         maxTurns,
         modeArtifactsLength,
         isDocumentVisible,

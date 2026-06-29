@@ -32,6 +32,7 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
         currentTopic,
         debateMode,
         currentTurn,
+        displayTurn,
         maxTurns,
         hasCurrentSession,
         isDocumentVisible,
@@ -121,7 +122,7 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
                     hasCurrentSession={hasCurrentSession}
                     currentSessionId={currentSessionId}
                     currentTopic={currentTopic}
-                    currentTurn={currentTurn}
+                    currentTurn={displayTurn}
                     maxTurns={maxTurns}
                     isSophistryMode={isSophistryMode}
                     topicTitleFontSize={chatFontSizes.topicTitle}

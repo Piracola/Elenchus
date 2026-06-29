@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 import asyncio
+import logging
+import re
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
@@ -30,6 +31,65 @@ logger = logging.getLogger(__name__)
 
 TokenCallback = Callable[[str], Awaitable[None]]
 ProgressCallback = Callable[[float], Awaitable[None]]
+_RETRY_AFTER_SECONDS_RE = re.compile(r"'retry_after':\s*(\d+)", re.IGNORECASE)
+
+
+def _extract_retry_after_seconds(exc: Exception) -> int | None:
+    """Best-effort parsing for provider-advised retry delay in seconds."""
+    candidate_values: list[Any] = []
+
+    response = getattr(exc, "response", None)
+    if response is not None:
+        headers = getattr(response, "headers", None)
+        if headers is not None:
+            header_value = None
+            if hasattr(headers, "get"):
+                header_value = headers.get("retry-after") or headers.get("Retry-After")
+            if header_value is not None:
+                candidate_values.append(header_value)
+
+    for attr in ("retry_after", "retryAfter"):
+        value = getattr(exc, attr, None)
+        if value is not None:
+            candidate_values.append(value)
+
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        for key in ("retry_after", "retryAfter"):
+            value = body.get(key)
+            if value is not None:
+                candidate_values.append(value)
+
+    candidate_values.append(str(exc))
+
+    for value in candidate_values:
+        if value is None:
+            continue
+        if isinstance(value, (int, float)):
+            parsed = int(value)
+            if parsed > 0:
+                return parsed
+            continue
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.isdigit():
+                parsed = int(stripped)
+                if parsed > 0:
+                    return parsed
+            match = _RETRY_AFTER_SECONDS_RE.search(stripped)
+            if match:
+                parsed = int(match.group(1))
+                if parsed > 0:
+                    return parsed
+
+    return None
+
+
+async def _sleep_before_retry(exc: Exception, attempt: int) -> None:
+    """Sleep using provider-advised retry_after when available, else exponential backoff."""
+    retry_after_seconds = _extract_retry_after_seconds(exc)
+    delay_seconds = retry_after_seconds if retry_after_seconds is not None else 2 ** attempt
+    await asyncio.sleep(delay_seconds)
 
 
 def _normalize_reasoning_content(response: AIMessage) -> AIMessage:
@@ -107,7 +167,7 @@ async def invoke_chat_model(
     on_token: TokenCallback | None = None,
     on_progress: ProgressCallback | None = None,
     timeout_seconds: float = 120.0,
-    heartbeat_interval_seconds: float = 8.0,
+    heartbeat_interval_seconds: float = 1.0,
     max_retries: int = 2,
 ) -> AIMessage | str:
     """
@@ -118,7 +178,6 @@ async def invoke_chat_model(
     that class of failure, retry with the raw OpenAI transport and coerce the
     result into an `AIMessage`.
     """
-    last_exception = None
     config = None
 
     for attempt in range(max_retries + 1):
@@ -178,7 +237,6 @@ async def invoke_chat_model(
                 )
             return response
         except Exception as exc:
-            last_exception = exc
             current_config = config if config is not None else await resolve_llm_config(override)
             if used_raw_transport_this_attempt or not _should_use_openai_raw_fallback(current_config, exc):
                 if attempt < max_retries:
@@ -188,7 +246,7 @@ async def invoke_chat_model(
                         max_retries + 1,
                         exc,
                     )
-                    await asyncio.sleep(2 ** attempt)
+                    await _sleep_before_retry(exc, attempt)
                     continue
                 else:
                     logger.error(
@@ -225,12 +283,10 @@ async def invoke_text_model(
     on_token: TokenCallback | None = None,
     on_progress: ProgressCallback | None = None,
     timeout_seconds: float = 120.0,
-    heartbeat_interval_seconds: float = 8.0,
+    heartbeat_interval_seconds: float = 1.0,
     max_retries: int = 2,
 ) -> str:
     """Invoke a chat model and return plain text content with automatic retry."""
-    last_exception = None
-
     for attempt in range(max_retries + 1):
         try:
             response = await invoke_chat_model(
@@ -241,13 +297,13 @@ async def invoke_text_model(
                 on_progress=on_progress,
                 timeout_seconds=timeout_seconds,
                 heartbeat_interval_seconds=heartbeat_interval_seconds,
+                max_retries=0,
             )
 
             if hasattr(response, "content"):
                 return extract_text_content(response.content)
             return extract_text_content(response)
         except Exception as exc:
-            last_exception = exc
             if attempt < max_retries:
                 logger.warning(
                     "Model invocation failed (attempt %d/%d), retrying: %s",
@@ -255,7 +311,7 @@ async def invoke_text_model(
                     max_retries + 1,
                     exc,
                 )
-                await asyncio.sleep(2 ** attempt)
+                await _sleep_before_retry(exc, attempt)
             else:
                 logger.error(
                     "Model invocation failed after %d attempts: %s",
@@ -310,7 +366,7 @@ async def _invoke_openai_raw(
     on_token: TokenCallback | None = None,
     on_progress: ProgressCallback | None = None,
     timeout_seconds: float = 120.0,
-    heartbeat_interval_seconds: float = 8.0,
+    heartbeat_interval_seconds: float = 1.0,
 ) -> AIMessage:
     """Compatibility wrapper for the raw OpenAI-compatible transport adapter."""
     if on_token is not None:
