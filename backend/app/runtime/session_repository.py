@@ -10,11 +10,9 @@ from app.services.builtin_reference_service import ensure_builtin_mode_reference
 from app.text_repair import repair_text_tree
 
 from .session_defaults import (
-    default_jury_config,
     default_mode_config,
     default_reasoning_config,
     default_speech_config,
-    default_team_config,
 )
 from .session_dialogue_helpers import sanitize_dialogue_history
 from .session_snapshot_normalizer import normalize_resumable_snapshot
@@ -57,34 +55,10 @@ class SessionRuntimeRepository:
         dialogue_history = sanitize_dialogue_history(
             session_snapshot.get("dialogue_history", session_data.get("dialogue_history", []))
         )
-        team_dialogue_history = sanitize_dialogue_history(
-            session_snapshot.get(
-                "team_dialogue_history",
-                session_data.get("team_dialogue_history", []),
-            )
-        )
-        jury_dialogue_history = sanitize_dialogue_history(
-            session_snapshot.get(
-                "jury_dialogue_history",
-                session_data.get("jury_dialogue_history", []),
-            )
-        )
         judge_history = sanitize_dialogue_history(session_snapshot.get("judge_history", []))
         recent_dialogue_history = sanitize_dialogue_history(
             session_snapshot.get("recent_dialogue_history", dialogue_history)
         )
-        team_config = session_snapshot.get(
-            "team_config",
-            session_data.get("team_config", default_team_config()),
-        )
-        if not isinstance(team_config, dict):
-            team_config = default_team_config()
-        jury_config = session_snapshot.get(
-            "jury_config",
-            session_data.get("jury_config", default_jury_config()),
-        )
-        if not isinstance(jury_config, dict):
-            jury_config = default_jury_config()
         reasoning_config = session_snapshot.get(
             "reasoning_config",
             session_data.get("reasoning_config", default_reasoning_config()),
@@ -125,8 +99,6 @@ class SessionRuntimeRepository:
                 "current_speaker": "",
                 "current_speaker_index": -1,
                 "dialogue_history": dialogue_history,
-                "team_dialogue_history": team_dialogue_history,
-                "jury_dialogue_history": jury_dialogue_history,
                 "judge_history": judge_history,
                 "recent_dialogue_history": recent_dialogue_history or dialogue_history,
                 "compressed_history_count": int(
@@ -147,24 +119,12 @@ class SessionRuntimeRepository:
                 ),
                 "status": "in_progress",
                 "error": None,
-                "team_config": team_config,
-                "jury_config": jury_config,
                 "reasoning_config": reasoning_config,
                 "speech_config": speech_config,
                 "mode_artifacts": session_snapshot.get("mode_artifacts", []),
                 "current_mode_report": session_snapshot.get("current_mode_report"),
                 "final_mode_report": session_snapshot.get("final_mode_report"),
                 "builtin_reference_docs": session_snapshot.get("builtin_reference_docs", []),
-                "current_team_discussion": [],
-                "current_team_summary": None,
-                "current_jury_discussion": [],
-                "current_jury_summary": None,
-                "emitted_team_discussion_count": int(
-                    session_snapshot.get("emitted_team_discussion_count", 0) or 0
-                ),
-                "emitted_jury_discussion_count": int(
-                    session_snapshot.get("emitted_jury_discussion_count", 0) or 0
-                ),
                 "last_executed_node": str(session_snapshot.get("last_executed_node", "") or ""),
                 "last_progress_at": str(session_snapshot.get("last_progress_at", "") or ""),
                 "last_status_message": str(
@@ -198,8 +158,6 @@ class SessionRuntimeRepository:
                     default_mode_config(str(state.get("debate_mode", DebateMode.STANDARD.value))),
                 ),
                 "dialogue_history": state.get("dialogue_history", []),
-                "team_dialogue_history": state.get("team_dialogue_history", []),
-                "jury_dialogue_history": state.get("jury_dialogue_history", []),
                 "judge_history": state.get("judge_history", []),
                 "recent_dialogue_history": state.get("recent_dialogue_history", []),
                 "compressed_history_count": state.get("compressed_history_count", 0),
@@ -207,15 +165,11 @@ class SessionRuntimeRepository:
                 "current_scores": state.get("current_scores", {}),
                 "cumulative_scores": state.get("cumulative_scores", {}),
                 "agent_configs": agent_configs_for_storage,
-                "team_config": state.get("team_config", default_team_config()),
-                "jury_config": state.get("jury_config", default_jury_config()),
                 "reasoning_config": state.get("reasoning_config", default_reasoning_config()),
                 "speech_config": state.get("speech_config", default_speech_config()),
                 "mode_artifacts": state.get("mode_artifacts", []),
                 "current_mode_report": state.get("current_mode_report"),
                 "final_mode_report": state.get("final_mode_report"),
-                "emitted_team_discussion_count": state.get("emitted_team_discussion_count", 0),
-                "emitted_jury_discussion_count": state.get("emitted_jury_discussion_count", 0),
                 "builtin_reference_docs": state.get("builtin_reference_docs", []),
                 "last_executed_node": state.get("last_executed_node", ""),
                 "last_progress_at": state.get("last_progress_at", ""),
@@ -234,16 +188,3 @@ class SessionRuntimeRepository:
 
     async def get_latest_runtime_event_seq(self, session_id: str) -> int:
         return await runtime_event_service.get_latest_runtime_event_seq(session_id)
-
-    async def load_runtime_events(
-        self,
-        session_id: str,
-        *,
-        before_seq: int | None = None,
-        limit: int = 200,
-    ) -> dict[str, Any]:
-        return await runtime_event_service.list_runtime_events(
-            session_id,
-            before_seq=before_seq,
-            limit=limit,
-        )

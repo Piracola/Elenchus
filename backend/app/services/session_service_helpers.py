@@ -8,24 +8,8 @@ from app.models.schemas import DebateMode
 from app.text_repair import repair_text_tree
 
 
-def default_team_config() -> dict[str, int]:
-    return {
-        "agents_per_team": 0,
-        "discussion_rounds": 0,
-    }
-
-
-def default_jury_config() -> dict[str, int]:
-    return {
-        "agents_per_jury": 0,
-        "discussion_rounds": 0,
-    }
-
-
 def default_reasoning_config() -> dict[str, bool]:
     return {
-        "steelman_enabled": True,
-        "counterfactual_enabled": True,
         "consensus_enabled": True,
     }
 
@@ -56,22 +40,12 @@ def normalize_mode_config(debate_mode: str, value: Any) -> dict[str, Any]:
 
 def effective_configs_for_mode(
     debate_mode: str,
-    team_config: dict[str, int],
-    jury_config: dict[str, int],
     reasoning_config: dict[str, bool],
-) -> tuple[dict[str, int], dict[str, int], dict[str, bool]]:
+) -> dict[str, bool]:
     if debate_mode != DebateMode.SOPHISTRY_EXPERIMENT.value:
-        return team_config, jury_config, reasoning_config
+        return reasoning_config
 
-    return (
-        default_team_config(),
-        default_jury_config(),
-        {
-            "steelman_enabled": False,
-            "counterfactual_enabled": False,
-            "consensus_enabled": False,
-        },
-    )
+    return {"consensus_enabled": False}
 
 
 def sanitize_dialogue_history(dialogue_history: Any) -> list[dict[str, Any]]:
@@ -206,14 +180,6 @@ def sanitize_state_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     sanitized = repair_text_tree(dict(snapshot))
     dialogue_history = sanitize_dialogue_history(sanitized.get("dialogue_history", []))
     sanitized["dialogue_history"] = dialogue_history
-    if "team_dialogue_history" in sanitized:
-        sanitized["team_dialogue_history"] = sanitize_dialogue_history(
-            sanitized.get("team_dialogue_history", [])
-        )
-    if "jury_dialogue_history" in sanitized:
-        sanitized["jury_dialogue_history"] = sanitize_dialogue_history(
-            sanitized.get("jury_dialogue_history", [])
-        )
     if "judge_history" in sanitized:
         judge_history = sanitize_dialogue_history(
             sanitized.get("judge_history", [])

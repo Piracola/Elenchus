@@ -37,33 +37,9 @@ class DocumentStatus(str, Enum):
     FAILED = "failed"
 
 
-class ReferenceEntryType(str, Enum):
-    SUMMARY = "reference_summary"
-    TERM = "reference_term"
-    CLAIM = "reference_claim"
-    EXCERPT = "reference_excerpt"
-    VALIDATION = "reference_validation"
-
-
-class TeamConfig(BaseModel):
-    """Configuration for per-side internal team discussion."""
-
-    agents_per_team: int = Field(default=0, ge=0, le=10)
-    discussion_rounds: int = Field(default=0, ge=0, le=10)
-
-
-class JuryConfig(BaseModel):
-    """Configuration for the multi-perspective jury discussion."""
-
-    agents_per_jury: int = Field(default=0, ge=0, le=10)
-    discussion_rounds: int = Field(default=0, ge=0, le=10)
-
-
 class ReasoningConfig(BaseModel):
-    """Optional reasoning enhancements layered onto each debate."""
+    """Internal reasoning behavior for one debate."""
 
-    steelman_enabled: bool = True
-    counterfactual_enabled: bool = True
     consensus_enabled: bool = True
 
 
@@ -80,22 +56,6 @@ class SophistryModeConfig(BaseModel):
     seed_reference_enabled: bool = True
     observer_enabled: bool = True
     artifact_detail_level: str = Field(default="full")
-
-
-class AgentPersonaSummary(BaseModel):
-    """Lightweight metadata for a file-backed agent persona."""
-
-    id: str
-    name: str
-    description: str = ""
-    roles: list[str] = Field(default_factory=list)
-    filename: str
-
-
-class AgentPersonaDetail(AgentPersonaSummary):
-    """Full persona detail including the prompt content."""
-
-    content: str
 
 
 def _blank_to_none(value: Any) -> Any:
@@ -163,8 +123,6 @@ class SessionCreate(BaseModel):
             "{model, provider_type, provider_id, api_base_url, custom_name, custom_prompt}."
         ),
     )
-    team_config: TeamConfig = Field(default_factory=TeamConfig)
-    jury_config: JuryConfig = Field(default_factory=JuryConfig)
     reasoning_config: ReasoningConfig = Field(default_factory=ReasoningConfig)
     speech_config: SpeechConfig = Field(default_factory=SpeechConfig)
     debate_mode: DebateMode = Field(default=DebateMode.STANDARD)
@@ -326,14 +284,10 @@ class SessionResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     dialogue_history: list[dict[str, Any]] = Field(default_factory=list)
-    team_dialogue_history: list[dict[str, Any]] = Field(default_factory=list)
-    jury_dialogue_history: list[dict[str, Any]] = Field(default_factory=list)
     shared_knowledge: list[dict[str, Any]] = Field(default_factory=list)
     current_scores: dict[str, Any] = Field(default_factory=dict)
     cumulative_scores: dict[str, Any] = Field(default_factory=dict)
     agent_configs: dict[str, dict[str, Any]] | None = Field(default=None)
-    team_config: TeamConfig = Field(default_factory=TeamConfig)
-    jury_config: JuryConfig = Field(default_factory=JuryConfig)
     reasoning_config: ReasoningConfig = Field(default_factory=ReasoningConfig)
     speech_config: SpeechConfig = Field(default_factory=SpeechConfig)
     mode_artifacts: list[dict[str, Any]] = Field(default_factory=list)
@@ -386,54 +340,6 @@ class SessionDocumentListResponse(BaseModel):
     """Paginated-like response for session documents."""
 
     documents: list[SessionDocumentListItem]
-
-
-class ReferenceLibraryEntryResponse(BaseModel):
-    """Structured reference entry derived from an uploaded document."""
-
-    id: str
-    session_id: str
-    document_id: str
-    entry_type: ReferenceEntryType
-    title: str | None = None
-    content: str
-    payload: dict[str, Any] = Field(default_factory=dict)
-    importance: int
-    source_section: str | None = None
-    source_order: int
-    created_at: datetime
-    updated_at: datetime
-
-
-class ReferenceLibraryResponse(BaseModel):
-    """Reference-library payload for one session."""
-
-    documents: list[SessionDocumentListItem]
-    entries: list[ReferenceLibraryEntryResponse]
-
-
-class RuntimeEventResponse(BaseModel):
-    """Persisted runtime event envelope."""
-
-    schema_version: str
-    event_id: str
-    session_id: str
-    seq: int
-    timestamp: str
-    source: str
-    type: str
-    phase: str | None = None
-    payload: dict[str, Any] = Field(default_factory=dict)
-
-
-class RuntimeEventPageResponse(BaseModel):
-    """Paginated runtime event history page."""
-
-    events: list[RuntimeEventResponse]
-    total: int
-    limit: int
-    has_more: bool
-    next_before_seq: int | None = None
 
 
 class ModelConfigResponse(BaseModel):

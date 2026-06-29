@@ -37,18 +37,11 @@ class _FakeDDGSProvider:
         self.closed = True
 
 
-class _FakeTavilyProvider(_FakeDDGSProvider):
-    def __init__(self, api_key: str, api_url: str) -> None:
+class _FakeCustomProvider(_FakeDDGSProvider):
+    def __init__(self, endpoint: str, api_key: str = "") -> None:
         super().__init__()
+        self.endpoint = endpoint
         self.api_key = api_key
-        self.api_url = api_url
-
-
-class _FakeSearXNGProvider(_FakeDDGSProvider):
-    def __init__(self, base_url: str, api_key: str | None = None) -> None:
-        super().__init__()
-        self.base_url = base_url
-        self.api_key = api_key or ""
 
 
 @pytest.fixture(autouse=True)
@@ -61,61 +54,33 @@ def _clear_search_settings_cache(monkeypatch):
     monkeypatch.delenv("ELENCHUS_RUNTIME_DIR", raising=False)
 
 
-def test_persist_search_settings_updates_runtime_config_and_snapshot(monkeypatch):
+def test_persist_search_settings_updates_custom_config_and_snapshot(monkeypatch):
     with _workspace_runtime_dir() as runtime_root:
         monkeypatch.setenv("ELENCHUS_RUNTIME_DIR", str(runtime_root.resolve()))
 
         config_module.persist_search_settings(
-            provider="tavily",
-            tavily_api_key="tvly-secret",
-            tavily_api_url="https://example.com/tavily/search",
+            provider="custom",
+            custom_endpoint="https://search.example.com/query",
+            custom_api_key="custom-secret",
         )
 
         runtime_config = load_runtime_config()
-        assert runtime_config["search"]["provider"] == "tavily"
-        assert runtime_config["search"]["tavily"]["api_key"] == "tvly-secret"
-        assert runtime_config["search"]["tavily"]["api_url"] == "https://example.com/tavily/search"
+        assert runtime_config["search"]["provider"] == "custom"
+        assert runtime_config["search"]["custom"]["endpoint"] == "https://search.example.com/query"
+        assert runtime_config["search"]["custom"]["api_key"] == "custom-secret"
 
         snapshot = config_module.get_search_provider_settings_snapshot()
-        assert snapshot["tavily"] == {
-            "api_url": "https://example.com/tavily/search",
+        assert snapshot["custom"] == {
+            "endpoint": "https://search.example.com/query",
             "api_key_configured": True,
         }
 
-        config_module.persist_search_settings(clear_tavily_api_key=True)
+        config_module.persist_search_settings(clear_custom_api_key=True)
 
         snapshot = config_module.get_search_provider_settings_snapshot()
         runtime_config = load_runtime_config()
-        assert runtime_config["search"]["tavily"]["api_key"] == ""
-        assert snapshot["tavily"]["api_key_configured"] is False
-
-
-def test_persist_search_settings_preserves_remote_searxng_config(monkeypatch):
-    with _workspace_runtime_dir() as runtime_root:
-        monkeypatch.setenv("ELENCHUS_RUNTIME_DIR", str(runtime_root.resolve()))
-
-        config_module.persist_search_settings(
-            provider="searxng",
-            searxng_base_url="https://search.example.com",
-            searxng_api_key="searxng-secret",
-        )
-
-        runtime_config = load_runtime_config()
-        assert runtime_config["search"]["provider"] == "searxng"
-        assert runtime_config["search"]["searxng"]["base_url"] == "https://search.example.com"
-        assert runtime_config["search"]["searxng"]["api_key"] == "searxng-secret"
-
-        snapshot = config_module.get_search_provider_settings_snapshot()
-        assert snapshot["searxng"] == {
-            "base_url": "https://search.example.com",
-            "api_key_configured": True,
-        }
-
-        config_module.persist_search_settings(clear_searxng_api_key=True)
-
-        runtime_config = load_runtime_config()
-        assert runtime_config["search"]["searxng"]["api_key"] == ""
-        assert config_module.get_search_provider_settings_snapshot()["searxng"]["api_key_configured"] is False
+        assert runtime_config["search"]["custom"]["api_key"] == ""
+        assert snapshot["custom"]["api_key_configured"] is False
 
 
 def test_load_runtime_config_accepts_utf8_bom(monkeypatch):
@@ -146,44 +111,34 @@ async def test_search_factory_reload_rebuilds_provider_instances(monkeypatch):
         monkeypatch.setenv("ELENCHUS_RUNTIME_DIR", str(runtime_root.resolve()))
 
         monkeypatch.setattr(factory_module, "DDGSProvider", _FakeDDGSProvider)
-        monkeypatch.setattr(factory_module, "SearXNGProvider", _FakeSearXNGProvider)
-        monkeypatch.setattr(factory_module, "TavilyProvider", _FakeTavilyProvider)
+        monkeypatch.setattr(factory_module, "CustomSearchProvider", _FakeCustomProvider)
 
         config_module.persist_search_settings(
-            provider="searxng",
-            searxng_base_url="https://search.example.com",
-            searxng_api_key="initial-searxng-key",
-            tavily_api_key="initial-tavily-key",
-            tavily_api_url="https://initial.example/search",
+            provider="custom",
+            custom_endpoint="https://search.example.com/query",
+            custom_api_key="initial-key",
         )
 
         factory = SearchProviderFactory()
-        assert factory.get_current_provider() == "searxng"
+        assert factory.get_current_provider() == "custom"
         assert isinstance(factory._providers["ddgs"], _FakeDDGSProvider)
-        assert factory._providers["searxng"].base_url == "https://search.example.com"
-        assert factory._providers["searxng"].api_key == "initial-searxng-key"
-        assert factory._providers["tavily"].api_key == "initial-tavily-key"
-        assert factory._providers["tavily"].api_url == "https://initial.example/search"
+        assert factory._providers["custom"].endpoint == "https://search.example.com/query"
+        assert factory._providers["custom"].api_key == "initial-key"
 
-        old_searxng = factory._providers["searxng"]
-        old_tavily = factory._providers["tavily"]
+        old_custom = factory._providers["custom"]
 
         config_module.persist_search_settings(
             provider="ddgs",
-            clear_searxng_api_key=True,
-            searxng_base_url="https://updated-search.example.com",
-            clear_tavily_api_key=True,
-            tavily_api_url="https://updated.example/search",
+            custom_endpoint="https://updated-search.example.com/query",
+            clear_custom_api_key=True,
         )
         await factory.reload()
 
-        assert old_searxng.closed is True
-        assert old_tavily.closed is True
+        assert old_custom.closed is True
         assert factory.get_current_provider() == "ddgs"
-        assert "searxng" in factory._providers
-        assert factory._providers["searxng"].base_url == "https://updated-search.example.com"
-        assert factory._providers["searxng"].api_key == ""
-        assert "tavily" not in factory._providers
+        assert "custom" in factory._providers
+        assert factory._providers["custom"].endpoint == "https://updated-search.example.com/query"
+        assert factory._providers["custom"].api_key == ""
 
 
 def test_legacy_duckduckgo_provider_is_normalized_to_ddgs(monkeypatch):

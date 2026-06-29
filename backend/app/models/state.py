@@ -28,10 +28,6 @@ DialogueRole = Literal[
     'error',
     'audience',
     'fact_checker',
-    'team_member',
-    'team_summary',
-    'jury_member',
-    'jury_summary',
     'consensus_summary',
     'sophistry_round_report',
     'sophistry_final_report',
@@ -49,14 +45,6 @@ class DialogueEntryDict(TypedDict, total=False):
     target_role: str | None
     scores: dict | None
     discussion_kind: str | None
-    team_side: str | None
-    team_round: int | None
-    team_member_index: int | None
-    team_specialty: str | None
-    jury_round: int | None
-    jury_member_index: int | None
-    jury_perspective: str | None
-    source_role: str | None
 
 
 class SharedKnowledgeEntry(TypedDict, total=False):

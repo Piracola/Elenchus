@@ -39,16 +39,6 @@ def normalize_resumable_snapshot(
         for entry in sanitize_dialogue_history(snapshot.get("dialogue_history", []))
         if entry_turn(entry) != current_turn
     ]
-    snapshot["team_dialogue_history"] = [
-        entry
-        for entry in sanitize_dialogue_history(snapshot.get("team_dialogue_history", []))
-        if entry_turn(entry) != current_turn
-    ]
-    snapshot["jury_dialogue_history"] = [
-        entry
-        for entry in sanitize_dialogue_history(snapshot.get("jury_dialogue_history", []))
-        if entry_turn(entry) != current_turn
-    ]
     snapshot["judge_history"] = [
         entry
         for entry in sanitize_dialogue_history(snapshot.get("judge_history", []))
@@ -88,12 +78,6 @@ def normalize_resumable_snapshot(
     snapshot["current_speaker"] = ""
     snapshot["current_speaker_index"] = -1
     snapshot["messages"] = []
-    snapshot["current_team_discussion"] = []
-    snapshot["current_team_summary"] = None
-    snapshot["current_jury_discussion"] = []
-    snapshot["current_jury_summary"] = None
-    snapshot["emitted_team_discussion_count"] = 0
-    snapshot["emitted_jury_discussion_count"] = 0
     snapshot["current_scores"] = {}
     snapshot["cumulative_scores"] = recompute_cumulative_scores(snapshot["judge_history"])
     snapshot["last_executed_node"] = "manage_context"

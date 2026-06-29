@@ -229,34 +229,6 @@ def _load_runtime_events(session_id: str) -> list[dict[str, Any]]:
     return events
 
 
-def read_runtime_event_page(
-    session_id: str,
-    *,
-    before_seq: int | None = None,
-    limit: int = 200,
-) -> dict[str, Any]:
-    all_events = _load_runtime_events(session_id)
-    total = len(all_events)
-    events = all_events
-    if before_seq is not None:
-        events = [event for event in all_events if int(event.get("seq", 0) or 0) < before_seq]
-
-    selected = events[-limit:]
-    has_more = len(events) > limit
-    next_before_seq = int(selected[0].get("seq", 0) or 0) if has_more and selected else None
-    return {
-        "events": selected,
-        "total": total,
-        "limit": limit,
-        "has_more": has_more,
-        "next_before_seq": next_before_seq,
-    }
-
-
-def read_all_runtime_events(session_id: str) -> list[dict[str, Any]]:
-    return _load_runtime_events(session_id)
-
-
 def get_latest_runtime_event_seq(session_id: str) -> int:
     events = _load_runtime_events(session_id)
     if not events:

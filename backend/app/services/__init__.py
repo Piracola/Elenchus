@@ -5,8 +5,6 @@ from app.services.agent_config_service import AgentConfigService
 
 # Subpackage facades
 from app.services.provider.service import ProviderService
-from app.services.reference.service import list_reference_library
-from app.services.reference.workflow import preprocess_session_document
 from app.services.export import export_json, export_markdown
 
 # Re-export dependency injection functions for convenience
@@ -24,8 +22,6 @@ __all__ = [
     "InterventionManager",
     "AgentConfigService",
     "ProviderService",
-    "list_reference_library",
-    "preprocess_session_document",
     "export_json",
     "export_markdown",
     "get_intervention_manager",

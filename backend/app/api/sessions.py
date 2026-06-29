@@ -15,7 +15,7 @@ from app.models.schemas import (
     SessionListResponse,
     SessionResponse,
 )
-from app.services import export_service, session_service
+from app.services import export, session_service
 
 router = APIRouter(tags=["sessions"])
 router.include_router(session_documents_router)
@@ -90,33 +90,33 @@ async def export_session(
         raise HTTPException(status_code=404, detail="Session not found")
 
     if format == ExportFormat.JSON:
-        json_str = export_service.export_json(data)
-        filename = export_service.build_export_filename(data, "json")
+        json_str = export.export_json(data)
+        filename = export.build_export_filename(data, "json")
         return Response(
             content=json_str,
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": export_service.build_content_disposition(filename)
+                "Content-Disposition": export.build_content_disposition(filename)
             },
         )
 
     if format == ExportFormat.MARKDOWN:
-        markdown = export_service.export_markdown(data, categories)
-        filename = export_service.build_export_filename(data, "md")
+        markdown = export.export_markdown(data, categories)
+        filename = export.build_export_filename(data, "md")
         return Response(
             content=markdown,
             media_type="text/markdown; charset=utf-8",
             headers={
-                "Content-Disposition": export_service.build_content_disposition(filename)
+                "Content-Disposition": export.build_content_disposition(filename)
             },
         )
 
-    html = export_service.export_html(data, categories)
-    filename = export_service.build_export_filename(data, "html")
+    html = export.export_html(data, categories)
+    filename = export.build_export_filename(data, "html")
     return Response(
         content=html,
         media_type="text/html; charset=utf-8",
         headers={
-            "Content-Disposition": export_service.build_content_disposition(filename)
+            "Content-Disposition": export.build_content_disposition(filename)
         },
     )

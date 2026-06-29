@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.agents.sophistry_graph import (
     compile_sophistry_graph,
+    should_route_after_manage_context,
     should_route_after_set_speaker,
     should_route_after_speaker,
 )
@@ -46,3 +47,29 @@ def test_sophistry_graph_routes_to_next_speaker_then_observer():
             "current_speaker_index": 1,
         }
     ) == "observer"
+
+
+def test_sophistry_graph_routes_resumed_final_turn_to_postmortem_or_end():
+    assert should_route_after_manage_context(
+        {
+            "current_turn": 2,
+            "max_turns": 2,
+            "final_mode_report": None,
+        }
+    ) == "postmortem"
+
+    assert should_route_after_manage_context(
+        {
+            "current_turn": 2,
+            "max_turns": 2,
+            "final_mode_report": {"type": "sophistry_final_report"},
+        }
+    ) == "end"
+
+    assert should_route_after_manage_context(
+        {
+            "current_turn": 1,
+            "max_turns": 2,
+            "final_mode_report": None,
+        }
+    ) == "set_speaker"

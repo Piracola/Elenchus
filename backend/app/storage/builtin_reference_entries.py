@@ -1,4 +1,4 @@
-"""File-backed persistence for structured reference-library entries."""
+"""File-backed persistence for built-in mode reference entries."""
 
 from __future__ import annotations
 

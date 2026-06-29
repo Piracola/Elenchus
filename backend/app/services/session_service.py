@@ -38,10 +38,8 @@ async def create_session(body: SessionCreate) -> dict[str, Any]:
     agent_config_service = get_agent_config_service()
     debate_mode = body.debate_mode.value
     mode_config = normalize_mode_config(debate_mode, body.mode_config)
-    team_config, jury_config, reasoning_config = effective_configs_for_mode(
+    reasoning_config = effective_configs_for_mode(
         debate_mode,
-        body.team_config.model_dump(),
-        body.jury_config.model_dump(),
         body.reasoning_config.model_dump(),
     )
     agent_configs_for_storage = await agent_config_service.build_session_agent_configs(
@@ -62,8 +60,6 @@ async def create_session(body: SessionCreate) -> dict[str, Any]:
             "debate_mode": debate_mode,
             "mode_config": mode_config,
             "dialogue_history": [],
-            "team_dialogue_history": [],
-            "jury_dialogue_history": [],
             "judge_history": [],
             "shared_knowledge": [],
             "current_scores": {},
@@ -71,8 +67,6 @@ async def create_session(body: SessionCreate) -> dict[str, Any]:
             "search_context": [],
             "context_summary": "",
             "agent_configs": agent_configs_for_storage,
-            "team_config": team_config,
-            "jury_config": jury_config,
             "reasoning_config": reasoning_config,
             "speech_config": body.speech_config.model_dump(),
             "mode_artifacts": [],

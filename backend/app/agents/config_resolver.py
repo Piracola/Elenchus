@@ -18,13 +18,8 @@ AGENT_CONFIG_FALLBACKS: dict[str, list[str]] = {
     # Judge and direct derivatives
     "judge": ["judge"],
     "fact_checker": ["fact_checker"],
-    # Team-mode internal discussion inherits from the side's public debater
-    "team_member": ["team_member", "proposer", "opposer", "debater"],
-    "team_summary": ["team_summary", "proposer", "opposer", "debater"],
-    # Jury / consensus fall back to judge when not explicitly configured
-    "jury": ["jury", "judge"],
+    # Consensus and sophistry observers fall back to judge.
     "consensus": ["consensus", "judge"],
-    # Sophistry observer falls back to judge
     "observer": ["observer", "judge"],
     # Generic fallback
     "debater": ["debater"],

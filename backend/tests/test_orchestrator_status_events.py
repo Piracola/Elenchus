@@ -126,42 +126,6 @@ class _FakeEngine:
         }
 
 
-class _FakeDiscussionEngine:
-    async def stream(self, initial_state: dict[str, Any]):
-        session_id = initial_state["session_id"]
-
-        yield {
-            **initial_state,
-            "session_id": session_id,
-            "last_executed_node": "team_discussion",
-            "current_turn": 0,
-            "participants": initial_state["participants"],
-            "team_dialogue_history": [
-                {
-                    "role": "team_member",
-                    "agent_name": "正方组员1",
-                    "content": "第一条",
-                    "turn": 0,
-                    "discussion_kind": "team",
-                    "team_side": "proposer",
-                },
-                {
-                    "role": "team_summary",
-                    "agent_name": "正方总结员",
-                    "content": "第二条",
-                    "turn": 0,
-                    "discussion_kind": "team",
-                    "team_side": "proposer",
-                },
-            ],
-            "emitted_team_discussion_count": 2,
-            "shared_knowledge": [],
-            "messages": [],
-            "current_scores": {},
-            "cumulative_scores": {},
-        }
-
-
 class _FakeSophistryEngine:
     async def stream(self, initial_state: dict[str, Any]):
         session_id = initial_state["session_id"]
@@ -318,31 +282,3 @@ async def test_orchestrator_emits_sophistry_status_sequence():
         "sophistry_speaker",
         "sophistry_observer",
     ]
-
-
-@pytest.mark.asyncio
-async def test_orchestrator_skips_re_emitting_already_streamed_team_discussion_entries():
-    captured: list[dict[str, Any]] = []
-
-    async def _sink(_session_id: str, event: dict[str, Any]) -> None:
-        captured.append(event)
-
-    runtime_bus = RuntimeBus(_sink)
-    orchestrator = DebateOrchestrator(
-        repository=_FakeRepository(),
-        engine=_FakeDiscussionEngine(),
-        runtime_bus=runtime_bus,
-    )
-
-    await orchestrator.run_debate(
-        "abc123def456",
-        "Discussion timing test",
-        participants=["proposer", "opposer"],
-        max_turns=1,
-    )
-
-    discussion_events = [
-        event for event in captured
-        if event.get("type") in {"team_discussion", "team_summary"}
-    ]
-    assert discussion_events == []

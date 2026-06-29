@@ -31,16 +31,6 @@ def test_debate_graph_state_reducers():
     args = typing.get_args(sk_hint)
     assert len(args) == 2 and args[1] is add, "shared_knowledge must use `add` reducer"
 
-    team_hint = hints.get("team_dialogue_history")
-    assert team_hint is not None
-    args = typing.get_args(team_hint)
-    assert len(args) == 2 and args[1] is add, "team_dialogue_history must use `add` reducer"
-
-    jury_hint = hints.get("jury_dialogue_history")
-    assert jury_hint is not None
-    args = typing.get_args(jury_hint)
-    assert len(args) == 2 and args[1] is add, "jury_dialogue_history must use `add` reducer"
-
 
 def test_add_reducer_appends():
     """Sanity check: `add` reducer appends lists, not replaces."""
@@ -50,3 +40,45 @@ def test_add_reducer_appends():
     assert len(result) == 2
     assert result[0]["content"] == "A"
     assert result[1]["content"] == "B"
+
+
+def test_debate_graph_routes_resumed_final_turn_to_consensus_or_end():
+    from app.agents.graph import should_route_after_manage_context
+
+    assert should_route_after_manage_context(
+        {
+            "current_turn": 3,
+            "max_turns": 3,
+            "reasoning_config": {"consensus_enabled": True},
+            "dialogue_history": [],
+        }
+    ) == "consensus"
+
+    assert should_route_after_manage_context(
+        {
+            "current_turn": 3,
+            "max_turns": 3,
+            "reasoning_config": {"consensus_enabled": False},
+            "dialogue_history": [],
+        }
+    ) == "end"
+
+    assert should_route_after_manage_context(
+        {
+            "current_turn": 3,
+            "max_turns": 3,
+            "reasoning_config": {"consensus_enabled": True},
+            "dialogue_history": [
+                {"role": "consensus_summary", "discussion_kind": "consensus"}
+            ],
+        }
+    ) == "end"
+
+    assert should_route_after_manage_context(
+        {
+            "current_turn": 2,
+            "max_turns": 3,
+            "reasoning_config": {"consensus_enabled": True},
+            "dialogue_history": [],
+        }
+    ) == "set_speaker"

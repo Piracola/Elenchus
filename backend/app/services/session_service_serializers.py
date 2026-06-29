@@ -6,10 +6,8 @@ from app.models.schemas import DebateMode
 from app.services.session_service_helpers import (
     coerce_int,
     collect_round_timestamps,
-    default_jury_config,
     default_reasoning_config,
     default_speech_config,
-    default_team_config,
     entries_for_turn,
     knowledge_for_turn,
     merge_dialogue_for_display,
@@ -26,8 +24,6 @@ from app.storage.session_files import (
 def serialize_session_record(record: StoredSessionRecord) -> dict[str, Any]:
     snapshot = sanitize_state_snapshot(record.state_snapshot or {})
     dialogue_history = snapshot.get("dialogue_history", [])
-    team_dialogue_history = snapshot.get("team_dialogue_history", [])
-    jury_dialogue_history = snapshot.get("jury_dialogue_history", [])
     judge_history = snapshot.get("judge_history", [])
     debate_mode = str(
         snapshot.get("debate_mode")
@@ -49,14 +45,10 @@ def serialize_session_record(record: StoredSessionRecord) -> dict[str, Any]:
         "created_at": record.created_at,
         "updated_at": record.updated_at,
         "dialogue_history": merge_dialogue_for_display(dialogue_history, judge_history),
-        "team_dialogue_history": team_dialogue_history,
-        "jury_dialogue_history": jury_dialogue_history,
         "shared_knowledge": snapshot.get("shared_knowledge", []),
         "current_scores": snapshot.get("current_scores", {}),
         "cumulative_scores": snapshot.get("cumulative_scores", {}),
         "agent_configs": snapshot.get("agent_configs", {}),
-        "team_config": snapshot.get("team_config", default_team_config()),
-        "jury_config": snapshot.get("jury_config", default_jury_config()),
         "reasoning_config": snapshot.get("reasoning_config", default_reasoning_config()),
         "speech_config": snapshot.get("speech_config", default_speech_config()),
         "mode_artifacts": snapshot.get("mode_artifacts", []),
@@ -98,15 +90,11 @@ def build_round_result(record: StoredSessionRecord, turn_index: int) -> dict[str
     snapshot = sanitize_state_snapshot(record.state_snapshot or {})
     debate_entries = entries_for_turn(snapshot.get("dialogue_history", []), turn_index)
     judge_entries = entries_for_turn(snapshot.get("judge_history", []), turn_index)
-    team_entries = entries_for_turn(snapshot.get("team_dialogue_history", []), turn_index)
-    jury_entries = entries_for_turn(snapshot.get("jury_dialogue_history", []), turn_index)
     shared_knowledge = knowledge_for_turn(snapshot.get("shared_knowledge", []), turn_index)
     mode_report = mode_report_for_turn(snapshot, turn_index)
     timestamps = collect_round_timestamps(
         debate_entries,
         judge_entries,
-        team_entries,
-        jury_entries,
     )
 
     scores_by_role: dict[str, Any] = {}
@@ -130,8 +118,6 @@ def build_round_result(record: StoredSessionRecord, turn_index: int) -> dict[str
         "completed_at": completed_at,
         "debate": debate_entries,
         "judge": judge_entries,
-        "team_discussion": team_entries,
-        "jury_discussion": jury_entries,
         "shared_knowledge": shared_knowledge,
         "scores_by_role": scores_by_role,
         "mode_report": mode_report,

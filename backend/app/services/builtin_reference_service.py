@@ -9,7 +9,7 @@ from typing import Any
 from app.db.db_utils import _gen_id, _utcnow
 from app.models.schemas import DebateMode
 from app.runtime_paths import get_runtime_paths
-from app.storage.reference_library import (
+from app.storage.builtin_reference_entries import (
     StoredReferenceLibraryEntry,
     read_document_entries,
     write_document_entries,

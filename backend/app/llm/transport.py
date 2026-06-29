@@ -1,4 +1,4 @@
-"""Raw OpenAI-compatible transport adapter (formerly app.agents.openai_transport)."""
+"""Raw OpenAI-compatible transport adapter."""
 
 from __future__ import annotations
 

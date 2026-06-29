@@ -8,8 +8,6 @@ from typing import Any
 NODE_STATUS = {
     "manage_context": ("正在整理上下文...", "preparing"),
     "set_speaker": ("正在切换发言者...", "preparing"),
-    "team_discussion": ("组内讨论正在展开...", "preparing"),
-    "jury_discussion": ("陪审团讨论正在展开...", "preparing"),
     "speaker": ("辩手正在组织发言...", "speaking"),
     "sophistry_speaker": ("诡辩实验发言正在生成...", "speaking"),
     "tool_executor": ("正在调用工具核验事实...", "fact_checking"),
@@ -46,21 +44,10 @@ def predict_next_status_node(
         if isinstance(current_speaker, str) and current_speaker:
             if debate_mode == "sophistry_experiment":
                 return "sophistry_speaker"
-            team_config = final_state.get("team_config", {})
-            agents_per_team = int(team_config.get("agents_per_team", 0) or 0)
-            discussion_rounds = int(team_config.get("discussion_rounds", 0) or 0)
-            if agents_per_team > 0 and discussion_rounds > 0:
-                return "team_discussion"
             return "speaker"
         if debate_mode == "sophistry_experiment":
             return "sophistry_observer"
         return None
-
-    if node_name == "team_discussion":
-        return "speaker"
-
-    if node_name == "jury_discussion":
-        return "judge"
 
     if node_name == "speaker":
         if has_pending_tool_calls(final_state):
@@ -69,11 +56,6 @@ def predict_next_status_node(
         participants = final_state.get("participants", ["proposer", "opposer"])
         current_idx = final_state.get("current_speaker_index", 0)
         if isinstance(participants, list) and current_idx + 1 >= len(participants):
-            jury_config = final_state.get("jury_config", {})
-            agents_per_jury = int(jury_config.get("agents_per_jury", 0) or 0)
-            discussion_rounds = int(jury_config.get("discussion_rounds", 0) or 0)
-            if agents_per_jury > 0 and discussion_rounds > 0:
-                return "jury_discussion"
             return "judge"
         return None
 

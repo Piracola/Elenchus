@@ -7,25 +7,18 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
-from app.middleware.demo_guard import DemoGuardMiddleware
-from app.middleware.auth import AuthMiddleware
-from app.middleware.security_headers import SecurityHeadersMiddleware
-from app.middleware.body_limit import BodySizeLimitMiddleware
 from app.api.sessions import router as sessions_router
 from app.api.websocket import router as ws_router
 from app.api.models import router as models_router
 from app.api.log import router as log_router
 from app.api.search import router as search_router
 from app.api.search import build_search_health_payload
-from app.api.session_control import router as session_control_router
-from app.api.admin import router as admin_router
-from app.api.agent_personas import router as agent_personas_router
 from app.dependencies import get_search_factory
 from app.services.log_service import setup_logging, get_logger
 
@@ -57,12 +50,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Security headers
-app.add_middleware(SecurityHeadersMiddleware)
-
-# Body size limit
-app.add_middleware(BodySizeLimitMiddleware)
-
 # CORS — configurable via CORS_ORIGINS env var
 app.add_middleware(
     CORSMiddleware,
@@ -72,35 +59,12 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 
-# Global auth middleware — enforces authentication when auth.enabled is true
-app.add_middleware(AuthMiddleware)
-
-# Demo guard middleware — blocks mutation endpoints when demo_mode is enabled
-app.add_middleware(DemoGuardMiddleware)
-
 # Register routers
-# session_control_router must come before sessions_router so its start/stop handlers
-# take precedence over the legacy session_runtime handlers with the same paths.
-app.include_router(session_control_router, prefix="/api")
 app.include_router(sessions_router, prefix="/api")
 app.include_router(ws_router, prefix="/api")
 app.include_router(models_router, prefix="/api/models", tags=["models"])
 app.include_router(log_router, prefix="/api")
 app.include_router(search_router, prefix="/api")
-app.include_router(admin_router)
-app.include_router(agent_personas_router, prefix="/api")
-
-
-# ── Mode query endpoint ───────────────────────────────────────────
-
-@app.get("/api/mode")
-async def get_mode(request: Request):
-    """Return demo mode status and allowed models."""
-    settings = get_settings()
-    return {
-        "demo_mode": settings.demo.enabled,
-        "demo_models": settings.demo.allowed_models,
-    }
 
 
 # ── Health / diagnostic endpoints ────────────────────────────────

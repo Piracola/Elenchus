@@ -21,8 +21,8 @@ class SearchResult(BaseModel):
 class SearchProvider(ABC):
     """
     All search backends must implement this interface.
-    This abstraction allows swapping DDGS ↔ Tavily (or future providers)
-    via configuration without changing agent code.
+    The app intentionally keeps this surface small: DDGS plus one custom HTTP
+    bridge for users who need an external service.
     """
 
     @abstractmethod

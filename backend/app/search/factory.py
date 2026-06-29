@@ -1,6 +1,5 @@
 """
-Search provider factory — creates the appropriate provider based on config,
-with automatic fallback when the primary provider is unavailable.
+Search provider factory — keeps the runtime search surface intentionally small.
 """
 
 from __future__ import annotations
@@ -11,13 +10,12 @@ from typing import Literal
 
 from app.config import get_settings, persist_search_provider
 from app.search.base import SearchProvider, SearchResult
+from app.search.custom import CustomSearchProvider
 from app.search.ddgs import DDGSProvider
-from app.search.searxng import SearXNGProvider
-from app.search.tavily import TavilyProvider
 
 logger = logging.getLogger(__name__)
 
-ProviderType = Literal["ddgs", "searxng", "tavily"]
+ProviderType = Literal["ddgs", "custom"]
 
 
 class ProviderInfo:
@@ -39,8 +37,8 @@ class ProviderInfo:
 class SearchProviderFactory:
     """
     Creates and manages search provider instances.
-    Supports automatic failover: User Choice -> DDGS -> SearXNG -> Tavily.
-    DDGS is the default provider as it requires no API key.
+    DDGS is the default provider. A single custom HTTP endpoint is available
+    for users who need to bridge to another search service.
     """
 
     def __init__(self) -> None:
@@ -56,21 +54,11 @@ class SearchProviderFactory:
 
         settings = get_settings()
 
-        # Always create DDGS provider (no config required)
         self._providers["ddgs"] = DDGSProvider()
-
-        # Create remote SearXNG provider when a base URL is configured
-        if settings.env.searxng_base_url:
-            self._providers["searxng"] = SearXNGProvider(
-                base_url=settings.env.searxng_base_url,
-                api_key=settings.env.searxng_api_key or None,
-            )
-
-        # Create Tavily provider if API key is available
-        if settings.env.tavily_api_key:
-            self._providers["tavily"] = TavilyProvider(
-                api_key=settings.env.tavily_api_key,
-                api_url=settings.env.tavily_api_url,
+        if settings.search.custom_endpoint:
+            self._providers["custom"] = CustomSearchProvider(
+                endpoint=settings.search.custom_endpoint,
+                api_key=settings.search.custom_api_key,
             )
 
         # Set initial provider from config (default to ddgs)
@@ -102,7 +90,7 @@ class SearchProviderFactory:
         Set the current search provider at runtime.
 
         Args:
-            provider: The provider to use ("ddgs", "searxng", or "tavily")
+            provider: The provider to use ("ddgs" or "custom")
 
         Returns:
             True if provider was set successfully, False if provider not available.
@@ -167,14 +155,12 @@ class SearchProviderFactory:
     async def get_provider(self) -> SearchProvider | None:
         """
         Return the best available search provider.
-        Checks current provider availability first, then falls back in order:
-        DDGS -> SearXNG -> Tavily.
+        Checks current provider availability first, then falls back to DDGS.
         Returns None if all providers are unavailable.
         """
         self._init_providers()
 
-        # Define fallback order
-        fallback_order = ["ddgs", "searxng", "tavily"]
+        fallback_order = ["ddgs", "custom"]
 
         # Put current provider first
         if self._current_provider in fallback_order:

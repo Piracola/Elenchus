@@ -10,7 +10,7 @@ from app.services.builtin_reference_service import (
     ensure_builtin_mode_references,
 )
 from app.models.schemas import SessionCreate
-from app.storage.reference_library import read_document_entries
+from app.storage.builtin_reference_entries import read_document_entries
 from app.storage.session_documents import read_document_record
 from app.storage.session_files import read_session_record
 

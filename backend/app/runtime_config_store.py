@@ -9,10 +9,8 @@ from typing import Any
 
 from app.runtime_paths import get_runtime_paths, prepare_runtime_environment
 
-SUPPORTED_SEARCH_PROVIDERS = {"ddgs", "duckduckgo", "searxng", "tavily"}
+SUPPORTED_SEARCH_PROVIDERS = {"ddgs", "duckduckgo", "custom"}
 SEARCH_PROVIDER_ALIASES = {"duckduckgo": "ddgs"}
-DEFAULT_SEARXNG_BASE_URL = "http://localhost:8080"
-DEFAULT_TAVILY_API_URL = "https://api.tavily.com/search"
 _DEFAULT_CORS_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -75,11 +73,6 @@ def _default_config() -> dict[str, Any]:
             "cors_origins": list(_DEFAULT_CORS_ORIGINS),
             "database_url": _normalize_database_url("", runtime_root=runtime_root),
         },
-        "auth": {
-            "enabled": False,
-            "jwt_secret_key": "change-me-in-production",
-            "jwt_expire_minutes": 10080,
-        },
         "providers": [],
         "debate": {
             "default_max_turns": 5,
@@ -92,12 +85,8 @@ def _default_config() -> dict[str, Any]:
         "search": {
             "provider": "ddgs",
             "max_results_per_query": 5,
-            "searxng": {
-                "base_url": DEFAULT_SEARXNG_BASE_URL,
-                "api_key": "",
-            },
-            "tavily": {
-                "api_url": DEFAULT_TAVILY_API_URL,
+            "custom": {
+                "endpoint": "",
                 "api_key": "",
             },
         },
@@ -105,10 +94,6 @@ def _default_config() -> dict[str, Any]:
             "level": "INFO",
             "log_dir": "logs",
             "backup_count": 7,
-        },
-        "rate_limit": {
-            "backend": "auto",
-            "fallback_to_memory": True,
         },
     }
 
@@ -187,13 +172,6 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
         ),
     })
 
-    auth = incoming.get("auth") if isinstance(incoming.get("auth"), dict) else {}
-    base["auth"].update({
-        "enabled": bool(auth.get("enabled", base["auth"]["enabled"])),
-        "jwt_secret_key": str(auth.get("jwt_secret_key") or base["auth"]["jwt_secret_key"]),
-        "jwt_expire_minutes": int(auth.get("jwt_expire_minutes") or base["auth"]["jwt_expire_minutes"]),
-    })
-
     debate = incoming.get("debate") if isinstance(incoming.get("debate"), dict) else {}
     context_window = debate.get("context_window") if isinstance(debate.get("context_window"), dict) else {}
     base["debate"].update({
@@ -213,8 +191,7 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
     })
 
     search = incoming.get("search") if isinstance(incoming.get("search"), dict) else {}
-    searxng = search.get("searxng") if isinstance(search.get("searxng"), dict) else {}
-    tavily = search.get("tavily") if isinstance(search.get("tavily"), dict) else {}
+    custom = search.get("custom") if isinstance(search.get("custom"), dict) else {}
     provider = normalize_search_provider_name(
         str(search.get("provider") or base["search"]["provider"])
     )
@@ -223,13 +200,9 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
     base["search"] = {
         "provider": provider,
         "max_results_per_query": int(search.get("max_results_per_query") or base["search"]["max_results_per_query"]),
-        "searxng": {
-            "base_url": str(searxng.get("base_url") or base["search"]["searxng"]["base_url"]),
-            "api_key": str(searxng.get("api_key") or ""),
-        },
-        "tavily": {
-            "api_url": str(tavily.get("api_url") or base["search"]["tavily"]["api_url"]),
-            "api_key": str(tavily.get("api_key") or ""),
+        "custom": {
+            "endpoint": str(custom.get("endpoint") or ""),
+            "api_key": str(custom.get("api_key") or ""),
         },
     }
 
@@ -239,39 +212,6 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
         "log_dir": str(logging.get("log_dir") or base["logging"]["log_dir"]),
         "backup_count": int(logging.get("backup_count") or base["logging"]["backup_count"]),
     }
-
-    rate_limit = incoming.get("rate_limit") if isinstance(incoming.get("rate_limit"), dict) else {}
-    backend = str(rate_limit.get("backend") or base["rate_limit"]["backend"]).strip().lower()
-    if backend not in {"auto", "memory", "sqlite"}:
-        backend = base["rate_limit"]["backend"]
-    base["rate_limit"] = {
-        "backend": backend,
-        "fallback_to_memory": bool(
-            rate_limit.get("fallback_to_memory", base["rate_limit"]["fallback_to_memory"])
-        ),
-    }
-
-    # Preserve demo section (demo mode config)
-    demo = incoming.get("demo") if isinstance(incoming.get("demo"), dict) else {}
-    if demo:
-        allowed_models = demo.get("allowed_models")
-        if isinstance(allowed_models, list):
-            allowed_models = [str(m) for m in allowed_models if str(m).strip()]
-        else:
-            allowed_models = ["gpt-4o-mini", "claude-sonnet-4-6-20250514", "gemini-2.5-flash"]
-        base["demo"] = {
-            "enabled": bool(demo.get("enabled", False)),
-            "admin_username": str(demo.get("admin_username") or "admin"),
-            "admin_password_hash": str(demo.get("admin_password_hash") or ""),
-            "allowed_models": allowed_models,
-        }
-    else:
-        base["demo"] = {
-            "enabled": False,
-            "admin_username": "admin",
-            "admin_password_hash": "",
-            "allowed_models": ["gpt-4o-mini", "claude-sonnet-4-6-20250514", "gemini-2.5-flash"],
-        }
 
     providers = incoming.get("providers")
     if isinstance(providers, list):

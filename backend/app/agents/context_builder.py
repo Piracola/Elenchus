@@ -39,6 +39,10 @@ def _build_shared_knowledge_section(shared_knowledge: list[dict[str, Any]]) -> s
             query = item.get("query", "")
             result = item.get("result", "")
             knowledge_lines.append(f"- [Verified Fact for '{query}']: {result}")
+        elif item_type == "context":
+            title = item.get("title") or item.get("document_name") or "Context"
+            content = item.get("content", "")
+            knowledge_lines.append(f"- [Context - {title}]: {content}")
         elif item_type == "reference_summary":
             document_name = item.get("document_name", "reference")
             content = item.get("content", "")

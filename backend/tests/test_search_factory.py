@@ -35,13 +35,13 @@ async def test_get_available_providers_uses_instance_state_without_recursion():
 
 
 @pytest.mark.asyncio
-async def test_get_provider_falls_back_from_searxng_to_ddgs():
+async def test_get_provider_falls_back_from_custom_to_ddgs():
     factory = SearchProviderFactory()
     factory._providers = {
         "ddgs": _AvailableProvider(),
-        "searxng": _UnavailableProvider(),
+        "custom": _UnavailableProvider(),
     }
-    factory._current_provider = "searxng"
+    factory._current_provider = "custom"
     factory._initialized = True
 
     provider = await factory.get_provider()

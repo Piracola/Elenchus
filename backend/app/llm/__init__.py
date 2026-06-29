@@ -1,4 +1,4 @@
-"""LLM invocation infrastructure (formerly app.agents.llm package)."""
+"""LLM invocation infrastructure."""
 
 from app.llm.config import (
     DEFAULT_MAX_TOKENS,

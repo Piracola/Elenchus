@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.audit import log_audit
 from app.dependencies import get_debate_runtime_service
-from app.middleware.auth import require_auth
-from app.models.schemas import RuntimeEventPageResponse
 from app.runtime.service import DebateRuntimeService
-from app.services import export_service, runtime_event_service, session_service
+from app.services import session_service
 
 router = APIRouter(tags=["sessions"])
 
@@ -65,7 +62,6 @@ async def start_debate_session(
         status_code = 409 if "already running" in (result.message or "") else 422
         raise HTTPException(status_code=status_code, detail=result.message)
 
-    log_audit("session_start", session_id=session_id)
     return StartDebateResponse(
         started=True,
         session_id=session_id,
@@ -84,46 +80,8 @@ async def stop_debate_session(
     return {"stopped": True, "session_id": session_id}
 
 
-@router.get("/sessions/{session_id}/runtime-events", response_model=RuntimeEventPageResponse)
-async def list_runtime_events(
-    session_id: str,
-    before_seq: int | None = Query(default=None, ge=1),
-    limit: int = Query(default=200, ge=1, le=1000),
-):
-    session_record = await session_service.get_session_record(session_id)
-    if session_record is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    data = await runtime_event_service.list_runtime_events(
-        session_id,
-        before_seq=before_seq,
-        limit=limit,
-    )
-    return RuntimeEventPageResponse(**data)
-
-
-@router.get("/sessions/{session_id}/runtime-events/export")
-async def export_runtime_events_snapshot(session_id: str):
-    data = await session_service.get_session(session_id)
-    if data is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    events = await runtime_event_service.list_all_runtime_events(session_id)
-    snapshot = export_service.export_runtime_events_snapshot(events)
-    filename = export_service.build_export_filename(data, "runtime-events.json")
-    return Response(
-        content=snapshot,
-        media_type="application/json; charset=utf-8",
-        headers={
-            "Content-Disposition": export_service.build_content_disposition(filename)
-        },
-    )
-
-
 __all__ = [
     "router",
     "start_debate_session",
     "stop_debate_session",
-    "list_runtime_events",
-    "export_runtime_events_snapshot",
 ]

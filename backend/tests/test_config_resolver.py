@@ -15,8 +15,7 @@ class TestResolveAgentOverride:
 
     def test_fallback_chain(self):
         configs = {"judge": {"model": "gpt-4o"}}
-        # jury falls back to judge
-        result = resolve_agent_override(configs, "jury")
+        result = resolve_agent_override(configs, "consensus")
         assert result == {"model": "gpt-4o"}
 
     def test_no_match_returns_none(self):
@@ -24,8 +23,8 @@ class TestResolveAgentOverride:
         assert resolve_agent_override(None, "judge") is None
 
     def test_empty_dict_skipped(self):
-        configs = {"jury": {}, "judge": {"model": "gpt-4o"}}
-        result = resolve_agent_override(configs, "jury")
+        configs = {"consensus": {}, "judge": {"model": "gpt-4o"}}
+        result = resolve_agent_override(configs, "consensus")
         assert result == {"model": "gpt-4o"}
 
     def test_proposer_fallback_to_debater(self):
@@ -59,8 +58,7 @@ class TestFallbackChains:
     def test_all_roles_have_fallbacks(self):
         expected_roles = {
             "proposer", "opposer", "judge", "fact_checker",
-            "team_member", "team_summary",
-            "jury", "consensus", "observer", "debater",
+            "consensus", "observer", "debater",
         }
         assert set(AGENT_CONFIG_FALLBACKS.keys()) == expected_roles
 

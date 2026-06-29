@@ -36,8 +36,6 @@ def _build_consensus_instruction(state: dict[str, Any]) -> str:
     dialogue_history = state.get("dialogue_history", [])
     cumulative_scores = state.get("cumulative_scores", {})
     current_scores = state.get("current_scores", {})
-    team_history = state.get("team_dialogue_history", [])
-    jury_history = state.get("jury_dialogue_history", [])
 
     parts = [
         f"辩题：{topic}",
@@ -57,20 +55,6 @@ def _build_consensus_instruction(state: dict[str, Any]) -> str:
             role = entry.get("role", "")
             content = str(entry.get("content", "") or "")
             parts.append(f"### [{role}]\n{content}")
-
-    if team_history:
-        parts.append("## Team Discussion Highlights")
-        for entry in team_history[-4:]:
-            if not isinstance(entry, dict):
-                continue
-            parts.append(f"- {entry.get('agent_name', 'team')}: {entry.get('content', '')}")
-
-    if jury_history:
-        parts.append("## Jury Discussion Highlights")
-        for entry in jury_history[-4:]:
-            if not isinstance(entry, dict):
-                continue
-            parts.append(f"- {entry.get('agent_name', 'jury')}: {entry.get('content', '')}")
 
     if current_scores:
         parts.append(f"## Final Round Scores\n{current_scores}")
@@ -145,7 +129,6 @@ async def converge_consensus(state: dict[str, Any]) -> dict[str, Any]:
     if session_id and runtime_event_emitter is not None:
         await runtime_event_emitter.emit_discussion_entry(session_id, entry)
     return {
-        "jury_dialogue_history": [entry],
+        "dialogue_history": [entry],
         "agent_configs": agent_configs,
-        "emitted_jury_discussion_count": 1,
     }

@@ -28,9 +28,7 @@ ROLE_LABELS = {
 MARKDOWN_EXPORT_CATEGORY_ORDER = (
     "debater_speeches",
     "thinking_content",
-    "group_discussion",
     "judge_messages",
-    "jury_messages",
     "consensus_summary",
 )
 MARKDOWN_EXPORT_CATEGORY_SET = set(MARKDOWN_EXPORT_CATEGORY_ORDER)
@@ -227,29 +225,19 @@ def append_markdown_transcript_sections(
         "debater_speeches": [
             entry for entry in history if isinstance(entry, dict) and is_debater_speech_entry(entry, participants)
         ],
-        "group_discussion": [
-            entry for entry in session_data.get("team_dialogue_history", []) if isinstance(entry, dict)
-        ],
         "judge_messages": [
             entry for entry in history if isinstance(entry, dict) and str(entry.get("role", "")) == "judge"
         ],
-        "jury_messages": [
-            entry
-            for entry in session_data.get("jury_dialogue_history", [])
-            if isinstance(entry, dict) and str(entry.get("role", "")) != "consensus_summary"
-        ],
         "consensus_summary": [
             entry
-            for entry in session_data.get("jury_dialogue_history", [])
+            for entry in history
             if isinstance(entry, dict) and str(entry.get("role", "")) == "consensus_summary"
         ],
     }
     category_titles = {
         "debater_speeches": "## 辩手发言",
         "thinking_content": "",
-        "group_discussion": "## 组内讨论",
         "judge_messages": "## 裁判消息",
-        "jury_messages": "## 审判团消息",
         "consensus_summary": "## 共识收敛消息",
     }
 

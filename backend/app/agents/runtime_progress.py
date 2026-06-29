@@ -12,8 +12,6 @@ _NODE_PHASES = {
     "manage_context": "context",
     "speaker": "speaking",
     "judge": "judging",
-    "team_discussion": "preparing",
-    "jury_discussion": "preparing",
     "consensus": "complete",
 }
 

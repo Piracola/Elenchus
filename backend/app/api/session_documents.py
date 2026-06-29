@@ -3,12 +3,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 
 from app.models.schemas import (
-    ReferenceLibraryResponse,
     SessionDocumentListResponse,
     SessionDocumentResponse,
 )
-from app.services import document_service, reference_library_service, session_service
-from app.services.session_document_workflow import upload_and_process_session_document
+from app.services import document_service, session_service
+from app.services.session_document_workflow import (
+    remove_document_context_knowledge,
+    upload_and_process_session_document,
+)
 
 router = APIRouter(tags=["sessions"])
 
@@ -64,25 +66,11 @@ async def get_session_document(session_id: str, document_id: str):
     return SessionDocumentResponse(**document)
 
 
-@router.get("/sessions/{session_id}/reference-library", response_model=ReferenceLibraryResponse)
-async def get_reference_library(session_id: str):
-    await _require_session_record(session_id)
-    documents = await document_service.list_session_documents(session_id)
-    library = await reference_library_service.list_reference_library(
-        session_id,
-        documents=documents,
-    )
-    return ReferenceLibraryResponse(**library)
-
-
 @router.delete("/sessions/{session_id}/documents/{document_id}", status_code=204)
 async def delete_session_document(session_id: str, document_id: str):
-    session_record = await _require_session_record(session_id)
+    await _require_session_record(session_id)
     await _require_document_record(session_id, document_id)
-    await reference_library_service.delete_reference_library_for_document(
-        session_record=session_record,
-        document_id=document_id,
-    )
+    remove_document_context_knowledge(session_id, document_id=document_id)
     deleted = await document_service.delete_session_document(session_id, document_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Document not found")

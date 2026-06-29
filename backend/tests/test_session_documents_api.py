@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
-import pytest
 
 from app.main import app
 
@@ -119,7 +118,7 @@ def test_upload_document_requires_existing_session():
     assert response.json() == {"detail": "Session not found"}
 
 
-def test_reference_library_endpoint_and_shared_knowledge_sync():
+def test_document_upload_syncs_plain_context_shared_knowledge():
     client = TestClient(app)
     session_id = _create_session(client, topic="Reference sync")
 
@@ -140,62 +139,30 @@ def test_reference_library_endpoint_and_shared_knowledge_sync():
     assert upload_response.status_code == 201
     document_id = upload_response.json()["id"]
 
-    library_response = client.get(f"/api/sessions/{session_id}/reference-library")
+    list_response = client.get(f"/api/sessions/{session_id}/documents")
 
-    assert library_response.status_code == 200
-    library = library_response.json()
-    assert len(library["documents"]) == 1
-    assert library["documents"][0]["id"] == document_id
-    assert library["documents"][0]["status"] == "processed"
-    assert any(entry["entry_type"] == "reference_summary" for entry in library["entries"])
-    assert any(entry["entry_type"] == "reference_claim" for entry in library["entries"])
+    assert list_response.status_code == 200
+    documents = list_response.json()["documents"]
+    assert len(documents) == 1
+    assert documents[0]["id"] == document_id
+    assert documents[0]["status"] == "processed"
 
     session_response = client.get(f"/api/sessions/{session_id}")
     assert session_response.status_code == 200
     shared_knowledge = session_response.json()["shared_knowledge"]
-    assert any(item["type"] == "reference_summary" for item in shared_knowledge)
-    assert any(item["type"] == "reference_claim" for item in shared_knowledge)
+    assert any(
+        item["type"] == "context"
+        and item["source_kind"] == "session_document"
+        and item["document_id"] == document_id
+        and "分层控制" in item["content"]
+        for item in shared_knowledge
+    )
 
     delete_response = client.delete(
         f"/api/sessions/{session_id}/documents/{document_id}"
     )
     assert delete_response.status_code == 204
 
-    library_after_delete = client.get(f"/api/sessions/{session_id}/reference-library")
-    assert library_after_delete.status_code == 200
-    assert library_after_delete.json()["entries"] == []
-
     session_after_delete = client.get(f"/api/sessions/{session_id}")
     assert session_after_delete.status_code == 200
     assert session_after_delete.json()["shared_knowledge"] == []
-
-
-def test_upload_session_document_returns_failed_document_when_preprocess_errors(monkeypatch: pytest.MonkeyPatch):
-    client = TestClient(app)
-    session_id = _create_session(client, topic="Reference failure")
-
-    async def _raise_preprocess(*args, **kwargs):
-        raise RuntimeError("preprocess exploded")
-
-    monkeypatch.setattr(
-        "app.services.reference.workflow.preprocess_reference_document",
-        _raise_preprocess,
-    )
-
-    upload_response = client.post(
-        f"/api/sessions/{session_id}/documents",
-        files={"file": ("reference.txt", b"Failure path text", "text/plain")},
-    )
-
-    assert upload_response.status_code == 201
-    uploaded = upload_response.json()
-    assert uploaded["status"] == "failed"
-    assert uploaded["error_message"] == "preprocess exploded"
-
-    library_response = client.get(f"/api/sessions/{session_id}/reference-library")
-    assert library_response.status_code == 200
-    assert library_response.json()["entries"] == []
-
-    session_response = client.get(f"/api/sessions/{session_id}")
-    assert session_response.status_code == 200
-    assert session_response.json()["shared_knowledge"] == []

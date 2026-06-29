@@ -4,7 +4,6 @@ from app.models.schemas import (
     SessionCreate as SessionCreate,
     SessionListResponse as SessionListResponse,
     SessionResponse as SessionResponse,
-    TeamConfig as TeamConfig,
 )
 from app.models.scoring import DimensionScore as DimensionScore, TurnScore as TurnScore
 
@@ -14,7 +13,6 @@ __all__ = [
     "SessionResponse",
     "SessionListResponse",
     "ExportFormat",
-    "TeamConfig",
     "TurnScore",
     "DimensionScore",
 ]

@@ -5,28 +5,20 @@ Search configuration API routes.
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.audit import log_audit
 from app.config import get_search_provider_settings_snapshot, persist_search_settings
 from app.dependencies import get_search_factory
-from app.middleware.auth import require_auth
 from app.search.factory import SearchProviderFactory
 
 router = APIRouter(prefix="/search", tags=["search"])
 
 
-class TavilySettingsResponse(BaseModel):
-    api_url: str
-    api_key_configured: bool
-
-
-class SearXNGSettingsResponse(BaseModel):
-    base_url: str
+class CustomSearchSettingsResponse(BaseModel):
+    endpoint: str
     api_key_configured: bool
 
 
 class SearchProviderSettingsResponse(BaseModel):
-    searxng: SearXNGSettingsResponse
-    tavily: TavilySettingsResponse
+    custom: CustomSearchSettingsResponse
 
 
 class SearchConfigResponse(BaseModel):
@@ -43,21 +35,14 @@ class UpdateProviderRequest(BaseModel):
     provider: str
 
 
-class TavilySettingsUpdate(BaseModel):
-    api_url: str | None = None
-    api_key: str | None = None
-    clear_api_key: bool = False
-
-
-class SearXNGSettingsUpdate(BaseModel):
-    base_url: str | None = None
+class CustomSearchSettingsUpdate(BaseModel):
+    endpoint: str | None = None
     api_key: str | None = None
     clear_api_key: bool = False
 
 
 class SearchProviderSettingsUpdate(BaseModel):
-    searxng: SearXNGSettingsUpdate = Field(default_factory=SearXNGSettingsUpdate)
-    tavily: TavilySettingsUpdate = Field(default_factory=TavilySettingsUpdate)
+    custom: CustomSearchSettingsUpdate = Field(default_factory=CustomSearchSettingsUpdate)
 
 
 class UpdateSearchSettingsRequest(BaseModel):
@@ -102,14 +87,12 @@ async def get_search_config(
 async def update_search_config(
     request: UpdateProviderRequest,
     factory: SearchProviderFactory = Depends(get_search_factory),
-    _auth: bool = Depends(require_auth),
 ):
     """Update current search engine."""
 
     success = factory.set_provider(request.provider)
     if not success:
         raise HTTPException(status_code=400, detail=f"Invalid provider: {request.provider}")
-    log_audit("search_config_update", payload={"provider": request.provider})
     return {"status": "ok", "provider": request.provider}
 
 
@@ -117,21 +100,16 @@ async def update_search_config(
 async def update_search_settings(
     request: UpdateSearchSettingsRequest,
     factory: SearchProviderFactory = Depends(get_search_factory),
-    _auth: bool = Depends(require_auth),
 ):
     """Update runtime-editable provider settings and rebuild the provider factory."""
 
     persist_search_settings(
         provider=request.provider,
-        searxng_api_key=request.provider_settings.searxng.api_key,
-        clear_searxng_api_key=request.provider_settings.searxng.clear_api_key,
-        searxng_base_url=request.provider_settings.searxng.base_url,
-        tavily_api_key=request.provider_settings.tavily.api_key,
-        clear_tavily_api_key=request.provider_settings.tavily.clear_api_key,
-        tavily_api_url=request.provider_settings.tavily.api_url,
+        custom_endpoint=request.provider_settings.custom.endpoint,
+        custom_api_key=request.provider_settings.custom.api_key,
+        clear_custom_api_key=request.provider_settings.custom.clear_api_key,
     )
     await factory.reload()
-    log_audit("search_settings_update")
     return await _build_search_config_response(factory)
 
 

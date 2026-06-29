@@ -7,7 +7,6 @@ Uses Pydantic BaseModel for automatic validation and type safety.
 
 from __future__ import annotations
 
-import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -15,8 +14,6 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.runtime_config_store import (
-    DEFAULT_SEARXNG_BASE_URL,
-    DEFAULT_TAVILY_API_URL,
     SUPPORTED_SEARCH_PROVIDERS,
     load_runtime_config,
     normalize_search_provider_name,
@@ -33,23 +30,18 @@ class SearchConfig(BaseModel):
 
     provider: str = "ddgs"
     max_results_per_query: int = 5
-    searxng_base_url: str = DEFAULT_SEARXNG_BASE_URL
-    searxng_api_key: str = ""
-    tavily_api_url: str = DEFAULT_TAVILY_API_URL
-    tavily_api_key: str = ""
+    custom_endpoint: str = ""
+    custom_api_key: str = ""
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None = None) -> SearchConfig:
         data = data or {}
-        searxng = data.get("searxng") if isinstance(data.get("searxng"), dict) else {}
-        tavily = data.get("tavily") if isinstance(data.get("tavily"), dict) else {}
+        custom = data.get("custom") if isinstance(data.get("custom"), dict) else {}
         return cls(
             provider=normalize_search_provider_name(str(data.get("provider") or "ddgs")),
             max_results_per_query=int(data.get("max_results_per_query") or 5),
-            searxng_base_url=str(searxng.get("base_url") or DEFAULT_SEARXNG_BASE_URL),
-            searxng_api_key=str(searxng.get("api_key") or ""),
-            tavily_api_url=str(tavily.get("api_url") or DEFAULT_TAVILY_API_URL),
-            tavily_api_key=str(tavily.get("api_key") or ""),
+            custom_endpoint=str(custom.get("endpoint") or ""),
+            custom_api_key=str(custom.get("api_key") or ""),
         )
 
 
@@ -87,10 +79,6 @@ class DebateConfig(BaseModel):
 class EnvSettings(BaseModel):
     """Compatibility wrapper for runtime values historically read from `.env`."""
 
-    tavily_api_key: str = ""
-    tavily_api_url: str = DEFAULT_TAVILY_API_URL
-    searxng_api_key: str = ""
-    searxng_base_url: str = DEFAULT_SEARXNG_BASE_URL
     host: str = "0.0.0.0"
     port: int = 8001
     debug: bool = False
@@ -111,41 +99,11 @@ class EnvSettings(BaseModel):
             cors_origin_text = str(cors_origins or "")
 
         return cls(
-            tavily_api_key=search.tavily_api_key,
-            tavily_api_url=search.tavily_api_url,
-            searxng_api_key=search.searxng_api_key,
-            searxng_base_url=search.searxng_base_url,
             host=str(data.get("host") or "0.0.0.0"),
             port=int(data.get("port") or 8001),
             debug=bool(data.get("debug", False)),
             cors_origins=cors_origin_text,
             database_url=str(data.get("database_url") or ""),
-        )
-
-
-class AuthSettings(BaseModel):
-    enabled: bool = False
-    jwt_secret_key: str = "change-me-in-production"
-    jwt_expire_minutes: int = 10080
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any] | None = None) -> AuthSettings:
-        import logging
-        import os
-
-        data = data or {}
-        env_key = os.environ.get("ELENCHUS_JWT_SECRET_KEY", "").strip()
-        config_key = str(data.get("jwt_secret_key") or "")
-        key = env_key or config_key or "change-me-in-production"
-        if not env_key and key == "change-me-in-production":
-            logging.getLogger(__name__).warning(
-                "JWT secret key is set to the default value. "
-                "Set ELENCHUS_JWT_SECRET_KEY environment variable for production use."
-            )
-        return cls(
-            enabled=bool(data.get("enabled", False)),
-            jwt_secret_key=key,
-            jwt_expire_minutes=int(data.get("jwt_expire_minutes") or 10080),
         )
 
 
@@ -164,65 +122,13 @@ class LoggingSettings(BaseModel):
         )
 
 
-class DemoSettings(BaseModel):
-    enabled: bool = False
-    admin_username: str = "admin"
-    admin_password_hash: str = ""
-    allowed_models: list[str] = Field(
-        default_factory=lambda: ["gpt-4o-mini", "claude-sonnet-4-6-20250514", "gemini-2.5-flash"]
-    )
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any] | None = None) -> DemoSettings:
-        data = data or {}
-        return cls(
-            enabled=bool(data.get("enabled", False)),
-            admin_username=str(data.get("admin_username") or "admin"),
-            admin_password_hash=str(data.get("admin_password_hash") or ""),
-            allowed_models=list(
-                data.get("allowed_models")
-                or ["gpt-4o-mini", "claude-sonnet-4-6-20250514", "gemini-2.5-flash"]
-            ),
-        )
-
-
-class RateLimitSettings(BaseModel):
-    backend: str = "auto"
-    fallback_to_memory: bool = True
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any] | None = None) -> RateLimitSettings:
-        data = data or {}
-        backend = str(
-            os.environ.get("ELENCHUS_RATE_LIMIT_BACKEND")
-            or data.get("backend")
-            or "auto"
-        ).strip().lower()
-        if backend not in {"auto", "memory", "sqlite"}:
-            backend = "auto"
-
-        raw_fallback = os.environ.get("ELENCHUS_RATE_LIMIT_FALLBACK_TO_MEMORY")
-        if raw_fallback is None:
-            fallback_to_memory = bool(data.get("fallback_to_memory", True))
-        else:
-            fallback_to_memory = raw_fallback.strip().lower() not in {"0", "false", "no", "off"}
-
-        return cls(
-            backend=backend,
-            fallback_to_memory=fallback_to_memory,
-        )
-
-
 class Settings(BaseModel):
     """Unified settings object backed by `runtime/config.json`."""
 
     search: SearchConfig = Field(default_factory=SearchConfig)
     debate: DebateConfig = Field(default_factory=DebateConfig)
     env: EnvSettings = Field(default_factory=EnvSettings)
-    auth: AuthSettings = Field(default_factory=AuthSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
-    demo: DemoSettings = Field(default_factory=DemoSettings)
-    rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
 
     def __init__(self, **data: Any) -> None:
         # If called directly (not from Pydantic parse), load from config file
@@ -231,18 +137,12 @@ class Settings(BaseModel):
             search = SearchConfig.from_dict(config.get("search"))
             debate = DebateConfig.from_dict(config.get("debate"))
             env = EnvSettings.from_dict(config.get("server"), search=search)
-            auth = AuthSettings.from_dict(config.get("auth"))
             logging_cfg = LoggingSettings.from_dict(config.get("logging"))
-            demo = DemoSettings.from_dict(config.get("demo"))
-            rate_limit = RateLimitSettings.from_dict(config.get("rate_limit"))
             super().__init__(
                 search=search,
                 debate=debate,
                 env=env,
-                auth=auth,
                 logging=logging_cfg,
-                demo=demo,
-                rate_limit=rate_limit,
             )
         else:
             super().__init__(**data)
@@ -291,37 +191,21 @@ def persist_search_provider(provider: str) -> None:
 def persist_search_settings(
     *,
     provider: str | None = None,
-    searxng_api_key: str | None = None,
-    clear_searxng_api_key: bool = False,
-    searxng_base_url: str | None = None,
-    tavily_api_key: str | None = None,
-    clear_tavily_api_key: bool = False,
-    tavily_api_url: str | None = None,
+    custom_endpoint: str | None = None,
+    custom_api_key: str | None = None,
+    clear_custom_api_key: bool = False,
 ) -> None:
     normalized_provider = _normalize_search_provider(provider) if provider is not None else None
-    normalized_searxng_base_url = (
-        (searxng_base_url or "").strip() or DEFAULT_SEARXNG_BASE_URL
-        if searxng_base_url is not None
-        else None
-    )
-    normalized_searxng_api_key = (searxng_api_key or "").strip()
-    normalized_tavily_api_url = (
-        (tavily_api_url or "").strip() or DEFAULT_TAVILY_API_URL
-        if tavily_api_url is not None
-        else None
-    )
-    normalized_tavily_api_key = (tavily_api_key or "").strip()
+    normalized_custom_endpoint = custom_endpoint.strip() if custom_endpoint is not None else None
+    normalized_custom_api_key = (custom_api_key or "").strip()
 
     update_runtime_config(
         lambda config: _update_search_config(
             config,
             provider=normalized_provider,
-            searxng_api_key=normalized_searxng_api_key,
-            clear_searxng_api_key=clear_searxng_api_key,
-            searxng_base_url=normalized_searxng_base_url,
-            tavily_api_key=normalized_tavily_api_key,
-            clear_tavily_api_key=clear_tavily_api_key,
-            tavily_api_url=normalized_tavily_api_url,
+            custom_endpoint=normalized_custom_endpoint,
+            custom_api_key=normalized_custom_api_key,
+            clear_custom_api_key=clear_custom_api_key,
         )
     )
     _clear_settings_cache()
@@ -331,45 +215,31 @@ def _update_search_config(
     config: dict[str, Any],
     *,
     provider: str | None,
-    searxng_api_key: str,
-    clear_searxng_api_key: bool,
-    searxng_base_url: str | None,
-    tavily_api_key: str,
-    clear_tavily_api_key: bool,
-    tavily_api_url: str | None,
+    custom_endpoint: str | None,
+    custom_api_key: str,
+    clear_custom_api_key: bool,
 ) -> dict[str, Any]:
     search = config.setdefault("search", {})
-    searxng = search.setdefault("searxng", {})
-    tavily = search.setdefault("tavily", {})
+    custom = search.setdefault("custom", {})
 
     if provider is not None:
         search["provider"] = provider
     if "max_results_per_query" not in search:
         search["max_results_per_query"] = 5
-    if searxng_base_url is not None:
-        searxng["base_url"] = searxng_base_url
-    if clear_searxng_api_key:
-        searxng["api_key"] = ""
-    elif searxng_api_key:
-        searxng["api_key"] = searxng_api_key
-    if tavily_api_url is not None:
-        tavily["api_url"] = tavily_api_url
-    if clear_tavily_api_key:
-        tavily["api_key"] = ""
-    elif tavily_api_key:
-        tavily["api_key"] = tavily_api_key
+    if custom_endpoint is not None:
+        custom["endpoint"] = custom_endpoint
+    if clear_custom_api_key:
+        custom["api_key"] = ""
+    elif custom_api_key:
+        custom["api_key"] = custom_api_key
     return config
 
 
 def get_search_provider_settings_snapshot() -> dict[str, dict[str, Any]]:
     settings = get_settings()
     return {
-        "searxng": {
-            "base_url": settings.search.searxng_base_url,
-            "api_key_configured": bool(settings.search.searxng_api_key),
-        },
-        "tavily": {
-            "api_url": settings.search.tavily_api_url,
-            "api_key_configured": bool(settings.search.tavily_api_key),
+        "custom": {
+            "endpoint": settings.search.custom_endpoint,
+            "api_key_configured": bool(settings.search.custom_api_key),
         },
     }

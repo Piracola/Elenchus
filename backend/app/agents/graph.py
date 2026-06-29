@@ -23,8 +23,6 @@ from langgraph.graph.message import add_messages
 from app.agents.consensus import converge_consensus
 from app.agents.debater import debater_speak
 from app.agents.judge import judge_score
-from app.agents.jury_discussion import jury_discuss
-from app.agents.team_discussion import team_discuss
 from app.agents.context_manager import compress_context
 from app.tools import get_all_skills
 from app.tools.metadata import get_tool_shared_knowledge_type
@@ -78,22 +76,12 @@ class DebateGraphState(TypedDict, total=False):
     current_speaker_index: int
 
     dialogue_history: Annotated[list[DialogueEntryDict], add]
-    team_dialogue_history: Annotated[list[DialogueEntryDict], add]
-    jury_dialogue_history: Annotated[list[DialogueEntryDict], add]
     judge_history: Annotated[list[DialogueEntryDict], add]
     recent_dialogue_history: list[DialogueEntryDict]
     compressed_history_count: int
     shared_knowledge: Annotated[list[SharedKnowledgeEntry], add]
-    team_config: dict[str, int]
-    jury_config: dict[str, int]
     reasoning_config: dict[str, Any]
     speech_config: dict[str, int]
-    current_team_discussion: list[DialogueEntryDict]
-    current_team_summary: DialogueEntryDict | None
-    current_jury_discussion: list[DialogueEntryDict]
-    current_jury_summary: DialogueEntryDict | None
-    emitted_team_discussion_count: int
-    emitted_jury_discussion_count: int
     
     messages: Annotated[list[BaseMessage], add_messages]
 
@@ -198,20 +186,6 @@ async def node_debater_speak(state: DebateGraphState) -> dict[str, Any]:
     return result
 
 
-async def node_team_discussion(state: DebateGraphState) -> dict[str, Any]:
-    """Run the current side's internal discussion before public speech."""
-    result = await team_discuss(state)
-    result["last_executed_node"] = "team_discussion"
-    return result
-
-
-async def node_jury_discussion(state: DebateGraphState) -> dict[str, Any]:
-    """Run the optional jury discussion before scoring."""
-    result = await jury_discuss(state)
-    result["last_executed_node"] = "jury_discussion"
-    return result
-
-
 async def node_tool_executor(state: DebateGraphState) -> dict[str, Any]:
     """Executes the tool called by the LLM and feeds it back into the messages list and shared_knowledge."""
     messages = state.get("messages", [])
@@ -289,38 +263,12 @@ async def node_advance_turn(state: DebateGraphState) -> dict[str, Any]:
         "current_turn": current + 1,
         "current_speaker_index": -1, # Reset for the next round
         "messages": remove_msgs, # Clear internal tool messages
-        "current_team_discussion": [],
-        "current_team_summary": None,
-        "current_jury_discussion": [],
-        "current_jury_summary": None,
-        "emitted_team_discussion_count": 0,
-        "emitted_jury_discussion_count": 0,
         "speech_was_streamed": False,
         "last_executed_node": "advance_turn",
     }
 
 
 # ── Conditional edges ───────────────────────────────────────────
-
-def should_prepare_team_discussion(state: DebateGraphState) -> str:
-    """Route the current speaker through the optional internal team discussion."""
-    team_config = state.get("team_config", {})
-    agents_per_team = int(team_config.get("agents_per_team", 0) or 0)
-    discussion_rounds = int(team_config.get("discussion_rounds", 0) or 0)
-    if agents_per_team > 0 and discussion_rounds > 0:
-        return "team_discussion"
-    return "speaker"
-
-
-def should_prepare_jury_discussion(state: DebateGraphState) -> str:
-    """Route to the optional jury discussion after all speakers finish."""
-    jury_config = state.get("jury_config", {})
-    agents_per_jury = int(jury_config.get("agents_per_jury", 0) or 0)
-    discussion_rounds = int(jury_config.get("discussion_rounds", 0) or 0)
-    if agents_per_jury > 0 and discussion_rounds > 0:
-        return "jury_discussion"
-    return "judge"
-
 
 def _has_pending_tool_calls(state: DebateGraphState) -> bool:
     """Check if the debater emitted a tool call that needs execution."""
@@ -338,7 +286,7 @@ def _get_next_speaker_route(state: DebateGraphState) -> str:
     current_idx = state.get("current_speaker_index", 0)
     if current_idx + 1 < len(participants):
         return "next_speaker"
-    return should_prepare_jury_discussion(state)
+    return "judge"
 
 
 def should_execute_tools(state: DebateGraphState) -> str:
@@ -346,6 +294,50 @@ def should_execute_tools(state: DebateGraphState) -> str:
     if _has_pending_tool_calls(state):
         return "tools"
     return _get_next_speaker_route(state)
+
+
+def _coerce_turn(value: Any, fallback: int) -> int:
+    if isinstance(value, int):
+        return value
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _turn_limit_reached(state: DebateGraphState) -> bool:
+    current_turn = _coerce_turn(state.get("current_turn", 0), 0)
+    max_turns = _coerce_turn(state.get("max_turns", 5), 5)
+    return max_turns > 0 and current_turn >= max_turns
+
+
+def _has_consensus_summary(state: DebateGraphState) -> bool:
+    dialogue_history = state.get("dialogue_history", [])
+    if not isinstance(dialogue_history, list):
+        return False
+    return any(
+        isinstance(entry, dict)
+        and (
+            entry.get("role") == "consensus_summary"
+            or entry.get("discussion_kind") == "consensus"
+        )
+        for entry in dialogue_history
+    )
+
+
+def should_route_after_manage_context(state: DebateGraphState) -> str:
+    """Avoid starting another round when a resumed run is already at the turn limit."""
+    if not _turn_limit_reached(state):
+        return "set_speaker"
+
+    reasoning_config = state.get("reasoning_config", {})
+    if (
+        bool(reasoning_config.get("consensus_enabled", True))
+        and not _has_consensus_summary(state)
+    ):
+        return "consensus"
+    return "end"
+
 
 def should_continue(state: DebateGraphState) -> str:
     """After advancing turn, decide whether to continue or end."""
@@ -381,8 +373,6 @@ def build_debate_graph() -> StateGraph:
     # Add nodes
     graph.add_node("manage_context", node_manage_context)
     graph.add_node("set_speaker", node_set_speaker)
-    graph.add_node("team_discussion", node_team_discussion)
-    graph.add_node("jury_discussion", node_jury_discussion)
     graph.add_node("speaker", node_debater_speak)
     graph.add_node("tool_executor", node_tool_executor)
     graph.add_node("judge", node_judge_score)
@@ -391,16 +381,16 @@ def build_debate_graph() -> StateGraph:
 
     # Define edges
     graph.set_entry_point("manage_context")
-    graph.add_edge("manage_context", "set_speaker")
     graph.add_conditional_edges(
-        "set_speaker",
-        should_prepare_team_discussion,
+        "manage_context",
+        should_route_after_manage_context,
         {
-            "team_discussion": "team_discussion",
-            "speaker": "speaker",
+            "set_speaker": "set_speaker",
+            "consensus": "consensus",
+            "end": END,
         },
     )
-    graph.add_edge("team_discussion", "speaker")
+    graph.add_edge("set_speaker", "speaker")
     
     # From speaker, we check if they called a tool or are finished
     graph.add_conditional_edges(
@@ -409,11 +399,9 @@ def build_debate_graph() -> StateGraph:
         {
             "tools": "tool_executor",
             "next_speaker": "set_speaker",
-            "jury_discussion": "jury_discussion",
             "judge": "judge"
         }
     )
-    graph.add_edge("jury_discussion", "judge")
     
     # Tools feed back into the speaker to resolve the thought process
     graph.add_edge("tool_executor", "speaker")

@@ -1,4 +1,4 @@
-"""Tests for persisted runtime event history paging."""
+"""Tests for persisted runtime event recording."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from app.runtime_paths import get_runtime_paths
 from app.models.schemas import SessionCreate
+from app.runtime_paths import get_runtime_paths
 from app.services import runtime_event_service, session_service
 
 
@@ -26,38 +26,6 @@ def make_event(seq: int, session_id: str = "session123abc") -> dict[str, object]
 
 
 @pytest.mark.asyncio
-async def test_runtime_event_history_returns_latest_page_then_older_page():
-    session = await session_service.create_session(
-        SessionCreate(topic="Runtime history paging"),
-    )
-    session_id = session["id"]
-
-    for seq in range(1, 6):
-        await runtime_event_service.create_runtime_event(make_event(seq, session_id))
-
-    latest_page = await runtime_event_service.list_runtime_events(
-        session_id,
-        limit=2,
-    )
-
-    assert latest_page["total"] == 5
-    assert latest_page["has_more"] is True
-    assert latest_page["next_before_seq"] == 4
-    assert [event["seq"] for event in latest_page["events"]] == [4, 5]
-
-    older_page = await runtime_event_service.list_runtime_events(
-        session_id,
-        before_seq=latest_page["next_before_seq"],
-        limit=2,
-    )
-
-    assert older_page["total"] == 5
-    assert older_page["has_more"] is True
-    assert older_page["next_before_seq"] == 2
-    assert [event["seq"] for event in older_page["events"]] == [2, 3]
-
-
-@pytest.mark.asyncio
 async def test_runtime_event_history_reports_latest_sequence():
     session = await session_service.create_session(
         SessionCreate(topic="Runtime sequence"),
@@ -70,23 +38,6 @@ async def test_runtime_event_history_reports_latest_sequence():
     await runtime_event_service.create_runtime_event(make_event(8, session_id))
 
     assert await runtime_event_service.get_latest_runtime_event_seq(session_id) == 8
-
-
-@pytest.mark.asyncio
-async def test_runtime_event_history_can_return_full_persisted_list():
-    session = await session_service.create_session(
-        SessionCreate(topic="Runtime full export"),
-    )
-    session_id = session["id"]
-
-    for seq in range(1, 4):
-        await runtime_event_service.create_runtime_event(make_event(seq, session_id))
-
-    events = await runtime_event_service.list_all_runtime_events(session_id)
-
-    assert [event["seq"] for event in events] == [1, 2, 3]
-    assert events[0]["event_id"] == "evt_1"
-    assert events[-1]["event_id"] == "evt_3"
 
 
 @pytest.mark.asyncio

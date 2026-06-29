@@ -1,4 +1,4 @@
-"""Safe model invocation helpers (formerly app.agents.safe_invoke)."""
+"""Safe model invocation helpers."""
 
 from __future__ import annotations
 

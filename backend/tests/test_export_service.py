@@ -10,7 +10,7 @@ import pytest
 
 from app.api import sessions as sessions_api
 from app.models.schemas import ExportFormat
-from app.services import export_service
+from app.services import export
 
 
 def build_markdown_session_payload() -> dict:
@@ -37,26 +37,6 @@ def build_markdown_session_payload() -> dict:
                 "content": "论证结构完整，举例清晰。",
                 "citations": [],
                 "timestamp": "2026-03-18T10:02:00Z",
-                "turn": 0,
-            },
-        ],
-        "team_dialogue_history": [
-            {
-                "role": "team_member",
-                "agent_name": "正方一辩",
-                "content": "先巩固个性化学习的定义。",
-                "citations": [],
-                "timestamp": "2026-03-18T10:00:30Z",
-                "turn": 0,
-            }
-        ],
-        "jury_dialogue_history": [
-            {
-                "role": "jury_member",
-                "agent_name": "审判员甲",
-                "content": "正方证据更完整。",
-                "citations": [],
-                "timestamp": "2026-03-18T10:03:00Z",
                 "turn": 0,
             },
             {
@@ -93,7 +73,7 @@ def build_markdown_session_payload() -> dict:
 
 
 def test_export_markdown_uses_readable_chinese_labels():
-    markdown = export_service.export_markdown(build_markdown_session_payload())
+    markdown = export.export_markdown(build_markdown_session_payload())
 
     assert "# 辩论记录：" in markdown
     assert "## 基本信息" in markdown
@@ -112,37 +92,33 @@ def test_export_markdown_uses_readable_chinese_labels():
 
 
 def test_export_markdown_supports_category_filtered_sections():
-    markdown = export_service.export_markdown(
+    markdown = export.export_markdown(
         build_markdown_session_payload(),
-        ["jury_messages", "group_discussion", "judge_messages", "jury_messages", "invalid"],
+        ["consensus_summary", "judge_messages", "consensus_summary", "invalid"],
     )
 
-    assert "## 组内讨论" in markdown
     assert "## 裁判消息" in markdown
-    assert "## 审判团消息" in markdown
+    assert "## 共识收敛消息" in markdown
     assert "## 辩手发言" not in markdown
-    assert "## 共识收敛消息" not in markdown
-    assert "先巩固个性化学习的定义。" in markdown
     assert "论证结构完整，举例清晰。" in markdown
-    assert "正方证据更完整。" in markdown
-    assert "双方都承认 AI 会重塑教学流程" not in markdown
+    assert "双方都承认 AI 会重塑教学流程" in markdown
 
 
 def test_normalize_markdown_export_categories_preserves_stable_order_and_fallback():
-    assert export_service.normalize_markdown_export_categories(None) is None
-    assert export_service.normalize_markdown_export_categories(["jury_messages", "group_discussion", "jury_messages"]) == [
-        "jury_messages",
-        "group_discussion",
+    assert export.normalize_markdown_export_categories(None) is None
+    assert export.normalize_markdown_export_categories(["consensus_summary", "judge_messages", "consensus_summary"]) == [
+        "consensus_summary",
+        "judge_messages",
     ]
-    assert export_service.normalize_markdown_export_categories(["thinking_content", "group_discussion"]) == [
+    assert export.normalize_markdown_export_categories(["thinking_content", "judge_messages"]) == [
         "thinking_content",
-        "group_discussion",
+        "judge_messages",
     ]
-    assert export_service.normalize_markdown_export_categories(["invalid"]) == ["debater_speeches"]
+    assert export.normalize_markdown_export_categories(["invalid"]) == ["debater_speeches"]
 
 
 def test_export_markdown_falls_back_to_debater_speeches_when_categories_invalid():
-    markdown = export_service.export_markdown(
+    markdown = export.export_markdown(
         build_markdown_session_payload(),
         ["invalid", "unknown"],
     )
@@ -158,8 +134,8 @@ def test_export_markdown_can_include_or_hide_leading_thinking_content():
         "<think>**内部推理**\n\n- 检查定义</think>\n\n正式发言。"
     )
 
-    hidden = export_service.export_markdown(payload, ["debater_speeches"])
-    visible = export_service.export_markdown(payload, ["debater_speeches", "thinking_content"])
+    hidden = export.export_markdown(payload, ["debater_speeches"])
+    visible = export.export_markdown(payload, ["debater_speeches", "thinking_content"])
 
     assert "正式发言。" in hidden
     assert "内部推理" not in hidden
@@ -171,26 +147,30 @@ def test_export_markdown_can_include_or_hide_leading_thinking_content():
 
 
 def test_export_json_preserves_unicode_content():
-    payload = export_service.export_json({"topic": "测试导出", "value": "中文内容"})
+    payload = export.export_json({"topic": "测试导出", "value": "中文内容"})
 
     assert '"topic": "测试导出"' in payload
     assert '"value": "中文内容"' in payload
 
 
 def test_export_html_renders_static_reading_page_with_controls():
-    html = export_service.export_html(build_markdown_session_payload())
+    html = export.export_html(build_markdown_session_payload())
 
     assert "<!doctype html>" in html
     assert "Elenchus 辩论记录" in html
     assert "人工智能是否会改变教育" in html
     assert "全部展开" in html
     assert "全部收起" in html
+    assert "阅读地图" in html
+    assert 'class="reading-map-card" href="#full_transcript"' in html
+    assert 'href="#scores"' in html
     assert 'href="#turn-1"' in html
     assert "AI 可以显著提升个性化教学效果。" in html
     assert "论证结构完整，举例清晰。" in html
     assert "正方证据更完整。" not in html
     assert "当前评分" not in html
     assert "逐轮综合分走势" in html
+    assert 'id="scores"' in html
     assert "第 1 轮" in html
     assert "第 2 轮" in html
     assert "由 Elenchus 导出" in html
@@ -210,7 +190,7 @@ def test_export_html_uses_compact_header_and_speech_stats_without_thinking():
         }
     )
 
-    html = export_service.export_html(payload, ["debater_speeches", "thinking_content"])
+    html = export.export_html(payload, ["debater_speeches", "thinking_content"])
 
     assert "发言文本量" in html
     assert "不含思维链" in html
@@ -246,7 +226,7 @@ def test_export_html_renders_markdown_content_and_uses_restrained_message_style(
         ]
     )
 
-    html = export_service.export_html(payload)
+    html = export.export_html(payload)
 
     assert '<div class="message-body markdown-body">' in html
     assert "<h2>核心观点</h2>" in html
@@ -267,8 +247,8 @@ def test_export_html_can_include_or_hide_leading_thinking_content():
         "<think>**内部推理**\n\n- 检查定义</think>\n\n正式发言。"
     )
 
-    hidden = export_service.export_html(payload, ["debater_speeches"])
-    visible = export_service.export_html(payload, ["debater_speeches", "thinking_content"])
+    hidden = export.export_html(payload, ["debater_speeches"])
+    visible = export.export_html(payload, ["debater_speeches", "thinking_content"])
 
     assert "正式发言。" in hidden
     assert "内部推理" not in hidden
@@ -282,16 +262,14 @@ def test_export_html_can_include_or_hide_leading_thinking_content():
 
 
 def test_export_html_supports_category_filtered_sections():
-    html = export_service.export_html(
+    html = export.export_html(
         build_markdown_session_payload(),
-        ["jury_messages", "group_discussion", "judge_messages"],
+        ["consensus_summary", "judge_messages"],
     )
 
-    assert "组内讨论" in html
     assert "裁判消息" in html
-    assert "审判团消息" in html
-    assert "先巩固个性化学习的定义。" in html
-    assert "正方证据更完整。" in html
+    assert "共识收敛消息" in html
+    assert "双方都承认 AI 会重塑教学流程" in html
     assert "AI 可以显著提升个性化教学效果。" not in html
 
 
@@ -300,7 +278,7 @@ def test_export_html_escapes_agent_content():
     payload["topic"] = "<script>alert('topic')</script>"
     payload["dialogue_history"][0]["content"] = "<script>alert('xss')</script>\nhttps://example.com/path"
 
-    html = export_service.export_html(payload)
+    html = export.export_html(payload)
 
     assert "<script>alert('topic')</script>" not in html
     assert "<script>alert('xss')</script>" not in html
@@ -326,39 +304,3 @@ async def test_export_session_route_returns_html_response(monkeypatch):
     assert response.media_type == "text/html; charset=utf-8"
     assert response.headers["content-disposition"].endswith(".html")
     assert b"<!doctype html>" in response.body
-
-
-def test_export_runtime_events_snapshot_contains_checksum_and_full_event_list():
-    payload = export_service.export_runtime_events_snapshot(
-        [
-            {
-                "schema_version": "2026-03-17",
-                "event_id": "evt_1",
-                "session_id": "abc123def456",
-                "seq": 1,
-                "timestamp": "2026-03-18T10:00:00Z",
-                "source": "runtime.orchestrator",
-                "type": "status",
-                "phase": "context",
-                "payload": {"content": "准备中"},
-            },
-            {
-                "schema_version": "2026-03-17",
-                "event_id": "evt_2",
-                "session_id": "abc123def456",
-                "seq": 2,
-                "timestamp": "2026-03-18T10:00:01Z",
-                "source": "runtime.node.speaker",
-                "type": "speech_end",
-                "phase": "speaking",
-                "payload": {"role": "proposer", "content": "发言内容"},
-            },
-        ]
-    )
-
-    parsed = json.loads(payload)
-    assert parsed["version"] == "runtime-events.v1"
-    assert parsed["event_count"] == 2
-    assert parsed["trajectory_checksum"].startswith("fnv1a32-")
-    assert parsed["events"][1]["type"] == "speech_end"
-    assert parsed["events"][1]["payload"]["content"] == "发言内容"

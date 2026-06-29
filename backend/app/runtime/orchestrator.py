@@ -22,8 +22,6 @@ _PERSIST_NODES = frozenset(
         "advance_turn",
         "judge",
         "speaker",
-        "team_discussion",
-        "jury_discussion",
         "consensus",
         "sophistry_speaker",
         "sophistry_observer",
@@ -69,8 +67,6 @@ class DebateOrchestrator:
             "current_speaker": "",
             "current_speaker_index": -1,
             "dialogue_history": [],
-            "team_dialogue_history": [],
-            "jury_dialogue_history": [],
             "judge_history": [],
             "recent_dialogue_history": [],
             "shared_knowledge": [],
@@ -158,10 +154,6 @@ class DebateOrchestrator:
 
         final_state = dict(initial_state)
         prev_history_len = len(initial_state.get("dialogue_history", []))
-        prev_team_history_len = len(initial_state.get("team_dialogue_history", []))
-        prev_jury_history_len = len(initial_state.get("jury_dialogue_history", []))
-        prev_emitted_team_count = int(initial_state.get("emitted_team_discussion_count", 0) or 0)
-        prev_emitted_jury_count = int(initial_state.get("emitted_jury_discussion_count", 0) or 0)
         initial_knowledge = initial_state.get("shared_knowledge", [])
         prev_knowledge_len = len(initial_knowledge) if isinstance(initial_knowledge, list) else 0
         emitted_judge_keys: set[tuple[int, str]] = set()
@@ -172,12 +164,6 @@ class DebateOrchestrator:
                 node_name = state_snapshot.get("last_executed_node", "")
                 final_state = dict(state_snapshot)
                 final_state["last_progress_at"] = datetime.now(timezone.utc).isoformat()
-                prev_emitted_team_count = int(
-                    final_state.get("emitted_team_discussion_count", prev_emitted_team_count) or 0
-                )
-                prev_emitted_jury_count = int(
-                    final_state.get("emitted_jury_discussion_count", prev_emitted_jury_count) or 0
-                )
                 prev_knowledge_len = await self._events.emit_memory_updates(
                     session_id,
                     final_state,
@@ -206,18 +192,6 @@ class DebateOrchestrator:
                             final_state,
                             prev_history_len,
                         )
-                    elif node_name == "team_discussion":
-                        prev_team_history_len = await self._events.emit_team_discussion(
-                            session_id,
-                            final_state,
-                            max(prev_team_history_len, prev_emitted_team_count),
-                        )
-                    elif node_name == "jury_discussion":
-                        prev_jury_history_len = await self._events.emit_jury_discussion(
-                            session_id,
-                            final_state,
-                            max(prev_jury_history_len, prev_emitted_jury_count),
-                        )
                     elif node_name == "tool_executor":
                         await self._events.emit_fact_check(session_id, final_state)
                     elif node_name == "judge":
@@ -229,10 +203,10 @@ class DebateOrchestrator:
                     elif node_name == "advance_turn":
                         await self._events.emit_turn_complete(session_id, final_state)
                     elif node_name == "consensus":
-                        prev_jury_history_len = await self._events.emit_jury_discussion(
+                        prev_history_len = await self._events.emit_consensus_summary(
                             session_id,
                             final_state,
-                            max(prev_jury_history_len, prev_emitted_jury_count),
+                            prev_history_len,
                         )
 
                     next_status_node = self._events.predict_next_status_node(

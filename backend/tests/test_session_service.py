@@ -23,19 +23,13 @@ async def test_create_session():
     assert result["status"] == "pending"
     assert result["current_turn"] == 0
     assert len(result["id"]) == 12
-    assert result["team_config"] == {"agents_per_team": 0, "discussion_rounds": 0}
-    assert result["jury_config"] == {"agents_per_jury": 0, "discussion_rounds": 0}
     assert result["reasoning_config"] == {
-        "steelman_enabled": True,
-        "counterfactual_enabled": True,
         "consensus_enabled": True,
     }
     assert result["speech_config"] == {
         "proposer_max_chars": 0,
         "opposer_max_chars": 0,
     }
-    assert result["team_dialogue_history"] == []
-    assert result["jury_dialogue_history"] == []
 
 
 @pytest.mark.asyncio
@@ -281,35 +275,17 @@ async def test_create_session_persists_provider_identity(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_create_session_persists_team_config():
+async def test_create_session_persists_reasoning_config():
     created = await session_service.create_session(
         SessionCreate(
-            topic="Team config",
-            team_config={"agents_per_team": 4, "discussion_rounds": 3},
-        ),
-    )
-
-    assert created["team_config"] == {"agents_per_team": 4, "discussion_rounds": 3}
-
-
-@pytest.mark.asyncio
-async def test_create_session_persists_jury_and_reasoning_config():
-    created = await session_service.create_session(
-        SessionCreate(
-            topic="Jury config",
-            jury_config={"agents_per_jury": 5, "discussion_rounds": 2},
+            topic="Reasoning config",
             reasoning_config={
-                "steelman_enabled": False,
-                "counterfactual_enabled": True,
                 "consensus_enabled": False,
             },
         ),
     )
 
-    assert created["jury_config"] == {"agents_per_jury": 5, "discussion_rounds": 2}
     assert created["reasoning_config"] == {
-        "steelman_enabled": False,
-        "counterfactual_enabled": True,
         "consensus_enabled": False,
     }
 
@@ -345,11 +321,7 @@ async def test_create_sophistry_session_enforces_mode_specific_defaults():
         SessionCreate(
             topic="Sophistry mode",
             debate_mode="sophistry_experiment",
-            team_config={"agents_per_team": 4, "discussion_rounds": 2},
-            jury_config={"agents_per_jury": 3, "discussion_rounds": 2},
             reasoning_config={
-                "steelman_enabled": True,
-                "counterfactual_enabled": True,
                 "consensus_enabled": True,
             },
         ),
@@ -361,11 +333,7 @@ async def test_create_sophistry_session_enforces_mode_specific_defaults():
         "observer_enabled": True,
         "artifact_detail_level": "full",
     }
-    assert created["team_config"] == {"agents_per_team": 0, "discussion_rounds": 0}
-    assert created["jury_config"] == {"agents_per_jury": 0, "discussion_rounds": 0}
     assert created["reasoning_config"] == {
-        "steelman_enabled": False,
-        "counterfactual_enabled": False,
         "consensus_enabled": False,
     }
 
@@ -398,28 +366,6 @@ async def test_update_session_state_writes_round_json_file():
                     "timestamp": "2026-03-20T10:00:10Z",
                     "turn": 0,
                 },
-            ],
-            "team_dialogue_history": [
-                {
-                    "role": "team_summary",
-                    "agent_name": "Team Summary",
-                    "content": "Internal summary",
-                    "citations": [],
-                    "timestamp": "2026-03-20T09:59:50Z",
-                    "turn": 0,
-                    "discussion_kind": "team",
-                }
-            ],
-            "jury_dialogue_history": [
-                {
-                    "role": "jury_summary",
-                    "agent_name": "Jury Summary",
-                    "content": "Jury summary",
-                    "citations": [],
-                    "timestamp": "2026-03-20T10:00:20Z",
-                    "turn": 0,
-                    "discussion_kind": "jury",
-                }
             ],
             "judge_history": [
                 {

@@ -7,24 +7,8 @@ from typing import Any
 from app.models.schemas import DebateMode
 
 
-def default_team_config() -> dict[str, int]:
-    return {
-        "agents_per_team": 0,
-        "discussion_rounds": 0,
-    }
-
-
-def default_jury_config() -> dict[str, int]:
-    return {
-        "agents_per_jury": 0,
-        "discussion_rounds": 0,
-    }
-
-
 def default_reasoning_config() -> dict[str, bool]:
     return {
-        "steelman_enabled": True,
-        "counterfactual_enabled": True,
         "consensus_enabled": True,
     }
 

@@ -1,9 +1,4 @@
-"""Canonical agent tool entrypoints.
-
-New backend code should import from ``app.tools`` and ``app.tools.*``.
-The mirrored ``app.agents.skills`` package is kept only as a backward-
-compatibility shell for older imports.
-"""
+"""Agent tool entrypoints."""
 
 from langchain_core.tools import BaseTool
 
@@ -16,7 +11,7 @@ _SKILL_REGISTRY = {
 
 
 def get_all_skills() -> list[BaseTool]:
-    """Retrieve all registered tools from the canonical app.tools registry."""
+    """Retrieve all registered tools."""
     return list(_SKILL_REGISTRY.values())
 
 

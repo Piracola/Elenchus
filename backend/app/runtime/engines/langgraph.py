@@ -39,23 +39,15 @@ class LangGraphDebateEngine:
         if not isinstance(max_turns, int) or max_turns <= 0:
             max_turns = 5
 
-        team_config = initial_state.get("team_config", {})
-        agents_per_team = int(team_config.get("agents_per_team", 0) or 0)
-        discussion_rounds = int(team_config.get("discussion_rounds", 0) or 0)
-        team_multiplier = max(0, agents_per_team * discussion_rounds)
-        jury_config = initial_state.get("jury_config", {})
-        agents_per_jury = int(jury_config.get("agents_per_jury", 0) or 0)
-        jury_rounds = int(jury_config.get("discussion_rounds", 0) or 0)
-        jury_multiplier = max(0, agents_per_jury * jury_rounds)
         consensus_cost = 2 if bool((initial_state.get("reasoning_config", {}) or {}).get("consensus_enabled", True)) else 0
 
         if debate_mode == DebateMode.SOPHISTRY_EXPERIMENT.value:
             estimated_steps = max_turns * (len(participants) + 4) + 4
         else:
             # Worst-case estimate:
-            # per turn ~= manage_context + each speaker with optional team discussion + up to 2 tool loops
-            # + optional jury discussion + judge + advance_turn, plus an optional final consensus node.
-            estimated_steps = max_turns * ((7 + team_multiplier) * len(participants) + 3 + jury_multiplier)
+            # per turn ~= manage_context + each speaker + up to 2 tool loops + judge + advance_turn,
+            # plus an optional final consensus node.
+            estimated_steps = max_turns * (7 * len(participants) + 3)
             estimated_steps += consensus_cost
         recursion_limit = max(100, estimated_steps + 20)
 

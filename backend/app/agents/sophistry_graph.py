@@ -8,6 +8,7 @@ from langgraph.graph import END, StateGraph
 
 from app.agents.graph import (
     DebateGraphState,
+    _turn_limit_reached,
     node_advance_turn,
     node_manage_context,
     node_set_speaker,
@@ -49,6 +50,12 @@ def should_route_after_speaker(state: DebateGraphState) -> str:
     return "observer"
 
 
+def should_route_after_manage_context(state: DebateGraphState) -> str:
+    if _turn_limit_reached(state):
+        return "end" if state.get("final_mode_report") else "postmortem"
+    return "set_speaker"
+
+
 def should_continue_after_advance(state: DebateGraphState) -> str:
     current_turn = int(state.get("current_turn", 0) or 0)
     max_turns = int(state.get("max_turns", 5) or 5)
@@ -68,7 +75,15 @@ def build_sophistry_graph() -> StateGraph:
     graph.add_node("sophistry_postmortem", node_sophistry_postmortem)
 
     graph.set_entry_point("manage_context")
-    graph.add_edge("manage_context", "set_speaker")
+    graph.add_conditional_edges(
+        "manage_context",
+        should_route_after_manage_context,
+        {
+            "set_speaker": "set_speaker",
+            "postmortem": "sophistry_postmortem",
+            "end": END,
+        },
+    )
     graph.add_conditional_edges(
         "set_speaker",
         should_route_after_set_speaker,

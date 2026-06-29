@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import replace
 from typing import Any
 
 from app.db.db_utils import _gen_id, _utcnow
@@ -138,6 +139,24 @@ async def get_session_document_record(
 ) -> StoredSessionDocument | None:
     """Return the raw stored document record for internal workflows."""
     return read_document_record(session_id, document_id)
+
+
+async def mark_session_document_processed(
+    session_id: str,
+    document_id: str,
+) -> dict[str, Any] | None:
+    """Mark a decoded document ready for use as session context."""
+    record = read_document_record(session_id, document_id)
+    if record is None:
+        return None
+    updated = replace(
+        record,
+        status="processed",
+        error_message=None,
+        updated_at=_utcnow(),
+    )
+    write_document_record(updated)
+    return _record_to_dict(updated, include_content=True)
 
 
 async def list_session_documents(session_id: str) -> list[dict[str, Any]]:

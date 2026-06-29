@@ -264,35 +264,22 @@ def _collect_category_entries(session_data: dict[str, Any], categories: list[str
 
     participants_raw = session_data.get("participants", [])
     participants = {str(role) for role in participants_raw if isinstance(role, str) and role}
-    team_history = session_data.get("team_dialogue_history", [])
-    jury_history = session_data.get("jury_dialogue_history", [])
-
     category_entries: dict[str, list[dict[str, Any]]] = {
         "debater_speeches": [
             entry for entry in history if isinstance(entry, dict) and is_debater_speech_entry(entry, participants)
         ],
-        "group_discussion": [
-            entry for entry in team_history if isinstance(entry, dict)
-        ],
         "judge_messages": [
             entry for entry in history if isinstance(entry, dict) and str(entry.get("role", "")) == "judge"
         ],
-        "jury_messages": [
-            entry
-            for entry in jury_history
-            if isinstance(entry, dict) and str(entry.get("role", "")) != "consensus_summary"
-        ],
         "consensus_summary": [
             entry
-            for entry in jury_history
+            for entry in history
             if isinstance(entry, dict) and str(entry.get("role", "")) == "consensus_summary"
         ],
     }
     category_titles = {
         "debater_speeches": "辩手发言",
-        "group_discussion": "组内讨论",
         "judge_messages": "裁判消息",
-        "jury_messages": "审判团消息",
         "consensus_summary": "共识收敛消息",
     }
 
@@ -407,6 +394,60 @@ def _render_turn_nav(turns: list[int]) -> str:
         for turn in turns
     )
     return f'<nav class="turn-nav" aria-label="轮次导航">{links}</nav>'
+
+
+def _render_reading_map(
+    sections: list[tuple[str, str, list[dict[str, Any]]]],
+    *,
+    has_scores: bool,
+) -> str:
+    items: list[str] = []
+    for category, title, entries in sections:
+        if not entries:
+            continue
+        turn_numbers = sorted({
+            turn
+            for entry in entries
+            for turn in [_turn_number(entry)]
+            if turn is not None
+        })
+        if turn_numbers:
+            if len(turn_numbers) == 1:
+                detail = f"{len(entries)} 条 · 第 {turn_numbers[0]} 轮"
+            else:
+                detail = f"{len(entries)} 条 · 第 {turn_numbers[0]}-{turn_numbers[-1]} 轮"
+        else:
+            detail = f"{len(entries)} 条"
+        items.append(
+            '<a class="reading-map-card" '
+            f'href="#{_html(_slug(category))}">'
+            f'<span>{_html(title)}</span>'
+            f'<strong>{_html(detail)}</strong>'
+            "</a>"
+        )
+
+    if has_scores:
+        items.append(
+            '<a class="reading-map-card" href="#scores">'
+            "<span>评分走势</span>"
+            "<strong>综合分与逐轮变化</strong>"
+            "</a>"
+        )
+
+    if not items:
+        return ""
+
+    return f"""
+<section class="reading-map" aria-label="阅读地图">
+  <div class="reading-map-head">
+    <span>阅读地图</span>
+    <small>快速跳转到正文、裁判或评分区域</small>
+  </div>
+  <div class="reading-map-grid">
+    {"".join(items)}
+  </div>
+</section>
+""".strip()
 
 
 def _render_entry(entry: dict[str, Any], index: int, *, include_thinking: bool) -> str:
@@ -755,7 +796,7 @@ def _render_scores(session_data: dict[str, Any]) -> str:
     )
 
     return f"""
-<section class="score-section score-trend-section" aria-label="{_html(title)}">
+<section class="score-section score-trend-section" id="scores" aria-label="{_html(title)}">
   <div class="score-section-head">
     <div>
       <p class="section-kicker">评分</p>
@@ -924,6 +965,61 @@ h1 {
   font-weight: 760;
   font-variant-numeric: tabular-nums;
 }
+.reading-map {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.reading-map-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.reading-map-head span {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 760;
+}
+.reading-map-head small {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: right;
+}
+.reading-map-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+}
+.reading-map-card {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  color: inherit;
+  text-decoration: none;
+}
+.reading-map-card:hover {
+  background: var(--surface-hover);
+}
+.reading-map-card span {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 720;
+}
+.reading-map-card strong {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 620;
+  overflow-wrap: anywhere;
+}
 .toolbar {
   position: sticky;
   top: 0;
@@ -954,6 +1050,7 @@ h1 {
   background: var(--surface-hover);
 }
 .toolbar button:focus-visible,
+.reading-map-card:focus-visible,
 .turn-link:focus-visible,
 summary:focus-visible {
   outline: 2px solid var(--focus);
@@ -1227,6 +1324,7 @@ summary::-webkit-details-marker { display: none; }
 .markdown-body {
   color: var(--text);
   line-height: 1.72;
+  max-width: 76ch;
 }
 .markdown-body > :first-child {
   margin-top: 0;
@@ -1511,6 +1609,20 @@ summary::-webkit-details-marker { display: none; }
     padding: 6px;
     overflow: hidden;
   }
+  .reading-map {
+    margin: 12px 0;
+    padding: 14px;
+  }
+  .reading-map-head {
+    display: grid;
+    gap: 2px;
+  }
+  .reading-map-head small {
+    text-align: left;
+  }
+  .reading-map-grid {
+    grid-template-columns: 1fr;
+  }
   .toolbar button {
     flex: 0 0 auto;
     min-height: 30px;
@@ -1625,6 +1737,7 @@ def export_html(session_data: dict[str, Any], categories: list[str] | tuple[str,
     roles = _collect_roles(sections, participants if isinstance(participants, list) else [])
     speech_stats = _collect_speech_text_stats(session_data)
     topic = _plain(session_data.get("topic"), "未命名辩题")
+    scores_html = _render_scores(session_data)
     empty_state = '<section class="transcript-section"><h2>辩论正文</h2><p class="empty-content">暂无可导出的发言。</p></section>'
 
     return f"""<!doctype html>
@@ -1650,6 +1763,8 @@ def export_html(session_data: dict[str, Any], categories: list[str] | tuple[str,
       {_render_speech_stats(speech_stats)}
     </header>
 
+    {_render_reading_map(sections, has_scores=bool(scores_html))}
+
     <section class="toolbar" aria-label="阅读工具">
       <button type="button" data-action="expand-all">全部展开</button>
       <button type="button" data-action="collapse-all">全部收起</button>
@@ -1660,7 +1775,7 @@ def export_html(session_data: dict[str, Any], categories: list[str] | tuple[str,
 
     {transcript_html or empty_state}
 
-    {_render_scores(session_data)}
+    {scores_html}
 
     <footer class="footer">由 Elenchus 导出</footer>
   </main>
