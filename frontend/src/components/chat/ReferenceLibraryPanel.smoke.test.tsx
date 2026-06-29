@@ -7,7 +7,7 @@ vi.mock('./referenceLibrary/ReferenceLibraryPopover', () => ({
 vi.mock('../../api/client', () => ({
     api: {
         sessions: {
-            getReferenceLibrary: vi.fn(),
+            listDocuments: vi.fn(),
             uploadDocument: vi.fn(),
             deleteDocument: vi.fn(),
             get: vi.fn(),

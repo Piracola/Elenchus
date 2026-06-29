@@ -22,14 +22,6 @@ import {
 import { upsertSessionListItem } from '../utils/session/sessionList';
 import {
     applyRuntimeEventPatch,
-    createExitReplayPatch,
-    createFocusedRuntimeEventPatch,
-    createHydrateRuntimeEventsPatch,
-    createLoadRuntimeEventSnapshotPatch,
-    createPrependRuntimeEventsPatch,
-    createReplayCursorPatch,
-    createReplayEnabledPatch,
-    createReplayStepPatch,
 } from './debateStore.runtime';
 import {
     patchCollapsedKey,
@@ -44,12 +36,7 @@ export interface DebateSessionSlice {
 
 export interface DebateRuntimeSlice {
     runtimeEvents: RuntimeEvent[];
-    visibleRuntimeEvents: RuntimeEvent[];
     lastEventSeq: number;
-    focusedRuntimeEventId: string | null;
-    replayEnabled: boolean;
-    replayCursor: number;
-    hasOlderRuntimeEvents: boolean;
     isDocumentVisible: boolean;
     visibilityResumeToken: number;
     collapsedAgentMessagesBySession: Record<string, Record<string, boolean>>;
@@ -84,14 +71,6 @@ export interface DebateActionSlice {
     setPhase: (phase: DebatePhase, status?: string, node?: string) => void;
     markDocumentVisibility: (visible: boolean) => void;
     applyRuntimeEvent: (event: RuntimeEvent) => void;
-    setFocusedRuntimeEventId: (eventId: string | null) => void;
-    setReplayEnabled: (enabled: boolean) => void;
-    setReplayCursor: (cursor: number) => void;
-    stepReplay: (offset: number) => void;
-    exitReplay: () => void;
-    loadRuntimeEventSnapshot: (events: RuntimeEvent[]) => void;
-    hydrateRuntimeEvents: (events: RuntimeEvent[], hasOlderRuntimeEvents?: boolean) => void;
-    prependRuntimeEvents: (events: RuntimeEvent[], hasOlderRuntimeEvents?: boolean) => void;
     toggleAgentMessageCollapsed: (sessionId: string, collapseKey: string) => void;
     setAllAgentMessagesCollapsed: (sessionId: string, collapseKeys: string[], collapsed: boolean) => void;
     clearSessionCollapsedAgentMessages: (sessionId: string) => void;
@@ -123,12 +102,7 @@ const initialSessionState: DebateSessionSlice = {
 
 const initialRuntimeState: DebateRuntimeSlice = {
     runtimeEvents: [],
-    visibleRuntimeEvents: [],
     lastEventSeq: -1,
-    focusedRuntimeEventId: null,
-    replayEnabled: false,
-    replayCursor: -1,
-    hasOlderRuntimeEvents: false,
     isDocumentVisible: typeof document === 'undefined' ? true : document.visibilityState !== 'hidden',
     visibilityResumeToken: 0,
     collapsedAgentMessagesBySession: {},
@@ -169,8 +143,6 @@ function createInitialState() {
         sessions: [],
         currentSession: null,
         runtimeEvents: [],
-        visibleRuntimeEvents: [],
-        focusedRuntimeEventId: null,
         collapsedAgentMessagesBySession: {},
         lastSearchResults: [],
     };
@@ -228,12 +200,7 @@ export const useDebateStore = create<DebateState>((set) => ({
             return withSyncedSessionList(state, {
                 currentSession: safeSession,
                 runtimeEvents: [],
-                visibleRuntimeEvents: [],
                 lastEventSeq: -1,
-                focusedRuntimeEventId: null,
-                replayEnabled: false,
-                replayCursor: -1,
-                hasOlderRuntimeEvents: false,
                 streamingRole: '',
                 streamingContent: '',
                 streamingEntry: null,
@@ -261,22 +228,6 @@ export const useDebateStore = create<DebateState>((set) => ({
 
     applyRuntimeEvent: (event) =>
         set((state) => withSyncedSessionList(state, applyRuntimeEventPatch(state, event))),
-    setFocusedRuntimeEventId: (eventId) =>
-        set((state) => createFocusedRuntimeEventPatch(state, eventId)),
-    setReplayEnabled: (enabled) =>
-        set((state) => createReplayEnabledPatch(state, enabled)),
-    setReplayCursor: (cursor) =>
-        set((state) => createReplayCursorPatch(state, cursor)),
-    stepReplay: (offset) =>
-        set((state) => createReplayStepPatch(state, offset)),
-    exitReplay: () =>
-        set((state) => createExitReplayPatch(state)),
-    loadRuntimeEventSnapshot: (events) =>
-        set((state) => createLoadRuntimeEventSnapshotPatch(state, events)),
-    hydrateRuntimeEvents: (events, hasOlderRuntimeEvents = false) =>
-        set((state) => createHydrateRuntimeEventsPatch(state, events, hasOlderRuntimeEvents)),
-    prependRuntimeEvents: (events, hasOlderRuntimeEvents = false) =>
-        set((state) => createPrependRuntimeEventsPatch(state, events, hasOlderRuntimeEvents)),
 
     updateCurrentSessionAgentConfigs: (agentConfigs) =>
         set((state) => (

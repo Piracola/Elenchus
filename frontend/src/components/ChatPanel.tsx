@@ -37,10 +37,6 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
         isDocumentVisible,
         visibilityResumeToken,
         dialogueHistoryLength,
-        teamDialogueHistoryLength,
-        juryDialogueHistoryLength,
-        replayEnabled,
-        focusedRuntimeEventId,
         collapsedAgentMessages,
         transcriptViewModel,
         transcriptCollapseSummary,
@@ -51,12 +47,9 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
 
     const viewportMetrics = useChatViewportMetrics({
         currentSessionId,
-        replayEnabled,
         isDocumentVisible,
         visibilityResumeToken,
         dialogueHistoryLength,
-        teamDialogueHistoryLength,
-        juryDialogueHistoryLength,
         currentTurn,
         scrollRef,
         topOverlayRef,
@@ -65,13 +58,10 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
 
     const historyWindow = useChatHistoryWindow({
         currentSessionId,
-        replayEnabled,
-        focusedRuntimeEventId,
         transcriptViewModel,
         scrollRef,
         scrollTop: viewportMetrics.scrollTop,
         viewportHeight: viewportMetrics.viewportHeight,
-        smoothScrollSuppressed: viewportMetrics.smoothScrollSuppressed,
     });
 
     const isSophistryMode = debateMode === 'sophistry_experiment';
@@ -83,7 +73,7 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
         viewportMetrics.handleScroll();
 
         const container = scrollRef.current;
-        if (!container || replayEnabled) {
+        if (!container) {
             return;
         }
 
@@ -165,7 +155,7 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
                         collapsedAgentMessages={collapsedAgentMessages}
                         toggleAgentMessageCollapsed={toggleAgentMessageCollapsed}
                         consensusEntries={historyWindow.consensusEntries}
-                        consensusFocused={historyWindow.consensusFocused}
+                        liveTranscript={historyWindow.liveTranscript}
                     />
                 </div>
 

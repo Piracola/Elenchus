@@ -6,7 +6,7 @@ import MessageRow from './MessageRow';
 import RoundInsights from './RoundInsights';
 import StreamingMessage from './StreamingMessage';
 import type { VirtualVariableWindow } from '../../utils/virtualization/virtualWindow';
-import type { TranscriptRowViewModel } from '../../utils/chat/transcriptViewModel';
+import type { TranscriptRowViewModel, TranscriptViewModel } from '../../utils/chat/transcriptViewModel';
 import { isTranscriptAgentMessageCollapsed } from '../../utils/chat/transcriptViewModel';
 
 type ChatHistoryListProps = {
@@ -25,7 +25,7 @@ type ChatHistoryListProps = {
     collapsedAgentMessages: Record<string, boolean>;
     toggleAgentMessageCollapsed: (sessionId: string, collapseKey: string) => void;
     consensusEntries: DialogueEntry[];
-    consensusFocused: boolean;
+    liveTranscript: TranscriptViewModel['liveTranscript'];
 };
 
 export default function ChatHistoryList({
@@ -44,7 +44,7 @@ export default function ChatHistoryList({
     collapsedAgentMessages,
     toggleAgentMessageCollapsed,
     consensusEntries,
-    consensusFocused,
+    liveTranscript,
 }: ChatHistoryListProps) {
     // Get agent_configs from current session to resolve model info
     const { currentSession } = useConnectionViewState();
@@ -104,19 +104,18 @@ export default function ChatHistoryList({
             <div style={{ height: `${virtualWindow.paddingTop}px`, flexShrink: 0 }} />
             {virtualRows.map((viewModel, index) => {
                 const renderedIndex = virtualWindow.startIndex + index;
-                const rowFocused = viewModel.focus.agent || viewModel.focus.judge || viewModel.focus.system;
-                const animated = rowFocused || renderedIndex >= Math.max(0, renderedRowCount - 3);
+                const animated = renderedIndex >= Math.max(0, renderedRowCount - 3);
 
                 return (
                     <div key={viewModel.key} ref={setMeasuredRow(viewModel.key)}>
-                        <div data-row-focused={rowFocused ? 'true' : 'false'}>
+                        <div>
                             <MessageRow
                                 agentEntry={viewModel.row.agent}
                                 judgeEntry={viewModel.row.judge}
                                 systemEntry={viewModel.row.system}
-                                highlightAgent={viewModel.focus.agent}
-                                highlightJudge={viewModel.focus.judge}
-                                highlightSystem={viewModel.focus.system}
+                                highlightAgent={false}
+                                highlightJudge={false}
+                                highlightSystem={false}
                                 insightSections={viewModel.insightSections}
                                 animated={animated}
                                 agentCollapsed={isTranscriptAgentMessageCollapsed(viewModel.agentCollapseKey, collapsedAgentMessages)}
@@ -126,18 +125,13 @@ export default function ChatHistoryList({
                                 agentModel={viewModel.row.agent?.role ? modelByRole[viewModel.row.agent.role] : undefined}
                             />
                         </div>
-                        {!!viewModel.jurySections.length && (
-                            <div data-row-focused={viewModel.juryFocused ? 'true' : 'false'}>
-                                <RoundInsights sections={viewModel.jurySections} />
-                            </div>
-                        )}
                     </div>
                 );
             })}
             <div style={{ height: `${virtualWindow.paddingBottom}px`, flexShrink: 0 }} />
 
             {!!consensusEntries.length && (
-                <div data-row-focused={consensusFocused ? 'true' : 'false'}>
+                <div>
                     <RoundInsights
                         sections={[
                             {
@@ -151,8 +145,13 @@ export default function ChatHistoryList({
                 </div>
             )}
 
-            {/* 流式消息：实时显示辩手发言内容 */}
-            <StreamingMessage />
+            {liveTranscript.speech && (
+                <StreamingMessage
+                    entry={liveTranscript.speech.entry}
+                    content={liveTranscript.speech.content}
+                    status={liveTranscript.speech.status}
+                />
+            )}
         </div>
     );
 }

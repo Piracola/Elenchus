@@ -4,6 +4,7 @@ import {
     buildTranscriptViewModel,
     getTranscriptCollapseSummary,
 } from '../../utils/chat/transcriptViewModel';
+import { buildLiveTranscriptViewModel } from '../../utils/chat/liveTranscript';
 import type { DialogueGroupingState } from '../../utils/chat/groupDialogue';
 
 export function useTranscriptPanelState() {
@@ -20,12 +21,14 @@ export function useTranscriptPanelState() {
         isDocumentVisible,
         visibilityResumeToken,
         dialogueHistory,
-        teamDialogueHistory,
-        juryDialogueHistory,
         participants,
-        visibleRuntimeEvents,
-        replayEnabled,
-        focusedRuntimeEventId,
+        runtimeEvents,
+        streamingEntry,
+        streamingContent,
+        phase,
+        currentStatus,
+        currentNode,
+        isDebating,
         collapsedAgentMessages,
     } = useTranscriptViewState();
     const { setAllAgentMessagesCollapsed } = useTranscriptActions();
@@ -33,46 +36,45 @@ export function useTranscriptPanelState() {
 
     useEffect(() => {
         transcriptGroupingStateRef.current = null;
-    }, [currentSessionId, participants, replayEnabled]);
-
-    const focusedRuntimeEvent = useMemo(
-        () => (
-            focusedRuntimeEventId
-                ? visibleRuntimeEvents.find((event) => event.event_id === focusedRuntimeEventId) ?? null
-                : null
-        ),
-        [focusedRuntimeEventId, visibleRuntimeEvents],
-    );
-
-    const visibleEventIds = useMemo(
-        () => (replayEnabled ? new Set(visibleRuntimeEvents.map((event) => event.event_id)) : null),
-        [replayEnabled, visibleRuntimeEvents],
-    );
+    }, [currentSessionId, participants]);
 
     const transcriptViewModel = useMemo(() => {
+        const liveTranscript = buildLiveTranscriptViewModel({
+            currentSessionId,
+            currentTurn,
+            participants,
+            dialogueHistory,
+            runtimeEvents,
+            streamingEntry,
+            streamingContent,
+            phase,
+            currentNode,
+            currentStatus,
+            isDebating,
+        });
         const viewModel = buildTranscriptViewModel({
             dialogueHistory,
-            teamDialogueHistory,
-            juryDialogueHistory,
             participants,
-            replayEnabled,
-            visibleEventIds,
-            focusedRuntimeEvent,
+            liveTranscript,
             // eslint-disable-next-line react-hooks/refs -- preserve the previous grouping snapshot across renders
-            previousGroupingState: replayEnabled ? null : transcriptGroupingStateRef.current,
+            previousGroupingState: transcriptGroupingStateRef.current,
         });
 
         // eslint-disable-next-line react-hooks/refs -- cache the latest grouping snapshot for the next render
-        transcriptGroupingStateRef.current = replayEnabled ? null : viewModel.groupingState;
+        transcriptGroupingStateRef.current = viewModel.groupingState;
         return viewModel;
     }, [
+        currentNode,
+        currentSessionId,
+        currentStatus,
+        currentTurn,
         dialogueHistory,
-        focusedRuntimeEvent,
-        juryDialogueHistory,
+        isDebating,
         participants,
-        replayEnabled,
-        teamDialogueHistory,
-        visibleEventIds,
+        phase,
+        runtimeEvents,
+        streamingContent,
+        streamingEntry,
     ]);
 
     const transcriptCollapseSummary = useMemo(
@@ -104,10 +106,6 @@ export function useTranscriptPanelState() {
         isDocumentVisible,
         visibilityResumeToken,
         dialogueHistoryLength: dialogueHistory.length,
-        teamDialogueHistoryLength: teamDialogueHistory.length,
-        juryDialogueHistoryLength: juryDialogueHistory.length,
-        replayEnabled,
-        focusedRuntimeEventId,
         collapsedAgentMessages,
         transcriptViewModel,
         transcriptCollapseSummary,

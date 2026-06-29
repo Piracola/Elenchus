@@ -8,10 +8,6 @@ import HomeView from './HomeView';
 
 let animationFrameQueue: Array<{ id: number; callback: FrameRequestCallback }> = [];
 let nextAnimationFrameId = 1;
-const demoModeState = {
-    demoMode: false,
-    isAdmin: false,
-};
 let mockOffsetTop = 240;
 let nowTime = 10_000;
 let createSessionMock: ReturnType<typeof vi.fn>;
@@ -73,9 +69,7 @@ vi.mock('../hooks/useAgentConfigs', () => ({
             showAdvanced,
             setShowAdvanced,
             savedConfigs: [],
-            agentPersonas: [],
             selectedConfigIds: {},
-            selectedPersonaIds: {},
             temperatureInputs: {},
             showConfigManager: false,
             setShowConfigManager: vi.fn(),
@@ -83,7 +77,6 @@ vi.mock('../hooks/useAgentConfigs', () => ({
             error: null,
             reload: vi.fn(),
             handleConfigSelect: vi.fn(),
-            handlePersonaSelect: vi.fn(),
             handleTemperatureChange: vi.fn(),
             buildAgentConfigs: () => ({}),
         };
@@ -104,13 +97,6 @@ vi.mock('../stores/settingsStore', () => ({
         displaySettings: {
             messageFontSize: 15,
         },
-    }),
-}));
-
-vi.mock('../stores/demoModeStore', () => ({
-    useDemoModeStore: () => ({
-        demoMode: demoModeState.demoMode,
-        isAdmin: demoModeState.isAdmin,
     }),
 }));
 
@@ -271,7 +257,6 @@ describe('HomeView auto scroll', () => {
     afterEach(() => {
         cleanup();
         vi.restoreAllMocks();
-        demoModeState.demoMode = false;
     });
 
     it('does not auto-scroll on first render', () => {
@@ -330,23 +315,6 @@ describe('HomeView auto scroll', () => {
         });
 
         expect(HTMLElement.prototype.scrollTo).not.toHaveBeenCalled();
-    });
-
-    it('keeps the advanced panel hidden in demo mode without triggering scroll', () => {
-        demoModeState.demoMode = true;
-
-        render(<HomeView isSidebarCollapsed={false} onExpandSidebar={() => {}} />);
-
-        fireEvent.click(screen.getByRole('button', { name: 'Toggle advanced' }));
-
-        act(() => {
-            flushAnimationFrames();
-        });
-
-        expect(screen.queryByTestId('agent-config-panel')).toBeNull();
-        expect(HTMLElement.prototype.scrollTo).not.toHaveBeenCalled();
-
-        demoModeState.demoMode = false;
     });
 
     it('clamps the advanced panel scroll target to the top of the page on small layouts', () => {

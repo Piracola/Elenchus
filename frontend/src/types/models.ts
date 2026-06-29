@@ -69,21 +69,6 @@ export interface AgentConfigResult {
     max_input_tokens?: number;
     max_tokens?: number;
     custom_parameters?: Record<string, unknown>;
-    persona_id?: string;
-    persona_name?: string;
-    persona_filename?: string;
     custom_name?: string;
     custom_prompt?: string;
-}
-
-export interface AgentPersonaSummary {
-    id: string;
-    name: string;
-    description: string;
-    roles: string[];
-    filename: string;
-}
-
-export interface AgentPersonaDetail extends AgentPersonaSummary {
-    content: string;
 }

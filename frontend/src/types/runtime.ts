@@ -18,14 +18,7 @@ export type WSMessageType =
     | 'system'
     | 'mode_notice'
     | 'status'
-    | 'team_discussion'
-    | 'team_summary'
-    | 'jury_discussion'
-    | 'jury_summary'
     | 'consensus_summary'
-    | 'discussion_stream_start'
-    | 'discussion_stream_token'
-    | 'discussion_stream_cancel'
     | 'sophistry_round_report'
     | 'sophistry_final_report'
     | 'speech_start'
@@ -77,12 +70,4 @@ export interface RuntimeEvent {
     type: WSMessageType | string;
     phase?: DebatePhase;
     payload: Record<string, unknown>;
-}
-
-export interface RuntimeEventPage {
-    events: RuntimeEvent[];
-    total: number;
-    limit: number;
-    has_more: boolean;
-    next_before_seq: number | null;
 }

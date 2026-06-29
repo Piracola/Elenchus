@@ -8,21 +8,13 @@ export type InsightSection = {
     title: string;
     accent: string;
     entries: DialogueEntry[];
+    defaultCollapsed?: boolean;
+    loadingLabel?: string;
 };
 
 type RoundInsightsProps = {
     sections: InsightSection[];
 };
-
-function renderMeta(entry: DialogueEntry): string | null {
-    if (entry.role === 'team_member') {
-        return entry.team_specialty || null;
-    }
-    if (entry.role === 'jury_member') {
-        return entry.jury_perspective || null;
-    }
-    return null;
-}
 
 function areSectionsEqual(previous: InsightSection[], next: InsightSection[]): boolean {
     if (previous === next) return true;
@@ -35,6 +27,8 @@ function areSectionsEqual(previous: InsightSection[], next: InsightSection[]): b
             previousSection.key !== nextSection.key
             || previousSection.title !== nextSection.title
             || previousSection.accent !== nextSection.accent
+            || previousSection.defaultCollapsed !== nextSection.defaultCollapsed
+            || previousSection.loadingLabel !== nextSection.loadingLabel
             || previousSection.entries.length !== nextSection.entries.length
         ) {
             return false;
@@ -65,7 +59,13 @@ function RoundInsights({ sections }: RoundInsightsProps) {
             }}
         >
             {sections.map((section) => {
-                const collapsed = collapsedSections[section.key] ?? true;
+                const collapsed = collapsedSections[section.key] ?? (section.defaultCollapsed ?? true);
+                const toggleCollapsed = () => {
+                    setCollapsedSections((prev) => ({
+                        ...prev,
+                        [section.key]: !collapsed,
+                    }));
+                };
 
                 return (
                     <section
@@ -79,24 +79,61 @@ function RoundInsights({ sections }: RoundInsightsProps) {
                             boxShadow: 'var(--shadow-xs)',
                         }}
                     >
-                        <div
+                        <button
+                            type="button"
+                            aria-expanded={!collapsed}
+                            onClick={toggleCollapsed}
                             style={{
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
                                 gap: '12px',
+                                width: '100%',
+                                border: 0,
+                                padding: 0,
+                                background: 'transparent',
+                                color: 'inherit',
+                                textAlign: 'left',
+                                cursor: 'pointer',
                                 flexWrap: 'wrap',
                             }}
                         >
-                            <strong
-                                style={{
-                                    color: 'var(--text-primary)',
-                                    fontSize: '13px',
-                                    letterSpacing: '0.01em',
-                                }}
-                            >
-                                {section.title}
-                            </strong>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <strong
+                                    style={{
+                                        color: 'var(--text-primary)',
+                                        fontSize: '13px',
+                                        letterSpacing: '0.01em',
+                                    }}
+                                >
+                                    {section.title}
+                                </strong>
+                                {section.loadingLabel && (
+                                    <span
+                                        aria-live="polite"
+                                        style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '5px',
+                                            color: 'var(--accent-emerald)',
+                                            fontSize: '11px',
+                                            fontWeight: 600,
+                                        }}
+                                    >
+                                        <span
+                                            aria-hidden="true"
+                                            style={{
+                                                width: '6px',
+                                                height: '6px',
+                                                borderRadius: '50%',
+                                                background: 'var(--accent-emerald)',
+                                                animation: 'pulse 1s ease-in-out infinite',
+                                            }}
+                                        />
+                                        {section.loadingLabel}
+                                    </span>
+                                )}
+                            </div>
                             <div
                                 style={{
                                     display: 'inline-flex',
@@ -107,13 +144,7 @@ function RoundInsights({ sections }: RoundInsightsProps) {
                                 <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
                                     {section.entries.length} 条
                                 </span>
-                                <button
-                                    onClick={() => {
-                                        setCollapsedSections((prev) => ({
-                                            ...prev,
-                                            [section.key]: !collapsed,
-                                        }));
-                                    }}
+                                <span
                                     style={{
                                         display: 'inline-flex',
                                         alignItems: 'center',
@@ -125,19 +156,17 @@ function RoundInsights({ sections }: RoundInsightsProps) {
                                         color: 'var(--text-secondary)',
                                         fontSize: '11px',
                                         fontWeight: 600,
-                                        cursor: 'pointer',
                                     }}
                                 >
                                     {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
                                     {collapsed ? '展开' : '收起'}
-                                </button>
+                                </span>
                             </div>
-                        </div>
+                        </button>
 
                         {!collapsed && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
                                 {section.entries.map((entry, index) => {
-                                    const meta = renderMeta(entry);
                                     return (
                                         <div
                                             key={entry.event_id ?? `${section.key}-${index}`}
@@ -166,11 +195,6 @@ function RoundInsights({ sections }: RoundInsightsProps) {
                                                 >
                                                     {entry.agent_name || entry.role}
                                                 </span>
-                                                {meta && (
-                                                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                                                        {meta}
-                                                    </span>
-                                                )}
                                             </div>
                                             <div
                                                 className="markdown-body"

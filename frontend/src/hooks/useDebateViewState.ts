@@ -48,11 +48,6 @@ export function useRuntimeViewState() {
     const currentSessionId = useDebateStore((state) => state.currentSession?.id ?? null);
     const currentTopic = useDebateStore((state) => state.currentSession?.topic ?? '');
     const runtimeEvents = useForegroundDebateSelector((state) => state.runtimeEvents);
-    const visibleRuntimeEvents = useForegroundDebateSelector((state) => state.visibleRuntimeEvents);
-    const replayEnabled = useForegroundDebateSelector((state) => state.replayEnabled);
-    const replayCursor = useForegroundDebateSelector((state) => state.replayCursor);
-    const focusedRuntimeEventId = useForegroundDebateSelector((state) => state.focusedRuntimeEventId);
-    const hasOlderRuntimeEvents = useForegroundDebateSelector((state) => state.hasOlderRuntimeEvents);
     const phase = useForegroundDebateSelector((state) => state.phase);
     const currentStatus = useForegroundDebateSelector((state) => state.currentStatus);
     const currentNode = useForegroundDebateSelector((state) => state.currentNode);
@@ -66,11 +61,6 @@ export function useRuntimeViewState() {
         currentTopic,
         runtimeEvents,
         runtimeEventCount: runtimeEvents.length,
-        visibleRuntimeEvents,
-        replayEnabled,
-        replayCursor,
-        focusedRuntimeEventId,
-        hasOlderRuntimeEvents,
         phase,
         currentStatus,
         currentNode,
@@ -79,28 +69,17 @@ export function useRuntimeViewState() {
     };
 }
 
-export function useRuntimeActions() {
-    return useDebateStore(useShallow((state) => ({
-        setFocusedRuntimeEventId: state.setFocusedRuntimeEventId,
-        setReplayEnabled: state.setReplayEnabled,
-        setReplayCursor: state.setReplayCursor,
-        stepReplay: state.stepReplay,
-        exitReplay: state.exitReplay,
-        loadRuntimeEventSnapshot: state.loadRuntimeEventSnapshot,
-        hydrateRuntimeEvents: state.hydrateRuntimeEvents,
-        prependRuntimeEvents: state.prependRuntimeEvents,
-    })));
-}
-
 export function useTranscriptViewState() {
     const { currentSessionId, debateMode, participants, currentTurn, maxTurns, modeArtifactsLength } = useSessionViewState();
     const { isDocumentVisible, visibilityResumeToken } = useChatUiState();
     const dialogueHistory = useForegroundDebateSelector((state) => state.currentSession?.dialogue_history ?? []);
-    const teamDialogueHistory = useForegroundDebateSelector((state) => state.currentSession?.team_dialogue_history ?? []);
-    const juryDialogueHistory = useForegroundDebateSelector((state) => state.currentSession?.jury_dialogue_history ?? []);
-    const visibleRuntimeEvents = useForegroundDebateSelector((state) => state.visibleRuntimeEvents);
-    const replayEnabled = useForegroundDebateSelector((state) => state.replayEnabled);
-    const focusedRuntimeEventId = useForegroundDebateSelector((state) => state.focusedRuntimeEventId);
+    const runtimeEvents = useForegroundDebateSelector((state) => state.runtimeEvents);
+    const streamingEntry = useForegroundDebateSelector((state) => state.streamingEntry);
+    const streamingContent = useForegroundDebateSelector((state) => state.streamingContent);
+    const phase = useForegroundDebateSelector((state) => state.phase);
+    const currentStatus = useForegroundDebateSelector((state) => state.currentStatus);
+    const currentNode = useForegroundDebateSelector((state) => state.currentNode);
+    const isDebating = useForegroundDebateSelector((state) => state.isDebating);
     const collapsedAgentMessages = useDebateStore((state) => (
         getCollapsedAgentMessagesForSession(state, currentSessionId)
     ));
@@ -115,11 +94,13 @@ export function useTranscriptViewState() {
         isDocumentVisible,
         visibilityResumeToken,
         dialogueHistory,
-        teamDialogueHistory,
-        juryDialogueHistory,
-        visibleRuntimeEvents,
-        replayEnabled,
-        focusedRuntimeEventId,
+        runtimeEvents,
+        streamingEntry,
+        streamingContent,
+        phase,
+        currentStatus,
+        currentNode,
+        isDebating,
         collapsedAgentMessages,
     };
 }

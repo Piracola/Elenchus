@@ -3,16 +3,11 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentConfigs } from '../hooks/useAgentConfigs';
 import { useSessionCreate } from '../hooks/useSessionCreate';
 import { useSettingsStore } from '../stores/settingsStore';
-import { useDemoModeStore } from '../stores/demoModeStore';
 import { getMessageFontTokens } from '../config/display';
 import type { DebateMode } from '../types';
 import {
-    parseJuryAgentsInput,
-    parseJuryDiscussionRoundsInput,
     parseMaxTurnsInput,
     parseSpeechMaxCharsInput,
-    parseTeamAgentsInput,
-    parseTeamDiscussionRoundsInput,
 } from '../utils/agent/debateSession';
 import { HomeComposerCard } from './home/HomeComposerCard';
 import type { PendingReferenceDocument } from './home/HomeComposerCard';
@@ -49,44 +44,30 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
     const [topic, setTopic] = useState('');
     const [debateMode, setDebateMode] = useState<DebateMode>('standard');
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
-    const [teamAgentsInput, setTeamAgentsInput] = useState('');
-    const [teamRoundsInput, setTeamRoundsInput] = useState('');
-    const [juryAgentsInput, setJuryAgentsInput] = useState('');
-    const [juryRoundsInput, setJuryRoundsInput] = useState('');
     const [proposerSpeechLimitInput, setProposerSpeechLimitInput] = useState('');
     const [opposerSpeechLimitInput, setOpposerSpeechLimitInput] = useState('');
-    const [steelmanEnabled, setSteelmanEnabled] = useState(true);
     const [pendingDocuments, setPendingDocuments] = useState<PendingReferenceDocument[]>([]);
     const { isCreating, error: createError, createSession, clearError } = useSessionCreate();
     const {
         showAdvanced,
         setShowAdvanced,
         savedConfigs,
-        agentPersonas,
         selectedConfigIds,
-        selectedPersonaIds,
         temperatureInputs,
         showConfigManager,
         setShowConfigManager,
         error: agentConfigsError,
         handleConfigSelect,
-        handlePersonaSelect,
         handleTemperatureChange,
         buildAgentConfigs,
     } = useAgentConfigs();
-    const { demoMode, isAdmin } = useDemoModeStore();
-    const isInDemo = demoMode && !isAdmin;
-    const advancedPanelVisible = showAdvanced && !isInDemo;
+    const advancedPanelVisible = showAdvanced;
 
     const isSophistryMode = debateMode === 'sophistry_experiment';
     const { displaySettings } = useSettingsStore();
     const messageFontSize = displaySettings.messageFontSize ?? 15;
     const homeFontSizes = useMemo(() => getMessageFontTokens(messageFontSize).home, [messageFontSize]);
     const maxTurns = parseMaxTurnsInput(maxTurnsInput);
-    const teamAgents = parseTeamAgentsInput(teamAgentsInput);
-    const teamDiscussionRounds = parseTeamDiscussionRoundsInput(teamRoundsInput);
-    const juryAgents = parseJuryAgentsInput(juryAgentsInput);
-    const juryDiscussionRounds = parseJuryDiscussionRoundsInput(juryRoundsInput);
     const proposerSpeechLimit = parseSpeechMaxCharsInput(proposerSpeechLimitInput);
     const opposerSpeechLimit = parseSpeechMaxCharsInput(opposerSpeechLimitInput);
 
@@ -167,9 +148,8 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
     }, [advancedPanelVisible]);
 
     const handleShowAdvancedChange = (nextShowAdvanced: boolean) => {
-        const nextAdvancedPanelVisible = nextShowAdvanced && !isInDemo;
         pendingAdvancedScrollRef.current =
-            nextAdvancedPanelVisible && !advancedPanelVisible
+            nextShowAdvanced && !advancedPanelVisible
                 ? 'open'
                 : null;
         setShowAdvanced(nextShowAdvanced);
@@ -186,20 +166,10 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                 maxTurns,
                 buildAgentConfigs(),
                 isSophistryMode
-                    ? { agents_per_team: 0, discussion_rounds: 0 }
-                    : { agents_per_team: teamAgents, discussion_rounds: teamDiscussionRounds },
-                isSophistryMode
-                    ? { agents_per_jury: 0, discussion_rounds: 0 }
-                    : { agents_per_jury: juryAgents, discussion_rounds: juryDiscussionRounds },
-                isSophistryMode
                     ? {
-                        steelman_enabled: false,
-                        counterfactual_enabled: false,
                         consensus_enabled: false,
                     }
                     : {
-                        steelman_enabled: steelmanEnabled,
-                        counterfactual_enabled: true,
                         consensus_enabled: true,
                     },
                 {
@@ -362,13 +332,8 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                         isSophistryMode={isSophistryMode}
                         showAdvanced={showAdvanced}
                         maxTurnsInput={maxTurnsInput}
-                        teamAgentsInput={teamAgentsInput}
-                        teamRoundsInput={teamRoundsInput}
-                        juryAgentsInput={juryAgentsInput}
-                        juryRoundsInput={juryRoundsInput}
                         proposerSpeechLimitInput={proposerSpeechLimitInput}
                         opposerSpeechLimitInput={opposerSpeechLimitInput}
-                        steelmanEnabled={steelmanEnabled}
                         homeFontSizes={homeFontSizes}
                         pendingDocuments={pendingDocuments}
                         onDebateModeChange={setDebateMode}
@@ -381,13 +346,8 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                         }}
                         onShowAdvancedChange={handleShowAdvancedChange}
                         onMaxTurnsChange={setMaxTurnsInput}
-                        onTeamAgentsChange={setTeamAgentsInput}
-                        onTeamRoundsChange={setTeamRoundsInput}
-                        onJuryAgentsChange={setJuryAgentsInput}
-                        onJuryRoundsChange={setJuryRoundsInput}
                         onProposerSpeechLimitChange={setProposerSpeechLimitInput}
                         onOpposerSpeechLimitChange={setOpposerSpeechLimitInput}
-                        onSteelmanToggle={() => setSteelmanEnabled((value) => !value)}
                         onCreateDebate={() => {
                             void handleCreateDebate();
                         }}
@@ -405,7 +365,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                     }}
                 >
                     <AnimatePresence initial={false}>
-                        {isSophistryMode && !isInDemo && (
+                        {isSophistryMode && (
                             <motion.div
                                 key="sophistry-notice"
                                 initial={{ opacity: 0, height: 0, y: -10 }}
@@ -444,14 +404,11 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                             )}
                             <AgentConfigPanel
                                 savedConfigs={savedConfigs}
-                                agentPersonas={agentPersonas}
                                 selectedConfigIds={selectedConfigIds}
-                                selectedPersonaIds={selectedPersonaIds}
                                 temperatureInputs={temperatureInputs}
                                 showConfigManager={showConfigManager}
                                 setShowConfigManager={setShowConfigManager}
                                 handleConfigSelect={handleConfigSelect}
-                                handlePersonaSelect={handlePersonaSelect}
                                 handleTemperatureChange={handleTemperatureChange}
                             />
                         </motion.div>

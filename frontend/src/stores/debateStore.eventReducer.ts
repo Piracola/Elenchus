@@ -17,7 +17,6 @@ import {
     sanitizeRuntimeEvent,
     shouldRecordRuntimeEvent,
 } from '../utils/agent/debateStoreHelpers';
-import { clampReplayCursor, getVisibleRuntimeEvents } from '../utils/runtime/replay';
 import type { DebateState } from './debateStore';
 
 function createRecordedRuntimePatch(
@@ -37,31 +36,8 @@ function createRecordedRuntimePatch(
     const trimmedEvents = didTrim
         ? nextRuntimeEvents.slice(-MAX_RUNTIME_EVENTS)
         : nextRuntimeEvents;
-    const nextReplayCursor = state.replayEnabled
-        ? clampReplayCursor(state.replayCursor, trimmedEvents.length)
-        : clampReplayCursor(trimmedEvents.length - 1, trimmedEvents.length);
-    const visibleRuntimeEvents = getVisibleRuntimeEvents(
-        trimmedEvents,
-        state.replayEnabled,
-        nextReplayCursor,
-    );
 
     patch.runtimeEvents = trimmedEvents;
-    patch.visibleRuntimeEvents = visibleRuntimeEvents;
-    patch.replayCursor = nextReplayCursor;
-    patch.hasOlderRuntimeEvents = state.hasOlderRuntimeEvents || didTrim;
-
-    if (
-        state.focusedRuntimeEventId &&
-        !trimmedEvents.some((item) => item.event_id === state.focusedRuntimeEventId)
-    ) {
-        patch.focusedRuntimeEventId =
-            state.replayEnabled && nextReplayCursor >= 0
-                ? trimmedEvents[nextReplayCursor].event_id
-                : null;
-    } else if (state.replayEnabled && !state.focusedRuntimeEventId && nextReplayCursor >= 0) {
-        patch.focusedRuntimeEventId = trimmedEvents[nextReplayCursor].event_id;
-    }
 
     return patch;
 }
@@ -102,34 +78,22 @@ function handleStatus(
     return patch;
 }
 
-function createTeamDiscussionEntry(
-    payload: Record<string, unknown>,
-    event: RuntimeEvent,
-): DialogueEntry {
-    return {
-        role: getPayloadString(payload, 'role') ?? (event.type === 'team_summary' ? 'team_summary' : 'team_member'),
-        agent_name: getPayloadString(payload, 'agent_name') ?? '',
-        content: sanitizeIncomingContent(getPayloadString(payload, 'content')),
-        citations: getPayloadCitations(payload),
-        timestamp: event.timestamp || new Date().toISOString(),
-        event_id: event.event_id,
-        turn: getPayloadNumber(payload, 'turn'),
-        discussion_kind: getPayloadString(payload, 'discussion_kind'),
-        team_side: getPayloadString(payload, 'team_side'),
-        team_round: getPayloadNumber(payload, 'team_round'),
-        team_member_index: getPayloadNumber(payload, 'team_member_index'),
-        team_specialty: getPayloadString(payload, 'team_specialty'),
-        source_role: getPayloadString(payload, 'source_role'),
-    };
-}
-
-function handleTeamDiscussion(
+function handleConsensusSummary(
     state: DebateState,
     payload: Record<string, unknown>,
     event: RuntimeEvent,
 ): Partial<DebateState> {
     if (!state.currentSession) return {};
-    const entry = createTeamDiscussionEntry(payload, event);
+    const entry: DialogueEntry = {
+        role: getPayloadString(payload, 'role') ?? 'consensus_summary',
+        agent_name: getPayloadString(payload, 'agent_name') ?? '共识收敛员',
+        content: sanitizeIncomingContent(getPayloadString(payload, 'content')),
+        citations: getPayloadCitations(payload),
+        timestamp: event.timestamp || new Date().toISOString(),
+        event_id: event.event_id,
+        turn: getPayloadNumber(payload, 'turn'),
+        discussion_kind: getPayloadString(payload, 'discussion_kind') ?? 'consensus',
+    };
 
     return {
         streamingRole: '',
@@ -137,55 +101,8 @@ function handleTeamDiscussion(
         streamingEntry: null,
         currentSession: {
             ...state.currentSession,
-            team_dialogue_history: appendDialogueWithDedupe(
-                state.currentSession.team_dialogue_history,
-                entry,
-            ),
-        },
-    };
-}
-
-function createJuryDiscussionEntry(
-    payload: Record<string, unknown>,
-    event: RuntimeEvent,
-): DialogueEntry {
-    const fallbackRole =
-        event.type === 'jury_summary'
-            ? 'jury_summary'
-            : event.type === 'consensus_summary'
-                ? 'consensus_summary'
-                : 'jury_member';
-    return {
-        role: getPayloadString(payload, 'role') ?? fallbackRole,
-        agent_name: getPayloadString(payload, 'agent_name') ?? '',
-        content: sanitizeIncomingContent(getPayloadString(payload, 'content')),
-        citations: getPayloadCitations(payload),
-        timestamp: event.timestamp || new Date().toISOString(),
-        event_id: event.event_id,
-        turn: getPayloadNumber(payload, 'turn'),
-        discussion_kind: getPayloadString(payload, 'discussion_kind'),
-        jury_round: getPayloadNumber(payload, 'jury_round'),
-        jury_member_index: getPayloadNumber(payload, 'jury_member_index'),
-        jury_perspective: getPayloadString(payload, 'jury_perspective'),
-    };
-}
-
-function handleJuryDiscussion(
-    state: DebateState,
-    payload: Record<string, unknown>,
-    event: RuntimeEvent,
-): Partial<DebateState> {
-    if (!state.currentSession) return {};
-    const entry = createJuryDiscussionEntry(payload, event);
-
-    return {
-        streamingRole: '',
-        streamingContent: '',
-        streamingEntry: null,
-        currentSession: {
-            ...state.currentSession,
-            jury_dialogue_history: appendDialogueWithDedupe(
-                state.currentSession.jury_dialogue_history,
+            dialogue_history: appendDialogueWithDedupe(
+                state.currentSession.dialogue_history,
                 entry,
             ),
         },
@@ -252,37 +169,6 @@ function handleSpeechEnd(
         dialogue_history: appendDialogueWithDedupe(state.currentSession.dialogue_history, entry),
     };
     return patch;
-}
-
-function handleDiscussionStreamStart(
-    _state: DebateState,
-    payload: Record<string, unknown>,
-    event: RuntimeEvent,
-): Partial<DebateState> {
-    const kind = getPayloadString(payload, 'discussion_kind') ?? 'team';
-    const entry = kind === 'jury'
-        ? createJuryDiscussionEntry(payload, event)
-        : createTeamDiscussionEntry(payload, event);
-    return {
-        isDebating: true,
-        streamingRole: entry.role,
-        streamingContent: '',
-        streamingEntry: {
-            ...entry,
-            content: '',
-        },
-    };
-}
-
-function handleDiscussionStreamToken(
-    state: DebateState,
-    payload: Record<string, unknown>,
-): Partial<DebateState> {
-    return handleSpeechToken(state, payload);
-}
-
-function handleDiscussionStreamCancel(): Partial<DebateState> {
-    return { streamingRole: '', streamingContent: '', streamingEntry: null };
 }
 
 function handleSophistryReport(
@@ -511,14 +397,7 @@ const eventHandlers: Record<string, EventHandler> = {
     system: handleSystem,
     mode_notice: handleSystem,
     status: handleStatus,
-    team_discussion: handleTeamDiscussion,
-    team_summary: handleTeamDiscussion,
-    jury_discussion: handleJuryDiscussion,
-    jury_summary: handleJuryDiscussion,
-    consensus_summary: handleJuryDiscussion,
-    discussion_stream_start: handleDiscussionStreamStart,
-    discussion_stream_token: handleDiscussionStreamToken,
-    discussion_stream_cancel: handleDiscussionStreamCancel,
+    consensus_summary: handleConsensusSummary,
     speech_start: handleSpeechStart,
     speech_token: handleSpeechToken,
     speech_cancel: handleSpeechCancel,

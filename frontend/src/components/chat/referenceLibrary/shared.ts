@@ -1,8 +1,7 @@
-import type { DocumentStatus, ReferenceLibraryResponse } from '../../../types';
+import type { DocumentStatus, SessionDocumentsResponse } from '../../../types';
 
-export const EMPTY_LIBRARY: ReferenceLibraryResponse = {
+export const EMPTY_LIBRARY: SessionDocumentsResponse = {
     documents: [],
-    entries: [],
 };
 
 export type ReferenceLibraryPanelProps = {
@@ -56,12 +55,4 @@ export function getStatusMeta(status: DocumentStatus): {
 
 export function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : '参考资料操作失败';
-}
-
-export function countEntriesByDocumentId(referenceLibrary: ReferenceLibraryResponse): Record<string, number> {
-    const entryCountByDocumentId: Record<string, number> = {};
-    for (const entry of referenceLibrary.entries) {
-        entryCountByDocumentId[entry.document_id] = (entryCountByDocumentId[entry.document_id] ?? 0) + 1;
-    }
-    return entryCountByDocumentId;
 }

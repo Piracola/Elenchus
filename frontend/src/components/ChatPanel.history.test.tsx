@@ -81,10 +81,6 @@ vi.mock('./chat/DebaterSettingsModal', () => ({
     default: () => null,
 }));
 
-vi.mock('./chat/RuntimeInspectorDock', () => ({
-    default: () => <div data-testid="runtime-inspector-dock" />,
-}));
-
 vi.mock('./chat/RoundInsights', () => ({
     default: () => <div data-testid="round-insights" />,
 }));
@@ -178,15 +174,9 @@ function makeSession(overrides: Partial<Session> = {}): Session {
         created_at: '2026-03-17T00:00:00+00:00',
         updated_at: '2026-03-17T00:00:00+00:00',
         dialogue_history: Array.from({ length: 180 }, (_, index) => makeDialogueEntry(index)),
-        team_dialogue_history: [],
-        jury_dialogue_history: [],
         current_scores: {},
         cumulative_scores: {},
-        team_config: { agents_per_team: 0, discussion_rounds: 0 },
-        jury_config: { agents_per_jury: 0, discussion_rounds: 0 },
         reasoning_config: {
-            steelman_enabled: true,
-            counterfactual_enabled: true,
             consensus_enabled: true,
         },
         mode_artifacts: [],
@@ -317,13 +307,12 @@ describe('ChatPanel history rendering', () => {
         expect(screen.getAllByTestId('message-row').length).toBeGreaterThan(0);
     });
 
-    it('renders the fixed runtime inspector dock below the header actions', async () => {
+    it('renders reference controls without the runtime inspector dock', async () => {
         useDebateStore.getState().setCurrentSession(makeSession());
 
         render(<ChatPanel isSidebarCollapsed={false} onExpandSidebar={() => {}} />);
         await flushLayout();
 
-        expect(screen.getByTestId('runtime-inspector-dock')).toBeInTheDocument();
         expect(screen.queryByText('参考资料')).toBeInTheDocument();
     });
 });

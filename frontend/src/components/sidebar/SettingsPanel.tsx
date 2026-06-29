@@ -4,15 +4,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Database, Monitor, Search, Terminal, X } from 'lucide-react';
 import { api } from '../../api/client';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { useDemoModeStore } from '../../stores/demoModeStore';
 import { useModelConfigManager } from '../../hooks/useModelConfigManager';
 import { SearchConfigTab } from './SearchConfigTab';
 import type { LogLevel } from '../../types';
 import { SettingsDisplayTab } from './settings/SettingsDisplayTab';
 import { SettingsLoggingTab } from './settings/SettingsLoggingTab';
 import { SettingsProvidersTab } from './settings/SettingsProvidersTab';
-import { DemoModelsList } from './settings/DemoModelsList';
-import { DemoFeatureNotice } from './settings/DemoFeatureNotice';
 import './settings/settings.css';
 
 export type SettingsTab = 'providers' | 'display' | 'logging' | 'search';
@@ -72,12 +69,9 @@ export default function SettingsPanel({
 }: Props) {
     const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
     const { logLevel, setLogLevel, displaySettings, setDisplaySettings } = useSettingsStore();
-    const { demoMode, isAdmin } = useDemoModeStore();
 
     // Use the extracted hook for provider management
     const modelConfig = useModelConfigManager();
-
-    const isInDemoMode = demoMode && !isAdmin;
 
     useEffect(() => {
         if (isOpen) {
@@ -110,41 +104,33 @@ export default function SettingsPanel({
 
     const renderActiveTab = () => {
         if (activeTab === 'providers') {
-            return isInDemoMode
-                ? <DemoModelsList />
-                : (
-                    <SettingsProvidersTab
-                        modelConfig={modelConfig}
-                        onClose={onClose}
-                    />
-                );
+            return (
+                <SettingsProvidersTab
+                    modelConfig={modelConfig}
+                    onClose={onClose}
+                />
+            );
         }
 
         if (activeTab === 'display') {
-            return isInDemoMode
-                ? <DemoFeatureNotice feature="显示设置" />
-                : (
-                    <SettingsDisplayTab
-                        displaySettings={displaySettings}
-                        setDisplaySettings={setDisplaySettings}
-                    />
-                );
+            return (
+                <SettingsDisplayTab
+                    displaySettings={displaySettings}
+                    setDisplaySettings={setDisplaySettings}
+                />
+            );
         }
 
         if (activeTab === 'logging') {
-            return isInDemoMode
-                ? <DemoFeatureNotice feature="日志级别" />
-                : (
-                    <SettingsLoggingTab
-                        logLevel={logLevel}
-                        onLogLevelChange={handleLogLevelChange}
-                    />
-                );
+            return (
+                <SettingsLoggingTab
+                    logLevel={logLevel}
+                    onLogLevelChange={handleLogLevelChange}
+                />
+            );
         }
 
-        return isInDemoMode
-            ? <DemoModelsList />
-            : <SearchConfigTab />;
+        return <SearchConfigTab />;
     };
 
     const modalContent = (

@@ -10,7 +10,7 @@ const mockSetCurrentSession = vi.fn();
 vi.mock('../../../api/client', () => ({
     api: {
         sessions: {
-            getReferenceLibrary: vi.fn(),
+            listDocuments: vi.fn(),
             uploadDocument: vi.fn(),
             deleteDocument: vi.fn(),
             get: vi.fn(),
@@ -49,22 +49,6 @@ function makeLibrary() {
                 normalized_text: '# Outline',
             },
         ],
-        entries: [
-            {
-                id: 'entry_1',
-                session_id: 'session_reference',
-                document_id: 'doc_1',
-                entry_type: 'reference_summary' as const,
-                title: 'Summary',
-                content: 'Layered control summary',
-                payload: {},
-                importance: 2,
-                source_section: null,
-                source_order: 0,
-                created_at: '2026-03-25T00:00:00Z',
-                updated_at: '2026-03-25T00:00:00Z',
-            },
-        ],
     };
 }
 
@@ -81,21 +65,15 @@ function makeSession() {
         created_at: '2026-03-25T00:00:00Z',
         updated_at: '2026-03-25T00:00:00Z',
         dialogue_history: [],
-        team_dialogue_history: [],
-        jury_dialogue_history: [],
         current_scores: {},
         cumulative_scores: {},
-        team_config: { agents_per_team: 0, discussion_rounds: 0 },
-        jury_config: { agents_per_jury: 0, discussion_rounds: 0 },
         reasoning_config: {
-            steelman_enabled: true,
-            counterfactual_enabled: true,
             consensus_enabled: true,
         },
         mode_artifacts: [],
         current_mode_report: null,
         final_mode_report: null,
-        shared_knowledge: [{ type: 'reference_summary', content: 'New reference summary' }],
+        shared_knowledge: [{ type: 'context', content: 'New reference context' }],
     };
 }
 
@@ -107,7 +85,7 @@ afterEach(() => {
 
 describe('useReferenceLibraryPanelState', () => {
     it('loads reference library after opening the panel', async () => {
-        sessionsApi.getReferenceLibrary.mockResolvedValue(makeLibrary());
+        sessionsApi.listDocuments.mockResolvedValue(makeLibrary());
 
         const { result } = renderHook(() => useReferenceLibraryPanelState({ currentSessionId: 'session_reference' }));
 
@@ -119,7 +97,7 @@ describe('useReferenceLibraryPanelState', () => {
             expect(result.current.hasLoaded).toBe(true);
         });
 
-        expect(sessionsApi.getReferenceLibrary).toHaveBeenCalledWith('session_reference');
+        expect(sessionsApi.listDocuments).toHaveBeenCalledWith('session_reference');
         expect(result.current.referenceLibrary.documents[0]?.filename).toBe('outline.md');
     });
 
@@ -140,7 +118,7 @@ describe('useReferenceLibraryPanelState', () => {
         };
 
         sessionsApi.uploadDocument.mockResolvedValue(refreshedLibrary.documents[1]);
-        sessionsApi.getReferenceLibrary.mockResolvedValue(refreshedLibrary);
+        sessionsApi.listDocuments.mockResolvedValue(refreshedLibrary);
         sessionsApi.get.mockResolvedValue(makeSession());
 
         const { result } = renderHook(() => useReferenceLibraryPanelState({ currentSessionId: 'session_reference' }));
@@ -158,7 +136,7 @@ describe('useReferenceLibraryPanelState', () => {
         });
 
         expect(sessionsApi.uploadDocument).toHaveBeenCalledWith('session_reference', file);
-        expect(sessionsApi.getReferenceLibrary).toHaveBeenCalledWith('session_reference');
+        expect(sessionsApi.listDocuments).toHaveBeenCalledWith('session_reference');
         expect(sessionsApi.get).toHaveBeenCalledWith('session_reference');
         expect(toastMock).toHaveBeenCalledWith('参考资料已上传：notes.md', 'success');
         expect(mockSetCurrentSession).toHaveBeenCalledWith(expect.objectContaining({

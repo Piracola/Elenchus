@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { resolveHistoryRowStart, revealFocusedHistoryRow } from '../../utils/chat/chatHistoryWindow';
+import { resolveHistoryRowStart } from '../../utils/chat/chatHistoryWindow';
 import { computeVariableVirtualWindow } from '../../utils/virtualization/virtualWindow';
 import type { TranscriptViewModel } from '../../utils/chat/transcriptViewModel';
 
@@ -8,32 +8,24 @@ const HISTORY_ROW_BATCH_SIZE = 80;
 const CHAT_ROW_OVERSCAN = 5;
 const DEFAULT_CHAT_ROW_HEIGHT = 320;
 const CHAT_ROW_HEIGHT_JITTER_PX = 1;
-const CHAT_SCROLL_EPSILON = 2;
 
 type UseChatHistoryWindowArgs = {
     currentSessionId: string | null;
-    replayEnabled: boolean;
-    focusedRuntimeEventId: string | null;
     transcriptViewModel: TranscriptViewModel;
     scrollRef: RefObject<HTMLDivElement | null>;
     scrollTop: number;
     viewportHeight: number;
-    smoothScrollSuppressed: boolean;
 };
 
 export function useChatHistoryWindow({
     currentSessionId,
-    replayEnabled,
-    focusedRuntimeEventId,
     transcriptViewModel,
     scrollRef,
     scrollTop,
     viewportHeight,
-    smoothScrollSuppressed,
 }: UseChatHistoryWindowArgs) {
     const previousRowsLengthRef = useRef(0);
     const previousSessionIdRef = useRef<string | null | undefined>(undefined);
-    const previousReplayEnabledRef = useRef<boolean | undefined>(undefined);
     const pendingHistoryPrependScrollHeightRef = useRef<number | null>(null);
     const measureObserversRef = useRef<Map<string, ResizeObserver>>(new Map());
     const measureCallbacksRef = useRef<Map<string, (node: HTMLDivElement | null) => void>>(new Map());
@@ -58,30 +50,26 @@ export function useChatHistoryWindow({
         const sessionId = currentSessionId;
         const rowsLength = transcriptViewModel.rows.length;
         const sessionChanged = previousSessionIdRef.current !== sessionId;
-        const replayChanged = previousReplayEnabledRef.current !== replayEnabled;
 
         setHistoryRowStart((currentStart) => resolveHistoryRowStart({
             currentStart,
             rowsLength,
             previousRowsLength: previousRowsLengthRef.current,
-            replayEnabled,
             sessionChanged,
-            replayChanged,
             initialWindowSize: INITIAL_HISTORY_ROW_WINDOW,
         }));
 
         previousSessionIdRef.current = sessionId;
-        previousReplayEnabledRef.current = replayEnabled;
         previousRowsLengthRef.current = rowsLength;
-    }, [currentSessionId, replayEnabled, transcriptViewModel.rows.length]);
+    }, [currentSessionId, transcriptViewModel.rows.length]);
 
     const renderedRowViewModels = useMemo(
-        () => (replayEnabled || historyRowStart <= 0
+        () => (historyRowStart <= 0
             ? transcriptViewModel.rowViewModels
             : transcriptViewModel.rowViewModels.slice(historyRowStart)),
-        [historyRowStart, replayEnabled, transcriptViewModel.rowViewModels],
+        [historyRowStart, transcriptViewModel.rowViewModels],
     );
-    const hiddenHistoryRowCount = replayEnabled ? 0 : historyRowStart;
+    const hiddenHistoryRowCount = historyRowStart;
 
     const estimateRowHeight = useCallback((index: number) => {
         const viewModel = renderedRowViewModels[index];
@@ -90,7 +78,7 @@ export function useChatHistoryWindow({
         }
 
         const baseHeight = viewModel.row.system ? 96 : 260;
-        const insightCount = viewModel.insightSections.length + viewModel.jurySections.length;
+        const insightCount = viewModel.insightSections.length;
         return baseHeight + insightCount * 64;
     }, [renderedRowViewModels]);
 
@@ -113,10 +101,6 @@ export function useChatHistoryWindow({
         () => renderedRowViewModels.slice(virtualWindow.startIndex, virtualWindow.endIndex),
         [renderedRowViewModels, virtualWindow.endIndex, virtualWindow.startIndex],
     );
-
-    const getRenderedRowTop = useCallback((index: number) => (
-        virtualItemHeights.slice(0, index).reduce((sum, height) => sum + height, 0)
-    ), [virtualItemHeights]);
 
     const flushPendingRowHeights = useCallback(() => {
         rowHeightFlushFrameRef.current = null;
@@ -231,12 +215,12 @@ export function useChatHistoryWindow({
 
     const loadOlderHistoryRows = useCallback(() => {
         const container = scrollRef.current;
-        if (!container || replayEnabled || hiddenHistoryRowCount <= 0) return;
+        if (!container || hiddenHistoryRowCount <= 0) return;
         if (pendingHistoryPrependScrollHeightRef.current !== null) return;
 
         pendingHistoryPrependScrollHeightRef.current = container.scrollHeight;
         setHistoryRowStart((currentStart) => Math.max(0, currentStart - HISTORY_ROW_BATCH_SIZE));
-    }, [hiddenHistoryRowCount, replayEnabled, scrollRef]);
+    }, [hiddenHistoryRowCount, scrollRef]);
 
     useLayoutEffect(() => {
         const previousScrollHeight = pendingHistoryPrependScrollHeightRef.current;
@@ -250,66 +234,6 @@ export function useChatHistoryWindow({
         pendingHistoryPrependScrollHeightRef.current = null;
     }, [renderedRowViewModels.length, scrollRef, virtualWindow.paddingBottom, virtualWindow.paddingTop]);
 
-    useEffect(() => {
-        if (replayEnabled || !focusedRuntimeEventId || transcriptViewModel.focusedRowIndex < 0) {
-            return;
-        }
-
-        queueMicrotask(() => {
-            setHistoryRowStart((currentStart) => revealFocusedHistoryRow(currentStart, transcriptViewModel.focusedRowIndex));
-        });
-    }, [focusedRuntimeEventId, replayEnabled, transcriptViewModel.focusedRowIndex]);
-
-    useEffect(() => {
-        if (!focusedRuntimeEventId) return;
-        const container = scrollRef.current;
-        if (!container) return;
-
-        const target = container.querySelector('[data-row-focused="true"]') as HTMLElement | null;
-        if (target) {
-            const containerRect = container.getBoundingClientRect();
-            const targetRect = target.getBoundingClientRect();
-            const targetAlreadyVisible = targetRect.top >= containerRect.top + CHAT_SCROLL_EPSILON
-                && targetRect.bottom <= containerRect.bottom - CHAT_SCROLL_EPSILON;
-            if (!targetAlreadyVisible) {
-                target.scrollIntoView({
-                    block: 'center',
-                    behavior: smoothScrollSuppressed ? 'auto' : 'smooth',
-                });
-            }
-            return;
-        }
-
-        const renderedFocusedIndex = replayEnabled
-            ? transcriptViewModel.focusedRowIndex
-            : transcriptViewModel.focusedRowIndex - historyRowStart;
-        if (renderedFocusedIndex < 0) {
-            return;
-        }
-
-        const top = getRenderedRowTop(renderedFocusedIndex);
-        const height = virtualItemHeights[renderedFocusedIndex] ?? DEFAULT_CHAT_ROW_HEIGHT;
-        const targetScrollTop = Math.max(0, top - (container.clientHeight / 2) + (height / 2));
-        if (Math.abs(container.scrollTop - targetScrollTop) <= CHAT_SCROLL_EPSILON) {
-            return;
-        }
-        container.scrollTo({
-            top: targetScrollTop,
-            behavior: smoothScrollSuppressed ? 'auto' : 'smooth',
-        });
-    }, [
-        focusedRuntimeEventId,
-        getRenderedRowTop,
-        historyRowStart,
-        replayEnabled,
-        scrollRef,
-        smoothScrollSuppressed,
-        transcriptViewModel.focusedRowIndex,
-        virtualItemHeights,
-        virtualRows,
-        viewportHeight,
-    ]);
-
     return {
         renderedRowViewModels,
         hiddenHistoryRowCount,
@@ -318,6 +242,6 @@ export function useChatHistoryWindow({
         loadOlderHistoryRows,
         setMeasuredRow,
         consensusEntries: transcriptViewModel.consensusEntries,
-        consensusFocused: transcriptViewModel.consensusFocused,
+        liveTranscript: transcriptViewModel.liveTranscript,
     };
 }

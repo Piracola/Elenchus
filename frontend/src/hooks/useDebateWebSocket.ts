@@ -222,8 +222,6 @@ export function useDebateWebSocket(sessionId: string | null) {
         async (topic: string, participants: string[], maxTurns: number) => {
             const store = getStore();
             const previousSession = store.currentSession;
-            store.exitReplay();
-            store.setFocusedRuntimeEventId(null);
             if (previousSession) {
                 store.setCurrentSession({
                     ...previousSession,

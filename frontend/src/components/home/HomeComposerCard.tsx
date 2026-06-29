@@ -23,11 +23,7 @@ import type { DebateMode } from '../../types';
 import { toast } from '../../utils/chat/toast';
 import {
     DEFAULT_MAX_TURNS,
-    DEFAULT_JURY_AGENTS_PER_JURY,
-    DEFAULT_JURY_DISCUSSION_ROUNDS,
     DEFAULT_SPEECH_MAX_CHARS,
-    DEFAULT_TEAM_AGENTS_PER_TEAM,
-    DEFAULT_TEAM_DISCUSSION_ROUNDS,
 } from '../../utils/agent/debateSession';
 import { HOME_MODE_OPTIONS, type HomeFontSizes } from './shared';
 
@@ -82,13 +78,8 @@ type HomeComposerCardProps = {
     isSophistryMode: boolean;
     showAdvanced: boolean;
     maxTurnsInput: string;
-    teamAgentsInput: string;
-    teamRoundsInput: string;
-    juryAgentsInput: string;
-    juryRoundsInput: string;
     proposerSpeechLimitInput: string;
     opposerSpeechLimitInput: string;
-    steelmanEnabled: boolean;
     homeFontSizes: HomeFontSizes;
     pendingDocuments: PendingReferenceDocument[];
     onDebateModeChange: (mode: DebateMode) => void;
@@ -96,13 +87,8 @@ type HomeComposerCardProps = {
     onTopicChange: (value: string) => void;
     onShowAdvancedChange: (show: boolean) => void;
     onMaxTurnsChange: (value: string) => void;
-    onTeamAgentsChange: (value: string) => void;
-    onTeamRoundsChange: (value: string) => void;
-    onJuryAgentsChange: (value: string) => void;
-    onJuryRoundsChange: (value: string) => void;
     onProposerSpeechLimitChange: (value: string) => void;
     onOpposerSpeechLimitChange: (value: string) => void;
-    onSteelmanToggle: () => void;
     onCreateDebate: () => void;
 };
 
@@ -205,13 +191,8 @@ export function HomeComposerCard({
     isSophistryMode,
     showAdvanced,
     maxTurnsInput,
-    teamAgentsInput,
-    teamRoundsInput,
-    juryAgentsInput,
-    juryRoundsInput,
     proposerSpeechLimitInput,
     opposerSpeechLimitInput,
-    steelmanEnabled,
     homeFontSizes,
     pendingDocuments,
     onDebateModeChange,
@@ -219,13 +200,8 @@ export function HomeComposerCard({
     onTopicChange,
     onShowAdvancedChange,
     onMaxTurnsChange,
-    onTeamAgentsChange,
-    onTeamRoundsChange,
-    onJuryAgentsChange,
-    onJuryRoundsChange,
     onProposerSpeechLimitChange,
     onOpposerSpeechLimitChange,
-    onSteelmanToggle,
     onCreateDebate,
 }: HomeComposerCardProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -307,8 +283,6 @@ export function HomeComposerCard({
     const modeIcon = isSophistryMode ? FlaskConical : Scale;
     const ActiveModeIcon = modeIcon;
     const maxTurnsLabel = displayValue(maxTurnsInput, DEFAULT_MAX_TURNS);
-    const teamAgentsLabel = displayValue(teamAgentsInput, DEFAULT_TEAM_AGENTS_PER_TEAM);
-    const juryAgentsLabel = displayValue(juryAgentsInput, DEFAULT_JURY_AGENTS_PER_JURY);
     const proposerSpeechLimitLabel = displayValue(proposerSpeechLimitInput, DEFAULT_SPEECH_MAX_CHARS);
     const opposerSpeechLimitLabel = displayValue(opposerSpeechLimitInput, DEFAULT_SPEECH_MAX_CHARS);
     const speechLimitLabel =
@@ -317,14 +291,7 @@ export function HomeComposerCard({
             : `发言 正${proposerSpeechLimitLabel} / 反${opposerSpeechLimitLabel}`;
     const summaryItems = isSophistryMode
         ? [`${maxTurnsLabel} 轮`, speechLimitLabel, '诡辩观察', `资料 ${documentCount}`]
-        : [
-            `${maxTurnsLabel} 轮`,
-            speechLimitLabel,
-            `组内 ${teamAgentsLabel}`,
-            `陪审 ${juryAgentsLabel}`,
-            `资料 ${documentCount}`,
-            steelmanEnabled ? '钢人论证 开' : '钢人论证 关',
-        ];
+        : [`${maxTurnsLabel} 轮`, speechLimitLabel, `资料 ${documentCount}`];
 
     return (
         <motion.div
@@ -625,7 +592,7 @@ export function HomeComposerCard({
                                         marginTop: '2px',
                                     }}
                                 >
-                                    这些选项会影响辩论流程、协作规模和参考资料。
+                                    这些选项会影响辩论流程、发言长度和参考资料。
                                 </div>
                             </div>
                         </div>
@@ -642,30 +609,6 @@ export function HomeComposerCard({
                                         max={100}
                                         onChange={onMaxTurnsChange}
                                     />
-                                    {!isSophistryMode && (
-                                        <label style={fieldLabelStyle}>
-                                            <span>钢人论证</span>
-                                            <button
-                                                type="button"
-                                                onClick={onSteelmanToggle}
-                                                style={{
-                                                    ...quietButtonStyle,
-                                                    width: '100%',
-                                                    height: '34px',
-                                                    justifyContent: 'space-between',
-                                                    background: steelmanEnabled ? 'var(--accent-indigo-alpha)' : 'var(--bg-card)',
-                                                    color: steelmanEnabled ? 'var(--accent-indigo)' : 'var(--text-secondary)',
-                                                    borderColor: 'transparent',
-                                                }}
-                                                className="home-composer-card__toggle"
-                                            >
-                                                钢人论证
-                                                <span style={{ fontSize: '11px', fontWeight: 800 }}>
-                                                    {steelmanEnabled ? 'ON' : 'OFF'}
-                                                </span>
-                                            </button>
-                                        </label>
-                                    )}
                                 </div>
                                 {isSophistryMode && (
                                     <div
@@ -714,46 +657,6 @@ export function HomeComposerCard({
                                     填 0 或留空表示不限；该限制会作为辩手发言提示词生效。
                                 </div>
                             </section>
-
-                            {!isSophistryMode && (
-                                <section style={sectionStyle}>
-                                    <div style={sectionTitleStyle}>协作规模</div>
-                                    <div className="home-composer-card__collaboration-grid">
-                                        <NumberField
-                                            label="组内智能体"
-                                            value={teamAgentsInput}
-                                            placeholder={DEFAULT_TEAM_AGENTS_PER_TEAM}
-                                            min={0}
-                                            max={10}
-                                            onChange={onTeamAgentsChange}
-                                        />
-                                        <NumberField
-                                            label="组内轮数"
-                                            value={teamRoundsInput}
-                                            placeholder={DEFAULT_TEAM_DISCUSSION_ROUNDS}
-                                            min={0}
-                                            max={10}
-                                            onChange={onTeamRoundsChange}
-                                        />
-                                        <NumberField
-                                            label="陪审智能体"
-                                            value={juryAgentsInput}
-                                            placeholder={DEFAULT_JURY_AGENTS_PER_JURY}
-                                            min={0}
-                                            max={10}
-                                            onChange={onJuryAgentsChange}
-                                        />
-                                        <NumberField
-                                            label="陪审轮数"
-                                            value={juryRoundsInput}
-                                            placeholder={DEFAULT_JURY_DISCUSSION_ROUNDS}
-                                            min={0}
-                                            max={10}
-                                            onChange={onJuryRoundsChange}
-                                        />
-                                    </div>
-                                </section>
-                            )}
 
                             <section style={{ ...sectionStyle, position: 'relative' }}>
                                 <div

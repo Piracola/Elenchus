@@ -6,7 +6,6 @@ import type { MarkdownExportCategory } from '../../types';
 import { toast } from '../../utils/chat/toast';
 import StatusBanner from './StatusBanner';
 import ReferenceLibraryPanel from './ReferenceLibraryPanel';
-import RuntimeInspectorDock from './RuntimeInspectorDock';
 import SidebarExpandButton from '../shared/SidebarExpandButton';
 import DebaterSettingsModal from './DebaterSettingsModal';
 import {
@@ -18,9 +17,7 @@ import {
 
 const EXPORT_CONTENT_OPTIONS: { value: MarkdownExportCategory; label: string }[] = [
   { value: 'thinking_content', label: '思维链' },
-  { value: 'group_discussion', label: '组内讨论' },
   { value: 'judge_messages', label: '裁判消息' },
-  { value: 'jury_messages', label: '陪审团消息' },
   { value: 'consensus_summary', label: '共识收敛消息' },
 ];
 
@@ -233,10 +230,8 @@ export default function ChatHeaderOverlay({
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                padding: '4px 8px',
-                background: '#FFFFFF',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-lg)',
+                minWidth: 0,
+                maxWidth: 'min(48vw, 540px)',
                 flexShrink: 0,
               }}
             >
@@ -487,8 +482,6 @@ export default function ChatHeaderOverlay({
                   </div>
                 )}
               </div>
-
-              {currentSessionId && <RuntimeInspectorDock currentSessionId={currentSessionId} />}
               <div style={{ marginLeft: 'auto' }} />
 
               <span

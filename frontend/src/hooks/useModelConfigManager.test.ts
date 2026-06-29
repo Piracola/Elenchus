@@ -108,7 +108,7 @@ describe('useModelConfigManager', () => {
             result.current.startNew();
         });
         await act(async () => {
-            result.current.updateFormField('apiKey', 'sk-demo');
+            result.current.updateFormField('apiKey', 'sk-test');
         });
         modelsApi.fetchRemoteModels.mockResolvedValueOnce({
             models: ['gpt-4o', 'claude-sonnet-4'],

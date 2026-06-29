@@ -15,16 +15,11 @@ vi.mock('../api/client', async () => {
                 ...actual.api.models,
                 list: vi.fn(),
             },
-            agentPersonas: {
-                ...actual.api.agentPersonas,
-                list: vi.fn(),
-            },
         },
     };
 });
 
 const modelsListMock = vi.mocked(api.models.list);
-const personasListMock = vi.mocked(api.agentPersonas.list);
 
 const modelFixture = [{
     id: 'provider-1',
@@ -40,29 +35,17 @@ const modelFixture = [{
     updated_at: '2026-05-10T00:00:00Z',
 }];
 
-const personaFixture = [{
-    id: 'persona-1',
-    name: 'Analyst',
-    description: 'Balanced analyst',
-    roles: ['proposer'],
-    filename: 'analyst.md',
-}];
-
 afterEach(() => {
     cleanup();
     vi.clearAllMocks();
 });
 
 describe('useAgentConfigs', () => {
-    it('exposes loading state and resolved data on initial load', async () => {
+    it('exposes loading state and resolved model configs on initial load', async () => {
         let resolveModels: ((value: typeof modelFixture) => void) | undefined;
-        let resolvePersonas: ((value: typeof personaFixture) => void) | undefined;
 
         modelsListMock.mockImplementation(() => new Promise((resolve) => {
             resolveModels = resolve;
-        }));
-        personasListMock.mockImplementation(() => new Promise((resolve) => {
-            resolvePersonas = resolve;
         }));
 
         const { result } = renderHook(() => useAgentConfigs());
@@ -74,7 +57,6 @@ describe('useAgentConfigs', () => {
 
         await act(async () => {
             resolveModels?.(modelFixture);
-            resolvePersonas?.(personaFixture);
         });
 
         await waitFor(() => {
@@ -82,14 +64,11 @@ describe('useAgentConfigs', () => {
         });
 
         expect(result.current.savedConfigs).toEqual(modelFixture);
-        expect(result.current.agentPersonas).toEqual(personaFixture);
         expect(modelsListMock).toHaveBeenCalledTimes(1);
-        expect(personasListMock).toHaveBeenCalledTimes(1);
     });
 
-    it('surfaces fetch failures as consumable error state without dropping successful data', async () => {
-        modelsListMock.mockResolvedValue(modelFixture);
-        personasListMock.mockRejectedValue(new Error('personas failed'));
+    it('surfaces model fetch failures as consumable error state', async () => {
+        modelsListMock.mockRejectedValue(new Error('models failed'));
 
         const { result } = renderHook(() => useAgentConfigs());
 
@@ -97,12 +76,11 @@ describe('useAgentConfigs', () => {
             expect(result.current.isLoading).toBe(false);
         });
 
-        expect(result.current.error).toBe('personas failed');
-        expect(result.current.savedConfigs).toEqual(modelFixture);
-        expect(result.current.agentPersonas).toEqual([]);
+        expect(result.current.error).toBe('models failed');
+        expect(result.current.savedConfigs).toEqual([]);
     });
 
-    it('refreshes models only after the config manager closes', async () => {
+    it('refreshes models after the config manager closes', async () => {
         modelsListMock
             .mockResolvedValueOnce(modelFixture)
             .mockResolvedValueOnce([{
@@ -110,7 +88,6 @@ describe('useAgentConfigs', () => {
                 id: 'provider-2',
                 name: 'Updated Provider',
             }]);
-        personasListMock.mockResolvedValue(personaFixture);
 
         const { result } = renderHook(() => useAgentConfigs());
 
@@ -123,7 +100,6 @@ describe('useAgentConfigs', () => {
         });
 
         expect(modelsListMock).toHaveBeenCalledTimes(1);
-        expect(personasListMock).toHaveBeenCalledTimes(1);
 
         await act(async () => {
             result.current.setShowConfigManager(false);
@@ -133,7 +109,6 @@ describe('useAgentConfigs', () => {
             expect(modelsListMock).toHaveBeenCalledTimes(2);
         });
 
-        expect(personasListMock).toHaveBeenCalledTimes(1);
         expect(result.current.savedConfigs[0]?.id).toBe('provider-2');
     });
 
@@ -144,7 +119,6 @@ describe('useAgentConfigs', () => {
                 ...modelFixture[0],
                 models: ['gpt-4o', 'gpt-4.1'],
             }]);
-        personasListMock.mockResolvedValue(personaFixture);
 
         const { result } = renderHook(() => useAgentConfigs());
 
@@ -160,13 +134,11 @@ describe('useAgentConfigs', () => {
             expect(modelsListMock).toHaveBeenCalledTimes(2);
         });
 
-        expect(personasListMock).toHaveBeenCalledTimes(1);
         expect(result.current.savedConfigs[0]?.models).toEqual(['gpt-4o', 'gpt-4.1']);
     });
 
-    it('keeps personas available if the manager closes before the initial load finishes', async () => {
+    it('keeps the latest model refresh when requests overlap', async () => {
         let resolveInitialModels: ((value: typeof modelFixture) => void) | undefined;
-        let resolveInitialPersonas: ((value: typeof personaFixture) => void) | undefined;
         let resolveRefreshModels: ((value: typeof modelFixture) => void) | undefined;
 
         modelsListMock
@@ -176,9 +148,6 @@ describe('useAgentConfigs', () => {
             .mockImplementationOnce(() => new Promise((resolve) => {
                 resolveRefreshModels = resolve;
             }));
-        personasListMock.mockImplementationOnce(() => new Promise((resolve) => {
-            resolveInitialPersonas = resolve;
-        }));
 
         const { result } = renderHook(() => useAgentConfigs());
 
@@ -194,10 +163,6 @@ describe('useAgentConfigs', () => {
             expect(modelsListMock).toHaveBeenCalledTimes(2);
         });
 
-        await waitFor(() => {
-            expect(personasListMock).toHaveBeenCalledTimes(1);
-        });
-
         await act(async () => {
             resolveRefreshModels?.([{
                 ...modelFixture[0],
@@ -205,7 +170,6 @@ describe('useAgentConfigs', () => {
                 name: 'Updated Provider',
             }]);
             resolveInitialModels?.(modelFixture);
-            resolveInitialPersonas?.(personaFixture);
         });
 
         await waitFor(() => {
@@ -213,6 +177,5 @@ describe('useAgentConfigs', () => {
         });
 
         expect(result.current.savedConfigs[0]?.id).toBe('provider-2');
-        expect(result.current.agentPersonas).toEqual(personaFixture);
     });
 });

@@ -11,12 +11,7 @@ export type RuntimeEventGroup =
 
 export function getRuntimeEventGroup(type: string): RuntimeEventGroup {
     if (
-        type === 'team_discussion'
-        || type === 'team_summary'
-        || type === 'jury_discussion'
-        || type === 'jury_summary'
-        || type === 'consensus_summary'
-        || type.startsWith('discussion_stream_')
+        type === 'consensus_summary'
     ) {
         return 'speech';
     }
@@ -37,9 +32,6 @@ export function getRuntimeEventNodeHint(
     type: string,
     debateMode: DebateMode = 'standard',
 ): string | null {
-    if (type === 'team_discussion' || type === 'team_summary') return 'team_discussion';
-    if (type === 'jury_discussion' || type === 'jury_summary') return 'jury_discussion';
-    if (type.startsWith('discussion_stream_')) return 'team_discussion';
     if (type === 'consensus_summary') return 'consensus';
     if (type.startsWith('speech_')) {
         return debateMode === 'sophistry_experiment' ? 'sophistry_speaker' : 'speaker';

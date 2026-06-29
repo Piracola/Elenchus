@@ -28,16 +28,11 @@ function createSearchConfig(overrides: Partial<SearchConfig> = {}): SearchConfig
         provider: 'ddgs',
         available_providers: [
             { name: 'ddgs', available: true, is_primary: true },
-            { name: 'searxng', available: true, is_primary: false },
-            { name: 'tavily', available: false, is_primary: false },
+            { name: 'custom', available: false, is_primary: false },
         ],
         provider_settings: {
-            searxng: {
-                base_url: 'https://search.example.com',
-                api_key_configured: false,
-            },
-            tavily: {
-                api_url: 'https://api.tavily.com/search',
+            custom: {
+                endpoint: 'https://search.example.com/query',
                 api_key_configured: false,
             },
         },
@@ -53,35 +48,18 @@ afterEach(() => {
 
 describe('useSearchConfigState', () => {
     it('reuses cached config on remount while refreshing in the background', async () => {
-        const firstConfig = createSearchConfig({
-            provider: 'ddgs',
-            provider_settings: {
-                searxng: {
-                    base_url: 'https://search.example.com',
-                    api_key_configured: false,
-                },
-                tavily: {
-                    api_url: 'https://api.tavily.com/search',
-                    api_key_configured: false,
-                },
-            },
-        });
+        const firstConfig = createSearchConfig();
         const refreshedConfig = createSearchConfig({
-            provider: 'tavily',
+            provider: 'custom',
             provider_settings: {
-                searxng: {
-                    base_url: 'https://search.example.com',
-                    api_key_configured: false,
-                },
-                tavily: {
-                    api_url: 'https://proxy.example.com/tavily',
+                custom: {
+                    endpoint: 'https://proxy.example.com/search',
                     api_key_configured: true,
                 },
             },
             available_providers: [
                 { name: 'ddgs', available: true, is_primary: false },
-                { name: 'searxng', available: true, is_primary: false },
-                { name: 'tavily', available: true, is_primary: true },
+                { name: 'custom', available: true, is_primary: true },
             ],
         });
 
@@ -104,7 +82,7 @@ describe('useSearchConfigState', () => {
         expect(secondMount.result.current.isLoading).toBe(false);
         expect(secondMount.result.current.isRefreshing).toBe(true);
         expect(secondMount.result.current.currentProvider).toBe('ddgs');
-        expect(secondMount.result.current.tavilyApiUrl).toBe('https://api.tavily.com/search');
+        expect(secondMount.result.current.customEndpoint).toBe('https://search.example.com/query');
 
         await act(async () => {
             resolveSecondFetch?.(refreshedConfig);
@@ -115,9 +93,9 @@ describe('useSearchConfigState', () => {
             expect(secondMount.result.current.isRefreshing).toBe(false);
         });
 
-        expect(secondMount.result.current.currentProvider).toBe('tavily');
-        expect(secondMount.result.current.tavilyApiUrl).toBe('https://proxy.example.com/tavily');
-        expect(secondMount.result.current.tavilyApiKeyConfigured).toBe(true);
+        expect(secondMount.result.current.currentProvider).toBe('custom');
+        expect(secondMount.result.current.customEndpoint).toBe('https://proxy.example.com/search');
+        expect(secondMount.result.current.customApiKeyConfigured).toBe(true);
     });
 
     it('loads the current search config on mount', async () => {
@@ -131,10 +109,10 @@ describe('useSearchConfigState', () => {
 
         expect(searchApi.getConfig).toHaveBeenCalledTimes(1);
         expect(result.current.currentProvider).toBe('ddgs');
-        expect(result.current.tavilyApiUrl).toBe('https://api.tavily.com/search');
+        expect(result.current.customEndpoint).toBe('https://search.example.com/query');
     });
 
-    it('keeps Tavily draft input while a background refresh resolves', async () => {
+    it('keeps custom draft input while a background refresh resolves', async () => {
         searchApi.getConfig.mockResolvedValueOnce(createSearchConfig());
 
         const firstMount = renderHook(() => useSearchConfigState());
@@ -151,19 +129,15 @@ describe('useSearchConfigState', () => {
         const { result } = renderHook(() => useSearchConfigState());
 
         act(() => {
-            result.current.setTavilyApiKey('tvly-draft-key');
-            result.current.setTavilyApiUrl('https://draft.example.com/tavily');
+            result.current.setCustomApiKey('custom-draft-key');
+            result.current.setCustomEndpoint('https://draft.example.com/search');
         });
 
         await act(async () => {
             resolveSecondFetch?.(createSearchConfig({
                 provider_settings: {
-                    searxng: {
-                        base_url: 'https://search.example.com',
-                        api_key_configured: false,
-                    },
-                    tavily: {
-                        api_url: 'https://api.tavily.com/search',
+                    custom: {
+                        endpoint: 'https://search.example.com/query',
                         api_key_configured: true,
                     },
                 },
@@ -175,65 +149,17 @@ describe('useSearchConfigState', () => {
             expect(result.current.isRefreshing).toBe(false);
         });
 
-        expect(result.current.tavilyApiKey).toBe('tvly-draft-key');
-        expect(result.current.tavilyApiUrl).toBe('https://draft.example.com/tavily');
-        expect(result.current.tavilyApiKeyConfigured).toBe(true);
+        expect(result.current.customApiKey).toBe('custom-draft-key');
+        expect(result.current.customEndpoint).toBe('https://draft.example.com/search');
+        expect(result.current.customApiKeyConfigured).toBe(true);
     });
 
-    it('saves trimmed SearXNG settings and reapplies the returned config', async () => {
+    it('saves trimmed custom settings and reapplies the returned config', async () => {
         searchApi.getConfig.mockResolvedValue(createSearchConfig());
         searchApi.updateConfig.mockResolvedValue(createSearchConfig({
             provider_settings: {
-                searxng: {
-                    base_url: 'https://proxy.example.com/search',
-                    api_key_configured: true,
-                },
-                tavily: {
-                    api_url: 'https://api.tavily.com/search',
-                    api_key_configured: false,
-                },
-            },
-        }));
-
-        const { result } = renderHook(() => useSearchConfigState());
-
-        await waitFor(() => {
-            expect(result.current.isLoading).toBe(false);
-        });
-
-        act(() => {
-            result.current.setSearxngBaseUrl('  https://proxy.example.com/search  ');
-            result.current.setSearxngApiKey('  searxng-secret  ');
-        });
-
-        await act(async () => {
-            await result.current.handleSaveSearxng();
-        });
-
-        expect(searchApi.updateConfig).toHaveBeenCalledWith({
-            provider_settings: {
-                searxng: {
-                    base_url: 'https://proxy.example.com/search',
-                    api_key: 'searxng-secret',
-                },
-            },
-        });
-        expect(result.current.searxngBaseUrl).toBe('https://proxy.example.com/search');
-        expect(result.current.searxngApiKey).toBe('');
-        expect(result.current.searxngApiKeyConfigured).toBe(true);
-        expect(toastMock).toHaveBeenCalledWith(expect.stringContaining('SearXNG'), 'success');
-    });
-
-    it('saves trimmed Tavily settings and reapplies the returned config', async () => {
-        searchApi.getConfig.mockResolvedValue(createSearchConfig());
-        searchApi.updateConfig.mockResolvedValue(createSearchConfig({
-            provider_settings: {
-                searxng: {
-                    base_url: 'https://search.example.com',
-                    api_key_configured: false,
-                },
-                tavily: {
-                    api_url: 'https://proxy.example.com/tavily',
+                custom: {
+                    endpoint: 'https://proxy.example.com/search',
                     api_key_configured: true,
                 },
             },
@@ -246,25 +172,25 @@ describe('useSearchConfigState', () => {
         });
 
         act(() => {
-            result.current.setTavilyApiUrl('  https://proxy.example.com/tavily  ');
-            result.current.setTavilyApiKey('  tvly-secret  ');
+            result.current.setCustomEndpoint('  https://proxy.example.com/search  ');
+            result.current.setCustomApiKey('  custom-secret  ');
         });
 
         await act(async () => {
-            await result.current.handleSaveTavily();
+            await result.current.handleSaveCustom();
         });
 
         expect(searchApi.updateConfig).toHaveBeenCalledWith({
             provider_settings: {
-                tavily: {
-                    api_url: 'https://proxy.example.com/tavily',
-                    api_key: 'tvly-secret',
+                custom: {
+                    endpoint: 'https://proxy.example.com/search',
+                    api_key: 'custom-secret',
                 },
             },
         });
-        expect(result.current.tavilyApiUrl).toBe('https://proxy.example.com/tavily');
-        expect(result.current.tavilyApiKey).toBe('');
-        expect(result.current.tavilyApiKeyConfigured).toBe(true);
-        expect(toastMock).toHaveBeenCalledWith(expect.stringContaining('Tavily'), 'success');
+        expect(result.current.customEndpoint).toBe('https://proxy.example.com/search');
+        expect(result.current.customApiKey).toBe('');
+        expect(result.current.customApiKeyConfigured).toBe(true);
+        expect(toastMock).toHaveBeenCalledWith(expect.stringContaining('自定义搜索'), 'success');
     });
 });

@@ -7,11 +7,10 @@ import { motion } from 'framer-motion';
 import { Settings2, Thermometer } from 'lucide-react';
 import CustomSelect from './CustomSelect';
 import SettingsPanel from '../sidebar/SettingsPanel';
-import type { AgentPersonaSummary, ModelConfig } from '../../types';
+import type { ModelConfig } from '../../types';
 import {
     AGENT_ROLES,
     DEFAULT_AGENT_TEMPERATURE,
-    agentRoleSupportsPersona,
     type AgentRole,
 } from '../../utils/agent/agentConfigs';
 
@@ -26,23 +25,20 @@ const AGENT_LABELS: Record<string, string> = {
 
 interface AgentConfigPanelProps {
     savedConfigs: ModelConfig[];
-    agentPersonas?: AgentPersonaSummary[];
     selectedConfigIds: Record<AgentRole, string>;
-    selectedPersonaIds?: Record<AgentRole, string>;
     temperatureInputs: Record<AgentRole, string>;
     showConfigManager: boolean;
     setShowConfigManager: (v: boolean) => void;
     handleConfigSelect: (agent: AgentRole, value: string) => void;
-    handlePersonaSelect?: (agent: AgentRole, value: string) => void;
     handleTemperatureChange: (agent: AgentRole, value: string) => void;
     readOnly?: boolean;
     manageButtonLabel?: string;
 }
 
 export default function AgentConfigPanel({
-    savedConfigs, agentPersonas = [], selectedConfigIds, selectedPersonaIds,
+    savedConfigs, selectedConfigIds,
     temperatureInputs,
-    showConfigManager, setShowConfigManager, handleConfigSelect, handlePersonaSelect, handleTemperatureChange,
+    showConfigManager, setShowConfigManager, handleConfigSelect, handleTemperatureChange,
     readOnly = false,
     manageButtonLabel = '管理配置',
 }: AgentConfigPanelProps) {
@@ -61,18 +57,6 @@ export default function AgentConfigPanel({
     };
 
     const options = buildOptions();
-    const buildPersonaOptions = (agent: AgentRole) => {
-        const personaOptions = [{ value: '', label: '默认人设' }];
-        agentPersonas
-            .filter((persona) => persona.roles.length === 0 || persona.roles.includes(agent))
-            .forEach((persona) => {
-                personaOptions.push({
-                    value: persona.id,
-                    label: persona.name,
-                });
-            });
-        return personaOptions;
-    };
 
     return (
         <>
@@ -91,7 +75,7 @@ export default function AgentConfigPanel({
                         <div style={{ minWidth: 0 }}>
                             <h4 className="agent-config-panel__title">执行模型</h4>
                             <p className="agent-config-panel__description">
-                                为每个角色指定模型、人设与温度；深度思考由设置页的服务商选项统一控制。
+                                为每个角色指定模型与温度；深度思考由设置页的服务商选项统一控制。
                             </p>
                         </div>
                     </div>
@@ -112,17 +96,11 @@ export default function AgentConfigPanel({
                                     {AGENT_LABELS[agent]}
                                 </span>
                                 <span className="agent-config-panel__role-description">
-                                    {agentRoleSupportsPersona(agent) ? '可绑定角色人设' : '使用模型配置执行'}
+                                    使用模型配置执行
                                 </span>
                             </div>
 
-                            <div
-                                className={`agent-config-panel__controls ${
-                                    handlePersonaSelect && agentRoleSupportsPersona(agent)
-                                        ? 'agent-config-panel__controls--with-persona'
-                                        : ''
-                                }`}
-                            >
+                            <div className="agent-config-panel__controls">
                                 <div className="agent-config-panel__control agent-config-panel__control--model">
                                     <span className="agent-config-panel__control-label">模型</span>
                                     <CustomSelect
@@ -134,19 +112,6 @@ export default function AgentConfigPanel({
                                         disabled={readOnly}
                                     />
                                 </div>
-                                {handlePersonaSelect && agentRoleSupportsPersona(agent) && (
-                                    <div className="agent-config-panel__control agent-config-panel__control--persona">
-                                        <span className="agent-config-panel__control-label">人设</span>
-                                        <CustomSelect
-                                            value={selectedPersonaIds?.[agent] ?? ''}
-                                            options={buildPersonaOptions(agent)}
-                                            onChange={(value) => handlePersonaSelect(agent, value)}
-                                            size="sm"
-                                            width="100%"
-                                            disabled={readOnly}
-                                        />
-                                    </div>
-                                )}
                                 <label className="agent-config-panel__temperature">
                                     <span className="agent-config-panel__temperature-label">
                                         <Thermometer size={12} />

@@ -1,9 +1,5 @@
 /**
  * API client — typed fetch wrappers for the Elenchus REST API.
- *
- * Authentication is handled via httpOnly cookies set by the backend
- * (/api/admin/login). All requests include credentials so the browser
- * sends the cookie automatically.
  */
 
 import type {
@@ -16,12 +12,9 @@ import type {
     ModelProviderModelsResult,
     ModelProviderProbePayload,
     ModelProviderProbeResult,
-    AgentPersonaDetail,
-    AgentPersonaSummary,
     LogLevel,
     MarkdownExportCategory,
-    ReferenceLibraryResponse,
-    RuntimeEventPage,
+    SessionDocumentsResponse,
     SearchConfig,
     SearchConfigUpdatePayload,
     SearchProviderStatus,
@@ -134,10 +127,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }, init);
 }
 
-async function requestText(path: string, init?: RequestInit): Promise<string> {
-    return requestWithParser(path, (res) => res.text(), init);
-}
-
 async function download(path: string, fallbackFilename: string): Promise<void> {
     const res = await fetch(buildApiUrl(path), { credentials: 'include' });
     if (!res.ok) {
@@ -201,20 +190,8 @@ export const api = {
                 method: 'DELETE',
             }),
 
-        getReferenceLibrary: (id: string): Promise<ReferenceLibraryResponse> =>
-            request(`/sessions/${id}/reference-library`),
-
-        listRuntimeEvents: (
-            id: string,
-            options: { beforeSeq?: number; limit?: number } = {},
-        ): Promise<RuntimeEventPage> => {
-            const params = new URLSearchParams();
-            if (typeof options.beforeSeq === 'number' && Number.isFinite(options.beforeSeq)) {
-                params.set('before_seq', String(options.beforeSeq));
-            }
-            params.set('limit', String(options.limit ?? 200));
-            return request(`/sessions/${id}/runtime-events?${params.toString()}`);
-        },
+        listDocuments: (id: string): Promise<SessionDocumentsResponse> =>
+            request(`/sessions/${id}/documents`),
 
         delete: (id: string): Promise<void> =>
             request(`/sessions/${id}`, {
@@ -251,15 +228,6 @@ export const api = {
             return download(`/sessions/${id}/export?${params.toString()}`, buildTopicFilename(topic, 'html'));
         },
 
-        exportRuntimeEventsSnapshot: (id: string, topic: string): Promise<void> => {
-            return download(
-                `/sessions/${id}/runtime-events/export`,
-                buildTopicFilename(topic, 'runtime-events.json'),
-            );
-        },
-
-        getRuntimeEventsSnapshot: (id: string): Promise<string> =>
-            requestText(`/sessions/${id}/runtime-events/export`),
     },
 
     models: {
@@ -294,14 +262,6 @@ export const api = {
                 method: 'POST',
                 body: JSON.stringify(payload),
             }),
-    },
-
-    agentPersonas: {
-        list: (): Promise<AgentPersonaSummary[]> =>
-            request('/agent-personas'),
-
-        get: (id: string): Promise<AgentPersonaDetail> =>
-            request(`/agent-personas/${encodeURIComponent(id)}`),
     },
 
     health: {

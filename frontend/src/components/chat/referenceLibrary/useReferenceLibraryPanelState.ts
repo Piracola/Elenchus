@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'reac
 
 import { api } from '../../../api/client';
 import { useSessionActions } from '../../../hooks/useDebateViewState';
-import type { ReferenceLibraryResponse } from '../../../types';
+import type { SessionDocumentsResponse } from '../../../types';
 import { toast } from '../../../utils/chat/toast';
 import { EMPTY_LIBRARY, getErrorMessage } from './shared';
 
@@ -15,21 +15,21 @@ export function useReferenceLibraryPanelState({ currentSessionId }: UseReference
     const inputRef = useRef<HTMLInputElement>(null);
     const requestIdRef = useRef(0);
     const [isOpen, setIsOpen] = useState(false);
-    const [referenceLibrary, setReferenceLibrary] = useState<ReferenceLibraryResponse>(EMPTY_LIBRARY);
+    const [referenceLibrary, setReferenceLibrary] = useState<SessionDocumentsResponse>(EMPTY_LIBRARY);
     const [hasLoaded, setHasLoaded] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
     const [errorMessage, setErrorMessage] = useState('');
 
-    const loadReferenceLibrary = useCallback(async (sessionId: string) => {
+    const loadDocuments = useCallback(async (sessionId: string) => {
         const requestId = requestIdRef.current + 1;
         requestIdRef.current = requestId;
         setIsLoading(true);
         setErrorMessage('');
 
         try {
-            const data = await api.sessions.getReferenceLibrary(sessionId);
+            const data = await api.sessions.listDocuments(sessionId);
             if (requestIdRef.current !== requestId) {
                 return;
             }
@@ -70,8 +70,8 @@ export function useReferenceLibraryPanelState({ currentSessionId }: UseReference
         if (!isOpen) {
             return;
         }
-        void loadReferenceLibrary(currentSessionId);
-    }, [currentSessionId, isOpen, loadReferenceLibrary]);
+        void loadDocuments(currentSessionId);
+    }, [currentSessionId, isOpen, loadDocuments]);
 
     const handleUploadButtonClick = () => {
         if (isUploading || deletingDocumentId) {
@@ -91,7 +91,7 @@ export function useReferenceLibraryPanelState({ currentSessionId }: UseReference
         try {
             await api.sessions.uploadDocument(currentSessionId, file);
             await Promise.all([
-                loadReferenceLibrary(currentSessionId),
+                loadDocuments(currentSessionId),
                 refreshSession(currentSessionId),
             ]);
             toast(`参考资料已上传：${file.name}`, 'success');
@@ -112,7 +112,7 @@ export function useReferenceLibraryPanelState({ currentSessionId }: UseReference
         try {
             await api.sessions.deleteDocument(currentSessionId, documentId);
             await Promise.all([
-                loadReferenceLibrary(currentSessionId),
+                loadDocuments(currentSessionId),
                 refreshSession(currentSessionId),
             ]);
             toast(`参考资料已删除：${filename}`, 'success');
@@ -135,7 +135,7 @@ export function useReferenceLibraryPanelState({ currentSessionId }: UseReference
         deletingDocumentId,
         errorMessage,
         setIsOpen,
-        loadReferenceLibrary,
+        loadReferenceLibrary: loadDocuments,
         handleUploadButtonClick,
         handleFileChange,
         handleDeleteDocument,

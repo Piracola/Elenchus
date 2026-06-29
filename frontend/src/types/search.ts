@@ -5,7 +5,7 @@ export interface SearchResult {
     source_engine: string;
 }
 
-export type SearchProviderType = 'ddgs' | 'searxng' | 'tavily';
+export type SearchProviderType = 'ddgs' | 'custom';
 
 export interface SearchProviderStatus {
     name: SearchProviderType;
@@ -14,12 +14,8 @@ export interface SearchProviderStatus {
 }
 
 export interface SearchProviderSettings {
-    searxng: {
-        base_url: string;
-        api_key_configured: boolean;
-    };
-    tavily: {
-        api_url: string;
+    custom: {
+        endpoint: string;
         api_key_configured: boolean;
     };
 }
@@ -33,13 +29,8 @@ export interface SearchConfig {
 export interface SearchConfigUpdatePayload {
     provider?: SearchProviderType | string;
     provider_settings?: {
-        searxng?: {
-            base_url?: string | null;
-            api_key?: string | null;
-            clear_api_key?: boolean;
-        };
-        tavily?: {
-            api_url?: string | null;
+        custom?: {
+            endpoint?: string | null;
             api_key?: string | null;
             clear_api_key?: boolean;
         };

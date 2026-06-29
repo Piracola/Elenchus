@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { PanelLeftClose, Plus, Search, Settings, Sun, Moon, Trash2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock3, PanelLeftClose, Plus, Search, Settings, Sun, Moon, Trash2 } from 'lucide-react';
 import { useThemeStore } from '../../stores/themeStore';
 import { api } from '../../api/client';
 import {
-    useRuntimeActions,
     useSessionActions,
     useSessionListViewState,
 } from '../../hooks/useDebateViewState';
@@ -14,15 +13,61 @@ import type { SessionListItem } from '../../types';
 import { filterSessionsByQuery, getSessionModePresentation, mergeSessionPage } from '../../utils/session/sessionList';
 import { toast } from '../../utils/chat/toast';
 
+type SessionListSection = {
+    key: 'active' | 'history';
+    title: string;
+    description: string;
+    items: SessionListItem[];
+};
+
 interface SessionListProps {
     onCollapse: () => void;
     fluidWidth?: boolean;
 }
 
+function getStatusPresentation(status: SessionListItem['status']) {
+    if (status === 'in_progress') {
+        return {
+            label: '进行中',
+            dot: 'var(--accent-emerald)',
+            badgeBackground: 'var(--accent-emerald-alpha)',
+            badgeColor: 'var(--color-green-600)',
+            icon: Clock3,
+        };
+    }
+
+    if (status === 'error') {
+        return {
+            label: '异常',
+            dot: 'var(--accent-rose)',
+            badgeBackground: 'var(--accent-rose-alpha)',
+            badgeColor: 'var(--accent-rose)',
+            icon: AlertCircle,
+        };
+    }
+
+    if (status === 'pending') {
+        return {
+            label: '等待中',
+            dot: 'var(--accent-amber)',
+            badgeBackground: 'var(--accent-amber-alpha)',
+            badgeColor: 'var(--color-amber-600)',
+            icon: Clock3,
+        };
+    }
+
+    return {
+        label: '已完成',
+        dot: 'var(--text-muted)',
+        badgeBackground: 'var(--bg-tertiary)',
+        badgeColor: 'var(--text-muted)',
+        icon: CheckCircle2,
+    };
+}
+
 export default function SessionList({ onCollapse, fluidWidth = false }: SessionListProps) {
     const { sessions, currentSessionId } = useSessionListViewState();
     const { setSessions, setCurrentSession } = useSessionActions();
-    const { hydrateRuntimeEvents } = useRuntimeActions();
     const { theme, toggleTheme } = useThemeStore();
     const [isLoading, setIsLoading] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -58,27 +103,15 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
         const requestId = sessionSelectionRequestRef.current + 1;
         sessionSelectionRequestRef.current = requestId;
         try {
-            const runtimePagePromise = api.sessions.listRuntimeEvents(item.id).catch((error) => {
-                console.error('Failed to load runtime events', error);
-                toast('加载执行时间轴失败，已仅打开辩论内容', 'error');
-                return null;
-            });
             const fullSession = await api.sessions.get(item.id);
             if (sessionSelectionRequestRef.current !== requestId) return;
 
             setCurrentSession(fullSession);
-            const runtimePage = await runtimePagePromise;
-            if (sessionSelectionRequestRef.current !== requestId) return;
-
-            hydrateRuntimeEvents(
-                runtimePage?.events ?? [],
-                runtimePage?.has_more ?? false,
-            );
         } catch (err) {
             console.error('Failed to load session details', err);
             toast('加载辩论记录失败', 'error');
         }
-    }, [currentSessionId, hydrateRuntimeEvents, setCurrentSession]);
+    }, [currentSessionId, setCurrentSession]);
 
     const handleDelete = useCallback(async (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
@@ -103,6 +136,37 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
     const filteredSessions = useMemo(
         () => filterSessionsByQuery(sessions, searchQuery),
         [sessions, searchQuery],
+    );
+
+    const sessionSections = useMemo<SessionListSection[]>(() => {
+        const activeItems = filteredSessions.filter((item) => (
+            item.status === 'in_progress' || item.status === 'pending' || item.status === 'error'
+        ));
+        const historyItems = filteredSessions.filter((item) => (
+            item.status !== 'in_progress' && item.status !== 'pending' && item.status !== 'error'
+        ));
+
+        const sections: SessionListSection[] = [
+            {
+                key: 'active',
+                title: '进行中的辩论',
+                description: '需要关注',
+                items: activeItems,
+            },
+            {
+                key: 'history',
+                title: '历史记录',
+                description: '已归档',
+                items: historyItems,
+            },
+        ];
+
+        return sections.filter((section) => section.items.length > 0);
+    }, [filteredSessions]);
+
+    const activeCount = useMemo(
+        () => filteredSessions.filter((item) => item.status === 'in_progress' || item.status === 'pending').length,
+        [filteredSessions],
     );
 
     return (
@@ -223,23 +287,51 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
 
             {/* Section Header */}
             <div style={{
-                padding: '0 18px 10px',
+                padding: '0 18px 12px',
                 display: 'flex',
-                alignItems: 'center',
+                alignItems: 'flex-end',
                 justifyContent: 'space-between',
+                gap: '12px',
             }}>
-                <h2 style={{
+                <div style={{ minWidth: 0 }}>
+                    <h2 style={{
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        color: 'var(--text-secondary)',
+                        letterSpacing: 0,
+                        margin: 0,
+                        lineHeight: 1.3,
+                    }}>
+                        辩论记录
+                    </h2>
+                    <p style={{
+                        margin: '2px 0 0',
+                        fontSize: '11px',
+                        color: 'var(--text-muted)',
+                        lineHeight: 1.4,
+                    }}>
+                        按状态分层浏览
+                    </p>
+                </div>
+                <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    minHeight: '24px',
+                    padding: '3px 8px',
+                    borderRadius: 'var(--radius-full)',
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-secondary)',
                     fontSize: '11px',
-                    fontWeight: 600,
-                    color: 'var(--text-muted)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                    margin: 0,
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap',
                 }}>
-                    辩论记录
-                </h2>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {filteredSessions.length}
+                    {filteredSessions.length} 条
+                    {activeCount > 0 && (
+                        <span style={{ color: 'var(--color-green-600)' }}>
+                            · {activeCount} 进行中
+                        </span>
+                    )}
                 </span>
             </div>
 
@@ -262,49 +354,156 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                         {searchQuery ? '未找到匹配的辩论' : '暂无历史辩论'}
                     </div>
                 ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        {filteredSessions.map((item) => {
-                            const isActive = item.id === currentSessionId;
-                            const isHovered = hoveredId === item.id;
-                            const isSophistryRecord = item.debate_mode === 'sophistry_experiment';
-                            const modePresentation = getSessionModePresentation(item.debate_mode);
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', paddingBottom: '10px' }}>
+                        {sessionSections.map((section) => (
+                            <section key={section.key} style={{ minWidth: 0 }}>
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        gap: '8px',
+                                        padding: '0 6px 7px',
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+                                        <span
+                                            style={{
+                                                width: '4px',
+                                                height: '14px',
+                                                borderRadius: 'var(--radius-full)',
+                                                background: section.key === 'active'
+                                                    ? 'var(--accent-emerald)'
+                                                    : 'var(--border-subtle)',
+                                                flexShrink: 0,
+                                            }}
+                                        />
+                                        <span
+                                            style={{
+                                                color: 'var(--text-secondary)',
+                                                fontSize: '11px',
+                                                fontWeight: 800,
+                                                lineHeight: 1.3,
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                whiteSpace: 'nowrap',
+                                            }}
+                                        >
+                                            {section.title}
+                                        </span>
+                                        <span
+                                            style={{
+                                                color: 'var(--text-muted)',
+                                                fontSize: '10px',
+                                                fontWeight: 600,
+                                                lineHeight: 1.3,
+                                                whiteSpace: 'nowrap',
+                                            }}
+                                        >
+                                            {section.description}
+                                        </span>
+                                    </div>
+                                    <span
+                                        style={{
+                                            color: 'var(--text-muted)',
+                                            fontSize: '10px',
+                                            fontWeight: 700,
+                                            whiteSpace: 'nowrap',
+                                        }}
+                                    >
+                                        {section.items.length}
+                                    </span>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                    {section.items.map((item) => {
+                                        const isActive = item.id === currentSessionId;
+                                        const isHovered = hoveredId === item.id;
+                                        const isSophistryRecord = item.debate_mode === 'sophistry_experiment';
+                                        const modePresentation = getSessionModePresentation(item.debate_mode);
+                                        const statusPresentation = getStatusPresentation(item.status);
+                                        const StatusIcon = statusPresentation.icon;
+                                        const activeAccent = isSophistryRecord
+                                            ? 'var(--mode-sophistry-accent)'
+                                            : item.status === 'in_progress'
+                                                ? 'var(--accent-emerald)'
+                                                : 'var(--accent-indigo)';
                             return (
                                 <motion.div
                                     key={item.id}
                                     data-session-mode={item.debate_mode}
+                                    role="button"
+                                    tabIndex={0}
                                     onMouseEnter={() => setHoveredId(item.id)}
                                     onMouseLeave={() => setHoveredId(null)}
                                     onClick={() => handleSelectSession(item)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                            event.preventDefault();
+                                            void handleSelectSession(item);
+                                        }
+                                    }}
                                     style={{
-                                        padding: '12px 14px',
-                                        borderRadius: 'var(--radius-lg)',
+                                        padding: '10px 10px 10px 12px',
+                                        borderRadius: 'var(--radius-md)',
                                         cursor: 'pointer',
                                         background: isActive
-                                            ? modePresentation.activeBackground
-                                            : modePresentation.inactiveBackground,
+                                            ? (isSophistryRecord ? 'var(--mode-sophistry-card)' : 'var(--bg-card)')
+                                            : isHovered
+                                                ? 'var(--bg-tertiary)'
+                                                : 'transparent',
                                         border: isActive
-                                            ? modePresentation.activeBorder
-                                            : modePresentation.inactiveBorder,
+                                            ? (isSophistryRecord ? '1px solid var(--mode-sophistry-border)' : '1px solid var(--border-subtle)')
+                                            : '1px solid transparent',
                                         boxShadow: isActive
-                                            ? modePresentation.activeShadow
-                                            : (isSophistryRecord ? 'var(--shadow-xs)' : 'none'),
-                                        transition: 'all var(--transition-fast)',
+                                            ? 'var(--shadow-xs)'
+                                            : 'none',
+                                        transition: 'background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast)',
                                         position: 'relative',
                                         display: 'flex',
                                         alignItems: 'flex-start',
-                                        gap: '10px',
+                                        gap: '9px',
+                                        minWidth: 0,
                                     }}
                                 >
+                                    {isActive && (
+                                        <span
+                                            aria-hidden="true"
+                                            style={{
+                                                position: 'absolute',
+                                                left: 0,
+                                                top: '10px',
+                                                bottom: '10px',
+                                                width: '3px',
+                                                borderRadius: '0 var(--radius-full) var(--radius-full) 0',
+                                                background: activeAccent,
+                                            }}
+                                        />
+                                    )}
+
                                     {/* Status indicator */}
-                                    <div style={{
-                                        width: '8px',
-                                        height: '8px',
-                                        borderRadius: '50%',
-                                        background: item.status === 'in_progress' ? 'var(--accent-emerald)' : 'var(--text-muted)',
-                                        marginTop: '5px',
-                                        flexShrink: 0,
-                                        boxShadow: item.status === 'in_progress' ? '0 0 6px var(--accent-emerald)' : 'none',
-                                    }} />
+                                    <div
+                                        style={{
+                                            width: '18px',
+                                            display: 'flex',
+                                            justifyContent: 'center',
+                                            paddingTop: '6px',
+                                            flexShrink: 0,
+                                        }}
+                                    >
+                                        <span
+                                            style={{
+                                                width: item.status === 'in_progress' ? '8px' : '7px',
+                                                height: item.status === 'in_progress' ? '8px' : '7px',
+                                                borderRadius: 'var(--radius-full)',
+                                                background: statusPresentation.dot,
+                                                boxShadow: item.status === 'in_progress'
+                                                    ? '0 0 0 3px var(--accent-emerald-alpha)'
+                                                    : 'none',
+                                            }}
+                                            aria-hidden="true"
+                                        />
+                                    </div>
 
                                     {/* Content */}
                                     <div style={{
@@ -312,11 +511,11 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                                         minWidth: 0,
                                         display: 'flex',
                                         flexDirection: 'column',
-                                        gap: '5px',
+                                        gap: '6px',
                                     }}>
                                         {/* Topic */}
                                         <div style={{
-                                            fontWeight: isActive ? 600 : 500,
+                                            fontWeight: isActive ? 700 : section.key === 'active' ? 650 : 600,
                                             fontSize: '13px',
                                             color: isSophistryRecord
                                                 ? 'var(--text-primary)'
@@ -333,7 +532,7 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                                         <div style={{
                                             display: 'flex',
                                             alignItems: 'center',
-                                            gap: '8px',
+                                            gap: '6px',
                                             flexWrap: 'wrap',
                                             fontSize: '11px',
                                             color: 'var(--text-muted)',
@@ -346,21 +545,39 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                                                 border: modePresentation.badgeBorder,
                                                 fontWeight: 700,
                                                 fontSize: '10px',
-                                                letterSpacing: '0.02em',
+                                                letterSpacing: 0,
+                                                lineHeight: 1.2,
                                             }}>
                                                 {modePresentation.label}
                                             </span>
                                             <span style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
                                                 padding: '2px 6px',
-                                                borderRadius: 'var(--radius-sm)',
-                                                background: item.status === 'in_progress' ? 'rgba(52, 199, 89, 0.1)' : 'var(--bg-tertiary)',
-                                                color: item.status === 'in_progress' ? 'var(--color-proposer)' : 'var(--text-muted)',
-                                                fontWeight: 500,
+                                                borderRadius: 'var(--radius-full)',
+                                                background: statusPresentation.badgeBackground,
+                                                color: statusPresentation.badgeColor,
+                                                fontWeight: 700,
                                                 fontSize: '10px',
+                                                lineHeight: 1.2,
                                             }}>
-                                                {item.status === 'in_progress' ? '进行中' : '已完成'}
+                                                <StatusIcon size={10} />
+                                                {statusPresentation.label}
                                             </span>
-                                            <span>{item.current_turn}/{item.max_turns} 轮</span>
+                                            <span
+                                                style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    minHeight: '18px',
+                                                    color: isActive ? 'var(--text-secondary)' : 'var(--text-muted)',
+                                                    fontSize: '11px',
+                                                    fontWeight: 600,
+                                                    lineHeight: 1.2,
+                                                }}
+                                            >
+                                                {item.current_turn}/{item.max_turns} 轮
+                                            </span>
                                         </div>
                                     </div>
 
@@ -376,8 +593,8 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                                         }}
                                         style={{
                                             flexShrink: 0,
-                                            background: 'none',
-                                            border: 'none',
+                                            background: isHovered || isActive ? 'var(--bg-tertiary)' : 'transparent',
+                                            border: '1px solid transparent',
                                             color: 'var(--text-muted)',
                                             cursor: 'pointer',
                                             padding: '4px',
@@ -386,15 +603,18 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                                             alignItems: 'center',
                                             justifyContent: 'center',
                                             marginTop: '2px',
-                                            transition: 'color var(--transition-fast)',
+                                            transition: 'background var(--transition-fast), color var(--transition-fast)',
                                         }}
                                         title="删除"
                                     >
                                         <Trash2 size={14} />
                                     </motion.button>
                                 </motion.div>
-                            );
-                        })}
+                                        );
+                                    })}
+                                </div>
+                            </section>
+                        ))}
                         {sessions.length < total && !searchQuery && (
                             <motion.button
                                 whileHover={{ scale: 1.01, background: 'var(--bg-hover)' }}

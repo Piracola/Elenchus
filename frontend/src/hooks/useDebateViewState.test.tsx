@@ -21,15 +21,9 @@ function makeSession(overrides: Partial<Session> = {}): Session {
         created_at: '2026-03-24T00:00:00Z',
         updated_at: '2026-03-24T00:00:00Z',
         dialogue_history: [],
-        team_dialogue_history: [],
-        jury_dialogue_history: [],
         current_scores: {},
         cumulative_scores: {},
-        team_config: { agents_per_team: 0, discussion_rounds: 0 },
-        jury_config: { agents_per_jury: 0, discussion_rounds: 0 },
         reasoning_config: {
-            steelman_enabled: false,
-            counterfactual_enabled: false,
             consensus_enabled: false,
         },
         mode_artifacts: [{ type: 'report', content: 'artifact' }],
@@ -78,7 +72,7 @@ describe('useDebateViewState', () => {
 
     it('returns grouped runtime and transcript state for the active session', () => {
         useDebateStore.getState().setCurrentSession(makeSession({ status: 'completed' }));
-        useDebateStore.getState().hydrateRuntimeEvents([makeRuntimeEvent()]);
+        useDebateStore.getState().applyRuntimeEvent(makeRuntimeEvent());
         useDebateStore.getState().setAllAgentMessagesCollapsed('session_view', ['event:evt_selector'], true);
 
         const runtime = renderHook(() => useRuntimeViewState());
@@ -88,7 +82,6 @@ describe('useDebateViewState', () => {
         expect(runtime.result.current.currentStatus).toBe('准备中');
         expect(runtime.result.current.currentNode).toBe('speaker');
         expect(transcript.result.current.currentSessionId).toBe('session_view');
-        expect(transcript.result.current.replayEnabled).toBe(false);
         expect(transcript.result.current.collapsedAgentMessages['event:evt_selector']).toBe(true);
     });
 });

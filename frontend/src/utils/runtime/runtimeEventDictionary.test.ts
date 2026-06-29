@@ -8,8 +8,6 @@ import {
 describe('runtimeEventDictionary', () => {
     it('maps event types to timeline groups', () => {
         expect(getRuntimeEventGroup('speech_end')).toBe('speech');
-        expect(getRuntimeEventGroup('team_discussion')).toBe('speech');
-        expect(getRuntimeEventGroup('jury_summary')).toBe('speech');
         expect(getRuntimeEventGroup('consensus_summary')).toBe('speech');
         expect(getRuntimeEventGroup('judge_score')).toBe('judge');
         expect(getRuntimeEventGroup('sophistry_round_report')).toBe('judge');
@@ -23,8 +21,6 @@ describe('runtimeEventDictionary', () => {
     it('maps event types to graph node hints', () => {
         expect(getRuntimeEventNodeHint('speech_start')).toBe('speaker');
         expect(getRuntimeEventNodeHint('speech_start', 'sophistry_experiment')).toBe('sophistry_speaker');
-        expect(getRuntimeEventNodeHint('team_summary')).toBe('team_discussion');
-        expect(getRuntimeEventNodeHint('jury_discussion')).toBe('jury_discussion');
         expect(getRuntimeEventNodeHint('consensus_summary')).toBe('consensus');
         expect(getRuntimeEventNodeHint('judge_start')).toBe('judge');
         expect(getRuntimeEventNodeHint('sophistry_round_report')).toBe('sophistry_observer');

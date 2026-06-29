@@ -501,7 +501,7 @@ body {
   min-width: 0;
 }
 
-.agent-config-panel__controls:not(.agent-config-panel__controls--with-persona) .agent-config-panel__control--model {
+.agent-config-panel__controls .agent-config-panel__control--model {
   grid-column: span 2;
 }
 
@@ -638,7 +638,7 @@ body {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .agent-config-panel__controls:not(.agent-config-panel__controls--with-persona) .agent-config-panel__control--model {
+  .agent-config-panel__controls .agent-config-panel__control--model {
     grid-column: auto;
   }
 }
@@ -801,6 +801,15 @@ a:hover {
   background: linear-gradient(90deg, rgba(34, 211, 238, 0.08) 0%, rgba(34, 211, 238, 0.04) 100%);
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   box-shadow: inset 0 -1px 0 rgba(34, 211, 238, 0.1);
+}
+
+@keyframes status-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ─── Score Card Styles ──────────────────────────────────────── */

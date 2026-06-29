@@ -1,4 +1,4 @@
-import { Monitor, PanelTop, RotateCcw, Type } from 'lucide-react';
+import { Monitor, PanelTop, Type } from 'lucide-react';
 import {
     MESSAGE_FONT_SIZE_MIN,
     MESSAGE_FONT_SIZE_MAX,
@@ -8,11 +8,8 @@ import {
     DEFAULT_SETTINGS_FONT_SIZE,
 } from '../../../config/display';
 import type { DisplaySettings } from '../../../types';
-import { resetStoredFloatingInspectorRect } from '../../../utils/inspector/floatingInspector';
-import { toast } from '../../../utils/chat/toast';
 import { SettingsRadioCardGroup } from './SettingsRadioCardGroup';
 import {
-    SettingsButton,
     SettingsField,
     SettingsInput,
     SettingsNotice,
@@ -33,11 +30,6 @@ type SettingsDisplayTabProps = {
 };
 
 export function SettingsDisplayTab({ displaySettings, setDisplaySettings }: SettingsDisplayTabProps) {
-    const handleFloatingInspectorReset = () => {
-        resetStoredFloatingInspectorRect();
-        toast('运行观察器已重置到默认位置和大小', 'success');
-    };
-
     const handleMessageFontSizeChange = (value: string) => {
         const num = parseInt(value, 10);
         if (!isNaN(num)) {
@@ -60,7 +52,7 @@ export function SettingsDisplayTab({ displaySettings, setDisplaySettings }: Sett
     return (
         <SettingsPage
             title="显示设置"
-            description="调整阅读宽度、字号和运行观察器位置，让长文本阅读更稳定。"
+            description="调整阅读宽度和字号，让长文本阅读更稳定。"
         >
             <SettingsSection
                 title="消息界面宽度"
@@ -126,27 +118,6 @@ export function SettingsDisplayTab({ displaySettings, setDisplaySettings }: Sett
                 </SettingsNotice>
             </SettingsSection>
 
-            <SettingsSection
-                title="运行观察器"
-                description="清空观察器记住的位置和展开尺寸。"
-                icon={<Monitor size={15} />}
-            >
-                <div className="settings-control-row settings-control-row--start">
-                    <div>
-                        <div className="settings-field-label">重置到默认位置</div>
-                        <div className="settings-field-hint" style={{ marginTop: 0 }}>
-                            如果观察器尺寸不合适，或想清空已记住的展开大小，可以恢复默认设置。
-                        </div>
-                    </div>
-                    <SettingsButton
-                        variant="primary"
-                        icon={<RotateCcw size={15} />}
-                        onClick={handleFloatingInspectorReset}
-                    >
-                        立即重置
-                    </SettingsButton>
-                </div>
-            </SettingsSection>
         </SettingsPage>
     );
 }

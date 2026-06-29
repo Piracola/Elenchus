@@ -15,12 +15,8 @@ describe('api client URL handling', () => {
 
         const { api } = await import('./client');
         await api.models.list();
-        await api.agentPersonas.list();
 
         expect(fetchMock).toHaveBeenNthCalledWith(1, `${window.location.origin}/api/models`, expect.objectContaining({
-            credentials: 'include',
-        }));
-        expect(fetchMock).toHaveBeenNthCalledWith(2, `${window.location.origin}/api/agent-personas`, expect.objectContaining({
             credentials: 'include',
         }));
     });

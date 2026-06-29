@@ -100,13 +100,6 @@ function sameDialogueContent(a: DialogueEntry, b: DialogueEntry): boolean {
         (a.turn ?? -1) === (b.turn ?? -1) &&
         (a.target_role ?? '') === (b.target_role ?? '') &&
         (a.discussion_kind ?? '') === (b.discussion_kind ?? '') &&
-        (a.team_side ?? '') === (b.team_side ?? '') &&
-        (a.team_round ?? -1) === (b.team_round ?? -1) &&
-        (a.team_member_index ?? -1) === (b.team_member_index ?? -1) &&
-        (a.team_specialty ?? '') === (b.team_specialty ?? '') &&
-        (a.jury_round ?? -1) === (b.jury_round ?? -1) &&
-        (a.jury_member_index ?? -1) === (b.jury_member_index ?? -1) &&
-        (a.jury_perspective ?? '') === (b.jury_perspective ?? '') &&
         a.agent_name === b.agent_name &&
         a.content === b.content &&
         sameCitations(a.citations, b.citations) &&
@@ -185,7 +178,7 @@ export function sanitizeRuntimeEvent(event: RuntimeEvent): RuntimeEvent {
 }
 
 export function shouldRecordRuntimeEvent(event: RuntimeEvent): boolean {
-    return event.type !== 'speech_token' && event.type !== 'discussion_stream_token';
+    return event.type !== 'speech_token';
 }
 
 function sortRuntimeEvents(a: RuntimeEvent, b: RuntimeEvent): number {
@@ -230,13 +223,7 @@ export function sanitizeSession(session: Session | null): Session | null {
         debate_mode: session.debate_mode ?? 'standard',
         mode_config: session.mode_config ?? {},
         dialogue_history: (session.dialogue_history ?? []).map(sanitizeDialogueEntry),
-        team_dialogue_history: (session.team_dialogue_history ?? []).map(sanitizeDialogueEntry),
-        jury_dialogue_history: (session.jury_dialogue_history ?? []).map(sanitizeDialogueEntry),
-        team_config: session.team_config ?? { agents_per_team: 0, discussion_rounds: 0 },
-        jury_config: session.jury_config ?? { agents_per_jury: 0, discussion_rounds: 0 },
         reasoning_config: session.reasoning_config ?? {
-            steelman_enabled: true,
-            counterfactual_enabled: true,
             consensus_enabled: true,
         },
         speech_config: session.speech_config ?? {

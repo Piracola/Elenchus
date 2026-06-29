@@ -41,14 +41,11 @@ export default function DebaterSettingsModal({
 }: DebaterSettingsModalProps) {
     const {
         savedConfigs,
-        agentPersonas,
         selectedConfigIds,
-        selectedPersonaIds,
         temperatureInputs,
         showConfigManager,
         setShowConfigManager,
         handleConfigSelect,
-        handlePersonaSelect,
         handleTemperatureChange,
         reload,
         buildAgentConfigs,
@@ -82,14 +79,12 @@ export default function DebaterSettingsModal({
             }
 
             handleTemperatureChange(role, cfg.temperature !== undefined ? String(cfg.temperature) : '');
-            handlePersonaSelect(role, cfg.persona_id ?? '');
         }
     }, [
         currentSession,
         savedConfigs,
         handleConfigSelect,
         handleTemperatureChange,
-        handlePersonaSelect,
     ]);
 
     const updatePopoverPosition = useCallback(() => {
@@ -264,14 +259,11 @@ export default function DebaterSettingsModal({
                     <div style={{ overflowY: 'auto', paddingRight: '2px' }}>
                         <AgentConfigPanel
                             savedConfigs={savedConfigs}
-                            agentPersonas={agentPersonas}
                             selectedConfigIds={selectedConfigIds}
-                            selectedPersonaIds={selectedPersonaIds}
                             temperatureInputs={temperatureInputs}
                             showConfigManager={showConfigManager}
                             setShowConfigManager={setShowConfigManager}
                             handleConfigSelect={handleConfigSelect}
-                            handlePersonaSelect={handlePersonaSelect}
                             handleTemperatureChange={handleTemperatureChange}
                             manageButtonLabel="管理配置"
                         />

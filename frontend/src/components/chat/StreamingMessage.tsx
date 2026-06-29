@@ -2,7 +2,7 @@
  * StreamingMessage - renders real-time streaming text from speech_token events.
  *
  * Performance strategy:
- * 1. Subscribe to streamingRole and streamingContent from store via Zustand selectors
+ * 1. Receive the already-derived live speech entry from the transcript view model
  * 2. Use requestAnimationFrame to throttle React re-renders to max once per frame (~60fps)
  * 3. Use a ref to track content changes without triggering re-renders
  * 4. setRenderedContent with functional update skips re-render if content hasn't changed
@@ -10,7 +10,6 @@
 
 import { useRef, useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { useDebateStore } from '../../stores/debateStore';
 import type { DialogueEntry } from '../../types';
 import { getAgentVisual, STATIC_MOTION_PROPS } from './messageRow/shared';
 import { messageContentWrapperStyle, markdownBodyStyle } from './messageRow/contentStyles';
@@ -20,12 +19,13 @@ import { splitLeadingThinkingContent } from '../../utils/chat/thinkingContent';
 import { getMessageFontTokens } from '../../config/display';
 import { useSettingsStore } from '../../stores/settingsStore';
 
-export default function StreamingMessage() {
-    // Subscribe to store - only re-renders when these specific fields change
-    const streamingRole = useDebateStore((state) => state.streamingRole);
-    const streamingContent = useDebateStore((state) => state.streamingContent);
-    const streamingEntry = useDebateStore((state) => state.streamingEntry);
+type StreamingMessageProps = {
+    entry: DialogueEntry;
+    content: string;
+    status: string;
+};
 
+export default function StreamingMessage({ entry, content, status }: StreamingMessageProps) {
     const rafRef = useRef<number | null>(null);
     const isStreamingRef = useRef(false);
     const [renderedContent, setRenderedContent] = useState('');
@@ -40,18 +40,18 @@ export default function StreamingMessage() {
 
     // Update the ref immediately (no re-render)
     useEffect(() => {
-        latestContentRef.current = streamingContent;
-    }, [streamingContent]);
+        latestContentRef.current = content;
+    }, [content]);
 
     // Handle streaming lifecycle (start/end detection)
     useEffect(() => {
-        if (streamingRole && !isStreamingRef.current) {
+        if (entry.role && !isStreamingRef.current) {
             // Streaming started
             isStreamingRef.current = true;
             setIsStreaming(true);
-            setRenderedContent(streamingContent);
-            latestContentRef.current = streamingContent;
-        } else if (!streamingRole && isStreamingRef.current) {
+            setRenderedContent(content);
+            latestContentRef.current = content;
+        } else if (!entry.role && isStreamingRef.current) {
             // Streaming ended
             isStreamingRef.current = false;
             setIsStreaming(false);
@@ -62,7 +62,7 @@ export default function StreamingMessage() {
                 rafRef.current = null;
             }
         }
-    }, [streamingRole, streamingContent]);
+    }, [content, entry.role]);
 
     // RAF-throttled content update: schedules at most one re-render per frame
     useEffect(() => {
@@ -76,7 +76,7 @@ export default function StreamingMessage() {
                 setRenderedContent((prev) => (prev === content ? prev : content));
             });
         }
-    }, [streamingContent]);
+    }, [content]);
 
     // Cleanup RAF on unmount
     useEffect(() => {
@@ -89,22 +89,12 @@ export default function StreamingMessage() {
 
     // Build a fake DialogueEntry for getAgentVisual
     const agentVisual = useMemo(() => {
-        if (!streamingRole) return null;
-        return getAgentVisual(streamingEntry ?? {
-            role: streamingRole,
-            agent_name: streamingRole === 'proposer' ? '正方' : streamingRole === 'opposer' ? '反方' : streamingRole,
-            content: '',
-            citations: [],
-            timestamp: '',
-        } as DialogueEntry);
-    }, [streamingEntry, streamingRole]);
+        if (!entry.role) return null;
+        return getAgentVisual(entry);
+    }, [entry]);
 
     const badgeBg = agentVisual?.color ?? 'var(--accent-indigo)';
-    const streamingStatus = streamingEntry?.discussion_kind === 'jury'
-        ? '正在评议...'
-        : streamingEntry?.discussion_kind === 'team'
-            ? '正在讨论...'
-            : '正在发言...';
+    const streamingStatus = status || '正在发言...';
 
     const splitContent = useMemo(
         () => splitLeadingThinkingContent(renderedContent),
@@ -131,7 +121,7 @@ export default function StreamingMessage() {
         }
     }, [renderedContent]);
 
-    if (!streamingRole || !agentVisual) return null;
+    if (!entry.role || !agentVisual) return null;
 
     return (
         <div

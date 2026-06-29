@@ -15,7 +15,6 @@ import {
     parseSpeechMaxCharsInput,
 } from '../../utils/agent/debateSession';
 import AgentConfigPanel from '../shared/AgentConfigPanel';
-import { useDemoModeStore } from '../../stores/demoModeStore';
 
 function ActiveSessionControls() {
     const { isDebating, isConnected, currentSession } = useConnectionViewState();
@@ -227,20 +226,14 @@ function SessionCreator() {
         showAdvanced,
         setShowAdvanced,
         savedConfigs,
-        agentPersonas,
         selectedConfigIds,
-        selectedPersonaIds,
         temperatureInputs,
         showConfigManager,
         setShowConfigManager,
         handleConfigSelect,
-        handlePersonaSelect,
         handleTemperatureChange,
         buildAgentConfigs,
     } = useAgentConfigs();
-    const { demoMode, isAdmin } = useDemoModeStore();
-    const isInDemo = demoMode && !isAdmin;
-
     const maxTurns = parseMaxTurnsInput(maxTurnsInput);
     const proposerSpeechLimit = parseSpeechMaxCharsInput(proposerSpeechLimitInput);
     const opposerSpeechLimit = parseSpeechMaxCharsInput(opposerSpeechLimitInput);
@@ -251,8 +244,6 @@ function SessionCreator() {
             topic,
             maxTurns,
             buildAgentConfigs(),
-            undefined,
-            undefined,
             undefined,
             {
                 proposer_max_chars: proposerSpeechLimit,
@@ -265,7 +256,7 @@ function SessionCreator() {
     return (
         <div style={{ position: 'relative', flexShrink: 0 }}>
             <AnimatePresence initial={false}>
-                {showAdvanced && !isInDemo && (
+                {showAdvanced && (
                     <motion.div
                         key="chat-agent-config"
                         initial={{ opacity: 0, height: 0, y: 8 }}
@@ -276,14 +267,11 @@ function SessionCreator() {
                     >
                         <AgentConfigPanel
                             savedConfigs={savedConfigs}
-                            agentPersonas={agentPersonas}
                             selectedConfigIds={selectedConfigIds}
-                            selectedPersonaIds={selectedPersonaIds}
                             temperatureInputs={temperatureInputs}
                             showConfigManager={showConfigManager}
                             setShowConfigManager={setShowConfigManager}
                             handleConfigSelect={handleConfigSelect}
-                            handlePersonaSelect={handlePersonaSelect}
                             handleTemperatureChange={handleTemperatureChange}
                         />
                         <div

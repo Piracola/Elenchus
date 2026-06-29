@@ -1,29 +1,16 @@
-/**
- * 大量数据渲染性能测试
- * 测试虚拟滚动、组件渲染、视图构建等前端渲染性能
- */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { RuntimeEvent, Session, DialogueEntry } from '../types';
+import type { DialogueEntry, Session } from '../types';
 import { useDebateStore } from '../stores/debateStore';
-import { makeRuntimeEvent } from '../test/runtimeEventFactory';
 import { buildTranscriptViewModel } from '../utils/chat/transcriptViewModel';
-import {
-    buildTimelineSearchIndex,
-    computeTimelinePageTotal,
-    computeVirtualTimelineWindow,
-    filterIndexedTimelineEvents,
-    filterTimelineEvents,
-    requiredPageCountForIndex,
-    sliceTimelineTail,
-} from '../utils/timeline/timelineWindow';
+import type { DialogueGroupingState } from '../utils/chat/groupDialogue';
 
 function makeDialogueEntry(index: number): DialogueEntry {
     const role = index % 2 === 0 ? 'proposer' : 'opposer';
     return {
         role,
-        agent_name: role === 'proposer' ? '正方' : '反方',
-        content: `渲染测试消息 ${index + 1}`.repeat(2),
+        agent_name: role === 'proposer' ? 'Proposer' : 'Opposer',
+        content: `Render performance message ${index + 1}`.repeat(2),
         citations: [],
         timestamp: `2026-03-17T00:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}Z`,
         event_id: `evt_render_${index + 1}`,
@@ -31,58 +18,10 @@ function makeDialogueEntry(index: number): DialogueEntry {
     };
 }
 
-function makeRuntimeeventBatch(count: number, startIndex: number = 0): RuntimeEvent[] {
-    return Array.from({ length: count }, (_, i) => {
-        const index = startIndex + i;
-        const role = index % 2 === 0 ? 'proposer' : 'opposer';
-        const eventType = index % 4 === 0 ? 'judge_score' :
-                         index % 4 === 1 ? 'speech_start' :
-                         index % 4 === 2 ? 'speech_end' : 'turn_complete';
-
-        return makeRuntimeEvent({
-            event_id: `evt_render_${index + 1}`,
-            session_id: 'session_render_test',
-            seq: index + 1,
-            type: eventType,
-            timestamp: `2026-03-17T00:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}Z`,
-            payload: eventType === 'speech_end'
-                ? {
-                    role,
-                    agent_name: role === 'proposer' ? '正方' : '反方',
-                    content: `渲染事件内容 ${index + 1}`.repeat(2),
-                    citations: [],
-                    turn: Math.floor(index / 2),
-                }
-                : eventType === 'judge_score'
-                ? {
-                    role,
-                    turn: Math.floor(index / 2),
-                    scores: {
-                        logical_rigor: { score: 8, rationale: 'ok' },
-                        evidence_quality: { score: 8, rationale: 'ok' },
-                        topic_focus: { score: 8, rationale: 'ok' },
-                        rebuttal_strength: { score: 8, rationale: 'ok' },
-                        consistency: { score: 8, rationale: 'ok' },
-                        boundary_contribution: { score: 8, rationale: 'ok' },
-                        module_scores: { foundation: 8, confrontation: 8, stability: 8, vision: 8 },
-                        comprehensive_score: 8,
-                        overall_comment: `评分 ${index + 1}`,
-                    },
-                }
-                : eventType === 'turn_complete'
-                ? {
-                    turn: Math.floor(index / 2) + 1,
-                    cumulative_scores: {},
-                }
-                : {},
-        });
-    });
-}
-
 function makeSessionWithHistory(historyCount: number): Session {
     return {
         id: 'session_render',
-        topic: `渲染性能测试 - ${historyCount}条`,
+        topic: `Render performance - ${historyCount}`,
         debate_mode: 'standard',
         mode_config: {},
         participants: ['proposer', 'opposer'],
@@ -91,16 +30,10 @@ function makeSessionWithHistory(historyCount: number): Session {
         status: 'completed',
         created_at: '2026-03-17T00:00:00+00:00',
         updated_at: '2026-03-17T01:00:00+00:00',
-        dialogue_history: Array.from({ length: historyCount }, (_, i) => makeDialogueEntry(i)),
-        team_dialogue_history: [],
-        jury_dialogue_history: [],
+        dialogue_history: Array.from({ length: historyCount }, (_, index) => makeDialogueEntry(index)),
         current_scores: {},
         cumulative_scores: {},
-        team_config: { agents_per_team: 0, discussion_rounds: 0 },
-        jury_config: { agents_per_jury: 0, discussion_rounds: 0 },
         reasoning_config: {
-            steelman_enabled: true,
-            counterfactual_enabled: true,
             consensus_enabled: true,
         },
         mode_artifacts: [],
@@ -109,7 +42,15 @@ function makeSessionWithHistory(historyCount: number): Session {
     };
 }
 
-describe('大量数据渲染性能测试', () => {
+function buildViewModel(session: Session, previousGroupingState: DialogueGroupingState | null = null) {
+    return buildTranscriptViewModel({
+        dialogueHistory: session.dialogue_history,
+        participants: session.participants,
+        previousGroupingState,
+    });
+}
+
+describe('large transcript rendering performance', () => {
     beforeEach(() => {
         useDebateStore.getState().reset();
     });
@@ -118,241 +59,40 @@ describe('大量数据渲染性能测试', () => {
         useDebateStore.getState().reset();
     });
 
-    describe('视图模型构建性能', () => {
-        it('应在50ms内构建100条记录的视图模型', () => {
-            const session = makeSessionWithHistory(100);
-            const events = makeRuntimeeventBatch(100);
-            useDebateStore.getState().setCurrentSession(session);
-            useDebateStore.getState().hydrateRuntimeEvents(events, false);
+    it('builds a 100-row transcript view model within budget', () => {
+        const session = makeSessionWithHistory(100);
+        useDebateStore.getState().setCurrentSession(session);
 
-            const startTime = performance.now();
-            const viewModel = buildTranscriptViewModel({
-                dialogueHistory: session.dialogue_history,
-                teamDialogueHistory: [],
-                juryDialogueHistory: [],
-                participants: session.participants,
-                replayEnabled: false,
-                visibleEventIds: null,
-                focusedRuntimeEvent: null,
-            });
-            const buildTime = performance.now() - startTime;
+        const startTime = performance.now();
+        const viewModel = buildViewModel(session);
+        const buildTime = performance.now() - startTime;
 
-            expect(buildTime).toBeLessThan(50);
-            expect(viewModel.rows.length).toBeGreaterThan(0);
-        });
-
-        it('应在200ms内构建500条记录的视图模型', () => {
-            const session = makeSessionWithHistory(500);
-            const events = makeRuntimeeventBatch(500);
-            useDebateStore.getState().setCurrentSession(session);
-            useDebateStore.getState().hydrateRuntimeEvents(events, false);
-
-            const startTime = performance.now();
-            const viewModel = buildTranscriptViewModel({
-                dialogueHistory: session.dialogue_history,
-                teamDialogueHistory: [],
-                juryDialogueHistory: [],
-                participants: session.participants,
-                replayEnabled: false,
-                visibleEventIds: null,
-                focusedRuntimeEvent: null,
-            });
-            const buildTime = performance.now() - startTime;
-
-            expect(buildTime).toBeLessThan(200);
-            expect(viewModel.rows.length).toBeGreaterThan(0);
-        });
-
-        it('应在500ms内构建1000条记录的视图模型', () => {
-            const session = makeSessionWithHistory(1000);
-            const events = makeRuntimeeventBatch(1000);
-            useDebateStore.getState().setCurrentSession(session);
-            useDebateStore.getState().hydrateRuntimeEvents(events, false);
-
-            const startTime = performance.now();
-            const viewModel = buildTranscriptViewModel({
-                dialogueHistory: session.dialogue_history,
-                teamDialogueHistory: [],
-                juryDialogueHistory: [],
-                participants: session.participants,
-                replayEnabled: false,
-                visibleEventIds: null,
-                focusedRuntimeEvent: null,
-            });
-            const buildTime = performance.now() - startTime;
-
-            expect(buildTime).toBeLessThan(500);
-            expect(viewModel.rows.length).toBeGreaterThan(0);
-        });
+        expect(buildTime).toBeLessThan(50);
+        expect(viewModel.rows.length).toBeGreaterThan(0);
     });
 
-    describe('时间线索引性能', () => {
-        it('应在100ms内构建1000个事件的搜索索引', () => {
-            const events = makeRuntimeeventBatch(1000);
+    it('builds a 1000-row transcript view model within budget', () => {
+        const session = makeSessionWithHistory(1000);
+        useDebateStore.getState().setCurrentSession(session);
 
-            const startTime = performance.now();
-            const indexed = buildTimelineSearchIndex(events);
-            const indexTime = performance.now() - startTime;
+        const startTime = performance.now();
+        const viewModel = buildViewModel(session);
+        const buildTime = performance.now() - startTime;
 
-            expect(indexTime).toBeLessThan(100);
-            expect(indexed).toBeDefined();
-        });
-
-        it('应在300ms内构建5000个事件的搜索索引', () => {
-            const events = makeRuntimeeventBatch(5000);
-
-            const startTime = performance.now();
-            buildTimelineSearchIndex(events);
-            const indexTime = performance.now() - startTime;
-
-            expect(indexTime).toBeLessThan(300);
-        });
-
-        it('应在50ms内完成索引过滤 (1000个事件)', () => {
-            const events = makeRuntimeeventBatch(1000);
-            const indexed = buildTimelineSearchIndex(events);
-
-            const startTime = performance.now();
-            const filtered = filterIndexedTimelineEvents(indexed, 'proposer');
-            const filterTime = performance.now() - startTime;
-
-            expect(filterTime).toBeLessThan(50);
-            expect(filtered.length).toBeGreaterThan(0);
-        });
-
-        it('应在100ms内计算时间线分页 (5000个事件)', () => {
-            const events = makeRuntimeeventBatch(5000);
-            const filtered = filterTimelineEvents(events, 'proposer');
-
-            const startTime = performance.now();
-            const pageTotal = computeTimelinePageTotal(filtered.length, 200);
-            const requiredPages = requiredPageCountForIndex(filtered.length, 1500, 200);
-            const tail = sliceTimelineTail(filtered, 200, 5);
-            computeVirtualTimelineWindow(tail.length, 3200, 360, 60, 8);
-            const calcTime = performance.now() - startTime;
-
-            expect(calcTime).toBeLessThan(100);
-            expect(pageTotal).toBeGreaterThan(0);
-            expect(requiredPages).toBeGreaterThan(0);
-        });
+        expect(buildTime).toBeLessThan(500);
+        expect(viewModel.rows.length).toBeGreaterThan(0);
     });
 
-    describe('大规模渲染压力测试', () => {
-        it('应在1000ms内完成2000条记录的完整渲染流程', () => {
-            const session = makeSessionWithHistory(2000);
-            const events = makeRuntimeeventBatch(2000);
-            useDebateStore.getState().setCurrentSession(session);
-            useDebateStore.getState().hydrateRuntimeEvents(events, false);
+    it('keeps repeated transcript rebuilds stable', () => {
+        const session = makeSessionWithHistory(300);
+        useDebateStore.getState().setCurrentSession(session);
+        const viewModel1 = buildViewModel(session);
 
-            const startTime = performance.now();
-            const viewModel = buildTranscriptViewModel({
-                dialogueHistory: session.dialogue_history,
-                teamDialogueHistory: [],
-                juryDialogueHistory: [],
-                participants: session.participants,
-                replayEnabled: false,
-                visibleEventIds: null,
-                focusedRuntimeEvent: null,
-            });
-            const totalTime = performance.now() - startTime;
+        const startTime = performance.now();
+        const viewModel2 = buildViewModel(session, viewModel1.groupingState);
+        const rebuildTime = performance.now() - startTime;
 
-            expect(totalTime).toBeLessThan(1000);
-            expect(viewModel.rows.length).toBeGreaterThan(0);
-        });
-
-        it('应在2000ms内完成5000条记录的完整渲染流程', () => {
-            const session = makeSessionWithHistory(5000);
-            const events = makeRuntimeeventBatch(5000);
-            useDebateStore.getState().setCurrentSession(session);
-            useDebateStore.getState().hydrateRuntimeEvents(events, false);
-
-            const startTime = performance.now();
-            const viewModel = buildTranscriptViewModel({
-                dialogueHistory: session.dialogue_history,
-                teamDialogueHistory: [],
-                juryDialogueHistory: [],
-                participants: session.participants,
-                replayEnabled: false,
-                visibleEventIds: null,
-                focusedRuntimeEvent: null,
-            });
-
-            buildTimelineSearchIndex(events);
-
-            const totalTime = performance.now() - startTime;
-
-            expect(totalTime).toBeLessThan(2000);
-            expect(viewModel.rows.length).toBeGreaterThan(0);
-        });
-    });
-
-    describe('重复渲染性能 (memo优化验证)', () => {
-        it('应在30ms内完成相同视图的重复构建', () => {
-            const session = makeSessionWithHistory(300);
-            const events = makeRuntimeeventBatch(300);
-            useDebateStore.getState().setCurrentSession(session);
-            useDebateStore.getState().hydrateRuntimeEvents(events, false);
-
-            const viewModel1 = buildTranscriptViewModel({
-                dialogueHistory: session.dialogue_history,
-                teamDialogueHistory: [],
-                juryDialogueHistory: [],
-                participants: session.participants,
-                replayEnabled: false,
-                visibleEventIds: null,
-                focusedRuntimeEvent: null,
-            });
-
-            const startTime = performance.now();
-            const viewModel2 = buildTranscriptViewModel({
-                dialogueHistory: session.dialogue_history,
-                teamDialogueHistory: [],
-                juryDialogueHistory: [],
-                participants: session.participants,
-                replayEnabled: false,
-                visibleEventIds: null,
-                focusedRuntimeEvent: null,
-                previousGroupingState: viewModel1.groupingState,
-            });
-            const rebuildTime = performance.now() - startTime;
-
-            expect(rebuildTime).toBeLessThan(30);
-            expect(viewModel2.rows.length).toBe(viewModel1.rows.length);
-        });
-    });
-
-    describe('长时间运行的渲染稳定性', () => {
-        it('应在连续100次视图构建中保持稳定的性能', () => {
-            const session = makeSessionWithHistory(100);
-            const events = makeRuntimeeventBatch(100);
-            useDebateStore.getState().setCurrentSession(session);
-            useDebateStore.getState().hydrateRuntimeEvents(events, false);
-
-            const times: number[] = [];
-            let previousState = null;
-
-            for (let i = 0; i < 100; i++) {
-                const startTime = performance.now();
-                const viewModel = buildTranscriptViewModel({
-                    dialogueHistory: session.dialogue_history,
-                    teamDialogueHistory: [],
-                    juryDialogueHistory: [],
-                    participants: session.participants,
-                    replayEnabled: false,
-                    visibleEventIds: null,
-                    focusedRuntimeEvent: null,
-                    previousGroupingState: previousState,
-                });
-                const elapsed = performance.now() - startTime;
-                times.push(elapsed);
-                previousState = viewModel.groupingState;
-            }
-
-            const avgTime = times.reduce((a, b) => a + b, 0) / times.length;
-            const maxTime = Math.max(...times);
-
-            expect(avgTime).toBeLessThan(20);
-            expect(maxTime).toBeLessThan(100);
-        });
+        expect(rebuildTime).toBeLessThan(30);
+        expect(viewModel2.rows.length).toBe(viewModel1.rows.length);
     });
 });

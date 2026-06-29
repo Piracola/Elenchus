@@ -3,12 +3,9 @@ import { isElementNearBottom } from '../../utils/chat/chatScroll';
 
 type UseChatViewportMetricsArgs = {
     currentSessionId: string | null;
-    replayEnabled: boolean;
     isDocumentVisible: boolean;
     visibilityResumeToken: number;
     dialogueHistoryLength: number;
-    teamDialogueHistoryLength: number;
-    juryDialogueHistoryLength: number;
     currentTurn: number;
     scrollRef: RefObject<HTMLDivElement | null>;
     topOverlayRef: RefObject<HTMLDivElement | null>;
@@ -17,12 +14,9 @@ type UseChatViewportMetricsArgs = {
 
 export function useChatViewportMetrics({
     currentSessionId,
-    replayEnabled,
     isDocumentVisible,
     visibilityResumeToken,
     dialogueHistoryLength,
-    teamDialogueHistoryLength,
-    juryDialogueHistoryLength,
     currentTurn,
     scrollRef,
     topOverlayRef,
@@ -69,7 +63,6 @@ export function useChatViewportMetrics({
     }, [isDocumentVisible, visibilityResumeToken]);
 
     useLayoutEffect(() => {
-        if (replayEnabled) return;
         if (!autoScrollEnabledRef.current) return;
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -77,10 +70,7 @@ export function useChatViewportMetrics({
     }, [
         currentTurn,
         dialogueHistoryLength,
-        replayEnabled,
         scrollRef,
-        teamDialogueHistoryLength,
-        juryDialogueHistoryLength,
     ]);
 
     useEffect(() => {
@@ -139,12 +129,12 @@ export function useChatViewportMetrics({
 
     const handleScroll = useCallback(() => {
         const container = scrollRef.current;
-        if (!container || replayEnabled) return;
+        if (!container) return;
 
         setScrollTop(container.scrollTop);
         setViewportHeight(container.clientHeight);
         autoScrollEnabledRef.current = isElementNearBottom(container);
-    }, [replayEnabled, scrollRef]);
+    }, [scrollRef]);
 
     return {
         topOverlayHeight,

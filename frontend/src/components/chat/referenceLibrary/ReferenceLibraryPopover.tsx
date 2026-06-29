@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { FileUp, RefreshCw, Trash2 } from 'lucide-react';
-import type { ReferenceLibraryResponse } from '../../../types';
-import { countEntriesByDocumentId, formatSize, getStatusMeta } from './shared';
+import type { SessionDocumentsResponse } from '../../../types';
+import { formatSize, getStatusMeta } from './shared';
 import {
     HEADER_TOOLBAR_PANEL_STYLE,
     HEADER_TOOLBAR_PRIMARY_BUTTON_STYLE,
@@ -20,7 +20,7 @@ type ReferenceLibraryPopoverProps = {
     onDeleteDocument: (documentId: string, filename: string) => void;
     onRefresh: (sessionId: string) => void;
     onUploadClick: () => void;
-    referenceLibrary: ReferenceLibraryResponse;
+    referenceLibrary: SessionDocumentsResponse;
 };
 
 export function ReferenceLibraryPopover({
@@ -37,8 +37,6 @@ export function ReferenceLibraryPopover({
     onUploadClick,
     referenceLibrary,
 }: ReferenceLibraryPopoverProps) {
-    const entryCountByDocumentId = countEntriesByDocumentId(referenceLibrary);
-
     if (!isOpen) {
         return null;
     }
@@ -68,11 +66,11 @@ export function ReferenceLibraryPopover({
                     参考资料
                 </span>
                 <span style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                    支持 .txt / .md，单个文件最大 1 MB。上传后会同步到后端参考库。
+                    支持 .txt / .md，单个文件最大 1 MB。上传后会作为当前辩论的公共背景。
                 </span>
                 {hasLoaded && (
                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                        已上传 {referenceLibrary.documents.length} 份，提炼出 {referenceLibrary.entries.length} 条参考要点
+                        已上传 {referenceLibrary.documents.length} 份参考资料
                     </span>
                 )}
             </div>
@@ -166,7 +164,6 @@ export function ReferenceLibraryPopover({
 
                 {referenceLibrary.documents.map((document) => {
                     const statusMeta = getStatusMeta(document.status);
-                    const entryCount = entryCountByDocumentId[document.id] ?? 0;
                     const isDeleting = deletingDocumentId === document.id;
 
                     return (
@@ -221,9 +218,6 @@ export function ReferenceLibraryPopover({
                                         </span>
                                         <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                                             {formatSize(document.size_bytes)}
-                                        </span>
-                                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                                            {entryCount} 条要点
                                         </span>
                                     </div>
                                 </div>

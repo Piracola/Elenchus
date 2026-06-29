@@ -66,14 +66,7 @@ vi.mock('../../utils/chat/toast', () => ({
 vi.mock('../../hooks/useAgentConfigs', () => ({
     useAgentConfigs: () => ({
         savedConfigs: [],
-        agentPersonas: [],
         selectedConfigIds: {
-            proposer: '',
-            opposer: '',
-            judge: '',
-            fact_checker: '',
-        },
-        selectedPersonaIds: {
             proposer: '',
             opposer: '',
             judge: '',
@@ -88,7 +81,6 @@ vi.mock('../../hooks/useAgentConfigs', () => ({
         showConfigManager: false,
         setShowConfigManager: vi.fn(),
         handleConfigSelect: vi.fn(),
-        handlePersonaSelect: vi.fn(),
         handleTemperatureChange: vi.fn(),
         reload: vi.fn(),
         buildAgentConfigs: buildAgentConfigsMock,

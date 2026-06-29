@@ -2,16 +2,10 @@ import type { AgentConfigResult, ModelConfig } from '../../types';
 
 export const AGENT_ROLES = ['proposer', 'opposer', 'judge', 'fact_checker'] as const;
 export type AgentRole = (typeof AGENT_ROLES)[number];
-export const AGENT_PERSONA_ROLES = ['proposer', 'opposer'] as const;
-export type AgentPersonaRole = (typeof AGENT_PERSONA_ROLES)[number];
 
 export const DEFAULT_AGENT_TEMPERATURE = 0.7;
 export const MIN_AGENT_TEMPERATURE = 0;
 export const MAX_AGENT_TEMPERATURE = 2;
-
-export function agentRoleSupportsPersona(role: AgentRole): role is AgentPersonaRole {
-    return AGENT_PERSONA_ROLES.includes(role as AgentPersonaRole);
-}
 
 export function createEmptyAgentFieldMap(): Record<AgentRole, string> {
     return {
@@ -55,7 +49,6 @@ export function buildAgentConfigsPayload(
     savedConfigs: ModelConfig[],
     selectedConfigIds: Record<string, string>,
     temperatureInputs: Record<string, string>,
-    selectedPersonaIds?: Record<string, string>,
 ): Record<string, AgentConfigResult> | undefined {
     const result: Record<string, AgentConfigResult> = {};
     const defaultProvider = savedConfigs.find(
@@ -65,11 +58,8 @@ export function buildAgentConfigsPayload(
     for (const role of AGENT_ROLES) {
         const selectedKey = selectedConfigIds[role] ?? '';
         const temperature = parseAgentTemperatureInput(temperatureInputs[role] ?? '');
-        const personaId = agentRoleSupportsPersona(role)
-            ? (selectedPersonaIds?.[role]?.trim() ?? '')
-            : '';
 
-        if (!selectedKey && temperature === undefined && !personaId) {
+        if (!selectedKey && temperature === undefined) {
             continue;
         }
 
@@ -85,7 +75,7 @@ export function buildAgentConfigsPayload(
             model = defaultProvider?.models?.[0] ?? '';
         }
 
-        if ((!configDef || !model) && !personaId) {
+        if (!configDef || !model) {
             continue;
         }
 
@@ -97,7 +87,6 @@ export function buildAgentConfigsPayload(
                 api_base_url: configDef.api_base_url || undefined,
             } : {}),
             ...(temperature !== undefined ? { temperature } : {}),
-            ...(personaId ? { persona_id: personaId } : {}),
             ...(configDef?.custom_parameters && Object.keys(configDef.custom_parameters).length > 0
                 ? { custom_parameters: configDef.custom_parameters }
                 : {}),
