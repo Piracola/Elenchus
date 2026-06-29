@@ -83,27 +83,16 @@ def write_packaged_runtime_config(runtime_root: Path, port: int) -> None:
                 "http://localhost:5173",
             ],
         },
-        "auth": {
-            "enabled": False,
-            "jwt_secret_key": "change-me-in-production",
-            "jwt_expire_minutes": 10080,
-        },
         "providers": [],
         "search": {
             "provider": "ddgs",
             "max_results_per_query": 5,
-            "tavily": {"api_url": "https://api.tavily.com/search", "api_key": ""},
+            "custom": {"endpoint": "", "api_key": ""},
         },
         "logging": {
             "level": "INFO",
             "log_dir": "logs",
             "backup_count": 3,
-        },
-        "demo": {
-            "enabled": False,
-            "admin_username": "admin",
-            "admin_password_hash": "",
-            "allowed_models": ["gpt-4o-mini"],
         },
     }
     config_path.write_text(

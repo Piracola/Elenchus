@@ -555,9 +555,7 @@ $VenvDir = Join-Path $BackendDir "venv"
 $BackendPython = Join-Path $VenvDir "Scripts\python.exe"
 $BackendRequirements = Join-Path $BackendDir "requirements.txt"
 $BuildScript = Join-Path $ScriptsDir "build_pyinstaller_release.py"
-$LauncherBuildScript = Join-Path $ScriptsDir "build_windows_launcher_release.py"
 $SmokeTestScript = Join-Path $ScriptsDir "smoke_test_release_backend.py"
-$LauncherSmokeTestScript = Join-Path $ScriptsDir "smoke_test_windows_launcher_release.py"
 $FrontendLockFile = Join-Path $FrontendDir "package-lock.json"
 $FrontendModulesDir = Join-Path $FrontendDir "node_modules"
 $FrontendEsbuildBinary = Join-Path $FrontendModulesDir "@esbuild\win32-x64\esbuild.exe"
@@ -655,17 +653,13 @@ $ReleaseName = "elenchus-portable-$EffectiveVersion-windows"
 $ReleaseRoot = Join-Path $EffectiveOutputDir $ReleaseName
 $ArchivePath = Join-Path $EffectiveOutputDir "$ReleaseName.zip"
 $ChecksumPath = "$ArchivePath.sha256"
-$LauncherReleaseName = "elenchus-launcher-$EffectiveVersion-windows"
-$LauncherReleaseRoot = Join-Path $EffectiveOutputDir $LauncherReleaseName
-$LauncherArchivePath = Join-Path $EffectiveOutputDir "$LauncherReleaseName.zip"
-$LauncherChecksumPath = "$LauncherArchivePath.sha256"
 
 $DoBackendInstall = -not ($SkipInstall -or $SkipBackendInstall)
 $DoFrontendInstall = -not ($SkipInstall -or $SkipFrontendInstall)
 
-Write-Section -Step "Step 1/8" -Title "Environment Check"
+Write-Section -Step "Step 1/6" -Title "Environment Check"
 
-foreach ($requiredPath in @($BackendDir, $FrontendDir, $BuildScript, $LauncherBuildScript, $SmokeTestScript, $LauncherSmokeTestScript, $BackendRequirements)) {
+foreach ($requiredPath in @($BackendDir, $FrontendDir, $BuildScript, $SmokeTestScript, $BackendRequirements)) {
     if (-not (Test-Path $requiredPath)) {
         Print-Err "Missing required path: $requiredPath"
         exit 1
@@ -710,7 +704,7 @@ if (-not $DoFrontendInstall -and -not (Test-FrontendDependencyInstallHealthy -Fr
     exit 1
 }
 
-Write-Section -Step "Step 2/8" -Title "Prepare Backend Build Environment"
+Write-Section -Step "Step 2/6" -Title "Prepare Backend Build Environment"
 
 if (-not (Test-Path $BackendPython)) {
     $venvArgs = @()
@@ -760,7 +754,7 @@ if ($DoBackendInstall) {
     Print-Warn "Skipping backend dependency installation"
 }
 
-Write-Section -Step "Step 3/8" -Title "Build Frontend Bundle"
+Write-Section -Step "Step 3/6" -Title "Build Frontend Bundle"
 
 if ($DoFrontendInstall) {
     if ((Test-Path $FrontendModulesDir) -and -not (Test-FrontendDependencyInstallHealthy -FrontendDirectory $FrontendDir)) {
@@ -793,7 +787,7 @@ if ($DryRun) {
     Print-OK "Frontend build completed"
 }
 
-Write-Section -Step "Step 4/8" -Title "Smoke Test Packaged Backend"
+Write-Section -Step "Step 4/6" -Title "Smoke Test Packaged Backend"
 
 if ($SkipSmokeTest) {
     Print-Warn "Skipping release backend smoke test"
@@ -813,7 +807,7 @@ if ($SkipSmokeTest) {
     }
 }
 
-Write-Section -Step "Step 5/8" -Title "Build Portable Backend Release"
+Write-Section -Step "Step 5/6" -Title "Build Portable Backend Release"
 
 $buildArgs = @()
 $buildArgs += $BuildPythonRuntime.Arguments
@@ -838,42 +832,7 @@ Invoke-ExternalCommand `
     -Arguments $buildArgs `
     -WorkingDirectory $RootDir
 
-Write-Section -Step "Step 6/8" -Title "Build Tauri Launcher"
-
-Invoke-ExternalCommand `
-    -Title "Building Tauri launcher executable..." `
-    -FilePath $NpmPath `
-    -Arguments @("run", "launcher:build", "--", "--no-bundle") `
-    -WorkingDirectory $RootDir
-if ($DryRun) {
-    Print-Info "Tauri launcher build would complete"
-} else {
-    Print-OK "Tauri launcher build completed"
-}
-
-Write-Section -Step "Step 7/8" -Title "Assemble Launcher Release"
-
-$launcherBuildArgs = @()
-$launcherBuildArgs += $BuildPythonRuntime.Arguments
-$launcherBuildArgs += $LauncherBuildScript
-if (-not [string]::IsNullOrWhiteSpace($EffectiveVersion)) {
-    $launcherBuildArgs += "--version", $EffectiveVersion
-}
-if (-not [string]::IsNullOrWhiteSpace($EffectiveOutputDir)) {
-    $launcherBuildArgs += "--output-dir", $EffectiveOutputDir
-}
-if ($IncludeRuntimeConfig) {
-    $launcherBuildArgs += "--include-runtime-config"
-    $launcherBuildArgs += "--runtime-config-path", $SelectedRuntimeConfigPath
-}
-
-Invoke-ExternalCommand `
-    -Title "Assembling Tauri launcher Windows release..." `
-    -FilePath $BuildPythonRuntime.FilePath `
-    -Arguments $launcherBuildArgs `
-    -WorkingDirectory $RootDir
-
-Write-Section -Step "Step 8/8" -Title "Smoke Test Release Artifacts"
+Write-Section -Step "Step 6/6" -Title "Smoke Test Release Artifact"
 
 if ($SkipSmokeTest) {
     Print-Warn "Skipping packaged release smoke tests"
@@ -892,21 +851,6 @@ if ($SkipSmokeTest) {
     } else {
         Print-OK "Packaged release smoke test passed"
     }
-
-    $launcherSmokeArgs = @()
-    $launcherSmokeArgs += $BuildPythonRuntime.Arguments
-    $launcherSmokeArgs += $LauncherSmokeTestScript
-    $launcherSmokeArgs += $LauncherReleaseRoot
-    Invoke-ExternalCommand `
-        -Title "Running launcher release smoke test..." `
-        -FilePath $BuildPythonRuntime.FilePath `
-        -Arguments $launcherSmokeArgs `
-        -WorkingDirectory $RootDir
-    if ($DryRun) {
-        Print-Info "Launcher release smoke test would pass"
-    } else {
-        Print-OK "Launcher release smoke test passed"
-    }
 }
 
 Write-Host ""
@@ -921,7 +865,4 @@ if ($DryRun) {
     Print-OK "Release folder: $ReleaseRoot"
     Print-OK "Release zip: $ArchivePath"
     Print-OK "SHA256 file: $ChecksumPath"
-    Print-OK "Launcher release folder: $LauncherReleaseRoot"
-    Print-OK "Launcher release zip: $LauncherArchivePath"
-    Print-OK "Launcher SHA256 file: $LauncherChecksumPath"
 }
