@@ -1,6 +1,6 @@
 # Elenchus Frontend
 
-这个目录包含 Elenchus 的 React + Vite 前端，实现会话创建、实时聊天、运行观察与历史回放界面。
+这个目录包含 Elenchus 的 React + Vite 前端，实现会话创建、实时聊天、运行观察与历史恢复界面。
 
 > 说明：这是**轻量目录入口**，帮助你快速定位前端代码与继续阅读路径；首次安装和完整启动步骤请统一参考 [docs/getting-started.md](../docs/getting-started.md)。
 
@@ -26,6 +26,6 @@ npm run build
 
 ## 继续阅读
 
-- [前端开发指南](../docs/guides/frontend-development.md)
+- [开发指南](../docs/development.md)
 - [系统架构总览](../docs/architecture.md)
-- [运行时与回放](../docs/runtime.md)
+- [运行时与历史恢复](../docs/runtime.md)

@@ -1,316 +1,244 @@
 # 系统架构总览
 
-> 更新时间：2026-05-10
-> 本文档聚焦**当前系统如何组织**：系统分层、前后端职责、模式化运行链路与关键代码入口。
-> `runtime/` 目录结构、`session.json` / `events.jsonl` / `documents/` / `reference_entries/` 的职责请见 [runtime.md](./runtime.md)。
+> 本文档说明当前系统如何组织：核心目标、分层、数据流、模式边界与主要代码入口。
+> `runtime/` 目录和历史恢复文件职责请见 [runtime.md](./runtime.md)。
 
-## 1. 架构定位
+## 1. 核心目标
 
-Elenchus 当前是一个“共享底座 + 多模式运行链路”的多智能体辩论平台。
+Elenchus 是一个本地优先的 AI 多智能体辩论应用。它的主路径只有一条：
 
-它的核心特征是：
+1. 用户配置模型 provider。
+2. 用户创建辩题。
+3. 后端编排多个 AI 角色运行辩论。
+4. 前端实时展示过程。
+5. 系统保存会话，支持历史恢复和导出。
 
-- 共享会话模型、事件流、持久化与前端观察界面
-- 按模式切换不同的 prompt、graph、事件映射与产物形态
-- 通过 REST + WebSocket 组合实现创建、控制、实时推送与回放
-
-当前主线模式包括：
-
-- **标准辩论模式**：保留常规辩论流程、评分与观察能力
-- **诡辩实验模式**：独立实验链路，用于观察修辞操控、谬误标签与叙事漂移
+架构判断优先服务这条闭环。公开部署、外部代理集成、额外桌面壳和长期未来规划不属于当前主线。
 
 ## 2. 系统分层
 
 ```text
-Browser UI
-├─ React 19 + Zustand
-├─ REST 请求
-└─ WebSocket 实时事件
+React Frontend
+├─ 会话创建与切换
+├─ 模型 / 搜索 / 界面设置
+├─ WebSocket 实时事件渲染
+└─ 历史恢复与导出入口
    │
    ▼
 FastAPI Backend
-├─ Session / Model / Search / Log APIs
+├─ Sessions / Models / Search / Log APIs
 ├─ WebSocket 会话控制
-└─ Runtime orchestration
+├─ 文档上传与会话参考资料
+└─ 静态前端发布包回退
    │
    ▼
-Service Layer
-├─ session_service
-├─ document / reference services
-├─ provider service
-└─ runtime helpers
+Runtime Layer
+├─ DebateRuntimeService
+├─ Orchestrator
+├─ RuntimeBus
+└─ SessionRuntimeRepository
    │
    ▼
-LangGraph Runtime
-├─ standard graph
-└─ sophistry graph
+Agent / LLM Layer
+├─ 标准辩论 graph
+├─ 诡辩实验 graph
+├─ Prompt loader
+├─ LLM invoke / transport
+└─ Search tools
    │
    ▼
 Persistence
+├─ runtime/config.json
 ├─ SQLite database
-└─ runtime session artifacts
+└─ runtime/sessions/<session_id>/
 ```
 
-## 3. 前后端职责
+## 3. 请求与事件流
 
-### 前端
+### 创建会话
 
-前端负责：
+```text
+HomeView
+→ frontend/src/api/client.ts
+→ POST /api/sessions
+→ backend/app/api/sessions.py
+→ backend/app/services/session_service.py
+→ database + runtime session files
+```
 
-- 创建与切换会话
-- 展示消息流、时间线、运行图、记忆面板
-- 管理模型配置、搜索配置和界面设置
-- 接收 WebSocket 事件并驱动实时渲染
-- 读取历史状态并支持回放
+### 启动辩论
 
-关键入口：
+```text
+DebateControls / useDebateWebSocket
+→ POST /api/sessions/{id}/start
+→ backend/app/api/session_runtime.py
+→ DebateRuntimeService
+→ Orchestrator
+→ LangGraph engine
+→ standard graph 或 sophistry graph
+```
 
-- `frontend/src/components/HomeView.tsx`
-- `frontend/src/components/ChatPanel.tsx`
-- `frontend/src/hooks/useDebateWebSocket.ts`
-- `frontend/src/stores/debateStore.ts`
-- `frontend/src/components/chat/RuntimeInspector.tsx`
+### 实时展示
 
-### 后端
+```text
+Runtime nodes
+→ RuntimeBus
+→ events.jsonl
+→ WebSocket /api/ws/{session_id}
+→ debateStore
+→ ChatPanel / StatusBanner / live transcript
+```
 
-后端负责：
+### 历史恢复
 
-- 会话创建、读取、删除与导出
-- WebSocket 启动、停止、介入和事件推送
-- 模型 provider 配置与搜索配置
-- LangGraph 运行编排
-- 会话持久化、资料池处理与模式初始化
+```text
+GET /api/sessions/{id}
+→ session.json
+→ debateStore
+→ 历史消息与会话运行态
+```
 
-关键入口：
+## 4. 前端边界
 
-- `backend/app/main.py`
-- `backend/app/api/sessions.py`
-- `backend/app/api/session_control.py`
-- `backend/app/api/websocket.py`
-- `backend/app/middleware/demo_guard.py`
-- `backend/app/services/session_service.py`
-- `backend/app/runtime/orchestrator.py`
-- `backend/app/runtime/engines/langgraph.py`
+前端负责用户操作与运行过程呈现，不承载辩论编排规则。
 
-## 4. 模式化运行链路
+主要入口：
 
-Elenchus 的一个关键架构选择，是把“模式差异”放在运行链路层，而不是在单一流程里堆叠大量条件分支。
+- `frontend/src/components/HomeView.tsx`：首页、模式选择、创建会话。
+- `frontend/src/components/ChatPanel.tsx`：会话主视图。
+- `frontend/src/hooks/useDebateWebSocket.ts`：启动 / 停止 / 心跳 / 干预与实时事件接收。
+- `frontend/src/stores/debateStore.ts`：会话、消息和运行态的前端状态。
+- `frontend/src/api/client.ts`：REST API 访问层。
+
+## 5. 后端边界
+
+后端负责 API、运行编排、LLM 调用、会话参考资料和持久化。
+
+主要入口：
+
+- `backend/app/main.py`：FastAPI 应用装配、CORS、路由、健康检查、静态前端回退。
+- `backend/app/api/sessions.py`：会话 CRUD 与导出。
+- `backend/app/api/session_runtime.py`：前端启动 / 停止辅助端点、运行事件读取与导出。
+- `backend/app/api/websocket.py`：实时控制和事件通道。
+- `backend/app/api/models.py`：模型 provider 配置。
+- `backend/app/api/search.py`：搜索配置与健康检查。
+- `backend/app/api/session_documents.py`：会话参考文档接口。
+
+## 6. 运行层边界
+
+运行层把“API 请求”转成“可恢复、可广播、可落盘的辩论过程”。
+
+关键职责：
+
+- `DebateRuntimeService`：启动、停止、运行状态和用户干预队列。
+- `Orchestrator`：按会话模式选择运行链路。
+- `RuntimeBus`：创建事件、广播 WebSocket、追加事件文件。
+- `SessionRuntimeRepository`：读写运行时会话快照。
+- `runtime/engines/langgraph.py`：装配并调用 LangGraph。
+
+运行事件是前后端之间的主契约之一。新增节点或事件时，需要同时确认：
+
+- 后端是否写入 `events.jsonl`。
+- 前端是否能识别并渲染事件。
+- 历史恢复是否能从快照和事件恢复合理状态。
+
+## 7. 模式边界
 
 ### 标准辩论模式
 
-适合常规辩论场景，核心特征包括：
+标准模式用于常规辩论、评分和总结。
 
-- 标准 debater / judge / jury 流程
-- 可配合搜索与常规推理增强
-- 产出评分、结论和相关观察结果
+核心能力：
 
-对应核心入口：
+- 正反方发言。
+- 裁判评分。
+- 可选搜索增强。
+- 可选共识收敛总结。
+
+主要入口：
 
 - `backend/app/agents/graph.py`
 - `backend/app/agents/debater.py`
 - `backend/app/agents/judge.py`
+- `backend/app/agents/consensus.py`
 
 ### 诡辩实验模式
 
-适合修辞与谬误观察场景，核心特征包括：
+诡辩实验模式用于观察修辞操控和谬误标签，不追求胜负裁决。
 
-- 独立 prompt 与独立 graph
-- 不启用评分、陪审团与搜索工具
-- 输出观察报告和整场复盘，而不是胜负结论
-- 自动注入内置谬误库到当前会话资料池
-- 运行时事件以 turn 为主键维护“辩手发言 → 观察员报告”的顺序关系；即使首批发言未经历 token 流，也必须补发最终发言事件
-- 观察员报告事件与 artifact 会额外携带 `source_turn`、`source_roles`，供前端在多轮与补发场景下恢复对应关系
+核心边界：
 
-对应核心入口：
+- 独立 prompt。
+- 独立 graph。
+- 禁用搜索。
+- 不启用裁判、陪审团和评分。
+- 输出观察报告和最终复盘。
+- 自动注入内置谬误库。
+
+主要入口：
 
 - `backend/app/agents/sophistry_graph.py`
 - `backend/app/agents/sophistry_debater.py`
 - `backend/app/agents/sophistry_observer.py`
 
-详细边界与用户可见行为见：[sophistry-experiment-mode-design.md](./sophistry-experiment-mode-design.md)
+模式行为细节见 [sophistry-experiment-mode-design.md](./sophistry-experiment-mode-design.md)。
 
-## 5. 核心模块入口
+## 8. 参考资料边界
 
-### API 层
+会话参考资料是会话级输入能力，不是全局知识库。
 
-- `backend/app/api/sessions.py`：会话 CRUD、导出入口与子路由聚合
-- `backend/app/api/session_control.py`：REST 会话控制入口，负责 start / stop / intervene / status / live-events，并与 demo 访客/管理员能力表共用访问策略
-- `backend/app/api/session_documents.py`：会话文档上传、列表、详情、删除与资料池接口
-- `backend/app/api/session_runtime.py`：运行事件分页与快照导出接口
-- `backend/app/api/websocket.py`：WebSocket 会话控制与事件收发
-- `backend/app/api/models.py`：provider / 模型配置
-- `backend/app/api/search.py`：搜索配置与健康检查
-- `backend/app/api/log.py`：日志配置
+它负责：
 
-### 应用入口与中间件
+- 保存用户上传文档。
+- 解码并规范化纯文本 / Markdown。
+- 将文档内容作为 `context` 同步进当前会话 shared knowledge。
 
-- `backend/app/main.py`：应用装配入口，负责中间件栈与路由注册；`session_control_router` 需要先于 `sessions_router` 注册，确保 `/sessions/{id}/start` / `stop` 控制路径不会被旧兼容路由抢占
-- `backend/app/middleware/demo_guard.py`：Demo 模式下的游客/管理员能力表与 HTTP / WebSocket 访问策略主入口
-- `backend/app/middleware/auth.py`：全局认证中间件，在 auth.enabled 打开时进一步收紧写操作与管理能力
-- `backend/app/middleware/rate_limit.py`：IP 限流入口；`auto` 模式下只有在 `server.database_url` 是可共享的 SQLite 文件时才会启用共享存储。若数据库是非 SQLite，或是 `sqlite:///:memory:` 这类不可共享场景，则会明确退回进程内内存限流
+用户上传资料不再经过 LLM 预处理，也不生成 term / claim / excerpt 结构化条目。诡辩实验模式的内置谬误库仍会生成内部标签条目，作为该模式的固定背景能力。
 
-### 服务层
+主要入口：
 
-- `backend/app/services/session_service.py`：会话主服务，负责 CRUD、更新入口与会话记录落盘
-- `backend/app/services/session_service_helpers.py`：会话配置默认值、快照清洗与轮次辅助逻辑
-- `backend/app/services/session_service_serializers.py`：会话记录序列化与轮次结果物化
-- `backend/app/services/session_document_workflow.py`：会话文档上传后的预处理编排
-- `backend/app/services/provider_service.py`：provider 配置应用服务与默认项规则
-- `backend/app/services/provider_config_store.py`：provider 配置存储访问
-- `backend/app/services/provider_serializers.py`：provider 配置排序、时间解析与响应映射
-- `backend/app/services/document_service.py`：会话文档上传与读取
-- `backend/app/services/reference_library_service.py`：结构化资料条目查询与删除入口
-- `backend/app/services/reference_library_workflow.py`：资料预处理工作流与失败回滚
-- `backend/app/services/reference_library_serializers.py`：资料文档与条目序列化
-- `backend/app/services/reference_library_knowledge.py`：资料池到 shared knowledge 的同步逻辑
-- `backend/app/services/builtin_reference_service.py`：模式内置参考文档注入
-- `backend/app/services/export/__init__.py`：导出能力的推荐主入口，统一聚合会话导出、文件名与运行时快照导出能力；`backend/app/services/export_service.py` 仅保留为兼容壳
-- `backend/app/services/export/html.py`：会话 HTML 静态阅读页导出，内联黑白灰阅读样式、低饱和智能体点缀色、轮次导航与一键展开/收起脚本
-- `backend/app/services/export_markdown_service.py`：会话 Markdown 导出与 transcript 分类渲染
-- `backend/app/services/export_scoring_service.py`：导出评分维度、模块权重与综合分推导
-- `backend/app/services/export_filename_service.py`：导出文件名清洗与 `Content-Disposition` 头生成
-- `backend/app/services/export_runtime_service.py`：运行事件快照导出与校验摘要
+- `backend/app/api/session_documents.py`
+- `backend/app/services/document_service.py`
+- `backend/app/services/session_document_workflow.py`
+- `backend/app/storage/session_documents.py`
+- `backend/app/services/builtin_reference_service.py`（仅诡辩模式内置资料）
 
-### 运行层
+运行时文件位置见 [runtime.md](./runtime.md)。
 
-- `backend/app/runtime/orchestrator.py`：运行协调
-- `backend/app/runtime/engines/langgraph.py`：按模式装配并运行 LangGraph engine
-- `backend/app/runtime/bus.py`：运行事件广播与持久化总线；`RuntimeBus` 是运行时事件分发的唯一主入口（历史兼容层 `EventStreamGateway` / `ConnectionHub` 已清理）
-- `backend/app/runtime/session_repository.py`：会话运行态读写 facade 入口，封装 `SessionRuntimeRepository` 类
-- `backend/app/runtime/session_defaults.py`：默认配置工厂（team/jury/reasoning/mode config）
-- `backend/app/runtime/session_dialogue_helpers.py`：对话历史清洗、轮次提取与累计评分重算
-- `backend/app/runtime/session_snapshot_normalizer.py`：可恢复快照规范化与不完整轮次回滚
-- `backend/app/runtime/event_emitter.py`：运行时事件发射 facade 入口，封装 `RuntimeEventEmitter` 类与 `noop_emit_event` 回退
-- `backend/app/runtime/runtime_status.py`：节点状态描述字典、状态预测与工具调用检测逻辑
-- `backend/app/runtime/runtime_speech_emitter.py`：发言事件发射（start/token/cancel/end）
-- `backend/app/runtime/runtime_discussion_emitter.py`：组内讨论与陪审团讨论事件发射
-- `backend/app/runtime/runtime_report_emitter.py`：诡辩报告、事实核查、评分、回合完成与记忆更新事件发射
+## 9. 配置与持久化
 
-### 模型调用与输出长度
+当前活动配置源是 `runtime/config.json`，主要保存：
 
-- `runtime/config.json`：统一持久化服务商级默认输出参数；当前 `providers[].default_max_tokens` 可由用户在设置面板中配置，作为该服务商的默认输出上限，系统默认值为 64k
-- `backend/app/llm/config.py`：模型配置的推荐主入口，负责解析 agent/provider 覆盖配置，并按“角色/会话覆盖 → 服务商默认 `default_max_tokens` → 系统默认值”顺序解析 `max_tokens`；当前系统约定默认最大输入为 128k、默认最大输出为 64k
-- `backend/app/llm/invoke.py`：统一模型调用的推荐主入口，公开发言、组内讨论、陪审团讨论和总结都应经由这里进入底层模型客户端；`backend/app/agents/safe_invoke.py` 仅保留为兼容壳
-- `backend/app/llm/transport.py`：OpenAI 兼容传输层的推荐主入口，最终把解析出的 `max_tokens` 写入 chat completions payload；`backend/app/agents/openai_transport.py` 仅保留为兼容壳
-- `backend/app/llm/providers/*`：服务商 client 的推荐主入口；`backend/app/agents/llm.py`、`backend/app/agents/providers/*` 仅保留为兼容壳，避免旧脚本与旧测试导入失效
+- server 配置。
+- provider 配置。
+- 搜索配置。
+- 日志配置。
+- 辩论默认配置。
 
-### 提示词资源
+会话持久化同时使用 SQLite 和 `runtime/sessions/<session_id>/` 文件。调试恢复或导出问题时，优先同时看数据库记录、`session.json` 和 `events.jsonl`。
 
-- `backend/prompts/`：标准模式与事实核查相关提示词目录，包含辩手基础提示词、正反方补充提示词、钢人论证提示词、裁判提示词、共识收敛提示词与事实核查提示词
-- `backend/prompts/sophistry/`：诡辩实验模式提示词目录，包含辩手基础提示词、正反方补充提示词与观察员提示词
-- `backend/app/agents/prompt_loader.py`：标准模式提示词加载入口，负责拼接基础辩手提示词与角色补充提示词，并提供裁判提示词与共识收敛提示词读取（`get_judge_prompt` / `get_consensus_prompt`）
-- `backend/app/agents/sophistry_prompt_loader.py`：诡辩模式提示词加载入口，负责拼接诡辩模式的基础辩手提示词与角色补充提示词，并提供观察员提示词读取
+## 10. 代码入口速查
 
-### Agent 技能
+| 场景 | 优先入口 |
+| --- | --- |
+| 启动应用 | `backend/app/main.py` |
+| 创建 / 删除 / 导出会话 | `backend/app/api/sessions.py` |
+| 启动 / 停止辩论 | `backend/app/api/session_runtime.py` |
+| 实时事件 | `backend/app/api/websocket.py`、`backend/app/runtime/bus.py` |
+| 标准辩论流程 | `backend/app/agents/graph.py` |
+| 诡辩实验流程 | `backend/app/agents/sophistry_graph.py` |
+| LLM 调用 | `backend/app/llm/invoke.py`、`backend/app/llm/transport.py` |
+| 搜索工具 | `backend/app/tools/search_tool.py` |
+| 模型配置 | `backend/app/api/models.py`、`backend/app/services/provider_service.py` |
+| 会话参考资料 | `backend/app/api/session_documents.py` |
+| 前端创建页 | `frontend/src/components/HomeView.tsx` |
+| 前端会话页 | `frontend/src/components/ChatPanel.tsx` |
+| 前端实时通信 | `frontend/src/hooks/useDebateWebSocket.ts` |
+| 前端状态 | `frontend/src/stores/debateStore.ts` |
 
-- `backend/app/tools/__init__.py`：Agent 工具的推荐聚合入口；新代码应从这里或 `backend/app/tools/*` 子模块导入
-- `backend/app/tools/search_tool.py`：`web_search` 的推荐主入口与 LangChain tool 注册入口，保留 shared knowledge metadata 标记
-- `backend/app/tools/search_query_planner.py`：查询清洗、prompt-like 输入纠偏、辩题主题提取与搜索计划构建
-- `backend/app/tools/search_result_filter.py`：搜索结果关键词提取、相关性评分、去重与过滤
-- `backend/app/tools/search_formatter.py`：证据摘要格式化与 snippet 截断
-- `backend/app/agents/skills/*`：历史导入路径保留为兼容壳，避免旧代码与测试失效，不再作为新实现入口
+## 11. 文档分工
 
-### 兼容壳约定
-
-- `backend/app/tools/*`、`backend/app/llm/*`、`backend/app/services/export/*` 是当前推荐主入口
-- `backend/app/agents/skills/*`、`backend/app/agents/openai_transport.py`、`backend/app/agents/safe_invoke.py`、`backend/app/agents/llm.py`、`backend/app/agents/providers/*`、`backend/app/services/export_service.py` 仅用于兼容旧导入
-- 阅读代码、修 bug 或新增实现时，优先从推荐主入口进入；只有在排查历史脚本或旧测试时，才需要继续看兼容壳
-- `backend/app/agents/skills/__init__.py` 当前只保证有限兼容面：包级 `web_search` / `get_all_skills`，以及 `metadata`、`search_formatter`、`search_query_planner`、`search_result_filter`、`search_tool` 这些历史镜像子模块的包属性访问
-
-当前最常见的对应关系可以直接按下面记：
-
-| 能力 | 推荐主入口 | 兼容入口 |
-| --- | --- | --- |
-| Agent 工具 | `backend/app/tools/__init__.py` 与 `backend/app/tools/*` | `backend/app/agents/skills/*` |
-| OpenAI 兼容传输层 | `backend/app/llm/transport.py` | `backend/app/agents/openai_transport.py` |
-| 导出能力 | `backend/app/services/export/__init__.py` | `backend/app/services/export_service.py` |
-
-### 前端主路径
-
-- `frontend/src/components/HomeView.tsx`：首页与会话创建入口
-- `frontend/src/components/ChatPanel.tsx`：聊天主视图
-- `frontend/src/components/ChatPanel.history.test.tsx`：长历史会话渲染与观察器联动回归测试入口
-- `frontend/src/components/chat/MessageRow.tsx`：消息行组件，辩手消息块与裁判消息块均采用统一头部行布局（头像 + 身份标识 + 轮数 + 模型 + 折叠按钮居中对齐为一行）；卡片阴影统一为灰色系（`rgba(224, 224, 224, 0.5)`），头像尺寸统一为 36px / `borderRadius-md` / 白色文字 + 灰色阴影；身份标识统一为深灰色文字（`#333333`）+ 灰色圆角边框（`#CCCCCC`）无填充样式
-- `frontend/src/components/chat/messageRow/MarkdownRenderer.tsx`：Markdown 渲染组件，基于 react-markdown + remark-gfm，支持表格、代码块、引用等扩展语法
-- `frontend/src/components/chat/messageRow/shared.ts`：消息行共享样式与辅助函数，包含角色视觉映射、折叠按钮样式、轮次标签格式化等
-- `frontend/src/components/chat/ExecutionTimeline.tsx`：执行时间线
-- `frontend/src/components/chat/LiveGraph.tsx`：运行图
-- `frontend/src/components/chat/RuntimeInspector.tsx`：运行观察器容器
-- `frontend/src/api/client.ts`：REST 请求入口
-- `frontend/src/utils/textRepair.ts`：前端用户可见文本的乱码兜底修复
-- `frontend/src/components/chat/referenceLibrary/`：参考资料面板拆分后的共享逻辑、状态 hook 与弹层展示
-- `frontend/src/components/sidebar/settings/`：设置面板拆分后的显示/日志/服务商子模块
-
-### 设置面板展示层
-
-- `frontend/src/components/sidebar/SettingsPanel.tsx`：设置弹层总入口，统一控制弹层尺寸、左右分栏宽度、内容区留白、导航字号与关闭按钮尺寸
-- `frontend/src/components/sidebar/settings/SettingsDisplayTab.tsx`、`SettingsLoggingTab.tsx`、`SettingsRadioCardGroup.tsx`：标准设置页的标题、说明文案、选项卡片与交互控件的放大基线
-- `frontend/src/components/sidebar/SearchConfigTab.tsx`、`frontend/src/components/sidebar/search/`：搜索设置页的状态卡片、表单输入、说明文字与操作按钮尺寸
-- `frontend/src/components/sidebar/ProviderForm.tsx`、`ProviderSidebar.tsx`：模型服务商设置页的列表宽度、表单控件字号、模型标签、下拉选择器与操作区尺寸
-- 当前设置界面采用“保持字体大小、缩小容器与间距”的展示策略：优先下调弹层宽高、侧边栏宽度、卡片内边距、按钮尺寸和区块间距，以提升紧凑度但不改变阅读字号
-
-### 首页弹出式交互层
-
-- `frontend/src/components/HomeView.tsx`：首页统一控制模式切换提示、Agent 配置面板与错误提示的出现顺序；当前将诡辩模式提示框与 Agent 配置框统一放置在主对话框下方，避免遮挡题目输入区
-- `frontend/src/components/shared/SophistryModeNotice.tsx`：诡辩模式提示组件，首页 compact 形态通过高度、位移与透明度组合动画平滑进入/退出
-- `frontend/src/components/shared/AgentConfigPanel.tsx`：首页高级 Agent 配置面板，跟随首页创建卡片下方展开/收起，并复用统一的弹出层动画节奏
-- `frontend/src/components/shared/CustomSelect.tsx`：首页 Agent 配置中的下拉选择器改为挂载到 `document.body` 的浮层渲染，避免被首页动画容器的 `overflow: hidden` 截断，并根据视口空间自动决定向上或向下展开
-- `frontend/src/components/home/HomeComposerCard.tsx`：首页创建卡片承载轮数与模式相关控件；诡辩模式下的状态提示文案直接在这里渲染，需保持 UTF-8 文本正确显示
-
-### 编码治理链路
-
-- `frontend/index.html`：前端页面 UTF-8 编码声明
-- `frontend/src/components/HomeView.tsx`、`frontend/src/types/scoring.ts`：首页与评分维度文案的直接显示入口
-- `frontend/src/components/chat/ExecutionTimeline.tsx`：运行事件快照导入时的 UTF-8 / GB18030 解码回退
-- `backend/app/api/sessions.py`：会话 JSON 导出响应头
-- `backend/app/api/session_runtime.py`：运行事件快照导出响应头
-- `backend/app/services/document_service.py`：上传文本文件的多编码兼容解码
-- `backend/app/text_repair.py`：后端用户可见文本归一化与乱码修复
-
-## 6. 会话资料池在架构中的位置
-
-当前会话资料池支持两类来源：
-
-- 用户上传的参考文档
-- 模式自动注入的内置文档
-
-其职责边界是：
-
-- 文档与结构化资料作为会话级输入能力存在
-- 高价值资料可同步进共享知识，供运行链路消费
-- 资料池具体文件落点、快照关系与回放边界不在本文档展开
-
-当前一致性策略是：
-
-- API 通过 `session_document_workflow.py` 串联“创建文档 → 预处理 → 回读最终状态”
-- 文档与资料条目主要落在 `runtime/` 文件存储，而不是数据库表事务
-- 一致性依赖文件原子写、进程内锁与预处理失败时的补偿清理，而不是 `db.begin()`
-
-相关文档：
-
-- [运行时与回放](./runtime.md)
-- `docs/history-archive.md`：资料池历史实现说明与其他归档材料
-
-## 7. 文档边界
-
-当前架构文档只负责回答下面这些问题：
-
-- 系统分成哪些层
-- 前后端分别负责什么
-- 不同模式的运行链路如何分开
-- 应该从哪些源码入口理解系统
-
-下列内容请改读对应文档：
-
-- 如何启动项目：读 [getting-started.md](./getting-started.md)
-- `runtime/` 目录和回放文件职责：读 [runtime.md](./runtime.md)
-- 资料池历史实现细节与旧审查材料：统一读 `docs/history-archive.md`
-
-## 8. 继续阅读
-
-- [快速开始](./getting-started.md)
-- [运行时与回放](./runtime.md)
-- [诡辩实验模式说明](./sophistry-experiment-mode-design.md)
-- [后端开发指南](./guides/backend-development.md)
-- [前端开发指南](./guides/frontend-development.md)
-- [编码规范指南](./guides/encoding.md)
+- 启动项目：读 [getting-started.md](./getting-started.md)。
+- 查看 API：启动后访问 `http://localhost:8001/docs`。
+- 理解运行时文件：读 [runtime.md](./runtime.md)。
+- 开发项目：读 [development.md](./development.md)。

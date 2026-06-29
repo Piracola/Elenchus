@@ -5,7 +5,7 @@
 
 <p>一个面向思辨训练的 AI 多智能体辩论平台。</p>
 
-<p>输入辩题后，系统会组织正方、反方、裁判、观察员等多个 AI 角色展开辩论，并实时展示、保存、回放、导出整场过程。</p>
+<p>输入辩题后，系统会组织正方、反方、裁判、观察员等多个 AI 角色展开辩论，并实时展示、保存、恢复和导出整场过程。</p>
 
 <p>
     <a href="https://github.com/Piracola/Elenchus/actions/workflows/ci.yml"><img src="https://github.com/Piracola/Elenchus/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
@@ -25,9 +25,9 @@
 
 - 标准辩论：正反方交锋，裁判评分，必要时可以调用搜索。
 - 诡辩实验模式：让辩手故意使用诡辩/修辞操控，然后由观察员分析用了哪些谬误。
-- 实时输出：前端通过 WebSocket 接收 AI 发言、状态、时间线、运行图。
-- 会话回放：保存运行事件，之后可以恢复历史过程。
-- 资料池：用户可以上传参考资料，系统会整理后作为当前辩论的公共背景知识。
+- 实时输出：前端通过 WebSocket 接收 AI 发言、状态和运行事件。
+- 历史恢复：保存会话快照和运行事件，之后可以恢复历史过程。
+- 参考资料：用户可以上传文本资料，系统会作为当前辩论的公共背景知识。
 
 ## 快速启动
 
@@ -65,106 +65,7 @@
 `search字段为搜索服务相关配置`
 
 <details>
-<summary><b>公开演示部署（Demo Mode）</b></summary>
-
-本项目支持通过 `runtime/config.json` 中的 `demo` 配置项开启演示模式，适用于公开网站部署。
-
-### 演示模式特性
-
-- **游客权限**：可创建辩题、启动辩论、观看辩论，但无法修改模型、搜索等配置
-- **固定模型列表**：仅允许使用管理员预设的模型，游客不可见其他模型
-- **全局共享辩论**：所有游客看到相同的辩论列表，无用户隔离
-- **速率限制**：基于 IP 的防滥用限制（创建频率、WS 消息频率）
-- **管理员认证**：游客可通过账号密码认证进入完整模式，解锁所有配置修改权限
-
-### 启用方法
-
-在 `runtime/config.json` 中添加 `demo` 配置：
-
-```json
-{
-  "demo": {
-    "enabled": true,
-    "admin_username": "admin",
-    "admin_password_hash": "<SHA256 hash of your password>",
-    "allowed_models": ["gpt-4o-mini", "claude-sonnet-4-6"]
-  }
-}
-```
-
-### 生成管理员密码 Hash
-
-```bash
-python -c "import hashlib; print(hashlib.sha256('你的密码'.encode()).hexdigest())"
-```
-
-### 管理员登录
-
-演示模式开启后，页面顶部会显示「演示模式」横幅，点击右侧「管理员登录」按钮，输入用户名和密码即可进入完整模式。登录后页面右上角显示「管理员模式」标识，可一键退出。
-
-### Nginx 反向代理配置示例
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:8001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_read_timeout 86400s;
-        proxy_send_timeout 86400s;
-    }
-}
-```
-
-**注意**：WebSocket 支持是必须的，请确保 Nginx 配置中包含 `Upgrade` 和 `Connection` 头转发。
-
-</details>
-
-<details>
-<summary><b>生产环境安全配置指南（公开部署必读）</b></summary>
-
-自本版本起，系统新增了多项安全机制，公开部署前请务必完成以下配置：
-
-#### 1. 全局认证开关
-
-`runtime/config.json` 中 `auth.enabled` 控制是否启用全局认证：
-
-```json
-{
-  "auth": {
-    "enabled": true,
-    "jwt_secret_key": "change-me-in-production",
-    "jwt_expire_minutes": 10080
-  }
-}
-```
-
-- `enabled: true`：所有变异操作（创建/删除会话、启动/停止辩论、修改配置等）需要管理员登录
-- `enabled: false`：保持原有公开访问行为（向后兼容）
-- **生产环境强烈建议设为 `true`**
-
-#### 2. JWT Secret 环境变量
-
-**不要**在 `config.json` 中写入真实 JWT Secret。改为通过环境变量注入：
-
-```bash
-# Linux/macOS
-export ELENCHUS_JWT_SECRET_KEY="$(openssl rand -hex 32)"
-
-# Windows PowerShell
-$env:ELENCHUS_JWT_SECRET_KEY = -join ((1..32) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) })
-```
-
-环境变量优先级高于配置文件。如果未设置环境变量，则回退读取 `config.json` 中的值，并会在启动时发出警告。
-
-#### 3. Provider API Key 加密
+<summary><b>Provider API Key 加密</b></summary>
 
 `runtime/config.json` 中的 Provider API Key 支持透明加密存储。启用方法：
 
@@ -178,56 +79,6 @@ export ELENCHUS_ENCRYPTION_KEY="<上面生成的密钥>"
 
 设置后，系统会在写入 `runtime/config.json` 时自动加密所有 `api_key`，读取时自动解密。未设置加密密钥时，API Key 仍以明文存储（向后兼容，但会发出警告）。
 
-#### 4. 调试模式
-
-生产环境必须关闭调试模式：
-
-```json
-{
-  "server": {
-    "debug": false
-  }
-}
-```
-
-`debug: true` 会暴露详细的错误堆栈和内部路径，极大降低攻击难度。
-
-#### 5. 管理员密码哈希升级
-
-旧版本使用 SHA-256 存储密码，新版本已迁移至 **bcrypt**。兼容逻辑如下：
-
-- 系统会检测现有哈希格式，若为 64 位十六进制字符串（旧 SHA-256），仍可通过旧逻辑验证
-- **强烈建议在首次登录后通过「设置密码」功能重置密码**，系统会自动使用 bcrypt 重新哈希
-- 生成 bcrypt 哈希：
-
-```bash
-python -c "import bcrypt; print(bcrypt.hashpw(b'你的密码', bcrypt.gensalt()).decode())"
-```
-
-#### 6. 安全响应头
-
-后端已自动添加以下安全响应头（无需额外配置）：
-
-- `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: DENY`
-- `Referrer-Policy: strict-origin-when-cross-origin`
-
-#### 7. 审计日志
-
-所有管理操作（登录、配置修改、模型增删改、搜索配置变更等）都会记录到 `runtime/logs/audit.log`。定期检查该日志可发现异常访问。
-
-#### 8. 前端 Source Map
-
-生产构建已默认关闭 Source Map，防止攻击者通过 `.js.map` 文件还原前端源码。
-
-#### 9. 速率限制
-
-当前速率限制基于进程内存。单实例部署有效；若使用负载均衡或多 Worker 部署，建议在 Nginx/Cloudflare 层配置统一的速率限制。
-
-#### 10. 请求体大小限制
-
-后端已默认限制请求体大小为 **10 MB**，防止超大 JSON 请求导致内存耗尽。
-
 </details>
 
 <details>
@@ -235,65 +86,9 @@ python -c "import bcrypt; print(bcrypt.hashpw(b'你的密码', bcrypt.gensalt())
 
 当前项目内置 `DDGS` 作为默认轻量搜索提供商，无需 Docker、无需单独服务、也无需额外部署步骤。
 
-如果你希望接入外部搜索 API，可以在 **设置** → **搜索引擎** 中配置 `Tavily` 的 API URL 与 API Key。
+如果你希望接入外部搜索 API，可以在 **设置** → **搜索引擎** 中配置一个自定义 HTTP 搜索接口。
 
-**注意：** 默认情况下系统会优先使用 `DDGS`，如已配置 Tavily，也可手动切换到 Tavily。
-
-</details>
-
-<details>
-<summary><b>openclaw 运行说明</b></summary>
-
-本项目支持通过 REST API 与 openclaw 等外部 AI 代理集成，实现自然语言操控辩论。
-
-### 功能概述
-
-通过新增的 REST API，openclaw 可以：
-
-- 创建辩论会话并指定模型配置
-- 启动/停止辩论
-- 实时监控辩论进展
-- 向辩论中插入用户干预
-- 导出辩论结果（JSON / Markdown / HTML 静态阅读页）
-
-### API 端点
-
-| 方法   | 路径                               | 功能     |
-| ---- | -------------------------------- | ------ |
-| POST | `/api/sessions/{id}/start`       | 启动辩论   |
-| POST | `/api/sessions/{id}/stop`        | 停止辩论   |
-| POST | `/api/sessions/{id}/intervene`   | 干预辩论   |
-| GET  | `/api/sessions/{id}/status`      | 获取辩论状态 |
-| GET  | `/api/sessions/{id}/live-events` | 轮询实时事件 |
-
-### openclaw 配置示例
-
-在 openclaw 中添加 Elenchus 工具：
-
-```yaml
-tools:
-  - name: elenchus
-    type: rest_api
-    base_url: http://<服务器地址>:8001
-    description: "多智能体辩论平台"
-```
-
-### 使用示例
-
-用户："帮我创建一个关于 AI 安全的辩论，用 GPT-4 和 Claude"
-
-openclaw 自动执行：
-
-1. `POST /api/sessions` → 创建会话
-2. `POST /api/sessions/{id}/start` → 启动辩论
-3. 循环轮询 `GET /api/sessions/{id}/live-events` → 实时展示进展
-4. `GET /api/sessions/{id}/export?format=markdown` → 导出结果（可改为 `format=json` 或 `format=html`）
-
-### 完整文档
-
-- API 参考文档：[docs/API_REFERENCE.md](./docs/API_REFERENCE.md)
-- 当前项目文档入口：[docs/README.md](./docs/README.md)
-- 历史集成说明与旧版资料统一归档到 `docs/history-archive.md`
+**注意：** 默认情况下系统会优先使用 `DDGS`。自定义接口未配置或不可用时，系统会回退到 DDGS。
 
 </details>
 
@@ -330,15 +125,13 @@ openclaw 自动执行：
 - [文档首页](./docs/README.md)
 - [快速开始](./docs/getting-started.md)
 - [系统架构总览](./docs/architecture.md)
-- [运行时与回放](./docs/runtime.md)
+- [运行时与历史恢复](./docs/runtime.md)
 - [诡辩实验模式说明](./docs/sophistry-experiment-mode-design.md)
-- [后端开发指南](./docs/guides/backend-development.md)
-- [前端开发指南](./docs/guides/frontend-development.md)
-- 历史资料归档：`docs/history-archive.md`
+- [开发指南](./docs/development.md)
 
 ## 项目结构概览
 
-- `frontend/`：React + Vite 前端，负责创建会话、实时观察、聊天与回放界面。
+- `frontend/`：React + Vite 前端，负责创建会话、实时观察、聊天与历史恢复界面。
 - `backend/`：FastAPI + LangGraph 后端，负责运行编排、API、会话存储与事件流。
 - `docs/`：详细文档入口，包括架构、运行时、模式与开发指南。
 - `runtime/`：本地运行时生成内容，包括数据库、日志、会话快照与事件文件。
