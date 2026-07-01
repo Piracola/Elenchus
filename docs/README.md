@@ -10,13 +10,14 @@
 ## 理解系统
 
 - [系统架构总览](./architecture.md)：核心分层、数据流、模式边界和主要代码入口。
-- [运行时与历史恢复](./runtime.md)：`runtime/` 目录、会话快照、事件流和恢复关系。
+- [运行时与历史恢复](./runtime.md)：`runtime/` 目录、SQLite 账本、事件流和恢复关系。
 - [诡辩实验模式说明](./sophistry-experiment-mode-design.md)：该模式的定位、用户可见行为和边界。
 - [诡辩实验模式谬误库](./sophistry-fallacy-catalog.md)：模式使用的标签体系与概念资料。
 
 ## 开发指南
 
 - [开发指南](./development.md)：后端、前端、UI 风格和编码约定。
+- [Python 依赖迁移计划](./dependency-migration-plan.md)：后端 `pyproject.toml + uv.lock` 依赖体系和迁移验收标准。
 
 ## 维护规则
 

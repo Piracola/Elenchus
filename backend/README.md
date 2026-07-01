@@ -9,14 +9,15 @@
 - `app/`：后端源码
 - `prompts/`：系统提示词文件，按标准模式与诡辩模式组织
 - `tests/`：后端测试
-- `requirements.txt`：运行依赖
-- `requirements-dev.txt`：开发 / 测试依赖
+- `pyproject.toml`：后端唯一依赖声明入口
+- `uv.lock`：后端锁文件
 
 ## prompts 目录说明
 
 - `prompts/debater_system.md`：标准模式辩手通用基础提示词
 - `prompts/debater_proposer.md`：标准模式正方补充提示词
 - `prompts/debater_opposer.md`：标准模式反方补充提示词
+- `prompts/group_discussion_system.md`：标准模式组内讨论提示词
 - `prompts/judge_system.md`：标准模式裁判提示词
 - `prompts/fact_checker_system.md`：事实核查代理提示词
 - `prompts/sophistry/debater_system.md`：诡辩模式辩手通用基础提示词
@@ -33,12 +34,11 @@
 ```bash
 npm run test:backend
 cd backend
-venv/Scripts/python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
-venv/Scripts/python -m pytest
-venv/Scripts/python -m pytest tests/test_graph.py
+uv sync --frozen --group dev
+uv run --frozen --no-dev python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+uv run --frozen --group dev pytest
+uv run --frozen --group dev pytest tests/test_graph.py
 ```
-
-macOS / Linux 请把 `venv/Scripts/python` 换成 `venv/bin/python`。
 
 如果你还没有准备虚拟环境、依赖或前后端联调环境，请回到 [快速开始](../docs/getting-started.md)。
 

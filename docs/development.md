@@ -26,10 +26,10 @@
 
 ```bash
 cd backend
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
-pytest
-pytest tests/test_graph.py
-pip install -r requirements-dev.txt
+uv sync --frozen --group dev
+uv run --frozen --no-dev python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+uv run --frozen --group dev pytest
+uv run --frozen --group dev pytest tests/test_graph.py
 ```
 
 如果在仓库根目录，也可以运行：
@@ -70,6 +70,11 @@ VITE_BACKEND_PORT=8001
 
 当前唯一活动配置源是 `runtime/config.json`。本地启动会初始化该文件，并把运行数据写入 `runtime/`。
 
+后端 Python 依赖的唯一真相源是：
+
+- `backend/pyproject.toml`
+- `backend/uv.lock`
+
 常见配置项：
 
 ```json
@@ -104,8 +109,8 @@ VITE_BACKEND_PORT=8001
 
 - `backend/app/main.py`：应用入口。
 - `backend/app/api/sessions.py`：会话 CRUD、导出与资料接口。
-- `backend/app/api/session_runtime.py`：启动 / 停止辅助端点、运行事件读取与导出。
-- `backend/app/api/websocket.py`：WebSocket 会话控制。
+- `backend/app/api/session_runtime.py`：Run 创建、查看、命令和事件读取。
+- `backend/app/api/websocket.py`：按 `run_id` 订阅 WebSocket 事件。
 - `backend/app/api/models.py`：provider / 模型配置接口。
 - `backend/app/api/search.py`：搜索配置与健康检查。
 - `backend/app/services/session_service.py`：会话生命周期主服务。
@@ -170,19 +175,20 @@ VITE_BACKEND_PORT=8001
 
 ### 会话 / 历史恢复异常
 
-优先同时查看：
+优先查看：
 
-- API 返回。
-- WebSocket 事件。
-- `runtime/sessions/<session_id>/session.json`。
-- `runtime/sessions/<session_id>/events.jsonl`。
+- `/api/runs/{run_id}` 返回的 run summary 和 projection。
+- `/api/runs/{run_id}/events?after_seq=0` 返回的事件流。
+- SQLite 中 `runs / run_events / run_checkpoints / run_projections` 对应记录。
+- `runtime/logs/` 中的异常堆栈。
 
 ### 参考资料异常
 
 优先查看：
 
-- `runtime/sessions/<session_id>/documents/`
-- `runtime/sessions/<session_id>/session.json` 中的 `shared_knowledge`
+- `/api/sessions/{session_id}/documents`
+- SQLite 中 `session_documents` 对应记录。
+- `/api/runs/{run_id}` 返回 projection 中的 `shared_knowledge`。
 
 ## 8. 前端风格契约
 
@@ -221,7 +227,7 @@ Elenchus 是辩论、分析、配置和运行观察工具。界面应该冷静�
 - `text/*` 响应必须显式带 `charset=utf-8`。
 - `application/json` 导出接口也统一显式带 `charset=utf-8`。
 - `Content-Disposition` 中包含中文文件名时，优先使用 `filename*=UTF-8''...`。
-- 运行时事件、会话快照、导出文件统一使用 UTF-8 写盘。
+- 运行事件、SQLite 导出结果和可读导出文件统一使用 UTF-8。
 
 出现乱码时，按下面顺序排查：
 

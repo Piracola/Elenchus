@@ -1,26 +1,27 @@
 const { spawn } = require('child_process');
-const fs = require('fs');
 const path = require('path');
 
 const rootDir = path.resolve(__dirname, '..');
 const backendDir = path.join(rootDir, 'backend');
-const isWindows = process.platform === 'win32';
-const pythonExecutable = isWindows
-  ? path.join(backendDir, 'venv', 'Scripts', 'python.exe')
-  : path.join(backendDir, 'venv', 'bin', 'python');
-
-if (!fs.existsSync(pythonExecutable)) {
-  console.error(`[elenchus] Backend virtual environment is missing: ${pythonExecutable}`);
-  console.error('[elenchus] Run the startup script once or create backend/venv before running backend tests.');
-  process.exit(1);
-}
 
 const extraArgs = process.argv.slice(2);
+const normalizedArgs = extraArgs.map((arg) => {
+  if (typeof arg !== 'string') {
+    return arg;
+  }
+  if (arg.startsWith('backend/')) {
+    return arg.slice('backend/'.length);
+  }
+  if (arg.startsWith('backend\\')) {
+    return arg.slice('backend\\'.length);
+  }
+  return arg;
+});
 const child = spawn(
-  pythonExecutable,
-  ['-m', 'pytest', ...extraArgs],
+  'uv',
+  ['run', '--frozen', '--group', 'dev', 'pytest', ...normalizedArgs],
   {
-    cwd: rootDir,
+    cwd: backendDir,
     stdio: 'inherit',
   },
 );

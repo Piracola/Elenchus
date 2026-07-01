@@ -83,18 +83,18 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
-          cache-dependency-path: |
-            backend/requirements.txt
-            backend/requirements-dev.txt
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
 
       - name: Install backend dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements-dev.txt
+        run: uv sync --frozen --group dev
 
       - name: Run backend tests
-        run: pytest tests
+        run: uv run --frozen --group dev pytest tests
 
   build:
     name: Build Windows Portable EXE
@@ -123,6 +123,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
 
       - name: Resolve release metadata
         id: meta
@@ -160,12 +166,10 @@ jobs:
         run: npm --prefix frontend run build
 
       - name: Install backend build dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r backend/requirements.txt pyinstaller
+        run: uv sync --project backend --frozen --no-default-groups --group build
 
       - name: Smoke test backend startup
-        run: python scripts/smoke_test_release_backend.py
+        run: uv run --project backend --frozen --no-default-groups --group build python scripts/smoke_test_release_backend.py
 
       - name: Build portable EXE release
         shell: pwsh
@@ -191,10 +195,10 @@ jobs:
             $arguments += "--allow-live-runtime-config"
           }
 
-          python @arguments
+          uv run --project backend --frozen --no-default-groups --group build python @arguments
 
       - name: Smoke test packaged release artifact
-        run: python scripts/smoke_test_release_backend.py --release-archive dist/releases/${{ steps.meta.outputs.artifact }}
+        run: uv run --project backend --frozen --no-default-groups --group build python scripts/smoke_test_release_backend.py --release-archive dist/releases/${{ steps.meta.outputs.artifact }}
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4

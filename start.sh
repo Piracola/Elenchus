@@ -164,15 +164,12 @@ echo ""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$SCRIPT_DIR/backend"
 FRONTEND_DIR="$SCRIPT_DIR/frontend"
-VENV_DIR="$BACKEND_DIR/venv"
 RUNTIME_DIR="$SCRIPT_DIR/runtime"
 INSTALL_STATE_DIR="$RUNTIME_DIR/.install-state"
 
-BACKEND_STATE_FILE="$INSTALL_STATE_DIR/backend.txt"
 FRONTEND_STATE_FILE="$INSTALL_STATE_DIR/frontend.txt"
 ENV_CACHE_FILE="$INSTALL_STATE_DIR/env-check.txt"
 
-BACKEND_DEPS=("$BACKEND_DIR/requirements.txt")
 FRONTEND_DEPS=("$FRONTEND_DIR/package.json" "$FRONTEND_DIR/package-lock.json")
 
 PIDS=()
@@ -202,25 +199,11 @@ if test_env_cache_valid "$ENV_CACHE_FILE"; then
     print_success "Environment check passed (cached)"
 else
     if [[ "$FRONTEND_ONLY" != true ]]; then
-        echo "Checking Python..."
-        if check_command python3; then
-            PY_VERSION=$(get_python_version)
-            if version_ge "$PY_VERSION" "3.10.0"; then
-                print_success "Python $PY_VERSION installed"
-            else
-                print_error "Python version too low ($PY_VERSION), requires 3.10+"
-                CHECKS_PASSED=false
-            fi
+        echo "Checking uv..."
+        if check_command uv; then
+            print_success "uv installed"
         else
-            print_error "Python3 not found, please install Python 3.10+"
-            CHECKS_PASSED=false
-        fi
-
-        echo "Checking pip..."
-        if check_command pip3 || check_command pip; then
-            print_success "pip installed"
-        else
-            print_error "pip not found"
+            print_error "uv not found, please install uv"
             CHECKS_PASSED=false
         fi
     fi
@@ -259,17 +242,17 @@ if [[ "$CHECKS_PASSED" != true ]]; then
     print_error "Environment check failed, please install missing dependencies"
     echo ""
     echo "Recommended installation:"
-    echo "  Python:  https://www.python.org/downloads/"
+    echo "  uv:      https://docs.astral.sh/uv/getting-started/installation/"
     echo "  Node.js: https://nodejs.org/"
     if [[ "$(uname)" == "Darwin" ]]; then
         echo ""
         echo "  macOS users can use Homebrew:"
-        echo "    brew install python3 node"
+        echo "    brew install uv node"
     elif [[ "$(uname)" == "Linux" ]]; then
         echo ""
-        echo "  Linux users can use package manager:"
-        echo "    Ubuntu/Debian: sudo apt install python3 python3-pip nodejs npm"
-        echo "    CentOS/RHEL:   sudo yum install python3 python3-pip nodejs npm"
+        echo "  Linux users can install Node.js with package manager and uv from the official installer:"
+        echo "    uv:      https://docs.astral.sh/uv/getting-started/installation/"
+        echo "    Node.js: https://nodejs.org/"
     fi
     exit 1
 fi
@@ -281,28 +264,12 @@ if [[ "$FRONTEND_ONLY" != true ]]; then
 
     cd "$BACKEND_DIR"
 
-    if [[ ! -d "$VENV_DIR" ]]; then
-        print_info "Creating Python virtual environment..."
-        python3 -m venv "$VENV_DIR"
-        print_success "Virtual environment created"
-    else
-        print_success "Virtual environment already exists"
-    fi
-
-    print_info "Activating virtual environment..."
-    source "$VENV_DIR/bin/activate"
-
     if [[ "$SKIP_INSTALL" != true ]]; then
-        if test_dependency_refresh_needed "$BACKEND_STATE_FILE" "${BACKEND_DEPS[@]}"; then
-            print_info "Installing backend dependencies..."
-            pip install -r requirements.txt --quiet 2>/dev/null || true
-            save_dependency_fingerprint "$BACKEND_STATE_FILE" "${BACKEND_DEPS[@]}"
-            print_success "Backend dependencies installed"
-        else
-            print_success "Backend dependencies are up to date"
-        fi
+        print_info "Synchronizing backend dependencies via uv..."
+        uv sync --project "$BACKEND_DIR" --frozen --no-dev
+        print_success "Backend dependencies are synchronized"
     else
-        print_info "Skipping dependency installation"
+        print_info "Skipping backend dependency synchronization"
     fi
 
     print_info "Runtime configuration is loaded from $RUNTIME_DIR/config.json"

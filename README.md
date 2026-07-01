@@ -71,7 +71,7 @@
 
 ```bash
 # 生成加密密钥（仅需执行一次，妥善保存）
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+uv run --project backend --with cryptography python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
 # 设置为环境变量
 export ELENCHUS_ENCRYPTION_KEY="<上面生成的密钥>"
@@ -128,6 +128,7 @@ export ELENCHUS_ENCRYPTION_KEY="<上面生成的密钥>"
 - [运行时与历史恢复](./docs/runtime.md)
 - [诡辩实验模式说明](./docs/sophistry-experiment-mode-design.md)
 - [开发指南](./docs/development.md)
+- [Python 依赖迁移计划](./docs/dependency-migration-plan.md)
 
 ## 项目结构概览
 

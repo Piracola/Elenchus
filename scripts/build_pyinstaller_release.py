@@ -118,7 +118,8 @@ def load_pyinstaller_runner():
     except ImportError as exc:
         raise RuntimeError(
             "PyInstaller is not installed in the current Python environment. "
-            "Install it first, for example with `python -m pip install pyinstaller`."
+            "Sync the backend build environment first, for example with "
+            "`uv sync --project backend --frozen --no-default-groups --group build`."
         ) from exc
     return pyinstaller_run
 

@@ -6,9 +6,15 @@
 
 ## 1. 环境要求
 
-- Python 3.10+
+- uv
 - Node.js 18+
 - npm
+
+补充说明：
+
+- 后端 Python 依赖现在统一由 `uv` 管理。
+- 仓库把后端解释器固定在 Python 3.11 这一条线上，`uv` 会按项目约束自动选择或下载兼容解释器。
+- 如果你还没有安装 `uv`，先按官方文档完成安装：`https://docs.astral.sh/uv/getting-started/installation/`
 
 ## 2. 一键启动
 
@@ -67,7 +73,7 @@ chmod +x ./start.sh
 补充说明：
 
 - 启动后会在 `runtime/config.json` 初始化统一运行时配置。
-- 运行目录会准备 `runtime/elenchus.db`、`runtime/logs/`、`runtime/sessions/` 等本地内容。
+- 运行目录会准备 `runtime/elenchus.db` 和 `runtime/logs/` 等本地内容；运行真相以 SQLite 账本为准。
 - provider API key 不通过仓库内 `.env` 管理，而是在 Web UI 中配置并持久化到 `runtime/config.json`。
 - 当前只会直接初始化并使用 `runtime/config.json`；旧的 `.env` / `config.yaml` / `log_config.json` / provider DB 残留不会再被自动导入。
 
@@ -79,29 +85,14 @@ chmod +x ./start.sh
 
 ```bash
 cd backend
-python -m venv venv
-```
-
-Windows PowerShell：
-
-```powershell
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
-```
-
-macOS / Linux：
-
-```bash
-source venv/bin/activate
-pip install -r requirements.txt
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+uv sync --frozen --group dev
+uv run --frozen --no-dev python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 如果你准备进行后端开发与测试，还可以额外安装：
 
 ```bash
-pip install -r requirements-dev.txt
+uv sync --frozen --group dev
 ```
 
 ### 5.2 启动前端
@@ -129,10 +120,10 @@ npm run dev
 
 ```bash
 cd backend
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
-venv/Scripts/python -m pytest
-venv/Scripts/python -m pytest tests/test_graph.py
-pip install -r requirements-dev.txt
+uv sync --frozen --group dev
+uv run --frozen --no-dev python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+uv run --frozen --group dev pytest
+uv run --frozen --group dev pytest tests/test_graph.py
 ```
 
 如果你在仓库根目录，也可以直接运行：

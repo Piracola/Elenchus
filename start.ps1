@@ -322,17 +322,11 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RootDir = $ScriptDir
 $BackendDir = Join-Path $RootDir "backend"
 $FrontendDir = Join-Path $RootDir "frontend"
-$VenvDir = Join-Path $BackendDir "venv"
 $RuntimeDir = Join-Path $RootDir "runtime"
 $InstallStateDir = Join-Path $RuntimeDir ".install-state"
 
-$BackendPython = Join-Path $VenvDir "Scripts\python.exe"
-$BackendStateFile = Join-Path $InstallStateDir "backend.txt"
 $FrontendStateFile = Join-Path $InstallStateDir "frontend.txt"
 $EnvCacheFile = Join-Path $InstallStateDir "env-check.txt"
-$BackendDependencyFiles = @(
-    (Join-Path $BackendDir "requirements.txt")
-)
 $FrontendDependencyFiles = @(
     (Join-Path $FrontendDir "package.json"),
     (Join-Path $FrontendDir "package-lock.json")
@@ -347,42 +341,27 @@ Write-Host $CYAN"========================================"$RESET
 Write-Host ""
 
 $checksPassed = $true
-$PythonRuntime = $null
+$UvInfo = $null
 
 $cachedEnv = Get-CachedEnvCheck -CacheFile $EnvCacheFile
 
 if ($null -ne $cachedEnv) {
     Print-OK "Environment check passed (cached)"
-    # Still need PythonRuntime for backend setup
     if (-not $FrontendOnly) {
-        $PythonRuntime = Resolve-PythonRuntime -PreferredPaths @($BackendPython)
-        if (-not $PythonRuntime) {
-            Print-Err "Python not found or unusable, please install Python 3.10+"
+        $UvInfo = Get-ExecutableVersion -CommandName "uv"
+        if (-not $UvInfo) {
+            Print-Err "uv not found or unusable, please install uv"
             $checksPassed = $false
         }
     }
 } else {
     if (-not $FrontendOnly) {
-        Write-Host "Checking Python..."
-        $PythonRuntime = Resolve-PythonRuntime -PreferredPaths @($BackendPython)
-        if ($PythonRuntime) {
-            Print-OK "Python $($PythonRuntime.Version) installed"
+        Write-Host "Checking uv..."
+        $UvInfo = Get-ExecutableVersion -CommandName "uv"
+        if ($UvInfo) {
+            Print-OK "uv $($UvInfo.Version) installed"
         } else {
-            Print-Err "Python not found or unusable, please install Python 3.10+"
-            $checksPassed = $false
-        }
-
-        Write-Host "Checking pip..."
-        if ($PythonRuntime) {
-            $pipVersionResult = Invoke-CommandCapture -FilePath $PythonRuntime.FilePath -Arguments ($PythonRuntime.Arguments + @("-m", "pip", "--version"))
-        } else {
-            $pipVersionResult = $null
-        }
-
-        if ($pipVersionResult -and $pipVersionResult.Success -and -not [string]::IsNullOrWhiteSpace($pipVersionResult.Text)) {
-            Print-OK "pip installed"
-        } else {
-            Print-Err "pip not found"
+            Print-Err "uv not found or unusable, please install uv"
             $checksPassed = $false
         }
     }
@@ -417,7 +396,7 @@ if (-not $checksPassed) {
     Print-Err "Environment check failed, please install missing dependencies"
     Write-Host ""
     Write-Host "Recommended installation:"
-    Write-Host "  Python:  https://www.python.org/downloads/"
+    Write-Host "  uv:      https://docs.astral.sh/uv/getting-started/installation/"
     Write-Host "  Node.js: https://nodejs.org/"
     exit 1
 }
@@ -433,43 +412,16 @@ if (-not $FrontendOnly) {
 
     Push-Location $BackendDir
 
-    $venvCreated = $false
-
-    if (-not (Test-Path $BackendPython)) {
-        Print-Info "Creating Python virtual environment..."
-        $venvArgs = @()
-        $venvArgs += $PythonRuntime.Arguments
-        $venvArgs += "-m", "venv", $VenvDir
-        & $PythonRuntime.FilePath @venvArgs
+    if (-not $SkipInstall) {
+        Print-Info "Synchronizing backend dependencies via uv..."
+        & $UvInfo.FilePath "sync" "--project" $BackendDir "--frozen" "--no-dev"
         if ($LASTEXITCODE -ne 0) {
-            Print-Err "Failed to create Python virtual environment"
+            Print-Err "Backend dependency synchronization failed"
             exit $LASTEXITCODE
         }
-
-        $venvCreated = $true
-        Print-OK "Virtual environment created"
+        Print-OK "Backend dependencies are synchronized"
     } else {
-        Print-OK "Virtual environment already exists"
-    }
-
-    if (-not $SkipInstall) {
-        $backendInstallNeeded = $venvCreated -or (Test-DependencyRefreshNeeded -StateFile $BackendStateFile -DependencyFiles $BackendDependencyFiles)
-
-        if ($backendInstallNeeded) {
-            Print-Info "Installing backend dependencies..."
-            & $BackendPython -m pip install --disable-pip-version-check --quiet -r requirements.txt
-            if ($LASTEXITCODE -ne 0) {
-                Print-Err "Backend dependency installation failed"
-                exit $LASTEXITCODE
-            }
-
-            Save-DependencyFingerprint -StateFile $BackendStateFile -DependencyFiles $BackendDependencyFiles
-            Print-OK "Backend dependencies installed"
-        } else {
-            Print-OK "Backend dependencies are up to date"
-        }
-    } else {
-        Print-Info "Skipping dependency installation"
+        Print-Info "Skipping backend dependency synchronization"
     }
     Print-Info "Runtime configuration is loaded from $RuntimeDir\\config.json"
 

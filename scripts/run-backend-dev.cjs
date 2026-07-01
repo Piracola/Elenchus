@@ -1,23 +1,26 @@
 const { spawn } = require('child_process');
-const fs = require('fs');
 const path = require('path');
 
 const rootDir = path.resolve(__dirname, '..');
 const backendDir = path.join(rootDir, 'backend');
 const backendPort = process.env.ELENCHUS_BACKEND_PORT || '8001';
-const isWindows = process.platform === 'win32';
-const pythonExecutable = isWindows
-  ? path.join(backendDir, 'venv', 'Scripts', 'python.exe')
-  : path.join(backendDir, 'venv', 'bin', 'python');
-
-if (!fs.existsSync(pythonExecutable)) {
-  console.error(`[elenchus] Backend virtual environment is missing: ${pythonExecutable}`);
-  process.exit(1);
-}
 
 const child = spawn(
-  pythonExecutable,
-  ['-m', 'uvicorn', 'app.main:app', '--host', '0.0.0.0', '--port', backendPort, '--reload'],
+  'uv',
+  [
+    'run',
+    '--frozen',
+    '--no-dev',
+    'python',
+    '-m',
+    'uvicorn',
+    'app.main:app',
+    '--host',
+    '0.0.0.0',
+    '--port',
+    backendPort,
+    '--reload',
+  ],
   {
     cwd: backendDir,
     stdio: 'inherit',

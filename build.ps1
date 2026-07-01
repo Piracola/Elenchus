@@ -551,9 +551,8 @@ $RootDir = $ScriptDir
 $BackendDir = Join-Path $RootDir "backend"
 $FrontendDir = Join-Path $RootDir "frontend"
 $ScriptsDir = Join-Path $RootDir "scripts"
-$VenvDir = Join-Path $BackendDir "venv"
-$BackendPython = Join-Path $VenvDir "Scripts\python.exe"
-$BackendRequirements = Join-Path $BackendDir "requirements.txt"
+$BackendPyproject = Join-Path $BackendDir "pyproject.toml"
+$BackendLockFile = Join-Path $BackendDir "uv.lock"
 $BuildScript = Join-Path $ScriptsDir "build_pyinstaller_release.py"
 $SmokeTestScript = Join-Path $ScriptsDir "smoke_test_release_backend.py"
 $FrontendLockFile = Join-Path $FrontendDir "package-lock.json"
@@ -659,19 +658,25 @@ $DoFrontendInstall = -not ($SkipInstall -or $SkipFrontendInstall)
 
 Write-Section -Step "Step 1/6" -Title "Environment Check"
 
-foreach ($requiredPath in @($BackendDir, $FrontendDir, $BuildScript, $SmokeTestScript, $BackendRequirements)) {
+foreach ($requiredPath in @($BackendDir, $FrontendDir, $BuildScript, $SmokeTestScript, $BackendPyproject, $BackendLockFile)) {
     if (-not (Test-Path $requiredPath)) {
         Print-Err "Missing required path: $requiredPath"
         exit 1
     }
 }
 
-$PythonRuntime = Resolve-PythonRuntime -PreferredPaths @($BackendPython)
-if (-not $PythonRuntime) {
-    Print-Err "Python not found or unusable, please install Python 3.10+"
+$UvCommand = Get-Command uv -ErrorAction SilentlyContinue
+if (-not $UvCommand) {
+    Print-Err "uv not found or unusable, please install uv"
     exit 1
 }
-Print-OK "Python $($PythonRuntime.Version) available via $($PythonRuntime.CommandLabel)"
+$UvPath = Resolve-CommandPath -Command $UvCommand
+$UvVersion = Invoke-CommandCapture -FilePath $UvPath -Arguments @("--version")
+if (-not $UvVersion.Success) {
+    Print-Err "uv is installed but unusable"
+    exit 1
+}
+Print-OK "uv $($UvVersion.Text) installed"
 
 $NodeCommand = Get-Command node -ErrorAction SilentlyContinue
 if (-not $NodeCommand) {
@@ -706,43 +711,11 @@ if (-not $DoFrontendInstall -and -not (Test-FrontendDependencyInstallHealthy -Fr
 
 Write-Section -Step "Step 2/6" -Title "Prepare Backend Build Environment"
 
-if (-not (Test-Path $BackendPython)) {
-    $venvArgs = @()
-    $venvArgs += $PythonRuntime.Arguments
-    $venvArgs += "-m", "venv", $VenvDir
-    Invoke-ExternalCommand `
-        -Title "Creating backend virtual environment..." `
-        -FilePath $PythonRuntime.FilePath `
-        -Arguments $venvArgs `
-        -WorkingDirectory $RootDir
-    Print-OK "Backend virtual environment created"
-} else {
-    Print-OK "Backend virtual environment already exists"
-}
-
-$BuildPythonRuntime = Resolve-PythonRuntime -PreferredPaths @($BackendPython)
-if (-not $BuildPythonRuntime) {
-    Print-Err "Unable to resolve backend build Python runtime"
-    exit 1
-}
-
 if ($DoBackendInstall) {
-    $pipUpgradeArgs = @()
-    $pipUpgradeArgs += $BuildPythonRuntime.Arguments
-    $pipUpgradeArgs += "-m", "pip", "install", "--upgrade", "pip"
     Invoke-ExternalCommand `
-        -Title "Upgrading pip in backend virtual environment..." `
-        -FilePath $BuildPythonRuntime.FilePath `
-        -Arguments $pipUpgradeArgs `
-        -WorkingDirectory $RootDir
-
-    $backendInstallArgs = @()
-    $backendInstallArgs += $BuildPythonRuntime.Arguments
-    $backendInstallArgs += "-m", "pip", "install", "-r", $BackendRequirements, "pyinstaller"
-    Invoke-ExternalCommand `
-        -Title "Installing backend runtime dependencies and PyInstaller..." `
-        -FilePath $BuildPythonRuntime.FilePath `
-        -Arguments $backendInstallArgs `
+        -Title "Synchronizing backend runtime and build dependencies via uv..." `
+        -FilePath $UvPath `
+        -Arguments @("sync", "--project", $BackendDir, "--frozen", "--no-default-groups", "--group", "build") `
         -WorkingDirectory $RootDir
 
     if ($DryRun) {
@@ -792,13 +765,10 @@ Write-Section -Step "Step 4/6" -Title "Smoke Test Packaged Backend"
 if ($SkipSmokeTest) {
     Print-Warn "Skipping release backend smoke test"
 } else {
-    $smokeArgs = @()
-    $smokeArgs += $BuildPythonRuntime.Arguments
-    $smokeArgs += $SmokeTestScript
     Invoke-ExternalCommand `
         -Title "Running release backend smoke test..." `
-        -FilePath $BuildPythonRuntime.FilePath `
-        -Arguments $smokeArgs `
+        -FilePath $UvPath `
+        -Arguments @("run", "--project", $BackendDir, "--frozen", "--no-default-groups", "--group", "build", "python", $SmokeTestScript) `
         -WorkingDirectory $RootDir
     if ($DryRun) {
         Print-Info "Release backend smoke test would pass"
@@ -810,8 +780,7 @@ if ($SkipSmokeTest) {
 Write-Section -Step "Step 5/6" -Title "Build Portable Backend Release"
 
 $buildArgs = @()
-$buildArgs += $BuildPythonRuntime.Arguments
-$buildArgs += $BuildScript
+$buildArgs += "run", "--project", $BackendDir, "--frozen", "--no-default-groups", "--group", "build", "python", $BuildScript
 if (-not [string]::IsNullOrWhiteSpace($EffectiveVersion)) {
     $buildArgs += "--version", $EffectiveVersion
 }
@@ -828,7 +797,7 @@ if ($IncludeRuntimeConfig) {
 
 Invoke-ExternalCommand `
     -Title "Building portable Windows release with PyInstaller..." `
-    -FilePath $BuildPythonRuntime.FilePath `
+    -FilePath $UvPath `
     -Arguments $buildArgs `
     -WorkingDirectory $RootDir
 
@@ -837,13 +806,13 @@ Write-Section -Step "Step 6/6" -Title "Smoke Test Release Artifact"
 if ($SkipSmokeTest) {
     Print-Warn "Skipping packaged release smoke tests"
 } else {
-    $packagedSmokeArgs = @()
-    $packagedSmokeArgs += $BuildPythonRuntime.Arguments
-    $packagedSmokeArgs += $SmokeTestScript
-    $packagedSmokeArgs += "--release-archive", $ArchivePath
+    $packagedSmokeArgs = @(
+        "run", "--project", $BackendDir, "--frozen", "--no-default-groups", "--group", "build", "python", $SmokeTestScript,
+        "--release-archive", $ArchivePath
+    )
     Invoke-ExternalCommand `
         -Title "Running packaged release smoke test..." `
-        -FilePath $BuildPythonRuntime.FilePath `
+        -FilePath $UvPath `
         -Arguments $packagedSmokeArgs `
         -WorkingDirectory $RootDir
     if ($DryRun) {
