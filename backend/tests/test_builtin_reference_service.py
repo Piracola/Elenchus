@@ -10,9 +10,6 @@ from app.services.builtin_reference_service import (
     ensure_builtin_mode_references,
 )
 from app.models.schemas import SessionCreate
-from app.storage.builtin_reference_entries import read_document_entries
-from app.storage.session_documents import read_document_record
-from app.storage.session_files import read_session_record
 
 
 @pytest.mark.asyncio
@@ -35,21 +32,14 @@ async def test_ensure_builtin_mode_references_seeds_once_and_syncs_snapshot():
         mode_config=created["mode_config"],
     )
 
-    document = read_document_record(created["id"], BUILTIN_SOPHISTRY_DOCUMENT_ID)
-    entries = read_document_entries(created["id"], BUILTIN_SOPHISTRY_DOCUMENT_ID)
-    record = read_session_record(created["id"])
+    documents = await session_service.list_session_documents(created["id"])
+    session = await session_service.get_session(created["id"])
+    assert session is not None
+    shared_knowledge = session.get("shared_knowledge", [])
 
-    assert document is not None
-    assert entries
-    assert record is not None
-
-    snapshot = record.state_snapshot or {}
-    builtin_docs = snapshot.get("builtin_reference_docs", [])
-    shared_knowledge = snapshot.get("shared_knowledge", [])
-
-    assert len([item for item in builtin_docs if item.get("document_id") == BUILTIN_SOPHISTRY_DOCUMENT_ID]) == 1
+    assert len([item for item in documents if item.get("id") == BUILTIN_SOPHISTRY_DOCUMENT_ID]) == 1
     assert any(item.get("document_id") == BUILTIN_SOPHISTRY_DOCUMENT_ID for item in shared_knowledge)
-    assert {entry.entry_type for entry in entries} >= {"reference_summary", "reference_term"}
+    assert {item.get("type") for item in shared_knowledge} >= {"reference_summary", "reference_term"}
 
 
 def test_read_catalog_text_uses_first_existing_fallback_candidate(monkeypatch):

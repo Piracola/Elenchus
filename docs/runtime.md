@@ -1,162 +1,76 @@
 # 运行时与历史恢复
 
-> 本文档聚焦**当前运行时产物**：`runtime/` 目录结构、关键文件职责，以及历史恢复如何依赖这些产物。
-> 系统分层、模式化运行链路与源码入口请见 [architecture.md](./architecture.md)。
+> 当前运行真相以 SQLite ledger 为准。`runtime/` 目录仍保存配置、数据库和日志，旧版文件布局不再是正式运行格式。
 
-## 1. 运行时目录是什么
+## 1. 运行时目录
 
-`runtime/` 保存的是**本地运行过程中生成的内容**，而不是仓库源码结构的一部分。
+`runtime/` 保存本地运行生成的内容：
 
-它承担的职责包括：
+- `config.json`：静态配置源，包括 server、provider、搜索、日志和默认运行配置。
+- `elenchus.db`：SQLite 账本，是 Session、Run、事件、投影、检查点和文档记录的权威来源。
+- `logs/`：运行日志。
 
-- 统一运行时配置
-- SQLite 数据库与日志
-- 会话快照
-- 实时事件流与历史追踪
-- 按轮次固化结果
-- 会话参考文档
+旧版按会话分目录的文件布局如果存在，只能作为历史导入或人工排查材料；迁移完成后，新运行不应依赖这些文件作为恢复真相。
 
-## 2. 目录结构
+可用一次性导入脚本把旧版 `runtime/sessions/<session_id>/session.json`、`events.jsonl`、`documents/*.json` 灌回新版 SQLite：
 
-```text
-runtime/
-├─ config.json
-├─ elenchus.db
-├─ logs/
-└─ sessions/
-   └─ <session_id>/
-      ├─ session.json
-      ├─ events.jsonl
-      ├─ rounds/
-      │  └─ round-001.json
-      ├─ documents/
-      │  └─ <document_id>.json
-      └─ reference_entries/          # 仅诡辩内置谬误库等内部资料可能生成
-         └─ <document_id>.json
+```bash
+cd backend
+python scripts/import_legacy_runtime.py
 ```
 
-## 3. 关键文件职责
+常用参数：
 
-### `runtime/config.json`
+- `--runtime-root ../runtime`：指定旧运行目录根路径。
+- `--session-id <id>`：只导入某一条旧会话，可重复传入。
+- `--force`：即使 SQLite 里已经有同名 session，也强制重新导入。
 
-统一运行时配置文件，负责保存：
+## 2. SQLite 账本
 
-- provider 配置与 API key
-- 服务端基础配置（host / port / debug / CORS / database_url）
-- 搜索配置（provider、自定义 HTTP 接口）
-- 辩论默认配置（如 `default_max_turns`、context window）
-- 日志级别等非会话配置
+核心表按职责分开：
 
-`runtime/config.json` 是当前唯一活动配置源。旧的 `runtime/backend/.env`、`runtime/backend/config.yaml`、`runtime/data/log_config.json`、`backend/data/providers.json` 均已废弃，不再参与启动或导入。
+- `sessions`：只保存用户定义的辩题、参与者、模型配置、模式配置、文档关联等 Session 级配置。
+- `runs`：一次具体执行，包含状态、当前轮次、最新事件序号和最后进度信息。
+- `run_events`：按 `run_id + seq` 追加的事实事件，是运行过程的主要事实来源。
+- `run_projections`：从 Session、文档和 RunEvent 归并出的可读状态，只是读模型，可以重建。
+- `run_checkpoints`：恢复点，保存关键节点的安全状态。
+- `run_commands`：stop / resume / intervene 等控制命令记录。
+- `session_documents`：会话级参考资料原文、规范化文本和处理状态。
 
-### `runtime/elenchus.db`
+## 3. 恢复关系
 
-本地 SQLite 数据库，用于保存仍然由数据库负责的结构化持久化数据。
+恢复只针对 Run，不针对 Session。流程是：
 
-当前 provider 配置已经迁移到 `runtime/config.json`，不再作为 provider 存储主来源。
+1. API 根据 `run_id` 找到对应 `RunRecord` 和 `SessionRecord`。
+2. projector 从 Session 配置、`session_documents` 和 `run_events` 重建 `RunProjection`。
+3. 运行恢复优先读取最近安全检查点，并用投影作为可读状态展示。
+4. 前端按 `run_id` 补拉 `run_events`，再接 WebSocket live stream。
 
-### `runtime/logs/`
+如果 `run_projections` 被删除，系统应能从 SQLite 事实流重建它；如果 `run_events` 或 checkpoint 丢失，恢复能力才会真正受损。
 
-运行日志输出目录。
+## 4. 导出关系
 
-### `runtime/sessions/<session_id>/session.json`
+JSON / Markdown / HTML 导出继续复用现有导出链路，但数据源来自：
 
-会话快照。它通常承载：
+- `SessionRecord`：辩题、模式、参与者和配置。
+- `RunProjection`：当前可读结果，如发言、评分、共识和模式报告。
+- `RunEvent`：事实事件轨迹。
 
-- 会话基础信息
-- 当前模式配置
-- 共享知识
-- 模式产物摘要
-- 当前主要运行状态
+默认导出 session 的最新 run；前端有明确 `activeRunId` 时会导出该 run。
 
-当你重新打开历史会话时，前后端会依赖它恢复主要状态。
+## 5. 排查顺序
 
-### `runtime/sessions/<session_id>/events.jsonl`
+遇到历史恢复、导出或卡死问题时，优先看：
 
-按时间追加的事件流，用于记录运行过程中的系统事件、发言事件和模式产物事件。
+- `/api/runs/{run_id}` 返回的 run summary 和 projection。
+- `/api/runs/{run_id}/events?after_seq=0` 返回的可见事件流。
+- SQLite 中 `runs / run_events / run_checkpoints / run_projections` 的对应记录。
+- `runtime/logs/` 中的异常堆栈。
 
-它是历史恢复与问题排查的核心输入之一：
+`runtime/config.json` 只解释静态配置，不解释某次运行为什么走到某个状态。
 
-- 历史会话可用它补充运行轨迹
-- 调试时可用它定位状态变化顺序
-- 运行状态恢复可参考其中的关键事件
+## 6. 文档边界
 
-### `runtime/sessions/<session_id>/rounds/`
-
-按轮次固化的结果文件。适合保存某一轮结束时的聚合结果，便于后续查看与调试。
-
-### `runtime/sessions/<session_id>/documents/`
-
-保存该会话的参考文档记录，包括：
-
-- 用户上传的文档。
-- 模式自动注入的内置文档。
-
-每个文档记录单独存为一个 JSON 文件。
-
-### `runtime/sessions/<session_id>/reference_entries/`
-
-仅用于诡辩实验模式的内置谬误库标签条目。用户上传参考资料不再生成该目录下的结构化条目。
-
-普通辩论资料只保存到 `documents/`，并作为 `context` 同步进 `session.json` 的 shared knowledge。
-
-## 4. 恢复与事件流的关系
-
-Elenchus 的历史恢复依赖两类持久化数据配合完成：
-
-- `session.json`：提供某个时刻可直接恢复的会话状态快照
-- `events.jsonl`：提供按顺序记录的运行事件轨迹，便于恢复与排查
-
-可以把它理解成：
-
-- `session.json` 回答“当前整体状态是什么”
-- `events.jsonl` 回答“这个状态是怎么形成的”
-
-因此，恢复主要依赖快照，事件流用于补足过程轨迹。当前前端不再提供独立时间线回放界面。
-
-## 5. 参考文档与会话运行的关系
-
-会话级参考资料在运行时留下的主要产物是：
-
-- `documents/`：原始文档记录与规范化文本。
-- `session.json` 中的 `shared_knowledge`：由文档同步出的 `context` 条目。
-
-它们与会话快照、历史恢复之间的关系是：
-
-- 文档属于会话级运行输入的一部分。
-- 文档内容会作为共享上下文影响后续辩论。
-- 回看问题时，通常需要把 `documents/` 与 `session.json` 一起看。
-
-当前运行时行为以本页和 [architecture.md](./architecture.md) 为准。
-
-## 6. 源码与运行时产物的边界
-
-应当把两类内容明确区分：
-
-### 仓库源码内容
-
-- 源代码
-- 提示词
-- 文档
-- 启动脚本
-- 内置静态资料源文件
-
-### 运行时生成内容
-
-- `runtime/config.json`
-- 数据库文件
-- 日志
-- 会话快照
-- 事件流
-- 参考文档处理结果
-
-这条边界很重要，因为：
-
-- 调试时不要把运行时产物误当成源码的一部分
-- 历史恢复问题通常先看 `runtime/`
-- 功能设计变更不应该通过直接修改运行时产物来替代源码变更
-
-## 7. 与其他文档的分工
-
-- [architecture.md](./architecture.md)：解释系统分层、前后端职责、模式化运行链路与模块入口
-- [getting-started.md](./getting-started.md)：解释如何启动项目
+- [architecture.md](./architecture.md)：解释系统分层、API、运行链路和模块入口。
+- [getting-started.md](./getting-started.md)：解释如何启动项目。
+- [development.md](./development.md)：解释开发命令和常见排查。

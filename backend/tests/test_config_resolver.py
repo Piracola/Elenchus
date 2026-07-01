@@ -42,6 +42,11 @@ class TestResolveAgentOverride:
         result = resolve_agent_override(configs, "observer")
         assert result == {"model": "gpt-4o"}
 
+    def test_group_discussion_fallback_to_judge(self):
+        configs = {"judge": {"model": "gpt-4o"}}
+        result = resolve_agent_override(configs, "group_discussion")
+        assert result == {"model": "gpt-4o"}
+
     def test_consensus_fallback_to_judge(self):
         configs = {"judge": {"model": "gpt-4o"}}
         result = resolve_agent_override(configs, "consensus")
@@ -58,7 +63,7 @@ class TestFallbackChains:
     def test_all_roles_have_fallbacks(self):
         expected_roles = {
             "proposer", "opposer", "judge", "fact_checker",
-            "consensus", "observer", "debater",
+            "consensus", "group_discussion", "observer", "debater",
         }
         assert set(AGENT_CONFIG_FALLBACKS.keys()) == expected_roles
 

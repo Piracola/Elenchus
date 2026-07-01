@@ -12,6 +12,7 @@ import type {
     SearchResult,
     DebatePhase,
     RuntimeEvent,
+    RunSummary,
 } from '../types';
 import {
     appendDialogueWithDedupe,
@@ -35,8 +36,11 @@ export interface DebateSessionSlice {
 }
 
 export interface DebateRuntimeSlice {
+    activeRun: RunSummary | null;
+    activeRunId: string | null;
     runtimeEvents: RuntimeEvent[];
     lastEventSeq: number;
+    lastEventSeqByRun: Record<string, number>;
     isDocumentVisible: boolean;
     visibilityResumeToken: number;
     collapsedAgentMessagesBySession: Record<string, Record<string, boolean>>;
@@ -66,6 +70,7 @@ export interface DebateActionSlice {
         sessions: SessionListItem[] | ((current: SessionListItem[]) => SessionListItem[])
     ) => void;
     setCurrentSession: (session: Session | null) => void;
+    setActiveRun: (run: RunSummary | null) => void;
     setConnected: (connected: boolean) => void;
     setDebating: (debating: boolean) => void;
     setPhase: (phase: DebatePhase, status?: string, node?: string) => void;
@@ -101,8 +106,11 @@ const initialSessionState: DebateSessionSlice = {
 };
 
 const initialRuntimeState: DebateRuntimeSlice = {
+    activeRun: null,
+    activeRunId: null,
     runtimeEvents: [],
     lastEventSeq: -1,
+    lastEventSeqByRun: {},
     isDocumentVisible: typeof document === 'undefined' ? true : document.visibilityState !== 'hidden',
     visibilityResumeToken: 0,
     collapsedAgentMessagesBySession: {},
@@ -142,7 +150,10 @@ function createInitialState() {
         ...initialState,
         sessions: [],
         currentSession: null,
+        activeRun: null,
+        activeRunId: null,
         runtimeEvents: [],
+        lastEventSeqByRun: {},
         collapsedAgentMessagesBySession: {},
         lastSearchResults: [],
     };
@@ -199,6 +210,8 @@ export const useDebateStore = create<DebateState>((set) => ({
             }
             return withSyncedSessionList(state, {
                 currentSession: safeSession,
+                activeRun: null,
+                activeRunId: null,
                 runtimeEvents: [],
                 lastEventSeq: -1,
                 streamingRole: '',
@@ -209,6 +222,20 @@ export const useDebateStore = create<DebateState>((set) => ({
                 currentStatus: runtimeFallback.status,
                 currentNode: runtimeFallback.node,
             });
+        }),
+
+    setActiveRun: (run) =>
+        set((state) => {
+            const changedRun = state.activeRunId !== run?.id;
+            return {
+                activeRun: run,
+                activeRunId: run?.id ?? null,
+                runtimeEvents: changedRun ? [] : state.runtimeEvents,
+                lastEventSeq: run?.id ? (state.lastEventSeqByRun[run.id] ?? -1) : -1,
+                streamingRole: changedRun ? '' : state.streamingRole,
+                streamingContent: changedRun ? '' : state.streamingContent,
+                streamingEntry: changedRun ? null : state.streamingEntry,
+            };
         }),
 
     setConnected: (connected) => set({ isConnected: connected }),

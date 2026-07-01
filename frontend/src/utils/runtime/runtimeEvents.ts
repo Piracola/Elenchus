@@ -19,6 +19,7 @@ function buildLegacyPayload(raw: Record<string, unknown>): Record<string, unknow
             key === 'phase' ||
             key === 'event_id' ||
             key === 'schema_version' ||
+            key === 'run_id' ||
             key === 'session_id' ||
             key === 'seq' ||
             key === 'timestamp' ||
@@ -43,9 +44,14 @@ export function normalizeRuntimeEvent(raw: unknown): RuntimeEvent | null {
     }
 
     if (isRecord(raw.payload) && asString(raw.event_id) && asString(raw.timestamp)) {
+        const runId = asString(raw.run_id);
+        if (!runId) {
+            return null;
+        }
         return {
             schema_version: asString(raw.schema_version) ?? LEGACY_SCHEMA_VERSION,
             event_id: asString(raw.event_id)!,
+            run_id: runId,
             session_id: asString(raw.session_id) ?? '',
             seq: asNumber(raw.seq) ?? -1,
             timestamp: asString(raw.timestamp)!,
@@ -56,9 +62,15 @@ export function normalizeRuntimeEvent(raw: unknown): RuntimeEvent | null {
         };
     }
 
+    const runId = asString(raw.run_id);
+    if (!runId) {
+        return null;
+    }
+
     return {
         schema_version: LEGACY_SCHEMA_VERSION,
         event_id: `legacy-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
+        run_id: runId,
         session_id: asString(raw.session_id) ?? '',
         seq: asNumber(raw.seq) ?? -1,
         timestamp: asString(raw.timestamp) ?? new Date().toISOString(),

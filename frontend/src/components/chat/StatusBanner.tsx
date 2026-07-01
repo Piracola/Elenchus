@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { AlertCircle, CheckCircle2, CircleDashed, Loader2, PauseCircle } from 'lucide-react';
-import type { DebatePhase } from '../../types';
-import { useRuntimeViewState } from '../../hooks/useDebateViewState';
+import type { DebatePhase, RunStatus } from '../../types';
+import { isRunStatusInProgress, useRuntimeViewState } from '../../hooks/useDebateViewState';
 
 const NODE_LABELS: Record<string, string> = {
     manage_context: '整理上下文',
@@ -90,18 +90,22 @@ function getTone({
 
 function buildStatusViewModel({
     sessionStatus,
+    runStatus,
     isDebating,
     phase,
     currentStatus,
     currentNode,
 }: {
     sessionStatus: string | null;
+    runStatus: RunStatus | null;
     isDebating: boolean;
     phase: DebatePhase;
     currentStatus: string;
     currentNode: string;
 }): StatusViewModel {
-    const resumableSession = !isDebating && sessionStatus === 'in_progress';
+    const resumableSession = !isDebating && (
+        isRunStatusInProgress(runStatus) || (!runStatus && sessionStatus === 'in_progress')
+    );
     const tone = getTone({ phase, isDebating, resumableSession });
     const message = currentStatus || getFallbackMessage({ phase, isDebating, resumableSession });
     const nodeLabel = getNodeLabel(currentNode);
@@ -175,6 +179,7 @@ function StatusIcon({ tone }: { tone: StatusTone }) {
 export default function StatusBanner() {
     const {
         sessionStatus,
+        runStatus,
         isDebating,
         phase,
         currentStatus,
@@ -184,12 +189,13 @@ export default function StatusBanner() {
     const viewModel = useMemo(
         () => buildStatusViewModel({
             sessionStatus,
+            runStatus,
             isDebating,
             phase,
             currentStatus,
             currentNode,
         }),
-        [currentNode, currentStatus, isDebating, phase, sessionStatus],
+        [currentNode, currentStatus, isDebating, phase, runStatus, sessionStatus],
     );
 
     if (!viewModel.show) {

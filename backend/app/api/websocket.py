@@ -1,76 +1,107 @@
-"""WebSocket endpoint for real-time debate streaming."""
+"""WebSocket endpoint for real-time run event streaming."""
 
 from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
-from app.dependencies import (
-    get_debate_runtime_service,
-    get_runtime_bus,
-)
+from app.dependencies import get_debate_runtime_service, get_runtime_bus
+from app.services.run_service import get_run, list_run_events
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["websocket"])
 
-_SESSION_ID_RE = re.compile(r"^[0-9a-f]{12}$")
-_VALID_ACTIONS = {"start", "stop", "ping", "intervene"}
+_ID_RE = re.compile(r"^[0-9a-f]{12}$")
 
 
 async def _send_error_event(
+    *,
     runtime_bus: "RuntimeBus",
+    run_id: str,
     session_id: str,
     websocket: WebSocket,
     content: str,
 ) -> bool:
-    """Create and send an error event; return True if send succeeded."""
-    payload = {"content": content}
     event = await runtime_bus.create_event(
+        run_id=run_id,
         session_id=session_id,
         event_type="error",
-        payload=payload,
+        payload={"content": content},
         source="ws.gateway",
         phase="error",
+        persisted=False,
     )
-    return await runtime_bus.send(session_id, websocket, event)
+    return await runtime_bus.send(run_id, websocket, event)
 
 
-@router.websocket("/ws/{session_id}")
-async def debate_ws(websocket: WebSocket, session_id: str):
-    """Connect to a debate session and stream debate events in real time."""
+@router.websocket("/ws/runs/{run_id}")
+async def run_ws(websocket: WebSocket, run_id: str, after_seq: int = Query(default=0, ge=0)):
+    """Subscribe to one run's persisted event stream and live events."""
     runtime_bus = get_runtime_bus()
     runtime_service = get_debate_runtime_service()
 
-    if not _SESSION_ID_RE.match(session_id):
+    if not _ID_RE.match(run_id):
         await websocket.accept()
-        await websocket.close(code=4001, reason="Invalid session_id format")
+        await websocket.close(code=4001, reason="Invalid run_id format")
         return
 
-    await runtime_bus.connect(session_id, websocket)
+    run_record = await get_run(run_id)
+    if run_record is None:
+        await websocket.accept()
+        await websocket.close(code=4004, reason="Run not found")
+        return
+
+    await runtime_service.reconcile_run_liveness(run_id)
+    run_record = await get_run(run_id)
+    if run_record is None:
+        await websocket.accept()
+        await websocket.close(code=4004, reason="Run not found")
+        return
+
+    session_id = run_record.session_id
+    await websocket.accept()
+    await runtime_bus.register_pending_listener(run_id, websocket, accept=False)
 
     try:
+        replay_until_seq = await runtime_bus.snapshot_latest_sequence(run_id)
+        for event in await list_run_events(run_id, after_seq=after_seq, up_to_seq=replay_until_seq):
+            if not await runtime_bus.send(run_id, websocket, event):
+                return
+
+        pending_events = await runtime_bus.activate_pending_listener(
+            run_id,
+            websocket,
+            replay_until_seq=replay_until_seq,
+        )
+        for event in pending_events:
+            if not await runtime_bus.send(run_id, websocket, event):
+                return
+
         connected_event = await runtime_bus.create_event(
+            run_id=run_id,
             session_id=session_id,
             event_type="system",
-            payload={"content": f"Connected to session {session_id}"},
+            payload={"content": f"Connected to run {run_id}"},
             source="ws.gateway",
+            persisted=False,
         )
-        if not await runtime_bus.send(session_id, websocket, connected_event):
+        if not await runtime_bus.send(run_id, websocket, connected_event):
             return
 
-        if runtime_service.is_running(session_id):
+        if runtime_service.is_running(run_id):
             resumed_event = await runtime_bus.create_event(
+                run_id=run_id,
                 session_id=session_id,
                 event_type="status",
-                payload={"content": "Live debate is currently running.", "node": ""},
+                payload={"content": "Live run is currently running.", "node": ""},
                 source="ws.gateway",
                 phase="processing",
+                persisted=False,
             )
-            if not await runtime_bus.send(session_id, websocket, resumed_event):
+            if not await runtime_bus.send(run_id, websocket, resumed_event):
                 return
 
         while True:
@@ -80,85 +111,38 @@ async def debate_ws(websocket: WebSocket, session_id: str):
                 break
             except Exception:
                 if not await _send_error_event(
-                    runtime_bus, session_id, websocket, "Invalid JSON message."
+                    runtime_bus=runtime_bus,
+                    run_id=run_id,
+                    session_id=session_id,
+                    websocket=websocket,
+                    content="Invalid JSON message.",
                 ):
                     return
                 continue
 
             action = data.get("action") if isinstance(data, dict) else None
-            if action not in _VALID_ACTIONS:
-                if not await _send_error_event(
-                    runtime_bus, session_id, websocket, f"Unknown or missing action: {action}"
-                ):
-                    return
-                continue
-
-            if action == "start":
-                result = await runtime_service.start_session(session_id)
-                if not result.started:
-                    if not await _send_error_event(
-                        runtime_bus,
-                        session_id,
-                        websocket,
-                        result.message or "Failed to start session.",
-                    ):
-                        return
-                    continue
-
-                session_db = result.session or {}
-                logger.info(
-                    "Debate task launched for session %s with runtime configs %s",
-                    session_id,
-                    list(session_db.get("agent_configs", {}).keys()),
-                )
-
-            elif action == "stop":
-                stopped = await runtime_service.stop_session(session_id)
-                if stopped:
-                    logger.info("Debate task cancelled for session %s", session_id)
-                await runtime_bus.emit(
-                    session_id=session_id,
-                    event_type="system",
-                    payload={"content": "Debate stopped by user."},
-                    source="ws.gateway",
-                )
-
-            elif action == "ping":
+            if action == "ping":
                 pong_event = await runtime_bus.create_event(
+                    run_id=run_id,
                     session_id=session_id,
                     event_type="pong",
                     payload={},
                     source="ws.gateway",
+                    persisted=False,
                 )
-                if not await runtime_bus.send(session_id, websocket, pong_event):
+                if not await runtime_bus.send(run_id, websocket, pong_event):
                     return
+                continue
 
-            elif action == "intervene":
-                content = data.get("content", "").strip()
-                if not content:
-                    continue
-
-                is_running = await runtime_service.queue_intervention(session_id, content)
-                if is_running:
-                    await runtime_bus.emit(
-                        session_id=session_id,
-                        event_type="audience_message",
-                        payload={
-                            "content": content,
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                        },
-                        source="ws.gateway",
-                    )
-                else:
-                    queued_event = await runtime_bus.create_event(
-                        session_id=session_id,
-                        event_type="system",
-                        payload={"content": "Intervention queued for the next round."},
-                        source="ws.gateway",
-                    )
-                    if not await runtime_bus.send(session_id, websocket, queued_event):
-                        return
+            if not await _send_error_event(
+                runtime_bus=runtime_bus,
+                run_id=run_id,
+                session_id=session_id,
+                websocket=websocket,
+                content=f"Unsupported websocket action: {action}",
+            ):
+                return
     except Exception as exc:
-        logger.error("WebSocket error for session %s: %s", session_id, exc)
+        logger.error("WebSocket error for run %s: %s", run_id, exc)
     finally:
-        runtime_bus.disconnect(session_id, websocket)
+        runtime_bus.disconnect(run_id, websocket)

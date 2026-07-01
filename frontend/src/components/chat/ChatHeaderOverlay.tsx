@@ -33,6 +33,7 @@ type ChatHeaderOverlayProps = {
   onExpandSidebar: () => void;
   hasCurrentSession: boolean;
   currentSessionId: string | null;
+  activeRunId?: string | null;
   currentTopic: string;
   currentTurn: number;
   maxTurns: number;
@@ -49,6 +50,7 @@ export default function ChatHeaderOverlay({
   onExpandSidebar,
   hasCurrentSession,
   currentSessionId,
+  activeRunId = null,
   currentTopic,
   currentTurn,
   maxTurns,
@@ -121,13 +123,13 @@ export default function ChatHeaderOverlay({
     setExportingFormat(format);
     try {
       if (format === 'markdown') {
-        await api.sessions.exportMarkdown(currentSessionId, currentTopic, normalizedExportCategories);
+        await api.sessions.exportMarkdown(currentSessionId, currentTopic, normalizedExportCategories, activeRunId);
         toast('已导出 Markdown 辩论记录', 'success');
       } else if (format === 'html') {
-        await api.sessions.exportHtml(currentSessionId, currentTopic, normalizedExportCategories);
+        await api.sessions.exportHtml(currentSessionId, currentTopic, normalizedExportCategories, activeRunId);
         toast('已导出 HTML 阅读页', 'success');
       } else {
-        await api.sessions.exportJson(currentSessionId, currentTopic);
+        await api.sessions.exportJson(currentSessionId, currentTopic, activeRunId);
         toast('已导出 JSON 辩论数据', 'success');
       }
       setShowExportMenu(false);

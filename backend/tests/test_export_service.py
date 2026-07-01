@@ -289,16 +289,18 @@ def test_export_html_escapes_agent_content():
 
 @pytest.mark.asyncio
 async def test_export_session_route_returns_html_response(monkeypatch):
-    async def _get_session(session_id: str):
+    async def _export_payload(session_id: str, *, run_id: str | None = None):
         assert session_id == "abc123def456"
+        assert run_id is None
         return build_markdown_session_payload()
 
-    monkeypatch.setattr(sessions_api.session_service, "get_session", _get_session)
+    monkeypatch.setattr(sessions_api, "export_run_payload", _export_payload)
 
     response = await sessions_api.export_session(
         "abc123def456",
         format=ExportFormat.HTML,
         categories=["debater_speeches"],
+        run_id=None,
     )
 
     assert response.media_type == "text/html; charset=utf-8"

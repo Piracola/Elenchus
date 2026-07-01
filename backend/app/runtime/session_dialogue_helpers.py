@@ -53,13 +53,6 @@ def knowledge_for_turn(entries: Any, turn_index: int) -> list[dict[str, Any]]:
         if source_turn == turn_index:
             selected.append(entry)
     return selected
-
-
-def rebuild_recent_dialogue_history(dialogue_history: list[dict[str, Any]], current_turn: int) -> list[dict[str, Any]]:
-    recent_entries = [entry for entry in dialogue_history if entry_turn(entry) == current_turn]
-    return recent_entries or dialogue_history
-
-
 def recompute_cumulative_scores(judge_history: list[dict[str, Any]]) -> dict[str, dict[str, list[Any]]]:
     cumulative_scores: dict[str, dict[str, list[Any]]] = {}
     for entry in judge_history:

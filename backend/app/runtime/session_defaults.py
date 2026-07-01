@@ -7,9 +7,10 @@ from typing import Any
 from app.models.schemas import DebateMode
 
 
-def default_reasoning_config() -> dict[str, bool]:
+def default_reasoning_config() -> dict[str, Any]:
     return {
         "consensus_enabled": True,
+        "group_discussion_rounds": 1,
     }
 
 
@@ -17,6 +18,7 @@ def default_speech_config() -> dict[str, int]:
     return {
         "proposer_max_chars": 0,
         "opposer_max_chars": 0,
+        "group_discussion_max_chars": 0,
     }
 
 

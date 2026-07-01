@@ -16,6 +16,7 @@ class _FakeRepository:
 
     async def build_initial_state(
         self,
+        run_id: str,
         session_id: str,
         *,
         topic: str,
@@ -24,6 +25,7 @@ class _FakeRepository:
         agent_configs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return {
+            "run_id": run_id,
             "session_id": session_id,
             "topic": topic,
             "participants": participants or ["proposer", "opposer"],
@@ -40,7 +42,7 @@ class _FakeRepository:
             "agent_configs": agent_configs or {},
         }
 
-    async def persist_state(self, _session_id: str, state: dict[str, Any]) -> None:
+    async def persist_state(self, _run_id: str, _session_id: str, state: dict[str, Any]) -> None:
         self.persisted.append(dict(state))
 
 
@@ -53,6 +55,7 @@ class _ExplodingEngine:
 class _InitExplodingRepository(_FakeRepository):
     async def build_initial_state(
         self,
+        run_id: str,
         session_id: str,
         *,
         topic: str,
@@ -79,6 +82,7 @@ async def test_orchestrator_emits_clean_user_facing_error_messages():
     )
 
     final_state = await orchestrator.run_debate(
+        "333333333333",
         "abc123def456",
         "Blocked request test",
         participants=["proposer", "opposer"],
@@ -114,6 +118,7 @@ async def test_orchestrator_emits_error_when_initial_state_build_fails():
     )
 
     final_state = await orchestrator.run_debate(
+        "444444444444",
         "abc123def456",
         "Initialization failure test",
         participants=["proposer", "opposer"],

@@ -225,10 +225,12 @@ export function sanitizeSession(session: Session | null): Session | null {
         dialogue_history: (session.dialogue_history ?? []).map(sanitizeDialogueEntry),
         reasoning_config: session.reasoning_config ?? {
             consensus_enabled: true,
+            group_discussion_rounds: 1,
         },
         speech_config: session.speech_config ?? {
             proposer_max_chars: 0,
             opposer_max_chars: 0,
+            group_discussion_max_chars: 0,
         },
         mode_artifacts: Array.isArray(session.mode_artifacts) ? session.mode_artifacts : [],
         current_mode_report: session.current_mode_report ?? null,
@@ -243,15 +245,6 @@ export function getSessionRuntimeFallback(session: Session | null): {
     node: string;
 } {
     if (!session) {
-        return {
-            isDebating: false,
-            phase: 'idle',
-            status: '',
-            node: '',
-        };
-    }
-
-    if (session.status === 'in_progress') {
         return {
             isDebating: false,
             phase: 'idle',

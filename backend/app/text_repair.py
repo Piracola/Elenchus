@@ -9,7 +9,7 @@ _MOJIBAKE_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     ("姝ｅ湪鏁寸悊涓婁笅鏂", "正在整理上下文..."),
     ("姝ｅ湪鍒囨崲鍙戣█鏂", "正在切换发言方..."),
     ("缁勫唴璁ㄨ姝ｅ湪灞曞紑", "组内讨论正在展开..."),
-    ("澶氳瑙掗櫔瀹″洟姝ｅ湪璁ㄨ鏈疆琛ㄧ幇", "多视角陪审团正在讨论本轮表现..."),
+    ("澶氳瑙掗櫔瀹″洟姝ｅ湪璁ㄨ鏈疆琛ㄧ幇", "组内讨论正在生成本轮赛前简报..."),
     ("杈╂墜姝ｅ湪鎬濊€冨苟缁勭粐鍙戣█", "辩手正在思考并组织发言..."),
     ("姝ｅ湪璋冪敤宸ュ叿鏍搁獙浜嬪疄", "正在调用工具核验事实..."),
     ("瑁佸垽姝ｅ湪璇勪及鏈疆琛ㄧ幇", "裁判正在评估本轮表现..."),
@@ -59,6 +59,10 @@ _PROVIDER_MESSAGE_REPLACEMENTS: tuple[tuple[str, str], ...] = (
         "Check API Base URL points to the OpenAI-compatible API route "
         "(usually ending with /v1).]",
         "模型服务地址配置错误：当前接口返回的是 HTML 页面，请将 API Base URL 指向 OpenAI 兼容接口地址（通常以 /v1 结尾）。",
+    ),
+    (
+        "origin_gateway_timeout",
+        "上游模型服务响应超时，请稍后重试。",
     ),
 )
 
@@ -155,6 +159,11 @@ def _normalize_provider_error_text(text: str) -> str:
         return normalized
 
     lowered = normalized.lower()
+    if "gateway time-out" in lowered or "gateway timeout" in lowered or "origin_gateway_timeout" in lowered:
+        request_id = _extract_request_id(normalized)
+        suffix = f"（request id: {request_id}）" if request_id else ""
+        return f"上游模型服务响应超时，请稍后重试。{suffix}"
+
     if any(marker in lowered for marker in _QUOTA_MARKERS):
         request_id = _extract_request_id(normalized)
         suffix = f"（request id: {request_id}）" if request_id else ""

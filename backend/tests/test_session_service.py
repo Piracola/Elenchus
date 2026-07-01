@@ -1,16 +1,36 @@
-"""
-Smoke tests for session CRUD operations.
-"""
-
-import json
+"""Smoke tests for session CRUD operations."""
 
 import pytest
-
-from app.runtime_paths import get_runtime_paths
 from app.services import session_service
 from app.services import document_service
-from app.storage.session_documents import document_file
+from app.services import run_service
 from app.models.schemas import SessionCreate
+
+
+async def _create_run_for_session(session: dict) -> str:
+    created = await run_service.create_run(
+        session["id"],
+        topic=session["topic"],
+        participants=session["participants"],
+        max_turns=session["max_turns"],
+        agent_configs=session.get("agent_configs", {}),
+    )
+    return created["run"]["id"]
+
+
+async def _update_run_state(
+    run_id: str,
+    state_snapshot: dict | None = None,
+    *,
+    current_turn: int | None = None,
+    status: str | None = None,
+) -> None:
+    await run_service.update_run_state(
+        run_id,
+        current_turn=current_turn,
+        status=status,
+        state_snapshot=state_snapshot,
+    )
 
 
 @pytest.mark.asyncio
@@ -25,10 +45,12 @@ async def test_create_session():
     assert len(result["id"]) == 12
     assert result["reasoning_config"] == {
         "consensus_enabled": True,
+        "group_discussion_rounds": 1,
     }
     assert result["speech_config"] == {
         "proposer_max_chars": 0,
         "opposer_max_chars": 0,
+        "group_discussion_max_chars": 0,
     }
 
 
@@ -62,6 +84,25 @@ async def test_get_session():
 
 
 @pytest.mark.asyncio
+async def test_session_payload_exposes_latest_run_id():
+    created = await session_service.create_session(SessionCreate(topic="Latest run"))
+    run = await run_service.create_run(
+        created["id"],
+        topic=created["topic"],
+        participants=created["participants"],
+        max_turns=created["max_turns"],
+        agent_configs=created.get("agent_configs", {}),
+    )
+
+    fetched = await session_service.get_session(created["id"])
+    listed = await session_service.list_sessions()
+
+    assert fetched is not None
+    assert fetched["latest_run_id"] == run["run"]["id"]
+    assert listed[0]["latest_run_id"] == run["run"]["id"]
+
+
+@pytest.mark.asyncio
 async def test_get_session_not_found():
     result = await session_service.get_session("nonexistent1")
     assert result is None
@@ -75,7 +116,6 @@ async def test_delete_session():
 
     fetched = await session_service.get_session(created["id"])
     assert fetched is None
-    assert not (get_runtime_paths().sessions_dir / created["id"]).exists()
 
 
 @pytest.mark.asyncio
@@ -89,27 +129,31 @@ async def test_delete_session_removes_uploaded_documents():
         mime_type="text/plain",
         content=b"Session-scoped reference notes",
     )
-    path = document_file(created["id"], document["id"])
-
-    assert path.exists()
+    assert await document_service.get_session_document(created["id"], document["id"]) is not None
 
     deleted = await session_service.delete_session(created["id"])
 
     assert deleted is True
-    assert not path.exists()
-    assert not (get_runtime_paths().sessions_dir / created["id"]).exists()
+    assert await document_service.get_session_document(created["id"], document["id"]) is None
 
 
 @pytest.mark.asyncio
-async def test_update_session_state():
+async def test_update_run_state_updates_latest_session_summary():
     created = await session_service.create_session(SessionCreate(topic="Update test"))
-    updated = await session_service.update_session_state(
-        created["id"],
+    run_id = await _create_run_for_session(created)
+
+    updated = await run_service.update_run_state(
+        run_id,
         current_turn=2,
         status="in_progress",
     )
+    fetched = await session_service.get_session(created["id"])
+    assert updated is not None
     assert updated["current_turn"] == 2
-    assert updated["status"] == "in_progress"
+    assert updated["status"] == "running"
+    assert fetched is not None
+    assert fetched["current_turn"] == 2
+    assert fetched["status"] == "in_progress"
 
 
 @pytest.mark.asyncio
@@ -117,13 +161,14 @@ async def test_get_session_flattens_shared_knowledge():
     created = await session_service.create_session(
         SessionCreate(topic="Shared knowledge"),
     )
+    run_id = await _create_run_for_session(created)
     expected_shared_knowledge = [
         {"type": "fact", "query": "example", "result": "result"},
         {"type": "memo", "role": "proposer", "content": "summary"},
     ]
 
-    updated = await session_service.update_session_state(
-        created["id"],
+    await _update_run_state(
+        run_id,
         state_snapshot={
             "dialogue_history": [],
             "shared_knowledge": expected_shared_knowledge,
@@ -132,9 +177,6 @@ async def test_get_session_flattens_shared_knowledge():
             "agent_configs": {},
         },
     )
-
-    assert updated is not None
-    assert updated["shared_knowledge"] == expected_shared_knowledge
 
     fetched = await session_service.get_session(created["id"])
 
@@ -147,9 +189,10 @@ async def test_get_session_merges_judge_history_into_dialogue_timeline():
     created = await session_service.create_session(
         SessionCreate(topic="Judge timeline"),
     )
+    run_id = await _create_run_for_session(created)
 
-    await session_service.update_session_state(
-        created["id"],
+    await _update_run_state(
+        run_id,
         state_snapshot={
             "dialogue_history": [
                 {
@@ -207,6 +250,7 @@ async def test_get_session_sanitizes_malformed_sse_dialogue_history():
     created = await session_service.create_session(
         SessionCreate(topic="Malformed provider payload"),
     )
+    run_id = await _create_run_for_session(created)
 
     raw_sse = "\n\n".join(
         [
@@ -217,8 +261,8 @@ async def test_get_session_sanitizes_malformed_sse_dialogue_history():
         ]
     )
 
-    await session_service.update_session_state(
-        created["id"],
+    await _update_run_state(
+        run_id,
         state_snapshot={
             "dialogue_history": [
                 {
@@ -281,12 +325,14 @@ async def test_create_session_persists_reasoning_config():
             topic="Reasoning config",
             reasoning_config={
                 "consensus_enabled": False,
+                "group_discussion_rounds": 2,
             },
         ),
     )
 
     assert created["reasoning_config"] == {
         "consensus_enabled": False,
+        "group_discussion_rounds": 2,
     }
 
 
@@ -298,6 +344,7 @@ async def test_create_session_persists_speech_config():
             speech_config={
                 "proposer_max_chars": 900,
                 "opposer_max_chars": 700,
+                "group_discussion_max_chars": 500,
             },
         ),
     )
@@ -305,13 +352,15 @@ async def test_create_session_persists_speech_config():
     assert created["speech_config"] == {
         "proposer_max_chars": 900,
         "opposer_max_chars": 700,
+        "group_discussion_max_chars": 500,
     }
 
-    record = await session_service.get_session_record(created["id"])
-    assert record is not None
-    assert record.state_snapshot["speech_config"] == {
+    fetched = await session_service.get_session(created["id"])
+    assert fetched is not None
+    assert fetched["speech_config"] == {
         "proposer_max_chars": 900,
         "opposer_max_chars": 700,
+        "group_discussion_max_chars": 500,
     }
 
 
@@ -323,6 +372,7 @@ async def test_create_sophistry_session_enforces_mode_specific_defaults():
             debate_mode="sophistry_experiment",
             reasoning_config={
                 "consensus_enabled": True,
+                "group_discussion_rounds": 3,
             },
         ),
     )
@@ -335,17 +385,19 @@ async def test_create_sophistry_session_enforces_mode_specific_defaults():
     }
     assert created["reasoning_config"] == {
         "consensus_enabled": False,
+        "group_discussion_rounds": 0,
     }
 
 
 @pytest.mark.asyncio
-async def test_update_session_state_writes_round_json_file():
+async def test_update_session_state_persists_projection_for_export():
     created = await session_service.create_session(
         SessionCreate(topic="Round file export"),
     )
+    run_id = await _create_run_for_session(created)
 
-    await session_service.update_session_state(
-        created["id"],
+    await _update_run_state(
+        run_id,
         current_turn=1,
         status="in_progress",
         state_snapshot={
@@ -393,12 +445,12 @@ async def test_update_session_state_writes_round_json_file():
         },
     )
 
-    round_path = get_runtime_paths().sessions_dir / created["id"] / "rounds" / "round-001.json"
-    assert round_path.exists()
+    exported = await session_service.get_session(created["id"])
 
-    round_payload = json.loads(round_path.read_text(encoding="utf-8"))
-    assert round_payload["turn"] == 0
-    assert round_payload["turn_number"] == 1
-    assert [entry["role"] for entry in round_payload["debate"]] == ["proposer", "opposer"]
-    assert round_payload["judge"][0]["target_role"] == "proposer"
-    assert round_payload["shared_knowledge"][0]["query"] == "example"
+    assert exported is not None
+    assert [entry["role"] for entry in exported["dialogue_history"]] == [
+        "proposer",
+        "opposer",
+        "judge",
+    ]
+    assert exported["shared_knowledge"][0]["query"] == "example"

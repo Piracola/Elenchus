@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.models.schemas import DebateMode
-from app.services import runtime_event_service, session_service
+from app.services import runtime_event_service, run_service, session_service
 from app.services.builtin_reference_service import ensure_builtin_mode_references
 from app.text_repair import repair_text_tree
 
@@ -24,8 +24,12 @@ class SessionRuntimeRepository:
     async def get_session(self, session_id: str) -> dict[str, Any] | None:
         return await session_service.get_session(session_id)
 
+    async def get_session_for_run(self, run_id: str) -> dict[str, Any] | None:
+        return await run_service.get_session_for_run(run_id)
+
     async def build_initial_state(
         self,
+        run_id: str,
         session_id: str,
         *,
         topic: str,
@@ -42,43 +46,44 @@ class SessionRuntimeRepository:
             )
             record = await session_service.get_session_record(session_id)
 
-        session_data = await session_service.get_session(session_id)
-
-        if session_data is None:
+        current_run = await run_service.get_run(run_id)
+        if current_run is None or current_run.session_id != session_id or record is None:
             return None
 
-        raw_snapshot = (record.state_snapshot or {}) if record is not None else {}
+        current_projection = await run_service.get_run_projection(run_id)
+        raw_snapshot = (
+            current_projection.projection
+            if current_projection is not None and isinstance(current_projection.projection, dict)
+            else {}
+        )
         session_snapshot = normalize_resumable_snapshot(
             raw_snapshot,
-            current_turn=int(session_data.get("current_turn", 0) or 0),
+            current_turn=int(current_run.current_turn or 0),
         )
         dialogue_history = sanitize_dialogue_history(
-            session_snapshot.get("dialogue_history", session_data.get("dialogue_history", []))
+            session_snapshot.get("dialogue_history", [])
         )
         judge_history = sanitize_dialogue_history(session_snapshot.get("judge_history", []))
-        recent_dialogue_history = sanitize_dialogue_history(
-            session_snapshot.get("recent_dialogue_history", dialogue_history)
-        )
         reasoning_config = session_snapshot.get(
             "reasoning_config",
-            session_data.get("reasoning_config", default_reasoning_config()),
+            record.reasoning_config or default_reasoning_config(),
         )
         if not isinstance(reasoning_config, dict):
             reasoning_config = default_reasoning_config()
         speech_config = session_snapshot.get(
             "speech_config",
-            session_data.get("speech_config", default_speech_config()),
+            record.speech_config or default_speech_config(),
         )
         if not isinstance(speech_config, dict):
             speech_config = default_speech_config()
         debate_mode = str(
-            session_data.get("debate_mode")
-            or (record.debate_mode if record is not None else DebateMode.STANDARD.value)
+            session_snapshot.get("debate_mode")
+            or record.debate_mode
             or DebateMode.STANDARD.value
         )
         mode_config = session_snapshot.get(
             "mode_config",
-            session_data.get("mode_config", record.mode_config if record is not None else {}),
+            record.mode_config or {},
         )
         if not isinstance(mode_config, dict):
             mode_config = default_mode_config(debate_mode)
@@ -86,36 +91,33 @@ class SessionRuntimeRepository:
         return repair_text_tree(
             {
                 "session_id": session_id,
+                "run_id": run_id,
                 "topic": topic,
                 "debate_mode": debate_mode,
                 "mode_config": mode_config,
                 "participants": (
                     participants
                     if participants is not None
-                    else session_data.get("participants", ["proposer", "opposer"])
+                    else record.participants or ["proposer", "opposer"]
                 ),
-                "current_turn": session_data.get("current_turn", 0),
+                "current_turn": current_run.current_turn or 0,
                 "max_turns": max_turns,
                 "current_speaker": "",
                 "current_speaker_index": -1,
                 "dialogue_history": dialogue_history,
                 "judge_history": judge_history,
-                "recent_dialogue_history": recent_dialogue_history or dialogue_history,
-                "compressed_history_count": int(
-                    session_snapshot.get("compressed_history_count", 0) or 0
-                ),
                 "shared_knowledge": session_snapshot.get(
                     "shared_knowledge",
-                    session_data.get("shared_knowledge", []),
+                    [],
                 ),
                 "messages": [],
                 "current_scores": session_snapshot.get(
                     "current_scores",
-                    session_data.get("current_scores", {}),
+                    {},
                 ),
                 "cumulative_scores": session_snapshot.get(
                     "cumulative_scores",
-                    session_data.get("cumulative_scores", {}),
+                    {},
                 ),
                 "status": "in_progress",
                 "error": None,
@@ -135,56 +137,74 @@ class SessionRuntimeRepository:
                 "agent_configs": (
                     agent_configs
                     if agent_configs is not None
-                    else session_data.get("agent_configs", {})
+                    else record.agent_configs or {}
                 ),
             }
         )
 
-    async def persist_state(self, session_id: str, state: dict[str, Any]) -> None:
+    async def persist_state(self, run_id: str, session_id: str, state: dict[str, Any]) -> None:
         agent_configs = state.get("agent_configs", {})
         agent_configs_for_storage = {
             role: {key: value for key, value in cfg.items() if key != "api_key"}
             for role, cfg in agent_configs.items()
         }
 
-        await session_service.update_session_state(
-            session_id,
+        state_snapshot = {
+            "run_id": run_id,
+            "session_id": session_id,
+            "topic": state.get("topic", ""),
+            "participants": state.get("participants", []),
+            "max_turns": state.get("max_turns", 0),
+            "status": state.get("status", "in_progress"),
+            "debate_mode": state.get("debate_mode", DebateMode.STANDARD.value),
+            "mode_config": state.get(
+                "mode_config",
+                default_mode_config(str(state.get("debate_mode", DebateMode.STANDARD.value))),
+            ),
+            "dialogue_history": state.get("dialogue_history", []),
+            "judge_history": state.get("judge_history", []),
+            "shared_knowledge": state.get("shared_knowledge", []),
+            "current_scores": state.get("current_scores", {}),
+            "cumulative_scores": state.get("cumulative_scores", {}),
+            "agent_configs": agent_configs_for_storage,
+            "reasoning_config": state.get("reasoning_config", default_reasoning_config()),
+            "speech_config": state.get("speech_config", default_speech_config()),
+            "mode_artifacts": state.get("mode_artifacts", []),
+            "current_mode_report": state.get("current_mode_report"),
+            "final_mode_report": state.get("final_mode_report"),
+            "builtin_reference_docs": state.get("builtin_reference_docs", []),
+            "last_executed_node": state.get("last_executed_node", ""),
+            "last_progress_at": state.get("last_progress_at", ""),
+            "last_status_message": state.get("last_status_message", ""),
+            "resume_count": state.get("resume_count", 0),
+            "interrupted_at": state.get("interrupted_at"),
+            "error": state.get("error"),
+        }
+
+        await run_service.update_run_state(
+            run_id,
             current_turn=state.get("current_turn", 0),
             status=state.get("status", "in_progress"),
-            state_snapshot={
-                "debate_mode": state.get("debate_mode", DebateMode.STANDARD.value),
-                "mode_config": state.get(
-                    "mode_config",
-                    default_mode_config(str(state.get("debate_mode", DebateMode.STANDARD.value))),
-                ),
-                "dialogue_history": state.get("dialogue_history", []),
-                "judge_history": state.get("judge_history", []),
-                "recent_dialogue_history": state.get("recent_dialogue_history", []),
-                "compressed_history_count": state.get("compressed_history_count", 0),
-                "shared_knowledge": state.get("shared_knowledge", []),
-                "current_scores": state.get("current_scores", {}),
-                "cumulative_scores": state.get("cumulative_scores", {}),
-                "agent_configs": agent_configs_for_storage,
-                "reasoning_config": state.get("reasoning_config", default_reasoning_config()),
-                "speech_config": state.get("speech_config", default_speech_config()),
-                "mode_artifacts": state.get("mode_artifacts", []),
-                "current_mode_report": state.get("current_mode_report"),
-                "final_mode_report": state.get("final_mode_report"),
-                "builtin_reference_docs": state.get("builtin_reference_docs", []),
-                "last_executed_node": state.get("last_executed_node", ""),
-                "last_progress_at": state.get("last_progress_at", ""),
-                "last_status_message": state.get("last_status_message", ""),
-                "resume_count": state.get("resume_count", 0),
-                "interrupted_at": state.get("interrupted_at"),
-            },
+            state_snapshot=state_snapshot,
+        )
+        latest_seq = await run_service.get_latest_run_event_seq(run_id)
+        await run_service.create_checkpoint(
+            run_id=run_id,
+            session_id=session_id,
+            checkpoint_kind="node",
+            node=str(state.get("last_executed_node", "") or ""),
+            seq=latest_seq,
+            turn=int(state.get("current_turn", 0) or 0),
+            state_snapshot=state_snapshot,
         )
 
-    async def persist_runtime_event(self, event: dict[str, Any]) -> None:
+    async def persist_runtime_event(self, event: dict[str, Any]) -> dict[str, Any] | None:
+        run_id = str(event.get("run_id", "") or "")
         session_id = str(event.get("session_id", "") or "")
-        if not session_id:
-            return
+        if not run_id or not session_id:
+            return None
 
-        await runtime_event_service.create_runtime_event(event)
+        return await runtime_event_service.create_runtime_event(event)
 
-    async def get_latest_runtime_event_seq(self, session_id: str) -> int:
-        return await runtime_event_service.get_latest_runtime_event_seq(session_id)
+    async def get_latest_runtime_event_seq(self, run_id: str) -> int:
+        return await runtime_event_service.get_latest_runtime_event_seq(run_id)

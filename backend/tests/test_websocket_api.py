@@ -181,6 +181,10 @@ async def _get_run(run_id: str) -> SimpleNamespace:
     return _run_record(run_id)
 
 
+async def _noop_reconcile(_run_id: str):
+    return None
+
+
 async def _no_events(
     _run_id: str,
     after_seq: int = 0,
@@ -219,7 +223,10 @@ async def test_run_websocket_replays_persisted_events_before_live_connect(monkey
     monkeypatch.setattr(
         websocket_api,
         "get_debate_runtime_service",
-        lambda: SimpleNamespace(is_running=lambda _run_id: False),
+        lambda: SimpleNamespace(
+            is_running=lambda _run_id: False,
+            reconcile_run_liveness=_noop_reconcile,
+        ),
     )
     monkeypatch.setattr(websocket_api, "list_run_events", _one_replayed_event)
 
@@ -247,6 +254,7 @@ async def test_running_run_sends_resume_status_on_connect(monkeypatch):
         "get_debate_runtime_service",
         lambda: SimpleNamespace(
             is_running=lambda run_id: run_id == "abcdef123456",
+            reconcile_run_liveness=_noop_reconcile,
         ),
     )
 
@@ -294,7 +302,10 @@ async def test_run_websocket_flushes_buffered_live_events_after_replay(monkeypat
     monkeypatch.setattr(
         websocket_api,
         "get_debate_runtime_service",
-        lambda: SimpleNamespace(is_running=lambda _run_id: False),
+        lambda: SimpleNamespace(
+            is_running=lambda _run_id: False,
+            reconcile_run_liveness=_noop_reconcile,
+        ),
     )
     monkeypatch.setattr(websocket_api, "list_run_events", replay_then_emit_live)
 
@@ -325,7 +336,10 @@ async def test_ping_send_failure_stops_processing_after_disconnect(monkeypatch):
     monkeypatch.setattr(
         websocket_api,
         "get_debate_runtime_service",
-        lambda: SimpleNamespace(is_running=lambda _run_id: False),
+        lambda: SimpleNamespace(
+            is_running=lambda _run_id: False,
+            reconcile_run_liveness=_noop_reconcile,
+        ),
     )
 
     await websocket_api.run_ws(websocket, "abcdef123456")

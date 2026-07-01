@@ -8,9 +8,10 @@ from app.models.schemas import DebateMode
 from app.text_repair import repair_text_tree
 
 
-def default_reasoning_config() -> dict[str, bool]:
+def default_reasoning_config() -> dict[str, Any]:
     return {
         "consensus_enabled": True,
+        "group_discussion_rounds": 1,
     }
 
 
@@ -18,6 +19,7 @@ def default_speech_config() -> dict[str, int]:
     return {
         "proposer_max_chars": 0,
         "opposer_max_chars": 0,
+        "group_discussion_max_chars": 0,
     }
 
 
@@ -40,12 +42,15 @@ def normalize_mode_config(debate_mode: str, value: Any) -> dict[str, Any]:
 
 def effective_configs_for_mode(
     debate_mode: str,
-    reasoning_config: dict[str, bool],
-) -> dict[str, bool]:
+    reasoning_config: dict[str, Any],
+) -> dict[str, Any]:
     if debate_mode != DebateMode.SOPHISTRY_EXPERIMENT.value:
         return reasoning_config
 
-    return {"consensus_enabled": False}
+    return {
+        "consensus_enabled": False,
+        "group_discussion_rounds": 0,
+    }
 
 
 def sanitize_dialogue_history(dialogue_history: Any) -> list[dict[str, Any]]:
@@ -187,10 +192,6 @@ def sanitize_state_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
         sanitized["judge_history"] = backfill_judge_history_turns(
             dialogue_history,
             judge_history,
-        )
-    if "recent_dialogue_history" in sanitized:
-        sanitized["recent_dialogue_history"] = sanitize_dialogue_history(
-            sanitized.get("recent_dialogue_history", [])
         )
     return sanitized
 

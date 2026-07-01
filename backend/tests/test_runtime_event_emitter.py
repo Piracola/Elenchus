@@ -15,6 +15,7 @@ class _FakeRuntimeBus:
     async def emit(
         self,
         *,
+        run_id: str,
         session_id: str,
         event_type: str,
         payload: dict[str, Any] | None = None,
@@ -23,6 +24,7 @@ class _FakeRuntimeBus:
     ) -> None:
         self.events.append(
             {
+                "run_id": run_id,
                 "session_id": session_id,
                 "type": event_type,
                 "payload": payload or {},
@@ -48,12 +50,42 @@ def test_predict_next_status_node_handles_tools_and_turn_progress():
         {"messages": [SimpleNamespace(tool_calls=[{"name": "web_search"}])]},
     ) == "tool_executor"
     assert emitter.predict_next_status_node(
+        "manage_context",
+        {
+            "participants": ["proposer", "opposer"],
+            "current_turn": 0,
+            "dialogue_history": [],
+            "reasoning_config": {"group_discussion_rounds": 1},
+        },
+    ) == "group_discussion"
+    assert emitter.predict_next_status_node(
+        "manage_context",
+        {
+            "participants": ["proposer", "opposer"],
+            "current_turn": 0,
+            "dialogue_history": [
+                {"role": "group_discussion", "turn": 0},
+            ],
+            "reasoning_config": {"group_discussion_rounds": 1},
+        },
+    ) == "set_speaker"
+    assert emitter.predict_next_status_node(
         "speaker",
         {
             "participants": ["proposer", "opposer"],
             "current_speaker_index": 1,
+            "reasoning_config": {"group_discussion_rounds": 1},
         },
     ) == "judge"
+    assert emitter.predict_next_status_node(
+        "speaker",
+        {
+            "participants": ["proposer", "opposer"],
+            "current_speaker_index": 1,
+            "reasoning_config": {"group_discussion_rounds": 0},
+        },
+    ) == "judge"
+    assert emitter.predict_next_status_node("group_discussion", {}) == "set_speaker"
     assert emitter.predict_next_status_node(
         "advance_turn",
         {"current_turn": 1, "max_turns": 3},
@@ -91,9 +123,21 @@ def test_predict_next_status_node_handles_tools_and_turn_progress():
 
 
 @pytest.mark.asyncio
+async def test_emit_runtime_event_requires_run_id():
+    emitter = RuntimeEventEmitter(runtime_bus=_FakeRuntimeBus())
+
+    with pytest.raises(ValueError, match="explicit run_id"):
+        await emitter.emit_runtime_event(
+            session_id="session-1",
+            event_type="status",
+            payload={"content": "should fail"},
+        )
+
+
+@pytest.mark.asyncio
 async def test_emit_memory_updates_routes_fact_and_memo_sources():
     bus = _FakeRuntimeBus()
-    emitter = RuntimeEventEmitter(runtime_bus=bus)
+    emitter = RuntimeEventEmitter(runtime_bus=bus).for_run("run-1")
 
     count = await emitter.emit_memory_updates(
         "session-1",
@@ -117,7 +161,7 @@ async def test_emit_memory_updates_routes_fact_and_memo_sources():
 @pytest.mark.asyncio
 async def test_emit_consensus_summary_uses_dedicated_event_type():
     bus = _FakeRuntimeBus()
-    emitter = RuntimeEventEmitter(runtime_bus=bus)
+    emitter = RuntimeEventEmitter(runtime_bus=bus).for_run("run-1")
 
     count = await emitter.emit_consensus_summary(
         "session-1",
@@ -144,7 +188,7 @@ async def test_emit_consensus_summary_uses_dedicated_event_type():
 @pytest.mark.asyncio
 async def test_emit_discussion_entry_routes_consensus_event_shape():
     bus = _FakeRuntimeBus()
-    emitter = RuntimeEventEmitter(runtime_bus=bus)
+    emitter = RuntimeEventEmitter(runtime_bus=bus).for_run("run-1")
 
     await emitter.emit_discussion_entry(
         "session-1",
@@ -163,9 +207,32 @@ async def test_emit_discussion_entry_routes_consensus_event_shape():
 
 
 @pytest.mark.asyncio
+async def test_emit_discussion_entry_routes_group_discussion_event_shape():
+    bus = _FakeRuntimeBus()
+    emitter = RuntimeEventEmitter(runtime_bus=bus).for_run("run-1")
+
+    await emitter.emit_discussion_entry(
+        "session-1",
+        {
+            "role": "group_discussion",
+            "agent_name": "组内讨论",
+            "content": "本轮关键问题是定义边界。",
+            "discussion_kind": "group_discussion",
+            "discussion_round": 1,
+            "turn": 0,
+        },
+    )
+
+    assert [event["type"] for event in bus.events] == ["group_discussion"]
+    assert bus.events[0]["source"] == "runtime.node.group_discussion"
+    assert bus.events[0]["phase"] == "processing"
+    assert bus.events[0]["payload"]["discussion_round"] == 1
+
+
+@pytest.mark.asyncio
 async def test_emit_speech_skips_duplicate_start_when_tokens_already_streamed():
     bus = _FakeRuntimeBus()
-    emitter = RuntimeEventEmitter(runtime_bus=bus)
+    emitter = RuntimeEventEmitter(runtime_bus=bus).for_run("run-1")
 
     count = await emitter.emit_speech(
         "session-1",
@@ -205,7 +272,7 @@ async def test_emit_speech_skips_duplicate_start_when_tokens_already_streamed():
 @pytest.mark.asyncio
 async def test_emit_speech_omits_empty_metadata_payload():
     bus = _FakeRuntimeBus()
-    emitter = RuntimeEventEmitter(runtime_bus=bus)
+    emitter = RuntimeEventEmitter(runtime_bus=bus).for_run("run-1")
 
     await emitter.emit_speech(
         "session-1",
@@ -231,7 +298,7 @@ async def test_emit_speech_omits_empty_metadata_payload():
 @pytest.mark.asyncio
 async def test_emit_speech_uses_sophistry_speaker_source_for_experiment_mode():
     bus = _FakeRuntimeBus()
-    emitter = RuntimeEventEmitter(runtime_bus=bus)
+    emitter = RuntimeEventEmitter(runtime_bus=bus).for_run("run-1")
 
     await emitter.emit_speech(
         "session-1",
@@ -257,7 +324,7 @@ async def test_emit_speech_uses_sophistry_speaker_source_for_experiment_mode():
 @pytest.mark.asyncio
 async def test_emit_speech_emits_every_new_entry_after_missed_turns():
     bus = _FakeRuntimeBus()
-    emitter = RuntimeEventEmitter(runtime_bus=bus)
+    emitter = RuntimeEventEmitter(runtime_bus=bus).for_run("run-1")
 
     count = await emitter.emit_speech(
         "session-1",
@@ -307,7 +374,7 @@ async def test_emit_speech_emits_every_new_entry_after_missed_turns():
 @pytest.mark.asyncio
 async def test_emit_sophistry_reports_includes_turn_mapping_metadata():
     bus = _FakeRuntimeBus()
-    emitter = RuntimeEventEmitter(runtime_bus=bus)
+    emitter = RuntimeEventEmitter(runtime_bus=bus).for_run("run-1")
 
     count = await emitter.emit_sophistry_reports(
         "session-1",

@@ -11,6 +11,13 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.context_runtime import (
+    CONTEXT_POLICY_FIELD_LIMITS,
+    DEFAULT_CONTEXT_INJECTION_MODE,
+    clamp_context_policy_value,
+    normalize_context_injection_mode,
+)
+
 
 class ExportFormat(str, Enum):
     JSON = "json"
@@ -23,6 +30,26 @@ class SessionStatus(str, Enum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     ERROR = "error"
+    ARCHIVED = "archived"
+
+
+class RunStatus(str, Enum):
+    PENDING = "pending"
+    INITIALIZING = "initializing"
+    RUNNING = "running"
+    RETRYING = "retrying"
+    RECOVERING = "recovering"
+    STOPPING = "stopping"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    STALLED = "stalled"
+
+
+class RunCommandType(str, Enum):
+    STOP = "stop"
+    RESUME = "resume"
+    INTERVENE = "intervene"
 
 
 class DebateMode(str, Enum):
@@ -41,6 +68,31 @@ class ReasoningConfig(BaseModel):
     """Internal reasoning behavior for one debate."""
 
     consensus_enabled: bool = True
+    group_discussion_rounds: int = Field(default=1, ge=0, le=5)
+
+
+class ContextRuntimeConfig(BaseModel):
+    """Runtime-tunable context engineering configuration."""
+
+    context_injection_mode: str = DEFAULT_CONTEXT_INJECTION_MODE
+    recent_turns_to_include: int = Field(default=2, ge=1, le=8)
+    evidence_items_per_agent: int = Field(default=4, ge=1, le=12)
+    exact_recent_entries_per_agent: int = Field(default=4, ge=1, le=12)
+    planning_entries_per_agent: int = Field(default=2, ge=0, le=6)
+    long_term_memory_entries_per_agent: int = Field(default=4, ge=0, le=12)
+    use_low_cost_context_model: bool = True
+    low_cost_model_provider_id: str | None = None
+    low_cost_model_id: str | None = None
+
+    @field_validator("context_injection_mode", mode="before")
+    @classmethod
+    def _normalize_context_injection_mode(cls, value: Any) -> str:
+        return normalize_context_injection_mode(value)
+
+    @field_validator(*CONTEXT_POLICY_FIELD_LIMITS.keys(), mode="before")
+    @classmethod
+    def _clamp_context_policy_value(cls, value: Any, info) -> int:
+        return clamp_context_policy_value(info.field_name, value)
 
 
 class SpeechConfig(BaseModel):
@@ -48,6 +100,7 @@ class SpeechConfig(BaseModel):
 
     proposer_max_chars: int = Field(default=0, ge=0, le=20000)
     opposer_max_chars: int = Field(default=0, ge=0, le=20000)
+    group_discussion_max_chars: int = Field(default=0, ge=0, le=20000)
 
 
 class SophistryModeConfig(BaseModel):
@@ -274,6 +327,7 @@ class SessionResponse(BaseModel):
     """Full session detail."""
 
     id: str
+    latest_run_id: str | None = None
     topic: str
     debate_mode: DebateMode = DebateMode.STANDARD
     mode_config: dict[str, Any] = Field(default_factory=dict)
@@ -299,6 +353,7 @@ class SessionListItem(BaseModel):
     """Lightweight session info for list endpoint."""
 
     id: str
+    latest_run_id: str | None = None
     topic: str
     debate_mode: DebateMode = DebateMode.STANDARD
     status: SessionStatus
@@ -312,6 +367,59 @@ class SessionListResponse(BaseModel):
 
     sessions: list[SessionListItem]
     total: int
+
+
+class RunCreate(BaseModel):
+    topic: str | None = None
+    participants: list[str] | None = None
+    max_turns: int | None = None
+
+
+class RunSummary(BaseModel):
+    id: str
+    session_id: str
+    status: RunStatus
+    current_turn: int
+    latest_seq: int
+    last_status_message: str = ""
+    last_error_message: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    interrupted_at: datetime | None = None
+    last_progress_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RunProjectionResponse(BaseModel):
+    run: RunSummary
+    session: SessionResponse
+    projection: dict[str, Any] = Field(default_factory=dict)
+
+
+class RunEventEnvelope(BaseModel):
+    schema_version: str = "v2"
+    event_id: str
+    run_id: str
+    session_id: str
+    seq: int
+    timestamp: datetime
+    source: str
+    type: str
+    phase: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class RunCommandRequest(BaseModel):
+    command_type: RunCommandType
+    content: str | None = None
+
+
+class RunCommandAck(BaseModel):
+    accepted: bool
+    run_id: str
+    command_type: RunCommandType
+    message: str | None = None
 
 
 class SessionDocumentListItem(BaseModel):

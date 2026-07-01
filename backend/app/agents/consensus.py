@@ -10,6 +10,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from app.agents.context_engine import build_context_packet
 from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.prompt_loader import get_consensus_prompt
 from app.agents.runtime_progress import (
@@ -33,9 +34,19 @@ _CONSENSUS_RULES = """
 
 def _build_consensus_instruction(state: dict[str, Any]) -> str:
     topic = str(state.get("topic", "") or "")
-    dialogue_history = state.get("dialogue_history", [])
     cumulative_scores = state.get("cumulative_scores", {})
     current_scores = state.get("current_scores", {})
+    packet = build_context_packet(
+        state,
+        agent_role="consensus",
+        task_lines=[
+            f"辩题：{topic}",
+            "请基于整场辩论绘制最终概念地图。",
+        ],
+        live_constraints=[
+            "不要把组内讨论当作正式立场，只把它当作规划线索。",
+        ],
+    )
 
     parts = [
         f"辩题：{topic}",
@@ -45,16 +56,8 @@ def _build_consensus_instruction(state: dict[str, Any]) -> str:
         "2. 仍未解决的核心分歧",
         "3. 若要继续辩论，最值得继续验证的问题",
         "4. 哪一方在什么条件下更占优",
+        packet.render(),
     ]
-
-    if dialogue_history:
-        parts.append("## Public Debate Highlights")
-        for entry in dialogue_history[-8:]:
-            if not isinstance(entry, dict):
-                continue
-            role = entry.get("role", "")
-            content = str(entry.get("content", "") or "")
-            parts.append(f"### [{role}]\n{content}")
 
     if current_scores:
         parts.append(f"## Final Round Scores\n{current_scores}")

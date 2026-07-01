@@ -1,18 +1,19 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Database, Monitor, Search, Terminal, X } from 'lucide-react';
+import { BrainCircuit, Database, Monitor, Search, Terminal, X } from 'lucide-react';
 import { api } from '../../api/client';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useModelConfigManager } from '../../hooks/useModelConfigManager';
 import { SearchConfigTab } from './SearchConfigTab';
 import type { LogLevel } from '../../types';
 import { SettingsDisplayTab } from './settings/SettingsDisplayTab';
+import { SettingsContextTab } from './settings/SettingsContextTab';
 import { SettingsLoggingTab } from './settings/SettingsLoggingTab';
 import { SettingsProvidersTab } from './settings/SettingsProvidersTab';
 import './settings/settings.css';
 
-export type SettingsTab = 'providers' | 'display' | 'logging' | 'search';
+export type SettingsTab = 'providers' | 'display' | 'logging' | 'search' | 'context';
 
 const SETTINGS_TAB_TRANSITION = {
     duration: 0.16,
@@ -54,6 +55,12 @@ const SETTINGS_TABS: Array<{
         description: '检索 provider 配置',
         icon: <Search size={17} />,
     },
+    {
+        value: 'context',
+        label: '上下文工程',
+        description: '上下文整理与专用模型',
+        icon: <BrainCircuit size={17} />,
+    },
 ];
 
 interface Props {
@@ -68,7 +75,7 @@ export default function SettingsPanel({
     initialTab = 'providers',
 }: Props) {
     const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
-    const { logLevel, setLogLevel, displaySettings, setDisplaySettings } = useSettingsStore();
+    const { logLevel, setLogLevel, displaySettings, setDisplaySettings, contextRuntime, setContextRuntime } = useSettingsStore();
 
     // Use the extracted hook for provider management
     const modelConfig = useModelConfigManager();
@@ -126,6 +133,16 @@ export default function SettingsPanel({
                 <SettingsLoggingTab
                     logLevel={logLevel}
                     onLogLevelChange={handleLogLevelChange}
+                />
+            );
+        }
+
+        if (activeTab === 'context') {
+            return (
+                <SettingsContextTab
+                    providers={modelConfig.providers}
+                    contextRuntime={contextRuntime}
+                    setContextRuntime={setContextRuntime}
                 />
             );
         }

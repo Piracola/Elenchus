@@ -1,4 +1,5 @@
 export const DEFAULT_MAX_TURNS = 5;
+export const DEFAULT_GROUP_DISCUSSION_ROUNDS = 1;
 export const DEFAULT_SPEECH_MAX_CHARS = 0;
 
 function parseBoundedIntegerInput(
@@ -42,5 +43,16 @@ export function parseSpeechMaxCharsInput(
         fallback,
         min: 0,
         max: 20000,
+    });
+}
+
+export function parseGroupDiscussionRoundsInput(
+    input: string,
+    fallback: number = DEFAULT_GROUP_DISCUSSION_ROUNDS,
+): number {
+    return parseBoundedIntegerInput(input, {
+        fallback,
+        min: 0,
+        max: 5,
     });
 }

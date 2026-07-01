@@ -13,6 +13,7 @@ from app.runtime.orchestrator import DebateOrchestrator
 class _FakeRepository:
     async def build_initial_state(
         self,
+        run_id: str,
         session_id: str,
         *,
         topic: str,
@@ -21,6 +22,7 @@ class _FakeRepository:
         agent_configs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return {
+            "run_id": run_id,
             "session_id": session_id,
             "topic": topic,
             "participants": participants or ["proposer", "opposer"],
@@ -34,16 +36,18 @@ class _FakeRepository:
             "current_scores": {},
             "cumulative_scores": {},
             "status": "in_progress",
+            "reasoning_config": {"group_discussion_rounds": 1},
             "agent_configs": agent_configs or {},
         }
 
-    async def persist_state(self, _session_id: str, _state: dict[str, Any]) -> None:
+    async def persist_state(self, _run_id: str, _session_id: str, _state: dict[str, Any]) -> None:
         return None
 
 
 class _FakeSophistryRepository(_FakeRepository):
     async def build_initial_state(
         self,
+        run_id: str,
         session_id: str,
         *,
         topic: str,
@@ -52,6 +56,7 @@ class _FakeSophistryRepository(_FakeRepository):
         agent_configs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         state = await super().build_initial_state(
+            run_id,
             session_id,
             topic=topic,
             participants=participants,
@@ -71,6 +76,16 @@ class _FakeSophistryRepository(_FakeRepository):
 class _FakeEngine:
     async def stream(self, initial_state: dict[str, Any]):
         session_id = initial_state["session_id"]
+        group_discussion_entry = {
+            "role": "group_discussion",
+            "agent_name": "组内讨论",
+            "content": "brief",
+            "timestamp": "2026-03-18T00:00:00Z",
+            "citations": [],
+            "turn": 0,
+            "discussion_kind": "group_discussion",
+            "discussion_round": 1,
+        }
 
         yield {
             "session_id": session_id,
@@ -85,6 +100,23 @@ class _FakeEngine:
             "messages": [],
             "current_scores": {},
             "cumulative_scores": {},
+            "reasoning_config": initial_state.get("reasoning_config", {}),
+        }
+
+        yield {
+            "session_id": session_id,
+            "last_executed_node": "group_discussion",
+            "participants": initial_state["participants"],
+            "max_turns": initial_state["max_turns"],
+            "current_turn": 0,
+            "current_speaker": "",
+            "current_speaker_index": -1,
+            "dialogue_history": [group_discussion_entry],
+            "shared_knowledge": [],
+            "messages": [],
+            "current_scores": {},
+            "cumulative_scores": {},
+            "reasoning_config": initial_state.get("reasoning_config", {}),
         }
 
         yield {
@@ -95,11 +127,12 @@ class _FakeEngine:
             "current_turn": 0,
             "current_speaker": "proposer",
             "current_speaker_index": 0,
-            "dialogue_history": [],
+            "dialogue_history": [group_discussion_entry],
             "shared_knowledge": [],
             "messages": [],
             "current_scores": {},
             "cumulative_scores": {},
+            "reasoning_config": initial_state.get("reasoning_config", {}),
         }
 
         yield {
@@ -111,6 +144,7 @@ class _FakeEngine:
             "current_speaker": "proposer",
             "current_speaker_index": 0,
             "dialogue_history": [
+                group_discussion_entry,
                 {
                     "role": "proposer",
                     "agent_name": "Proposer",
@@ -123,6 +157,7 @@ class _FakeEngine:
             "messages": [],
             "current_scores": {},
             "cumulative_scores": {},
+            "reasoning_config": initial_state.get("reasoning_config", {}),
         }
 
 
@@ -222,6 +257,7 @@ async def test_orchestrator_preannounces_speaker_status_after_set_speaker():
     )
 
     await orchestrator.run_debate(
+        "111111111111",
         "abc123def456",
         "Status timing test",
         participants=["proposer", "opposer"],
@@ -233,8 +269,9 @@ async def test_orchestrator_preannounces_speaker_status_after_set_speaker():
         for event in captured
         if event.get("type") == "status" and isinstance(event.get("payload"), dict)
     ]
-    assert status_nodes[:3] == ["manage_context", "set_speaker", "speaker"]
+    assert status_nodes[:4] == ["manage_context", "group_discussion", "set_speaker", "speaker"]
     assert status_nodes.count("manage_context") == 1
+    assert status_nodes.count("group_discussion") == 1
     assert status_nodes.count("speaker") == 1
 
     speaker_status_index = next(
@@ -265,6 +302,7 @@ async def test_orchestrator_emits_sophistry_status_sequence():
     )
 
     await orchestrator.run_debate(
+        "222222222222",
         "abc123def456",
         "Sophistry timing test",
         participants=["proposer", "opposer"],

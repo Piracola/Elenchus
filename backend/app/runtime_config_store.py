@@ -7,6 +7,11 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
+from app.context_runtime import (
+    DEFAULT_CONTEXT_INJECTION_MODE,
+    infer_context_injection_mode,
+    values_for_context_injection_mode,
+)
 from app.runtime_paths import get_runtime_paths, prepare_runtime_environment
 
 SUPPORTED_SEARCH_PROVIDERS = {"ddgs", "duckduckgo", "custom"}
@@ -77,9 +82,16 @@ def _default_config() -> dict[str, Any]:
         "debate": {
             "default_max_turns": 5,
             "default_max_tokens": 64000,
-            "context_window": {
-                "recent_turns_to_keep": 3,
-                "enable_summary_compression": True,
+            "context_runtime": {
+                "context_injection_mode": DEFAULT_CONTEXT_INJECTION_MODE,
+                "recent_turns_to_include": 2,
+                "evidence_items_per_agent": 4,
+                "exact_recent_entries_per_agent": 4,
+                "planning_entries_per_agent": 2,
+                "long_term_memory_entries_per_agent": 4,
+                "use_low_cost_context_model": True,
+                "low_cost_model_provider_id": "",
+                "low_cost_model_id": "",
             },
         },
         "search": {
@@ -137,6 +149,37 @@ def _normalize_provider(provider: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _fill_context_runtime_model_from_providers(config: dict[str, Any]) -> None:
+    debate = config.get("debate")
+    if not isinstance(debate, dict):
+        return
+
+    context_runtime = debate.get("context_runtime")
+    if not isinstance(context_runtime, dict):
+        return
+
+    provider_id = str(context_runtime.get("low_cost_model_provider_id") or "").strip()
+    model_id = str(context_runtime.get("low_cost_model_id") or "").strip()
+    if not provider_id or model_id:
+        return
+
+    providers = config.get("providers")
+    if not isinstance(providers, list):
+        return
+
+    for provider in providers:
+        if not isinstance(provider, dict):
+            continue
+        if str(provider.get("id") or "") != provider_id:
+            continue
+        models = provider.get("models")
+        if isinstance(models, list):
+            first_model = next((str(model).strip() for model in models if str(model).strip()), "")
+            if first_model:
+                context_runtime["low_cost_model_id"] = first_model
+        return
+
+
 def _decrypt_provider_keys(providers: list[dict[str, Any]] | None) -> None:
     from app.crypto import decrypt_value
     if not providers:
@@ -173,19 +216,31 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
     })
 
     debate = incoming.get("debate") if isinstance(incoming.get("debate"), dict) else {}
-    context_window = debate.get("context_window") if isinstance(debate.get("context_window"), dict) else {}
+    context_runtime = debate.get("context_runtime") if isinstance(debate.get("context_runtime"), dict) else {}
+    context_injection_mode = infer_context_injection_mode(context_runtime)
+    context_policy_values = values_for_context_injection_mode(
+        context_injection_mode,
+        context_runtime,
+    )
     base["debate"].update({
         "default_max_turns": int(debate.get("default_max_turns") or base["debate"]["default_max_turns"]),
-        "context_window": {
-            "recent_turns_to_keep": int(
-                context_window.get("recent_turns_to_keep")
-                or base["debate"]["context_window"]["recent_turns_to_keep"]
-            ),
-            "enable_summary_compression": bool(
-                context_window.get(
-                    "enable_summary_compression",
-                    base["debate"]["context_window"]["enable_summary_compression"],
+        "context_runtime": {
+            "context_injection_mode": context_injection_mode,
+            **context_policy_values,
+            "use_low_cost_context_model": bool(
+                context_runtime.get(
+                    "use_low_cost_context_model",
+                    base["debate"]["context_runtime"]["use_low_cost_context_model"],
                 )
+            ),
+            "low_cost_model_provider_id": str(
+                context_runtime.get("low_cost_model_provider_id")
+                or base["debate"]["context_runtime"]["low_cost_model_provider_id"]
+            ),
+            "low_cost_model_id": str(
+                context_runtime.get("low_cost_model_id")
+                if context_runtime.get("low_cost_model_id") is not None
+                else base["debate"]["context_runtime"]["low_cost_model_id"]
             ),
         },
     })
@@ -227,6 +282,8 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
                 normalized_providers[0]["is_default"] = True
             _decrypt_provider_keys(normalized_providers)
             base["providers"] = normalized_providers
+
+    _fill_context_runtime_model_from_providers(base)
 
     schema_version = incoming.get("schema_version")
     if isinstance(schema_version, int) and schema_version > 0:

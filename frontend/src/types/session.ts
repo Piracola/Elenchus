@@ -1,16 +1,42 @@
 import type { TurnScore } from './scoring';
 
 export type SessionStatus = 'pending' | 'in_progress' | 'completed' | 'error';
+export type RunStatus =
+    | 'pending'
+    | 'initializing'
+    | 'running'
+    | 'retrying'
+    | 'recovering'
+    | 'stopping'
+    | 'completed'
+    | 'failed'
+    | 'cancelled'
+    | 'stalled';
+export type RunCommandType = 'stop' | 'resume' | 'intervene';
 export type DebateMode = 'standard' | 'sophistry_experiment';
 export type DocumentStatus = 'uploaded' | 'processing' | 'processed' | 'failed';
 
 export interface ReasoningConfig {
     consensus_enabled: boolean;
+    group_discussion_rounds: number;
 }
 
 export interface SpeechConfig {
     proposer_max_chars: number;
     opposer_max_chars: number;
+    group_discussion_max_chars: number;
+}
+
+export interface ContextRuntimeConfig {
+    context_injection_mode: 'auto' | 'lean' | 'standard' | 'deep' | 'custom';
+    recent_turns_to_include: number;
+    evidence_items_per_agent: number;
+    exact_recent_entries_per_agent: number;
+    planning_entries_per_agent: number;
+    long_term_memory_entries_per_agent: number;
+    use_low_cost_context_model: boolean;
+    low_cost_model_provider_id: string | null;
+    low_cost_model_id: string | null;
 }
 
 export interface ModeArtifact {
@@ -47,6 +73,7 @@ export interface DialogueEntry {
     target_role?: string;
     scores?: TurnScore;
     discussion_kind?: string;
+    discussion_round?: number;
 }
 
 export interface AgentConfig {
@@ -61,6 +88,7 @@ export interface AgentConfig {
 
 export interface Session {
     id: string;
+    latest_run_id?: string | null;
     topic: string;
     debate_mode: DebateMode;
     mode_config: Record<string, unknown>;
@@ -84,6 +112,7 @@ export interface Session {
 
 export interface SessionListItem {
     id: string;
+    latest_run_id?: string | null;
     topic: string;
     debate_mode: DebateMode;
     status: SessionStatus;
@@ -101,6 +130,41 @@ export interface SessionCreatePayload {
     agent_configs?: Record<string, AgentConfig>;
     reasoning_config?: ReasoningConfig;
     speech_config?: SpeechConfig;
+}
+
+export interface RunSummary {
+    id: string;
+    session_id: string;
+    status: RunStatus;
+    current_turn: number;
+    latest_seq: number;
+    last_status_message: string;
+    last_error_message?: string | null;
+    started_at?: string | null;
+    completed_at?: string | null;
+    interrupted_at?: string | null;
+    last_progress_at?: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface RunProjectionResponse {
+    run: RunSummary;
+    session: Session;
+    projection: Record<string, unknown>;
+}
+
+export interface RunCommandAck {
+    accepted: boolean;
+    run_id: string;
+    command_type: RunCommandType;
+    message?: string | null;
+}
+
+export interface RuntimeSettings {
+    debate: {
+        context_runtime: ContextRuntimeConfig;
+    };
 }
 
 export interface SessionAgentConfigsUpdatePayload {

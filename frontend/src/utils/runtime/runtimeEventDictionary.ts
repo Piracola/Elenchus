@@ -20,7 +20,7 @@ export function getRuntimeEventGroup(type: string): RuntimeEventGroup {
     if (type.startsWith('fact_check')) return 'tool';
     if (type.startsWith('memory_')) return 'memory';
     if (type === 'judge_score' || type === 'judge_start') return 'judge';
-    if (type === 'status' || type === 'turn_complete' || type === 'debate_complete') return 'status';
+    if (type === 'status' || type === 'run_status_changed' || type === 'turn_complete' || type === 'debate_complete') return 'status';
     if (type === 'system' || type === 'mode_notice' || type === 'audience_message' || type === 'pong') {
         return 'system';
     }

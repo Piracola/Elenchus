@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.services.agent_config_service import AgentConfigService
+from app.runtime_config_store import normalize_runtime_config
 
 
 class _FakeProviderService:
@@ -38,6 +39,55 @@ def _providers() -> list[dict[str, object]]:
     ]
 
 
+def test_normalize_runtime_config_infers_context_mode_from_legacy_defaults():
+    normalized = normalize_runtime_config(
+        {
+            "debate": {
+                "context_runtime": {
+                    "recent_turns_to_include": 2,
+                    "evidence_items_per_agent": 4,
+                    "exact_recent_entries_per_agent": 4,
+                    "planning_entries_per_agent": 2,
+                    "long_term_memory_entries_per_agent": 4,
+                    "use_low_cost_context_model": True,
+                    "low_cost_model_provider_id": "",
+                    "low_cost_model_id": "",
+                }
+            }
+        }
+    )
+
+    assert normalized["debate"]["context_runtime"]["context_injection_mode"] == "auto"
+    assert normalized["debate"]["context_runtime"]["recent_turns_to_include"] == 2
+
+
+def test_normalize_runtime_config_backfills_low_cost_model_id_from_provider():
+    normalized = normalize_runtime_config(
+        {
+            "providers": [
+                {
+                    "id": "provider-1",
+                    "name": "Provider A",
+                    "provider_type": "openai",
+                    "api_key": "test-key",
+                    "models": ["deepseek-v4-flash", "deepseek-v4-pro"],
+                    "is_default": True,
+                }
+            ],
+            "debate": {
+                "context_runtime": {
+                    "use_low_cost_context_model": True,
+                    "low_cost_model_provider_id": "provider-1",
+                    "low_cost_model_id": "",
+                }
+            },
+        }
+    )
+
+    assert normalized["debate"]["context_runtime"]["low_cost_model_provider_id"] == "provider-1"
+    assert normalized["debate"]["context_runtime"]["low_cost_model_id"] == "deepseek-v4-flash"
+
+
 @pytest.mark.asyncio
 async def test_build_session_agent_configs_preserves_provider_identity():
     service = AgentConfigService(provider_service=_FakeProviderService(_providers()))
@@ -62,6 +112,7 @@ async def test_build_session_agent_configs_preserves_provider_identity():
     assert configs["opposer"]["provider_id"] == "default-openai"
     assert configs["judge"]["provider_id"] == "default-openai"
     assert configs["fact_checker"]["provider_id"] == "default-openai"
+    assert configs["group_discussion"]["provider_id"] == "default-openai"
 
 
 @pytest.mark.asyncio
@@ -79,6 +130,7 @@ async def test_resolve_provider_selection_uses_selected_provider_credentials():
     assert selection.provider_type == "anthropic"
     assert selection.api_base_url == "https://anthropic.example"
     assert selection.api_key == "anthropic-key"
+    assert selection.default_model == "claude-3-7-sonnet"
     assert selection.custom_parameters == {
         "thinking": {"type": "enabled", "budget_tokens": 2048}
     }
@@ -99,6 +151,7 @@ async def test_resolve_provider_selection_merges_override_custom_parameters():
     )
 
     assert selection.provider_id == "default-openai"
+    assert selection.default_model == "gpt-4o"
     assert selection.custom_parameters == {
         "reasoning_effort": "high",
         "verbosity": "low",

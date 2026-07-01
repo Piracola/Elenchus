@@ -10,6 +10,7 @@ import { useChatHistoryWindow } from '../hooks/chat/useChatHistoryWindow';
 import { useChatViewportMetrics } from '../hooks/chat/useChatViewportMetrics';
 import { useTranscriptPanelState } from '../hooks/chat/useTranscriptPanelState';
 import { useTranscriptActions } from '../hooks/useDebateViewState';
+import { useDebateStore } from '../stores/debateStore';
 import { useSettingsStore, MESSAGE_WIDTH_VALUES } from '../stores/settingsStore';
 import DebateControls from './chat/DebateControls';
 import ChatHeaderOverlay from './chat/ChatHeaderOverlay';
@@ -45,6 +46,7 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
         handleToggleAllAgentMessages,
     } = useTranscriptPanelState();
     const { toggleAgentMessageCollapsed } = useTranscriptActions();
+    const activeRunId = useDebateStore((state) => state.activeRunId);
 
     const viewportMetrics = useChatViewportMetrics({
         currentSessionId,
@@ -121,6 +123,7 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
                     onExpandSidebar={onExpandSidebar}
                     hasCurrentSession={hasCurrentSession}
                     currentSessionId={currentSessionId}
+                    activeRunId={activeRunId}
                     currentTopic={currentTopic}
                     currentTurn={displayTurn}
                     maxTurns={maxTurns}

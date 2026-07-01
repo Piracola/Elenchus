@@ -2,10 +2,10 @@
 LangGraph debate state machine — the core orchestration graph.
 
 Flow per turn (Dynamic Tool Calling):
-  manage_context → set_speaker → debater_speak ↔ tool_executor
-                                     ↓
-                                advance_turn (loop until all speak)
-                                     ↓
+  manage_context → group_discussion → set_speaker → debater_speak ↔ tool_executor
+                                                 ↓
+                                            advance_turn (loop until all speak)
+                                                 ↓
   (next turn or END)
 """
 
@@ -21,9 +21,10 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 
 from app.agents.consensus import converge_consensus
+from app.agents.context_engine import build_round_digest, merge_round_digest_knowledge
 from app.agents.debater import debater_speak
+from app.agents.group_discussion import run_group_discussion
 from app.agents.judge import judge_score
-from app.agents.context_manager import compress_context
 from app.tools import get_all_skills
 from app.tools.metadata import get_tool_shared_knowledge_type
 from app.models.state import DialogueEntryDict, SharedKnowledgeEntry
@@ -65,6 +66,7 @@ def _build_tool_knowledge_entry(
 class DebateGraphState(TypedDict, total=False):
     """State flowing through the LangGraph debate graph."""
 
+    run_id: str
     session_id: str
     topic: str
     debate_mode: str
@@ -77,8 +79,6 @@ class DebateGraphState(TypedDict, total=False):
 
     dialogue_history: Annotated[list[DialogueEntryDict], add]
     judge_history: Annotated[list[DialogueEntryDict], add]
-    recent_dialogue_history: list[DialogueEntryDict]
-    compressed_history_count: int
     shared_knowledge: Annotated[list[SharedKnowledgeEntry], add]
     reasoning_config: dict[str, Any]
     speech_config: dict[str, int]
@@ -109,31 +109,20 @@ class DebateGraphState(TypedDict, total=False):
 # ── Node functions ──────────────────────────────────────────────
 
 async def node_manage_context(state: DebateGraphState) -> dict[str, Any]:
-    """Compress old dialogue history if it exceeds the context window."""
-    history = state.get("dialogue_history", [])
-    compressed_history_count = state.get("compressed_history_count", 0)
+    """Prepare derived context artifacts before a new turn starts."""
     knowledge = state.get("shared_knowledge", [])
-    agent_configs = state.get("agent_configs", {})
+    current_turn = int(state.get("current_turn", 0) or 0)
 
-    history_dicts = [dict(e) if not isinstance(e, dict) else e for e in history]
+    updated_knowledge = list(knowledge) if isinstance(knowledge, list) else []
+    if current_turn > 0:
+        digest_entry = await build_round_digest(state, turn_index=current_turn - 1)
+        updated_knowledge = merge_round_digest_knowledge(updated_knowledge, digest_entry)
 
-    new_knowledge, recent_entries, new_compressed_history_count = await compress_context(
-        history_dicts,
-        knowledge,
-        agent_configs,
-        compressed_history_count=compressed_history_count,
-        session_id=str(state.get("session_id", "") or ""),
-        runtime_event_emitter=state.get("runtime_event_emitter"),
-    )
-
-    # Compute delta: only items added by compression (memos not already in knowledge)
-    delta = new_knowledge[len(knowledge):]
-
-    # Inject any pending user interventions as audience dialogue entries
+    # Inject any pending user interventions as audience dialogue entries.
     from app.dependencies import get_intervention_manager
-    session_id = state.get("session_id", "")
+    run_id = str(state.get("run_id", "") or "")
     intervention_mgr = get_intervention_manager()
-    queued = await intervention_mgr.pop_interventions(session_id)
+    queued = await intervention_mgr.pop_interventions(run_id) if run_id else []
     intervention_entries = [
         {
             "role": "audience",
@@ -145,16 +134,9 @@ async def node_manage_context(state: DebateGraphState) -> dict[str, Any]:
         for content in queued
     ]
 
-    effective_recent_history = [
-        *recent_entries,
-        *intervention_entries,
-    ]
-
     return {
-        "shared_knowledge": delta,
+        "shared_knowledge": updated_knowledge,
         "dialogue_history": intervention_entries,
-        "recent_dialogue_history": effective_recent_history,
-        "compressed_history_count": new_compressed_history_count,
         "last_executed_node": "manage_context",
     }
 
@@ -243,6 +225,13 @@ async def node_judge_score(state: DebateGraphState) -> dict[str, Any]:
     return result
 
 
+async def node_group_discussion(state: DebateGraphState) -> dict[str, Any]:
+    """Run the configured pre-round group discussion."""
+    result = await run_group_discussion(state)
+    result["last_executed_node"] = "group_discussion"
+    return result
+
+
 async def node_consensus(state: DebateGraphState) -> dict[str, Any]:
     """Generate the final consensus convergence memo."""
     result = await converge_consensus(state)
@@ -289,6 +278,38 @@ def _get_next_speaker_route(state: DebateGraphState) -> str:
     return "judge"
 
 
+def _get_group_discussion_rounds(state: DebateGraphState) -> int:
+    reasoning_config = state.get("reasoning_config", {})
+    try:
+        return int(reasoning_config.get("group_discussion_rounds", 0) or 0)
+    except (AttributeError, TypeError, ValueError):
+        return 0
+
+
+def _current_turn_group_discussion_count(state: DebateGraphState) -> int:
+    current_turn = _coerce_turn(state.get("current_turn", 0), 0)
+    dialogue_history = state.get("dialogue_history", [])
+    if not isinstance(dialogue_history, list):
+        return 0
+
+    count = 0
+    for entry in dialogue_history:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("role") != "group_discussion":
+            continue
+        if _coerce_turn(entry.get("turn", -1), -1) == current_turn:
+            count += 1
+    return count
+
+
+def _should_run_pre_round_group_discussion(state: DebateGraphState) -> bool:
+    configured_rounds = _get_group_discussion_rounds(state)
+    if configured_rounds <= 0:
+        return False
+    return _current_turn_group_discussion_count(state) < configured_rounds
+
+
 def should_execute_tools(state: DebateGraphState) -> str:
     """Route after debater speaks: execute tools if pending, otherwise advance speakers."""
     if _has_pending_tool_calls(state):
@@ -328,6 +349,8 @@ def _has_consensus_summary(state: DebateGraphState) -> bool:
 def should_route_after_manage_context(state: DebateGraphState) -> str:
     """Avoid starting another round when a resumed run is already at the turn limit."""
     if not _turn_limit_reached(state):
+        if _should_run_pre_round_group_discussion(state):
+            return "group_discussion"
         return "set_speaker"
 
     reasoning_config = state.get("reasoning_config", {})
@@ -362,11 +385,11 @@ def build_debate_graph() -> StateGraph:
     Construct the debate LangGraph.
 
     Graph flow (per turn):
-      manage_context → set_speaker → debater_speaks ↔ tool_executor 
-                       ↑                  ↓
-                       └───── ← ──[next]──┘
-                                          ↓ [judge]
-                                        judge → advance_turn → {continue, end}
+      manage_context → group_discussion → set_speaker → debater_speaks ↔ tool_executor
+                                         ↑                  ↓
+                                         └───── ← ──[next]──┘
+                                                            ↓ [judge]
+                                                          judge → advance_turn → {continue, end}
     """
     graph = StateGraph(DebateGraphState)
 
@@ -375,6 +398,7 @@ def build_debate_graph() -> StateGraph:
     graph.add_node("set_speaker", node_set_speaker)
     graph.add_node("speaker", node_debater_speak)
     graph.add_node("tool_executor", node_tool_executor)
+    graph.add_node("group_discussion", node_group_discussion)
     graph.add_node("judge", node_judge_score)
     graph.add_node("advance_turn", node_advance_turn)
     graph.add_node("consensus", node_consensus)
@@ -385,11 +409,13 @@ def build_debate_graph() -> StateGraph:
         "manage_context",
         should_route_after_manage_context,
         {
+            "group_discussion": "group_discussion",
             "set_speaker": "set_speaker",
             "consensus": "consensus",
             "end": END,
         },
     )
+    graph.add_edge("group_discussion", "set_speaker")
     graph.add_edge("set_speaker", "speaker")
     
     # From speaker, we check if they called a tool or are finished
@@ -399,7 +425,7 @@ def build_debate_graph() -> StateGraph:
         {
             "tools": "tool_executor",
             "next_speaker": "set_speaker",
-            "judge": "judge"
+            "judge": "judge",
         }
     )
     

@@ -7,6 +7,7 @@ function makeEvent(payload: Record<string, unknown>): RuntimeEvent {
     return {
         schema_version: '2026-03-17',
         event_id: 'evt_1',
+        run_id: 'run_1',
         session_id: 'session_1',
         seq: 1,
         timestamp: '2026-03-17T00:00:00+00:00',

@@ -5,6 +5,8 @@ Tests for judge scoring robustness.
 from __future__ import annotations
 
 import json
+import asyncio
+import time
 
 import pytest
 
@@ -110,7 +112,6 @@ async def test_judge_uses_dialogue_history_when_recent_is_stale(monkeypatch):
             "topic": "Should AI regulate itself?",
             "participants": ["proposer"],
             "dialogue_history": [{"role": "proposer", "content": "这是本轮实质发言"}],
-            "recent_dialogue_history": [],
             "shared_knowledge": [],
             "current_turn": 0,
             "cumulative_scores": {},
@@ -135,3 +136,34 @@ def test_build_judge_instruction_warns_against_ascii_double_quotes():
 
     assert 'use Chinese quotes like 「」 instead of ASCII double quotes' in instruction
     assert "all 6 atomic dimensions" in instruction
+
+
+@pytest.mark.asyncio
+async def test_judge_scores_participants_concurrently(monkeypatch):
+    async def fake_invoke_text_model(messages, *, override=None, tools=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+        await asyncio.sleep(0.08)
+        return json.dumps(_score_payload(), ensure_ascii=False)
+
+    monkeypatch.setattr(judge, "get_judge_prompt", lambda: "Judge carefully.")
+    monkeypatch.setattr(judge, "invoke_text_model", fake_invoke_text_model)
+
+    started_at = time.perf_counter()
+    result = await judge.judge_score(
+        {
+            "topic": "Should AI regulate itself?",
+            "participants": ["proposer", "opposer"],
+            "dialogue_history": [
+                {"role": "proposer", "content": "Argument"},
+                {"role": "opposer", "content": "Counter argument"},
+            ],
+            "shared_knowledge": [],
+            "current_turn": 0,
+            "cumulative_scores": {},
+            "agent_configs": {},
+        }
+    )
+    elapsed = time.perf_counter() - started_at
+
+    assert elapsed < 0.14
+    assert list(result["current_scores"].keys()) == ["proposer", "opposer"]
+    assert [entry["target_role"] for entry in result["judge_history"]] == ["proposer", "opposer"]

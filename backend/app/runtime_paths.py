@@ -41,7 +41,6 @@ class RuntimePaths:
     frontend_dist_dir: Path
     prompts_dir: Path
     runtime_root: Path
-    sessions_dir: Path
     config_json_file: Path
     logs_dir: Path
     default_database_file: Path
@@ -58,8 +57,6 @@ def get_runtime_paths() -> RuntimePaths:
         else bundle_root / "runtime"
     )
     runtime_root = _runtime_root(default_runtime_root)
-    sessions_dir = runtime_root / "sessions"
-
     return RuntimePaths(
         is_frozen=is_frozen,
         bundle_root=bundle_root,
@@ -67,7 +64,6 @@ def get_runtime_paths() -> RuntimePaths:
         frontend_dist_dir=bundle_root / "frontend" / "dist",
         prompts_dir=backend_bundle_dir / "prompts",
         runtime_root=runtime_root,
-        sessions_dir=sessions_dir,
         config_json_file=runtime_root / "config.json",
         logs_dir=runtime_root / "logs",
         default_database_file=runtime_root / "elenchus.db",
@@ -77,6 +73,5 @@ def get_runtime_paths() -> RuntimePaths:
 def prepare_runtime_environment() -> RuntimePaths:
     paths = get_runtime_paths()
     paths.runtime_root.mkdir(parents=True, exist_ok=True)
-    paths.sessions_dir.mkdir(parents=True, exist_ok=True)
     paths.logs_dir.mkdir(parents=True, exist_ok=True)
     return paths

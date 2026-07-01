@@ -16,6 +16,7 @@ class ResolvedProviderSelection:
     provider_type: str | None
     api_base_url: str | None
     api_key: str | None
+    default_model: str | None
     custom_parameters: dict[str, Any]
 
 
@@ -44,7 +45,7 @@ class AgentConfigService:
                 providers_by_id,
             )
 
-        roles_needed = set(participants + ["judge", "fact_checker"])
+        roles_needed = set(participants + ["judge", "fact_checker", "group_discussion"])
         if default_provider:
             default_model = self._default_model_for(default_provider)
             for role in roles_needed:
@@ -89,6 +90,7 @@ class AgentConfigService:
                 provider_type=provider_type,
                 api_base_url=api_base_url,
                 api_key=api_key,
+                default_model=self._default_model_for(selected_provider),
                 custom_parameters={
                     **self._normalize_custom_parameters(
                         selected_provider.get("custom_parameters")
@@ -103,6 +105,7 @@ class AgentConfigService:
                 provider_type=provider_type,
                 api_base_url=api_base_url,
                 api_key=api_key,
+                default_model=None,
                 custom_parameters=custom_parameters,
             )
 
@@ -117,6 +120,7 @@ class AgentConfigService:
                     provider_type=provider_type or default_provider.get("provider_type"),
                     api_base_url=api_base_url or default_provider.get("api_base_url"),
                     api_key=default_provider.get("api_key"),
+                    default_model=self._default_model_for(default_provider),
                     custom_parameters={
                         **self._normalize_custom_parameters(
                             default_provider.get("custom_parameters")
@@ -137,6 +141,7 @@ class AgentConfigService:
                 provider_type=default_provider.get("provider_type"),
                 api_base_url=default_provider.get("api_base_url"),
                 api_key=default_provider.get("api_key"),
+                default_model=self._default_model_for(default_provider),
                 custom_parameters=self._normalize_custom_parameters(
                     default_provider.get("custom_parameters")
                 ),
@@ -147,6 +152,7 @@ class AgentConfigService:
             provider_type=provider_type,
             api_base_url=api_base_url,
             api_key=None,
+            default_model=None,
             custom_parameters=custom_parameters,
         )
 

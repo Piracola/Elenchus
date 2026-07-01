@@ -11,6 +11,7 @@ import type { ModelConfig } from '../../types';
 import {
     AGENT_ROLES,
     DEFAULT_AGENT_TEMPERATURE,
+    buildModelConfigOptions,
     type AgentRole,
 } from '../../utils/agent/agentConfigs';
 
@@ -21,6 +22,7 @@ const AGENT_LABELS: Record<string, string> = {
     opposer: '反方',
     judge: '裁判',
     fact_checker: '事实核查',
+    group_discussion: '组内讨论',
 };
 
 interface AgentConfigPanelProps {
@@ -43,20 +45,7 @@ export default function AgentConfigPanel({
     manageButtonLabel = '管理配置',
 }: AgentConfigPanelProps) {
 
-    const buildOptions = () => {
-        const options = [{ value: '', label: '默认配置' }];
-        savedConfigs.forEach(c => {
-            c.models?.forEach(m => {
-                options.push({
-                    value: `${c.id}::${m}`,
-                    label: `${c.is_default ? '⭐ ' : ''}${c.name} — ${m}`,
-                });
-            });
-        });
-        return options;
-    };
-
-    const options = buildOptions();
+    const options = buildModelConfigOptions(savedConfigs);
 
     return (
         <>

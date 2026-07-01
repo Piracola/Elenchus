@@ -1,19 +1,13 @@
-"""Service helpers for session reference document storage."""
-
 from __future__ import annotations
 
 from pathlib import Path
-from dataclasses import replace
 from typing import Any
 
+from sqlalchemy import desc, select
+
 from app.db.db_utils import _gen_id, _utcnow
-from app.storage.session_documents import (
-    StoredSessionDocument,
-    delete_document_record,
-    list_document_records,
-    read_document_record,
-    write_document_record,
-)
+from app.models.ledger import SessionDocumentRecord
+from app.services.run_ledger_service import RunLedgerService
 
 _MAX_DOCUMENT_BYTES = 1 * 1024 * 1024
 _SUPPORTED_SUFFIXES = {".txt", ".md", ".markdown"}
@@ -24,6 +18,7 @@ _SUPPORTED_MIME_TYPES = {
     "text/md",
 }
 _SUMMARY_LIMIT = 240
+_ledger = RunLedgerService()
 
 
 def _normalize_mime_type(filename: str, mime_type: str) -> str:
@@ -72,25 +67,6 @@ def _build_summary_short(text: str) -> str | None:
     return condensed[:_SUMMARY_LIMIT].rstrip() + "..."
 
 
-def _record_to_dict(record: StoredSessionDocument, *, include_content: bool) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "id": record.id,
-        "session_id": record.session_id,
-        "filename": record.filename,
-        "mime_type": record.mime_type,
-        "size_bytes": record.size_bytes,
-        "status": record.status,
-        "summary_short": record.summary_short,
-        "error_message": record.error_message,
-        "created_at": record.created_at,
-        "updated_at": record.updated_at,
-    }
-    if include_content:
-        payload["raw_text"] = record.raw_text
-        payload["normalized_text"] = record.normalized_text
-    return payload
-
-
 async def create_session_document(
     session_id: str,
     *,
@@ -98,7 +74,6 @@ async def create_session_document(
     mime_type: str,
     content: bytes,
 ) -> dict[str, Any]:
-    """Validate, decode, and store a session-scoped document."""
     trimmed_filename = filename.strip()
     if not trimmed_filename:
         raise ValueError("Filename is required.")
@@ -115,7 +90,7 @@ async def create_session_document(
         raise ValueError("Uploaded file does not contain readable text.")
 
     now = _utcnow()
-    record = StoredSessionDocument(
+    record = SessionDocumentRecord(
         id=_gen_id(),
         session_id=session_id,
         filename=trimmed_filename,
@@ -129,63 +104,101 @@ async def create_session_document(
         created_at=now,
         updated_at=now,
     )
-    write_document_record(record)
-    return _record_to_dict(record, include_content=True)
+    async with _ledger._session_factory() as db:  # noqa: SLF001
+        db.add(record)
+        await db.commit()
+        await db.refresh(record)
+    return _document_to_dict(record, include_content=True)
 
 
 async def get_session_document_record(
     session_id: str,
     document_id: str,
-) -> StoredSessionDocument | None:
-    """Return the raw stored document record for internal workflows."""
-    return read_document_record(session_id, document_id)
+) -> SessionDocumentRecord | None:
+    async with _ledger._session_factory() as db:  # noqa: SLF001
+        result = await db.execute(
+            select(SessionDocumentRecord).where(
+                SessionDocumentRecord.session_id == session_id,
+                SessionDocumentRecord.id == document_id,
+            )
+        )
+        return result.scalar_one_or_none()
 
 
 async def mark_session_document_processed(
     session_id: str,
     document_id: str,
 ) -> dict[str, Any] | None:
-    """Mark a decoded document ready for use as session context."""
-    record = read_document_record(session_id, document_id)
-    if record is None:
-        return None
-    updated = replace(
-        record,
-        status="processed",
-        error_message=None,
-        updated_at=_utcnow(),
-    )
-    write_document_record(updated)
-    return _record_to_dict(updated, include_content=True)
+    async with _ledger._session_factory() as db:  # noqa: SLF001
+        result = await db.execute(
+            select(SessionDocumentRecord).where(
+                SessionDocumentRecord.session_id == session_id,
+                SessionDocumentRecord.id == document_id,
+            )
+        )
+        record = result.scalar_one_or_none()
+        if record is None:
+            return None
+        record.status = "processed"
+        record.error_message = None
+        record.updated_at = _utcnow()
+        await db.commit()
+        return _document_to_dict(record, include_content=True)
 
 
 async def list_session_documents(session_id: str) -> list[dict[str, Any]]:
-    """Return all stored documents for a session, newest first."""
-    return [
-        _record_to_dict(record, include_content=False)
-        for record in list_document_records(session_id)
-    ]
+    async with _ledger._session_factory() as db:  # noqa: SLF001
+        result = await db.execute(
+            select(SessionDocumentRecord)
+            .where(SessionDocumentRecord.session_id == session_id)
+            .order_by(desc(SessionDocumentRecord.created_at))
+        )
+        return [_document_to_dict(record, include_content=False) for record in result.scalars()]
 
 
 async def get_session_document(
     session_id: str,
     document_id: str,
 ) -> dict[str, Any] | None:
-    """Return a single stored document, including extracted text."""
-    record = read_document_record(session_id, document_id)
+    record = await get_session_document_record(session_id, document_id)
     if record is None:
         return None
-    return _record_to_dict(record, include_content=True)
+    return _document_to_dict(record, include_content=True)
 
 
 async def delete_session_document(
     session_id: str,
     document_id: str,
 ) -> bool:
-    """Delete a single stored document for a session."""
-    record = read_document_record(session_id, document_id)
-    if record is None:
-        return False
+    async with _ledger._session_factory() as db:  # noqa: SLF001
+        result = await db.execute(
+            select(SessionDocumentRecord).where(
+                SessionDocumentRecord.session_id == session_id,
+                SessionDocumentRecord.id == document_id,
+            )
+        )
+        record = result.scalar_one_or_none()
+        if record is None:
+            return False
+        await db.delete(record)
+        await db.commit()
+        return True
 
-    delete_document_record(session_id, document_id)
-    return True
+
+def _document_to_dict(record: SessionDocumentRecord, *, include_content: bool) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "id": record.id,
+        "session_id": record.session_id,
+        "filename": record.filename,
+        "mime_type": record.mime_type,
+        "size_bytes": record.size_bytes,
+        "status": record.status,
+        "summary_short": record.summary_short,
+        "error_message": record.error_message,
+        "created_at": record.created_at,
+        "updated_at": record.updated_at,
+    }
+    if include_content:
+        payload["raw_text"] = record.raw_text
+        payload["normalized_text"] = record.normalized_text
+    return payload

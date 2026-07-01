@@ -51,10 +51,10 @@
 | 维度 | 标准辩论模式 | 诡辩实验模式 |
 | --- | --- | --- |
 | 目标 | 常规辩论与观察 | 修辞操控观察 |
-| Prompt | 标准 debater / judge / jury | 独立 sophistry prompt |
+| Prompt | 标准 debater / group discussion / judge | 独立 sophistry prompt |
 | Graph | 标准 graph | 独立 sophistry graph |
 | 搜索 | 可启用 | 禁用 |
-| 裁判 / 陪审团 | 启用 | 不启用 |
+| 裁判 / 组内讨论 | 启用 | 不启用 |
 | 结果 | 分数、结论、评议 | 观察报告、最终复盘 |
 | 会话资料 | 用户资料 | 用户资料 + 内置谬误库 |
 
@@ -73,10 +73,10 @@
 ### 4.2 当前不做
 
 - 裁判评分
-- 陪审团讨论
+- 组内讨论
 - 自动宣布胜负
 - 搜索工具调用
-- 复用标准模式的 judge / jury / consensus 链路
+- 复用标准模式的 judge / group discussion / consensus 链路
 
 这些不是缺失，而是为了保证模式边界清晰。
 

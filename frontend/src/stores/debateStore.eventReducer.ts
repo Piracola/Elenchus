@@ -23,9 +23,22 @@ function createRecordedRuntimePatch(
     state: DebateState,
     event: RuntimeEvent,
 ): Partial<DebateState> {
+    const runId = event.run_id;
+    const previousRunSeq = state.lastEventSeqByRun[runId] ?? -1;
+    const nextSeq = event.seq >= 0 ? Math.max(previousRunSeq, event.seq) : previousRunSeq;
     const patch: Partial<DebateState> = {
-        lastEventSeq: event.seq >= 0 ? Math.max(state.lastEventSeq, event.seq) : state.lastEventSeq,
+        lastEventSeq: nextSeq,
+        lastEventSeqByRun: {
+            ...state.lastEventSeqByRun,
+            [runId]: nextSeq,
+        },
     };
+    if (state.activeRun && runId && state.activeRun.id === runId && event.seq >= 0) {
+        patch.activeRun = {
+            ...state.activeRun,
+            latest_seq: Math.max(state.activeRun.latest_seq ?? -1, event.seq),
+        };
+    }
 
     if (!shouldRecordRuntimeEvent(event)) {
         return patch;
@@ -78,6 +91,61 @@ function handleStatus(
     return patch;
 }
 
+function handleRunStatusChanged(
+    state: DebateState,
+    payload: Record<string, unknown>,
+): Partial<DebateState> {
+    const nextStatus = getPayloadString(payload, 'status');
+    const currentStatus = sanitizeIncomingContent(getPayloadString(payload, 'content')) || '';
+    const patch: Partial<DebateState> = {};
+
+    if (state.activeRun && nextStatus) {
+        patch.activeRun = {
+            ...state.activeRun,
+            status: nextStatus as typeof state.activeRun.status,
+            last_status_message: currentStatus || state.activeRun.last_status_message,
+            last_error_message:
+                nextStatus === 'failed' || nextStatus === 'stalled'
+                    ? (currentStatus || state.activeRun.last_error_message || null)
+                    : state.activeRun.last_error_message,
+        };
+    }
+
+    if (nextStatus === 'completed') {
+        patch.isDebating = false;
+        patch.phase = 'complete';
+        patch.currentStatus = currentStatus || '辩论已完成';
+    } else if (nextStatus === 'failed' || nextStatus === 'stalled') {
+        patch.isDebating = false;
+        patch.phase = 'error';
+        patch.currentStatus = currentStatus || '运行中断，请查看最新消息';
+    } else if (nextStatus === 'cancelled') {
+        patch.isDebating = false;
+        patch.phase = 'idle';
+        patch.currentStatus = currentStatus || '辩论已停止';
+    } else if (nextStatus === 'stopping') {
+        patch.isDebating = false;
+        patch.phase = 'processing';
+        patch.currentStatus = currentStatus || '正在停止辩论...';
+    }
+
+    if (state.currentSession && nextStatus) {
+        patch.currentSession = {
+            ...state.currentSession,
+            status:
+                nextStatus === 'completed'
+                    ? 'completed'
+                    : nextStatus === 'failed' || nextStatus === 'stalled'
+                        ? 'error'
+                        : nextStatus === 'cancelled'
+                            ? 'pending'
+                            : state.currentSession.status,
+        };
+    }
+
+    return patch;
+}
+
 function handleConsensusSummary(
     state: DebateState,
     payload: Record<string, unknown>,
@@ -125,6 +193,38 @@ function handleSpeechStart(
             citations: [],
             timestamp: '',
             turn: getPayloadNumber(payload, 'turn'),
+        },
+    };
+}
+
+function handleGroupDiscussion(
+    state: DebateState,
+    payload: Record<string, unknown>,
+    event: RuntimeEvent,
+): Partial<DebateState> {
+    if (!state.currentSession) return {};
+    const entry: DialogueEntry = {
+        role: getPayloadString(payload, 'role') ?? 'group_discussion',
+        agent_name: getPayloadString(payload, 'agent_name') ?? '组内讨论',
+        content: sanitizeIncomingContent(getPayloadString(payload, 'content')),
+        citations: getPayloadCitations(payload),
+        timestamp: event.timestamp || new Date().toISOString(),
+        event_id: event.event_id,
+        turn: getPayloadNumber(payload, 'turn'),
+        discussion_kind: getPayloadString(payload, 'discussion_kind') ?? 'group_discussion',
+    };
+    const discussionRound = getPayloadNumber(payload, 'discussion_round');
+    if (discussionRound !== undefined) {
+        entry.discussion_round = discussionRound;
+    }
+
+    return {
+        currentSession: {
+            ...state.currentSession,
+            dialogue_history: appendDialogueWithDedupe(
+                state.currentSession.dialogue_history,
+                entry,
+            ),
         },
     };
 }
@@ -397,7 +497,9 @@ const eventHandlers: Record<string, EventHandler> = {
     system: handleSystem,
     mode_notice: handleSystem,
     status: handleStatus,
+    run_status_changed: handleRunStatusChanged,
     consensus_summary: handleConsensusSummary,
+    group_discussion: handleGroupDiscussion,
     speech_start: handleSpeechStart,
     speech_token: handleSpeechToken,
     speech_cancel: handleSpeechCancel,
@@ -423,7 +525,15 @@ export function applyRuntimeEventPatch(
         return {};
     }
 
+    if (!event.run_id) {
+        return {};
+    }
+
     if (state.currentSession && event.session_id && event.session_id !== state.currentSession.id) {
+        return {};
+    }
+
+    if (state.activeRunId && event.run_id && event.run_id !== state.activeRunId) {
         return {};
     }
 
@@ -431,7 +541,9 @@ export function applyRuntimeEventPatch(
         return {};
     }
 
-    if (event.seq >= 0 && event.seq <= state.lastEventSeq) {
+    const runId = event.run_id;
+    const previousSeq = state.lastEventSeqByRun[runId] ?? -1;
+    if (event.seq >= 0 && event.seq <= previousSeq) {
         return {};
     }
 

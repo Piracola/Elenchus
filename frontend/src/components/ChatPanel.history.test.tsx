@@ -178,6 +178,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
         cumulative_scores: {},
         reasoning_config: {
             consensus_enabled: true,
+            group_discussion_rounds: 1,
         },
         mode_artifacts: [],
         current_mode_report: null,

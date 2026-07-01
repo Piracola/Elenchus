@@ -99,6 +99,11 @@ function applyDialogueEntry(
     const observerRoles = new Set(['sophistry_round_report', 'sophistry_final_report']);
     const { rows } = state;
 
+    if (entry.role === 'group_discussion') {
+        rows.push({ agent: entry, judge: null, turn: entry.turn });
+        return;
+    }
+
     if (speakerRoles.has(entry.role)) {
         const nextIndex = rows.length;
         rows.push({ agent: entry, judge: null, turn: entry.turn });

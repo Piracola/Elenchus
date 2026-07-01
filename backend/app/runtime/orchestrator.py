@@ -22,6 +22,7 @@ _PERSIST_NODES = frozenset(
         "advance_turn",
         "judge",
         "speaker",
+        "group_discussion",
         "consensus",
         "sophistry_speaker",
         "sophistry_observer",
@@ -52,6 +53,7 @@ class DebateOrchestrator:
 
     async def run_debate(
         self,
+        run_id: str,
         session_id: str,
         topic: str,
         participants: list[str] | None = None,
@@ -59,6 +61,7 @@ class DebateOrchestrator:
         agent_configs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         final_state: dict[str, Any] = {
+            "run_id": run_id,
             "session_id": session_id,
             "topic": topic,
             "participants": participants or ["proposer", "opposer"],
@@ -68,7 +71,6 @@ class DebateOrchestrator:
             "current_speaker_index": -1,
             "dialogue_history": [],
             "judge_history": [],
-            "recent_dialogue_history": [],
             "shared_knowledge": [],
             "messages": [],
             "current_scores": {},
@@ -82,6 +84,7 @@ class DebateOrchestrator:
 
         try:
             initial_state = await self._repository.build_initial_state(
+                run_id,
                 session_id,
                 topic=topic,
                 participants=participants,
@@ -99,7 +102,9 @@ class DebateOrchestrator:
         last_checkpoint_node = str(initial_state.get("last_executed_node", "") or "")
         prior_resume_count = int(initial_state.get("resume_count", 0) or 0)
         initial_state["resume_count"] = prior_resume_count + 1
-        initial_state["runtime_event_emitter"] = self._events
+        run_events = self._events.for_run(run_id)
+        initial_state["run_id"] = run_id
+        initial_state["runtime_event_emitter"] = run_events
         initial_state["interrupted_at"] = None
         initial_state["last_progress_at"] = datetime.now(timezone.utc).isoformat()
 
@@ -113,7 +118,7 @@ class DebateOrchestrator:
 
         if prior_resume_count > 0 or last_checkpoint_node:
             checkpoint_label = last_checkpoint_node or "manage_context"
-            await self._events.emit_runtime_event(
+            await run_events.emit_runtime_event(
                 session_id=session_id,
                 event_type="system",
                 payload={
@@ -125,26 +130,26 @@ class DebateOrchestrator:
                 source="runtime.orchestrator.resume",
             )
 
-        await self._events.emit_runtime_event(
+        await run_events.emit_runtime_event(
             session_id=session_id,
             event_type="system",
             payload={"content": f"辩论开始：{topic}"},
             source="runtime.orchestrator",
         )
         if debate_mode == "sophistry_experiment":
-            await self._events.emit_runtime_event(
+            await run_events.emit_runtime_event(
                 session_id=session_id,
                 event_type="mode_notice",
                 payload={
                     "content": (
-                        "诡辩实验模式已启用：本场不会使用搜索、陪审团或裁判评分，"
+                        "诡辩实验模式已启用：本场不会使用搜索、组内讨论或裁判评分，"
                         "输出仅用于观察修辞操控与谬误对抗。"
                     )
                 },
                 source="runtime.orchestrator.mode",
                 phase="processing",
             )
-        await self._events.emit_runtime_event(
+        await run_events.emit_runtime_event(
             session_id=session_id,
             event_type="status",
             payload={"content": "正在整理上下文...", "node": "manage_context"},
@@ -164,7 +169,7 @@ class DebateOrchestrator:
                 node_name = state_snapshot.get("last_executed_node", "")
                 final_state = dict(state_snapshot)
                 final_state["last_progress_at"] = datetime.now(timezone.utc).isoformat()
-                prev_knowledge_len = await self._events.emit_memory_updates(
+                prev_knowledge_len = await run_events.emit_memory_updates(
                     session_id,
                     final_state,
                     prev_knowledge_len,
@@ -172,63 +177,69 @@ class DebateOrchestrator:
 
                 if node_name and node_name != last_node:
                     last_node = node_name
-                    status_message, _status_phase = self._events.describe_status(node_name)
+                    status_message, _status_phase = run_events.describe_status(node_name)
                     final_state["last_status_message"] = status_message
-                    last_status_node = await self._events.emit_status_if_changed(
+                    last_status_node = await run_events.emit_status_if_changed(
                         session_id,
                         node_name,
                         last_status_node,
                     )
 
                     if node_name in {"speaker", "sophistry_speaker"}:
-                        prev_history_len = await self._events.emit_speech(
+                        prev_history_len = await run_events.emit_speech(
+                            session_id,
+                            final_state,
+                            prev_history_len,
+                        )
+                    elif node_name == "group_discussion":
+                        prev_history_len = await run_events.emit_discussion_entries(
                             session_id,
                             final_state,
                             prev_history_len,
                         )
                     elif node_name in {"sophistry_observer", "sophistry_postmortem"}:
-                        prev_history_len = await self._events.emit_sophistry_reports(
+                        prev_history_len = await run_events.emit_sophistry_reports(
                             session_id,
                             final_state,
                             prev_history_len,
                         )
                     elif node_name == "tool_executor":
-                        await self._events.emit_fact_check(session_id, final_state)
+                        await run_events.emit_fact_check(session_id, final_state)
                     elif node_name == "judge":
-                        await self._events.emit_judge_scores(
+                        await run_events.emit_judge_scores(
                             session_id,
                             final_state,
                             emitted_judge_keys,
                         )
                     elif node_name == "advance_turn":
-                        await self._events.emit_turn_complete(session_id, final_state)
+                        await run_events.emit_turn_complete(session_id, final_state)
                     elif node_name == "consensus":
-                        prev_history_len = await self._events.emit_consensus_summary(
+                        prev_history_len = await run_events.emit_consensus_summary(
                             session_id,
                             final_state,
                             prev_history_len,
                         )
 
-                    next_status_node = self._events.predict_next_status_node(
+                    next_status_node = run_events.predict_next_status_node(
                         node_name,
                         final_state,
                     )
                     if next_status_node is not None:
-                        last_status_node = await self._events.emit_status_if_changed(
+                        last_status_node = await run_events.emit_status_if_changed(
                             session_id,
                             next_status_node,
                             last_status_node,
                         )
 
                 if node_name in _PERSIST_NODES:
-                    await self._repository.persist_state(session_id, final_state)
+                    await self._repository.persist_state(run_id, session_id, final_state)
 
             final_state["status"] = "completed"
             final_state["interrupted_at"] = None
             final_state["last_status_message"] = "辩论已完成"
             final_state["last_progress_at"] = datetime.now(timezone.utc).isoformat()
-            await self._repository.persist_state(session_id, final_state)
-            await self._events.emit_runtime_event(
+            await self._repository.persist_state(run_id, session_id, final_state)
+            await run_events.emit_runtime_event(
                 session_id=session_id,
                 event_type="debate_complete",
                 payload={
@@ -246,23 +257,24 @@ class DebateOrchestrator:
             )
         except asyncio.CancelledError:
             interrupted_at = datetime.now(timezone.utc).isoformat()
-            final_state["status"] = "in_progress"
+            final_state["status"] = "cancelled"
             final_state["interrupted_at"] = interrupted_at
             final_state["last_progress_at"] = interrupted_at
             if last_node:
                 final_state["last_executed_node"] = last_node
-            final_state["last_status_message"] = "辩论已中断，可稍后继续恢复。"
-            await self._repository.persist_state(session_id, final_state)
+            final_state["last_status_message"] = "辩论已停止。"
+            await self._repository.persist_state(run_id, session_id, final_state)
             raise
         except Exception as exc:
             final_state = await self._handle_debate_error(
-                session_id, final_state, exc, last_node=last_node
+                run_id, session_id, final_state, exc, last_node=last_node
             )
 
         return final_state
 
     async def _handle_debate_error(
         self,
+        run_id: str,
         session_id: str,
         state: dict[str, Any],
         exc: Exception,
@@ -298,10 +310,8 @@ class DebateOrchestrator:
                 "citations": [],
             }
         )
-        state["recent_dialogue_history"] = dialogue_history
-
-        await self._repository.persist_state(session_id, state)
-        await self._events.emit_runtime_event(
+        await self._repository.persist_state(run_id, session_id, state)
+        await self._events.for_run(run_id).emit_runtime_event(
             session_id=session_id,
             event_type="error",
             payload={"content": f"辩论出错：{user_facing_error}"},
@@ -317,4 +327,7 @@ class DebateOrchestrator:
         exc: Exception,
     ) -> dict[str, Any]:
         """Handle errors that occur before the debate engine starts streaming."""
-        return await self._handle_debate_error(session_id, final_state, exc)
+        run_id = str(final_state.get("run_id", "") or "").strip()
+        if not run_id:
+            raise RuntimeError("Startup error cannot be finalized without a run_id.") from exc
+        return await self._handle_debate_error(run_id, session_id, final_state, exc)

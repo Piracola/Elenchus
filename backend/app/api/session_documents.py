@@ -7,10 +7,7 @@ from app.models.schemas import (
     SessionDocumentResponse,
 )
 from app.services import document_service, session_service
-from app.services.session_document_workflow import (
-    remove_document_context_knowledge,
-    upload_and_process_session_document,
-)
+from app.services.session_document_workflow import upload_and_process_session_document
 
 router = APIRouter(tags=["sessions"])
 
@@ -70,7 +67,6 @@ async def get_session_document(session_id: str, document_id: str):
 async def delete_session_document(session_id: str, document_id: str):
     await _require_session_record(session_id)
     await _require_document_record(session_id, document_id)
-    remove_document_context_knowledge(session_id, document_id=document_id)
     deleted = await document_service.delete_session_document(session_id, document_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Document not found")

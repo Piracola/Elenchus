@@ -35,6 +35,13 @@ const KNOWN_ROLE_VISUALS: Record<string, RoleVisual> = {
         cardTint: 'rgba(255, 59, 48, 0.08)',
         glowTint: 'rgba(255, 59, 48, 0.35)',
     },
+    group_discussion: {
+        badge: '议',
+        label: '组内讨论',
+        color: 'var(--accent-cyan)',
+        cardTint: 'rgba(34, 211, 238, 0.08)',
+        glowTint: 'rgba(34, 211, 238, 0.35)',
+    },
 };
 
 const EXTRA_ROLE_VISUALS: Omit<RoleVisual, 'badge' | 'label'>[] = [
@@ -221,6 +228,17 @@ export function getAgentVisual(agentEntry?: DialogueEntry | null): RoleVisual {
 }
 
 export function getJudgeVisual(judgeEntry?: DialogueEntry | null): JudgeVisual {
+    if (judgeEntry?.role === 'group_discussion') {
+        return {
+            badge: '议',
+            label: judgeEntry.agent_name || '组内讨论',
+            color: 'var(--accent-cyan)',
+            background: 'var(--bg-secondary)',
+            border: 'var(--border-subtle)',
+            glowTint: 'rgba(34, 211, 238, 0.25)',
+        };
+    }
+
     if (judgeEntry?.role === 'sophistry_round_report') {
         return {
             badge: '观',

@@ -10,7 +10,7 @@ from typing import Any
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph.message import RemoveMessage
 
-from app.agents.context_builder import build_context_for_agent
+from app.agents.context_builder import build_runtime_context_for_agent
 from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.runtime_progress import (
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
@@ -103,11 +103,6 @@ async def sophistry_debater_speak(state: dict[str, Any]) -> dict[str, Any]:
     current_turn = int(state.get("current_turn", 0) or 0)
     max_turns = int(state.get("max_turns", 5) or 5)
 
-    dialogue_history = state.get("dialogue_history", [])
-    recent_dialogue_history = state.get("recent_dialogue_history", dialogue_history)
-    if not isinstance(recent_dialogue_history, list):
-        recent_dialogue_history = dialogue_history if isinstance(dialogue_history, list) else []
-    shared_knowledge = state.get("shared_knowledge", [])
     messages = state.get("messages", [])
     agent_configs = await refresh_agent_configs_for_session(state)
     runtime_event_emitter = state.get("runtime_event_emitter")
@@ -121,12 +116,15 @@ async def sophistry_debater_speak(state: dict[str, Any]) -> dict[str, Any]:
     if custom_prompt:
         system_prompt = f"{system_prompt}\n\n## 自定义人格补充\n{custom_prompt}"
 
-    context_block = build_context_for_agent(
-        shared_knowledge=shared_knowledge if isinstance(shared_knowledge, list) else [],
-        recent_history=recent_dialogue_history,
+    context_block = build_runtime_context_for_agent(
+        state,
+        agent_role=role,
         topic=topic,
         current_turn=current_turn,
         max_turns=max_turns,
+        live_constraints=[
+            "这是诡辩实验模式，可把历史材料视为操控与防御素材。",
+        ],
     )
     instruction = _build_instruction(
         topic=topic,
@@ -243,7 +241,6 @@ async def sophistry_debater_speak(state: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "dialogue_history": [entry],
-        "recent_dialogue_history": [*recent_dialogue_history, entry],
         "messages": [RemoveMessage(id=message.id) for message in messages if getattr(message, "id", None)],
         "speech_was_streamed": speech_started,
         "agent_configs": agent_configs,

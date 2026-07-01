@@ -28,15 +28,15 @@ async def test_connection_hub_tracks_connections_and_broadcasts():
     ws1 = _FakeWebSocket()
     ws2 = _FakeWebSocket()
 
-    await hub.connect("session-1", ws1)
-    await hub.connect("session-1", ws2)
+    await hub.connect("run-1", ws1)
+    await hub.connect("run-1", ws2)
 
     assert ws1.accepted is True
     assert ws2.accepted is True
-    assert len(hub.get_connections("session-1")) == 2
-    assert hub.active_sessions == ["session-1"]
+    assert len(hub.get_connections("run-1")) == 2
+    assert hub.active_runs == ["run-1"]
 
-    await hub.broadcast("session-1", {"type": "status"})
+    await hub.broadcast("run-1", {"type": "status"})
 
     assert ws1.messages == [{"type": "status"}]
     assert ws2.messages == [{"type": "status"}]
@@ -48,10 +48,10 @@ async def test_connection_hub_drops_dead_connections_on_broadcast():
     alive = _FakeWebSocket()
     dead = _FakeWebSocket(fail_send=True)
 
-    await hub.connect("session-1", alive)
-    await hub.connect("session-1", dead)
+    await hub.connect("run-1", alive)
+    await hub.connect("run-1", dead)
 
-    await hub.broadcast("session-1", {"type": "system"})
+    await hub.broadcast("run-1", {"type": "system"})
 
     assert alive.messages == [{"type": "system"}]
-    assert hub.get_connections("session-1") == [alive]
+    assert hub.get_connections("run-1") == [alive]

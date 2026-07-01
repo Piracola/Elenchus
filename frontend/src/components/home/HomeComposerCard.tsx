@@ -23,6 +23,7 @@ import type { DebateMode } from '../../types';
 import { toast } from '../../utils/chat/toast';
 import {
     DEFAULT_MAX_TURNS,
+    DEFAULT_GROUP_DISCUSSION_ROUNDS,
     DEFAULT_SPEECH_MAX_CHARS,
 } from '../../utils/agent/debateSession';
 import { HOME_MODE_OPTIONS, type HomeFontSizes } from './shared';
@@ -78,8 +79,10 @@ type HomeComposerCardProps = {
     isSophistryMode: boolean;
     showAdvanced: boolean;
     maxTurnsInput: string;
+    groupDiscussionRoundsInput: string;
     proposerSpeechLimitInput: string;
     opposerSpeechLimitInput: string;
+    groupDiscussionSpeechLimitInput: string;
     homeFontSizes: HomeFontSizes;
     pendingDocuments: PendingReferenceDocument[];
     onDebateModeChange: (mode: DebateMode) => void;
@@ -87,8 +90,10 @@ type HomeComposerCardProps = {
     onTopicChange: (value: string) => void;
     onShowAdvancedChange: (show: boolean) => void;
     onMaxTurnsChange: (value: string) => void;
+    onGroupDiscussionRoundsChange: (value: string) => void;
     onProposerSpeechLimitChange: (value: string) => void;
     onOpposerSpeechLimitChange: (value: string) => void;
+    onGroupDiscussionSpeechLimitChange: (value: string) => void;
     onCreateDebate: () => void;
 };
 
@@ -191,8 +196,10 @@ export function HomeComposerCard({
     isSophistryMode,
     showAdvanced,
     maxTurnsInput,
+    groupDiscussionRoundsInput,
     proposerSpeechLimitInput,
     opposerSpeechLimitInput,
+    groupDiscussionSpeechLimitInput,
     homeFontSizes,
     pendingDocuments,
     onDebateModeChange,
@@ -200,8 +207,10 @@ export function HomeComposerCard({
     onTopicChange,
     onShowAdvancedChange,
     onMaxTurnsChange,
+    onGroupDiscussionRoundsChange,
     onProposerSpeechLimitChange,
     onOpposerSpeechLimitChange,
+    onGroupDiscussionSpeechLimitChange,
     onCreateDebate,
 }: HomeComposerCardProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -283,15 +292,25 @@ export function HomeComposerCard({
     const modeIcon = isSophistryMode ? FlaskConical : Scale;
     const ActiveModeIcon = modeIcon;
     const maxTurnsLabel = displayValue(maxTurnsInput, DEFAULT_MAX_TURNS);
+    const groupDiscussionRoundsLabel = isSophistryMode
+        ? '0'
+        : displayValue(groupDiscussionRoundsInput, DEFAULT_GROUP_DISCUSSION_ROUNDS);
     const proposerSpeechLimitLabel = displayValue(proposerSpeechLimitInput, DEFAULT_SPEECH_MAX_CHARS);
     const opposerSpeechLimitLabel = displayValue(opposerSpeechLimitInput, DEFAULT_SPEECH_MAX_CHARS);
+    const groupDiscussionSpeechLimitLabel = displayValue(
+        groupDiscussionSpeechLimitInput,
+        DEFAULT_SPEECH_MAX_CHARS,
+    );
     const speechLimitLabel =
         proposerSpeechLimitLabel === '0' && opposerSpeechLimitLabel === '0'
             ? '发言 不限'
             : `发言 正${proposerSpeechLimitLabel} / 反${opposerSpeechLimitLabel}`;
+    const discussionLimitLabel = groupDiscussionSpeechLimitLabel === '0'
+        ? `赛前讨论 ${groupDiscussionRoundsLabel} 轮`
+        : `赛前讨论 ${groupDiscussionRoundsLabel} 轮 / ${groupDiscussionSpeechLimitLabel} 字`;
     const summaryItems = isSophistryMode
         ? [`${maxTurnsLabel} 轮`, speechLimitLabel, '诡辩观察', `资料 ${documentCount}`]
-        : [`${maxTurnsLabel} 轮`, speechLimitLabel, `资料 ${documentCount}`];
+        : [`${maxTurnsLabel} 轮`, discussionLimitLabel, speechLimitLabel, `资料 ${documentCount}`];
 
     return (
         <motion.div
@@ -609,6 +628,16 @@ export function HomeComposerCard({
                                         max={100}
                                         onChange={onMaxTurnsChange}
                                     />
+                                    {!isSophistryMode && (
+                                        <NumberField
+                                            label="每轮赛前讨论"
+                                            value={groupDiscussionRoundsInput}
+                                            placeholder={DEFAULT_GROUP_DISCUSSION_ROUNDS}
+                                            min={0}
+                                            max={5}
+                                            onChange={onGroupDiscussionRoundsChange}
+                                        />
+                                    )}
                                 </div>
                                 {isSophistryMode && (
                                     <div
@@ -646,6 +675,16 @@ export function HomeComposerCard({
                                         max={20000}
                                         onChange={onOpposerSpeechLimitChange}
                                     />
+                                    {!isSophistryMode && (
+                                        <NumberField
+                                            label="赛前讨论上限"
+                                            value={groupDiscussionSpeechLimitInput}
+                                            placeholder={DEFAULT_SPEECH_MAX_CHARS}
+                                            min={0}
+                                            max={20000}
+                                            onChange={onGroupDiscussionSpeechLimitChange}
+                                        />
+                                    )}
                                 </div>
                                 <div
                                     style={{
@@ -654,7 +693,7 @@ export function HomeComposerCard({
                                         lineHeight: 1.5,
                                     }}
                                 >
-                                    填 0 或留空表示不限；该限制会作为辩手发言提示词生效。
+                                    填 0 或留空表示不限；赛前讨论会在每轮正式发言前生成，并通过独立提示词生效。
                                 </div>
                             </section>
 

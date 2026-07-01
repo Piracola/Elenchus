@@ -50,3 +50,7 @@ def get_judge_prompt() -> str:
 
 def get_consensus_prompt() -> str:
     return load_prompt("consensus_system.md")
+
+
+def get_group_discussion_prompt() -> str:
+    return load_prompt("group_discussion_system.md")

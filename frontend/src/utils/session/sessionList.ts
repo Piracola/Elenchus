@@ -43,6 +43,7 @@ export function getSessionModePresentation(mode: DebateMode): SessionModePresent
 export function toSessionListItem(session: Session | SessionListItem): SessionListItem {
     return {
         id: session.id,
+        latest_run_id: session.latest_run_id ?? null,
         topic: session.topic,
         debate_mode: session.debate_mode ?? 'standard',
         status: session.status,

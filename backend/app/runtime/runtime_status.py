@@ -9,6 +9,7 @@ NODE_STATUS = {
     "manage_context": ("正在整理上下文...", "preparing"),
     "set_speaker": ("正在切换发言者...", "preparing"),
     "speaker": ("辩手正在组织发言...", "speaking"),
+    "group_discussion": ("组内讨论正在生成本轮赛前简报...", "processing"),
     "sophistry_speaker": ("诡辩实验发言正在生成...", "speaking"),
     "tool_executor": ("正在调用工具核验事实...", "fact_checking"),
     "judge": ("裁判正在评估本轮表现...", "judging"),
@@ -33,11 +34,85 @@ def has_pending_tool_calls(state: dict[str, Any]) -> bool:
     return bool(tool_calls)
 
 
+def _configured_group_discussion_rounds(state: dict[str, Any]) -> int:
+    reasoning_config = state.get("reasoning_config", {})
+    if not isinstance(reasoning_config, dict):
+        return 0
+    try:
+        return int(reasoning_config.get("group_discussion_rounds", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _coerce_turn(value: Any, fallback: int) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _current_turn_group_discussion_count(state: dict[str, Any]) -> int:
+    current_turn = _coerce_turn(state.get("current_turn", 0), 0)
+    dialogue_history = state.get("dialogue_history", [])
+    if not isinstance(dialogue_history, list):
+        return 0
+    return sum(
+        1
+        for entry in dialogue_history
+        if isinstance(entry, dict)
+        and entry.get("role") == "group_discussion"
+        and _coerce_turn(entry.get("turn", -1), -1) == current_turn
+    )
+
+
+def should_run_pre_round_group_discussion(state: dict[str, Any]) -> bool:
+    rounds = _configured_group_discussion_rounds(state)
+    return rounds > 0 and _current_turn_group_discussion_count(state) < rounds
+
+
+def _turn_limit_reached(state: dict[str, Any]) -> bool:
+    current_turn = _coerce_turn(state.get("current_turn", 0), 0)
+    max_turns = _coerce_turn(state.get("max_turns", 5), 5)
+    return max_turns > 0 and current_turn >= max_turns
+
+
+def _has_consensus_summary(state: dict[str, Any]) -> bool:
+    dialogue_history = state.get("dialogue_history", [])
+    if not isinstance(dialogue_history, list):
+        return False
+    return any(
+        isinstance(entry, dict)
+        and (
+            entry.get("role") == "consensus_summary"
+            or entry.get("discussion_kind") == "consensus"
+        )
+        for entry in dialogue_history
+    )
+
+
 def predict_next_status_node(
     node_name: str,
     final_state: dict[str, Any],
 ) -> str | None:
     debate_mode = str(final_state.get("debate_mode", "") or "")
+
+    if node_name == "manage_context":
+        if _turn_limit_reached(final_state):
+            reasoning_config = final_state.get("reasoning_config", {})
+            if (
+                isinstance(reasoning_config, dict)
+                and bool(reasoning_config.get("consensus_enabled", True))
+                and not _has_consensus_summary(final_state)
+            ):
+                return "consensus"
+            return None
+        if debate_mode == "sophistry_experiment":
+            return "set_speaker"
+        if should_run_pre_round_group_discussion(final_state):
+            return "group_discussion"
+        return "set_speaker"
 
     if node_name == "set_speaker":
         current_speaker = final_state.get("current_speaker")
@@ -71,6 +146,9 @@ def predict_next_status_node(
 
     if node_name == "tool_executor":
         return "speaker"
+
+    if node_name == "group_discussion":
+        return "set_speaker"
 
     if node_name == "advance_turn":
         current_turn = final_state.get("current_turn", 0)

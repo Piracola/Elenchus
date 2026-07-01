@@ -1,11 +1,17 @@
 import type { AgentConfigResult, ModelConfig } from '../../types';
 
-export const AGENT_ROLES = ['proposer', 'opposer', 'judge', 'fact_checker'] as const;
+export const AGENT_ROLES = ['proposer', 'opposer', 'judge', 'fact_checker', 'group_discussion'] as const;
 export type AgentRole = (typeof AGENT_ROLES)[number];
 
 export const DEFAULT_AGENT_TEMPERATURE = 0.7;
 export const MIN_AGENT_TEMPERATURE = 0;
 export const MAX_AGENT_TEMPERATURE = 2;
+export const DEFAULT_MODEL_CONFIG_VALUE = '';
+
+export interface ModelConfigSelectOption {
+    value: string;
+    label: string;
+}
 
 export function createEmptyAgentFieldMap(): Record<AgentRole, string> {
     return {
@@ -13,6 +19,7 @@ export function createEmptyAgentFieldMap(): Record<AgentRole, string> {
         opposer: '',
         judge: '',
         fact_checker: '',
+        group_discussion: '',
     };
 }
 
@@ -30,7 +37,24 @@ export function parseAgentTemperatureInput(input: string): number | undefined {
     return Math.min(MAX_AGENT_TEMPERATURE, Math.max(MIN_AGENT_TEMPERATURE, parsed));
 }
 
-function splitSelectedConfigKey(selectedKey: string): { providerId: string; model: string } {
+export function buildModelConfigOptions(savedConfigs: ModelConfig[]): ModelConfigSelectOption[] {
+    const options: ModelConfigSelectOption[] = [
+        { value: DEFAULT_MODEL_CONFIG_VALUE, label: '默认配置' },
+    ];
+
+    savedConfigs.forEach((config) => {
+        config.models?.forEach((model) => {
+            options.push({
+                value: `${config.id}::${model}`,
+                label: `${config.is_default ? '⭐ ' : ''}${config.name} — ${model}`,
+            });
+        });
+    });
+
+    return options;
+}
+
+export function splitSelectedConfigKey(selectedKey: string): { providerId: string; model: string } {
     const separatorIndex = selectedKey.indexOf('::');
     if (separatorIndex === -1) {
         return {
@@ -43,6 +67,31 @@ function splitSelectedConfigKey(selectedKey: string): { providerId: string; mode
         providerId: selectedKey.slice(0, separatorIndex),
         model: selectedKey.slice(separatorIndex + 2),
     };
+}
+
+export function buildSelectedConfigKey(
+    savedConfigs: ModelConfig[],
+    selection: {
+        providerId?: string | null;
+        model?: string | null;
+    },
+): string {
+    const providerId = selection.providerId?.trim() ?? '';
+    if (!providerId) {
+        return DEFAULT_MODEL_CONFIG_VALUE;
+    }
+
+    const provider = savedConfigs.find((config) => config.id === providerId);
+    if (!provider) {
+        return DEFAULT_MODEL_CONFIG_VALUE;
+    }
+
+    const model = selection.model?.trim() || provider.models?.[0] || '';
+    if (!model) {
+        return DEFAULT_MODEL_CONFIG_VALUE;
+    }
+
+    return `${providerId}::${model}`;
 }
 
 export function buildAgentConfigsPayload(

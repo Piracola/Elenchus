@@ -60,7 +60,6 @@ async def test_debater_repairs_search_dump_into_final_speech(monkeypatch):
     )
 
     assert result["dialogue_history"][0]["content"] == "这是整理后的正式辩论发言。"
-    assert result["recent_dialogue_history"][-1]["content"] == "这是整理后的正式辩论发言。"
 
 
 @pytest.mark.asyncio
@@ -326,7 +325,6 @@ async def test_debater_includes_only_own_previous_judge_feedback(monkeypatch):
             "current_turn": 2,
             "max_turns": 5,
             "dialogue_history": [],
-            "recent_dialogue_history": [],
             "shared_knowledge": [],
             "judge_history": [
                 {
@@ -385,7 +383,6 @@ async def test_debater_falls_back_to_older_feedback_and_excludes_same_turn(monke
             "current_turn": 2,
             "max_turns": 5,
             "dialogue_history": [],
-            "recent_dialogue_history": [],
             "shared_knowledge": [],
             "judge_history": [
                 {

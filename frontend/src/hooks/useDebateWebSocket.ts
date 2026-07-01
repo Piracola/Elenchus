@@ -1,8 +1,5 @@
 /**
- * useDebateWebSocket manages the debate session websocket lifecycle.
- *
- * All store mutations inside websocket callbacks go through
- * useDebateStore.getState() to avoid stale closures.
+ * useDebateWebSocket manages the run websocket lifecycle.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
@@ -25,18 +22,24 @@ function previewPayload(payload: unknown): string {
         : text;
 }
 
-export function useDebateWebSocket(sessionId: string | null) {
+function buildWsUrl(runId: string): string {
+    const lastSeq = getStore().lastEventSeqByRun[runId] ?? -1;
+    const afterSeq = Math.max(0, lastSeq);
+    return `${WS_BASE}/ws/runs/${runId}?after_seq=${afterSeq}`;
+}
+
+export function useDebateWebSocket(runId: string | null) {
     const ws = useRef<WebSocket | null>(null);
     const reconnectAttempt = useRef(0);
     const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
     const isMounted = useRef(true);
     const activeGeneration = useRef(0);
-    const requestedSessionId = useRef<string | null>(sessionId);
+    const requestedRunId = useRef<string | null>(runId);
 
     useLayoutEffect(() => {
-        requestedSessionId.current = sessionId;
-    }, [sessionId]);
+        requestedRunId.current = runId;
+    }, [runId]);
 
     useEffect(() => {
         isMounted.current = true;
@@ -95,7 +98,7 @@ export function useDebateWebSocket(sessionId: string | null) {
         clearReconnectTimer();
         clearPingTimer();
 
-        if (!sessionId) {
+        if (!runId) {
             ws.current = null;
             reconnectAttempt.current = 0;
             getStore().setConnected(false);
@@ -106,37 +109,17 @@ export function useDebateWebSocket(sessionId: string | null) {
             };
         }
 
-        const url = `${WS_BASE}/ws/${sessionId}`;
-        const isActiveSession = () => {
+        const isActiveRun = () => {
             if (!isMounted.current || activeGeneration.current !== generation) {
                 return false;
             }
-            if (requestedSessionId.current !== sessionId) {
+            if (requestedRunId.current !== runId) {
                 return false;
             }
-            const currentStoreSessionId = getStore().currentSession?.id ?? null;
-            return currentStoreSessionId === sessionId;
+            return getStore().activeRunId === runId;
         };
         const isCurrentConnection = (sock?: WebSocket | null) =>
-            isActiveSession() &&
-            (!sock || ws.current === sock);
-
-        const scheduleReconnect = () => {
-            if (!isCurrentConnection()) return;
-            const delay =
-                RECONNECT_DELAYS[
-                    Math.min(reconnectAttempt.current, RECONNECT_DELAYS.length - 1)
-                ];
-            reconnectAttempt.current++;
-            clearReconnectTimer();
-            reconnectTimer.current = setTimeout(() => {
-                if (isCurrentConnection()) {
-                    const newSocket = new WebSocket(url);
-                    ws.current = newSocket;
-                    setupSocket(newSocket);
-                }
-            }, delay);
-        };
+            isActiveRun() && (!sock || ws.current === sock);
 
         const setupSocket = (sock: WebSocket) => {
             sock.onopen = () => {
@@ -170,18 +153,12 @@ export function useDebateWebSocket(sessionId: string | null) {
                     const parsed = JSON.parse(evt.data);
                     const event = normalizeRuntimeEvent(parsed);
                     if (!event) {
-                        console.warn(
-                            '[WS] Ignored unsupported message preview:',
-                            previewPayload(evt.data),
-                        );
+                        console.warn('[WS] Ignored unsupported message preview:', previewPayload(evt.data));
                         return;
                     }
                     getStore().applyRuntimeEvent(event);
                 } catch {
-                    console.warn(
-                        '[WS] Failed to parse message preview:',
-                        previewPayload(evt.data),
-                    );
+                    console.warn('[WS] Failed to parse message preview:', previewPayload(evt.data));
                 }
             };
 
@@ -192,7 +169,16 @@ export function useDebateWebSocket(sessionId: string | null) {
                 }
                 clearPingTimer();
                 getStore().setConnected(false);
-                scheduleReconnect();
+                const delay = RECONNECT_DELAYS[Math.min(reconnectAttempt.current, RECONNECT_DELAYS.length - 1)];
+                reconnectAttempt.current++;
+                clearReconnectTimer();
+                reconnectTimer.current = setTimeout(() => {
+                    if (isCurrentConnection()) {
+                        const nextSocket = new WebSocket(buildWsUrl(runId));
+                        ws.current = nextSocket;
+                        setupSocket(nextSocket);
+                    }
+                }, delay);
             };
 
             sock.onerror = () => {
@@ -200,7 +186,7 @@ export function useDebateWebSocket(sessionId: string | null) {
             };
         };
 
-        const socket = new WebSocket(url);
+        const socket = new WebSocket(buildWsUrl(runId));
         ws.current = socket;
         setupSocket(socket);
 
@@ -216,71 +202,131 @@ export function useDebateWebSocket(sessionId: string | null) {
             reconnectAttempt.current = 0;
             getStore().setConnected(false);
         };
-    }, [sessionId]);
+    }, [runId]);
 
-    const startDebate = useCallback(
-        async (topic: string, participants: string[], maxTurns: number) => {
-            const store = getStore();
-            const previousSession = store.currentSession;
-            if (previousSession) {
-                store.setCurrentSession({
-                    ...previousSession,
-                    topic,
-                    participants: participants.length ? participants : previousSession.participants,
-                    max_turns: maxTurns,
-                    status: 'in_progress',
-                });
+    const startRun = useCallback(async (topic: string, participants: string[], maxTurns: number) => {
+        const store = getStore();
+        const previousSession = store.currentSession;
+        if (!previousSession) return;
+
+        store.setCurrentSession({
+            ...previousSession,
+            topic,
+            participants: participants.length ? participants : previousSession.participants,
+            max_turns: maxTurns,
+            status: 'in_progress',
+        });
+        store.setDebating(true);
+        store.setPhase('initializing', '辩论准备中...');
+
+        try {
+            const run = await api.runs.create(previousSession.id, {
+                topic,
+                participants,
+                max_turns: maxTurns,
+            });
+            getStore().setActiveRun(run);
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'Failed to start debate';
+            const activeStore = getStore();
+            if (activeStore.currentSession?.id === previousSession.id) {
+                activeStore.setCurrentSession(previousSession);
             }
-            store.setDebating(true);
-            store.setPhase('initializing', '辩论准备中...');
+            activeStore.setPhase('error', errorMessage);
+            activeStore.setDebating(false);
+        }
+    }, []);
 
-            // Use REST API to start debate for detailed error reporting
-            try {
-                const sessionId = store.currentSession?.id;
-                if (!sessionId) return;
-                await api.sessions.startDebate(sessionId, {
-                    topic,
-                    participants,
-                    max_turns: maxTurns,
-                });
-            } catch (err) {
-                // REST API reported detailed error — update store and emit error
-                const errorMessage = err instanceof Error ? err.message : 'Failed to start debate';
-                const activeStore = getStore();
-                if (previousSession && activeStore.currentSession?.id === previousSession.id) {
-                    activeStore.setCurrentSession(previousSession);
+    const resumeRun = useCallback(async () => {
+        const store = getStore();
+        const activeRun = store.activeRun;
+        const activeRunId = activeRun?.id;
+        if (!activeRunId) return;
+
+        store.setDebating(true);
+        store.setPhase('initializing', '正在恢复辩论...');
+        store.setActiveRun({
+            ...activeRun,
+            status: 'running',
+            last_status_message: '正在恢复辩论...',
+        });
+
+        try {
+            await api.runs.command(activeRunId, 'resume');
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'Failed to resume debate';
+            const activeStore = getStore();
+            if (activeStore.activeRunId === activeRunId) {
+                activeStore.setActiveRun(activeRun);
+            }
+            activeStore.setPhase('error', errorMessage);
+            activeStore.setDebating(false);
+        }
+    }, []);
+
+    const stopRun = useCallback(async () => {
+        const store = getStore();
+        const activeRun = store.activeRun;
+        const activeRunId = activeRun?.id;
+        if (!activeRunId) {
+            store.setDebating(false);
+            store.setPhase('idle', '');
+            return;
+        }
+
+        store.setDebating(false);
+        store.setPhase('processing', '正在停止辩论...');
+        if (activeRun) {
+            store.setActiveRun({
+                ...activeRun,
+                status: 'stopping',
+                last_status_message: '正在停止辩论...',
+            });
+        }
+
+        try {
+            const ack = await api.runs.command(activeRunId, 'stop');
+            const latest = await api.runs.get(activeRunId);
+            const activeStore = getStore();
+            if (activeStore.activeRunId === activeRunId) {
+                activeStore.setCurrentSession(latest.session);
+                activeStore.setActiveRun(latest.run);
+                if (latest.run.status === 'cancelled') {
+                    activeStore.setPhase('idle', ack.message || latest.run.last_status_message || '辩论已停止');
+                } else if (latest.run.status === 'failed' || latest.run.status === 'stalled') {
+                    activeStore.setPhase('error', latest.run.last_error_message || ack.message || '运行中断');
                 }
-                store.setPhase('error', errorMessage);
-                store.setDebating(false);
             }
-        },
-        [],
-    );
-
-    const stopDebate = useCallback(async () => {
-        const sessionId = getStore().currentSession?.id;
-        if (sessionId) {
+        } catch (err) {
+            const activeStore = getStore();
             try {
-                await api.sessions.stopDebate(sessionId);
-            } catch {
-                // Fallback to WebSocket stop
-                if (ws.current?.readyState === WebSocket.OPEN) {
-                    try {
-                        ws.current.send(JSON.stringify({ action: 'stop' }));
-                    } catch {
-                        // Ignore transport errors here and still reset local UI state.
+                const latest = await api.runs.get(activeRunId);
+                if (activeStore.activeRunId === activeRunId) {
+                    activeStore.setCurrentSession(latest.session);
+                    activeStore.setActiveRun(latest.run);
+                    if (latest.run.status === 'failed' || latest.run.status === 'stalled') {
+                        activeStore.setPhase('error', latest.run.last_error_message || '运行中断');
+                    } else if (latest.run.status === 'cancelled') {
+                        activeStore.setPhase('idle', latest.run.last_status_message || '辩论已停止');
+                    } else {
+                        activeStore.setPhase('processing', latest.run.last_status_message || '正在处理');
                     }
                 }
+            } catch {
+                const errorMessage = err instanceof Error ? err.message : 'Failed to stop debate';
+                if (activeStore.activeRunId === activeRunId && activeRun) {
+                    activeStore.setActiveRun(activeRun);
+                }
+                activeStore.setPhase('error', errorMessage);
             }
         }
-        getStore().setDebating(false);
-        getStore().setPhase('idle', '');
     }, []);
 
     const sendIntervention = useCallback((content: string) => {
-        if (ws.current?.readyState !== WebSocket.OPEN) return;
-        ws.current.send(JSON.stringify({ action: 'intervene', content }));
+        const activeRunId = getStore().activeRunId;
+        if (!activeRunId || !content.trim()) return;
+        void api.runs.command(activeRunId, 'intervene', content.trim());
     }, []);
 
-    return { startDebate, stopDebate, sendIntervention };
+    return { startRun, resumeRun, stopRun, sendIntervention };
 }

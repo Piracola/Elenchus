@@ -14,11 +14,17 @@ import type {
     ModelProviderProbeResult,
     LogLevel,
     MarkdownExportCategory,
+    RuntimeSettings,
     SessionDocumentsResponse,
     SearchConfig,
     SearchConfigUpdatePayload,
     SearchProviderStatus,
     SessionDocumentResponse,
+    RunCommandAck,
+    RunCommandType,
+    RunProjectionResponse,
+    RunSummary,
+    RuntimeEvent,
 } from '../types';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
@@ -198,36 +204,67 @@ export const api = {
                 method: 'DELETE',
             }),
 
-        startDebate: (
-            id: string,
-            options?: { topic?: string; participants?: string[]; max_turns?: number },
-        ): Promise<{ started: boolean; message?: string; session_id: string }> =>
-            request(`/sessions/${id}/start`, {
-                method: 'POST',
-                body: JSON.stringify(options ?? {}),
-            }),
-
-        stopDebate: (id: string): Promise<{ stopped: boolean; session_id: string }> =>
-            request(`/sessions/${id}/stop`, {
-                method: 'POST',
-            }),
-
-        exportJson: (id: string, topic: string): Promise<void> => {
-            return download(`/sessions/${id}/export?format=json`, buildTopicFilename(topic, 'json'));
+        exportJson: (id: string, topic: string, runId?: string | null): Promise<void> => {
+            const params = new URLSearchParams({ format: 'json' });
+            if (runId) params.set('run_id', runId);
+            return download(`/sessions/${id}/export?${params.toString()}`, buildTopicFilename(topic, 'json'));
         },
 
-        exportMarkdown: (id: string, topic: string, categories?: MarkdownExportCategory[]): Promise<void> => {
+        exportMarkdown: (id: string, topic: string, categories?: MarkdownExportCategory[], runId?: string | null): Promise<void> => {
             const params = new URLSearchParams({ format: 'markdown' });
+            if (runId) params.set('run_id', runId);
             categories?.forEach((category) => params.append('categories', category));
             return download(`/sessions/${id}/export?${params.toString()}`, buildTopicFilename(topic, 'md'));
         },
 
-        exportHtml: (id: string, topic: string, categories?: MarkdownExportCategory[]): Promise<void> => {
+        exportHtml: (id: string, topic: string, categories?: MarkdownExportCategory[], runId?: string | null): Promise<void> => {
             const params = new URLSearchParams({ format: 'html' });
+            if (runId) params.set('run_id', runId);
             categories?.forEach((category) => params.append('categories', category));
             return download(`/sessions/${id}/export?${params.toString()}`, buildTopicFilename(topic, 'html'));
         },
 
+    },
+
+    runs: {
+        create: (
+            sessionId: string,
+            options?: { topic?: string; participants?: string[]; max_turns?: number },
+        ): Promise<RunSummary> =>
+            request(`/sessions/${sessionId}/runs`, {
+                method: 'POST',
+                body: JSON.stringify(options ?? {}),
+            }),
+
+        get: (runId: string): Promise<RunProjectionResponse> =>
+            request(`/runs/${runId}`),
+
+        events: (runId: string, afterSeq = 0): Promise<{ run_id: string; events: RuntimeEvent[] }> =>
+            request(`/runs/${runId}/events?after_seq=${afterSeq}`),
+
+        command: (
+            runId: string,
+            commandType: RunCommandType,
+            content?: string,
+        ): Promise<RunCommandAck> =>
+            request(`/runs/${runId}/commands`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    command_type: commandType,
+                    ...(content ? { content } : {}),
+                }),
+            }),
+    },
+
+    settings: {
+        getRuntime: (): Promise<RuntimeSettings> =>
+            request('/settings'),
+
+        updateRuntime: (payload: RuntimeSettings): Promise<RuntimeSettings> =>
+            request('/settings', {
+                method: 'PUT',
+                body: JSON.stringify(payload),
+            }),
     },
 
     models: {

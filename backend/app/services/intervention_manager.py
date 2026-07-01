@@ -3,11 +3,11 @@ Thread-safe intervention message manager.
 
 This module provides a thread-safe alternative to the previous global dictionary
 approach for storing pending user interventions. It uses asyncio.Lock to ensure
-safe concurrent access across multiple sessions.
+safe concurrent access across multiple runs.
 
 Why this is needed:
 - The previous implementation used a global dict which is not thread-safe
-- Multiple concurrent debates could cause message mixing or loss
+- Multiple concurrent runs could cause message mixing or loss
 - This implementation provides proper synchronization for concurrent access
 """
 
@@ -25,13 +25,13 @@ class InterventionManager:
     """
     Thread-safe manager for pending user interventions.
 
-    Uses asyncio.Lock for each session to ensure safe concurrent access.
-    Each session has its own lock to minimize contention.
+    Uses asyncio.Lock for each run to ensure safe concurrent access.
+    Each run has its own lock to minimize contention.
 
     Usage:
         manager = InterventionManager()
-        await manager.add_intervention(session_id, "User message")
-        interventions = await manager.pop_interventions(session_id)
+        await manager.add_intervention(run_id, "User message")
+        interventions = await manager.pop_interventions(run_id)
     """
 
     def __init__(self) -> None:
@@ -39,93 +39,89 @@ class InterventionManager:
         self._locks: dict[str, asyncio.Lock] = {}
         self._global_lock = asyncio.Lock()
 
-    async def _get_session_lock(self, session_id: str) -> asyncio.Lock:
-        """Get or create a lock for a specific session."""
+    async def _get_run_lock(self, run_id: str) -> asyncio.Lock:
+        """Get or create a lock for a specific run."""
         async with self._global_lock:
-            if session_id not in self._locks:
-                self._locks[session_id] = asyncio.Lock()
-            return self._locks[session_id]
+            if run_id not in self._locks:
+                self._locks[run_id] = asyncio.Lock()
+            return self._locks[run_id]
 
-    async def add_intervention(self, session_id: str, content: str) -> None:
+    async def add_intervention(self, run_id: str, content: str) -> None:
         """
-        Add an intervention message to the queue for a session.
+        Add an intervention message to the queue for a run.
 
         Args:
-            session_id: The debate session identifier
+            run_id: The debate run identifier
             content: The intervention message content
         """
-        lock = await self._get_session_lock(session_id)
+        lock = await self._get_run_lock(run_id)
         async with lock:
-            self._interventions[session_id].append(content)
+            self._interventions[run_id].append(content)
             logger.debug(
-                "Intervention added for session %s (total: %d)",
-                session_id,
-                len(self._interventions[session_id])
+                "Intervention added for run %s (total: %d)",
+                run_id,
+                len(self._interventions[run_id])
             )
 
-    async def pop_interventions(self, session_id: str) -> list[str]:
+    async def pop_interventions(self, run_id: str) -> list[str]:
         """
-        Pop and return all pending interventions for a session.
+        Pop and return all pending interventions for a run.
 
         This is a destructive operation - the interventions are removed
         from the queue after being returned.
 
         Args:
-            session_id: The debate session identifier
+            run_id: The debate run identifier
 
         Returns:
             List of intervention content strings (may be empty)
         """
-        lock = await self._get_session_lock(session_id)
+        lock = await self._get_run_lock(run_id)
         async with lock:
-            interventions = self._interventions.pop(session_id, [])
+            interventions = self._interventions.pop(run_id, [])
             if interventions:
                 logger.debug(
-                    "Popped %d interventions for session %s",
+                    "Popped %d interventions for run %s",
                     len(interventions),
-                    session_id
+                    run_id
                 )
             return interventions
 
-    async def get_interventions(self, session_id: str) -> list[str]:
+    async def get_interventions(self, run_id: str) -> list[str]:
         """
-        Get (non-destructively) all pending interventions for a session.
+        Get (non-destructively) all pending interventions for a run.
 
         Args:
-            session_id: The debate session identifier
+            run_id: The debate run identifier
 
         Returns:
             List of intervention content strings (may be empty)
         """
-        lock = await self._get_session_lock(session_id)
+        lock = await self._get_run_lock(run_id)
         async with lock:
-            return list(self._interventions.get(session_id, []))
+            return list(self._interventions.get(run_id, []))
 
-    async def clear_session(self, session_id: str) -> None:
+    async def clear_run(self, run_id: str) -> None:
         """
-        Clear all interventions and locks for a session.
+        Clear all interventions and locks for a run.
 
-        Should be called when a session ends to free memory.
+        Should be called when a run ends to free memory.
 
         Args:
-            session_id: The debate session identifier
+            run_id: The debate run identifier
         """
         async with self._global_lock:
-            self._interventions.pop(session_id, None)
-            self._locks.pop(session_id, None)
-            logger.debug("Cleared intervention data for session %s", session_id)
-
-    def get_active_session_count(self) -> int:
-        """Return the number of sessions with pending interventions."""
-        return len(self._interventions)
+            self._interventions.pop(run_id, None)
+            self._locks.pop(run_id, None)
+            logger.debug("Cleared intervention data for run %s", run_id)
 
     def get_stats(self) -> dict[str, Any]:
         """Return statistics about the intervention manager."""
         return {
-            "active_sessions": len(self._interventions),
+            "active_runs": len(self._interventions),
             "total_interventions": sum(len(v) for v in self._interventions.values()),
-            "sessions": {
-                sid: len(interventions)
-                for sid, interventions in self._interventions.items()
+            "runs": {
+                run_id: len(interventions)
+                for run_id, interventions in self._interventions.items()
             }
         }

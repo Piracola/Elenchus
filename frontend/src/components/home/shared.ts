@@ -16,7 +16,7 @@ export const HOME_MODE_OPTIONS: {
     {
         mode: 'standard',
         title: '标准辩论',
-        description: '保留裁判、陪审团与常规推理增强，用于更传统的攻防与评分。',
+        description: '保留裁判、赛前组内讨论与共识收敛，用于更传统的攻防、准备与评分。',
     },
     {
         mode: 'sophistry_experiment',

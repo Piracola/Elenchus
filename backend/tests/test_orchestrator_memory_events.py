@@ -16,6 +16,7 @@ class _FakeRepository:
 
     async def build_initial_state(
         self,
+        run_id: str,
         session_id: str,
         *,
         topic: str,
@@ -24,6 +25,7 @@ class _FakeRepository:
         agent_configs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return {
+            "run_id": run_id,
             "session_id": session_id,
             "topic": topic,
             "participants": participants or ["proposer", "opposer"],
@@ -37,8 +39,8 @@ class _FakeRepository:
             "agent_configs": agent_configs or {},
         }
 
-    async def persist_state(self, session_id: str, state: dict[str, Any]) -> None:
-        self.persisted.append((session_id, dict(state)))
+    async def persist_state(self, run_id: str, session_id: str, state: dict[str, Any]) -> None:
+        self.persisted.append((run_id, session_id, dict(state)))
 
 
 class _FakeEngine:
@@ -107,6 +109,7 @@ async def test_orchestrator_emits_memory_write_events_once_per_new_item():
     )
 
     await orchestrator.run_debate(
+        "555555555555",
         "abc123def456",
         "Memory event test",
         participants=["proposer", "opposer"],

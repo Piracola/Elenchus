@@ -35,14 +35,22 @@ class _FakeWebSocket:
 class _Repository:
     def __init__(self) -> None:
         self.persisted: list[dict[str, object]] = []
+        self.latest_by_run: dict[str, int] = {}
 
-    async def get_latest_runtime_event_seq(self, session_id: str) -> int:
-        if session_id == "resume123456":
-            return 4
-        return 0
+    async def get_latest_runtime_event_seq(self, run_id: str) -> int:
+        if run_id == "resume123456":
+            return max(4, self.latest_by_run.get(run_id, 0))
+        return self.latest_by_run.get(run_id, 0)
 
-    async def persist_runtime_event(self, event: dict[str, object]) -> None:
-        self.persisted.append(event)
+    async def persist_runtime_event(self, event: dict[str, object]) -> dict[str, object]:
+        persisted = dict(event)
+        run_id = str(persisted.get("run_id", ""))
+        self.latest_by_run[run_id] = max(
+            self.latest_by_run.get(run_id, 0),
+            int(persisted.get("seq", 0) or 0),
+        )
+        self.persisted.append(persisted)
+        return persisted
 
 
 @pytest.mark.asyncio
@@ -65,13 +73,14 @@ async def test_runtime_bus_broadcasts_to_live_connections():
 async def test_runtime_bus_sequences_and_persists_events():
     captured: list[tuple[str, dict[str, object]]] = []
 
-    async def sink(session_id: str, message: dict[str, object]) -> None:
-        captured.append((session_id, message))
+    async def sink(run_id: str, message: dict[str, object]) -> None:
+        captured.append((run_id, message))
 
     repository = _Repository()
     bus = RuntimeBus(sink, repository=repository)
 
     event = await bus.emit(
+        run_id="resume123456",
         session_id="resume123456",
         event_type="status",
         payload={"content": "resumed"},
@@ -84,16 +93,48 @@ async def test_runtime_bus_sequences_and_persists_events():
 
 
 @pytest.mark.asyncio
+async def test_runtime_bus_refreshes_sequence_when_repository_moves_ahead():
+    captured: list[tuple[str, dict[str, object]]] = []
+
+    async def sink(run_id: str, message: dict[str, object]) -> None:
+        captured.append((run_id, message))
+
+    repository = _Repository()
+    bus = RuntimeBus(sink, repository=repository)
+
+    first = await bus.emit(
+        run_id="run123abcdef",
+        session_id="session12345",
+        event_type="status",
+        payload={"content": "first"},
+        source="test",
+    )
+    repository.latest_by_run["run123abcdef"] = 8
+    second = await bus.emit(
+        run_id="run123abcdef",
+        session_id="session12345",
+        event_type="status",
+        payload={"content": "after direct ledger write"},
+        source="test",
+    )
+
+    assert first["seq"] == 1
+    assert second["seq"] == 9
+    assert captured[-1][1]["seq"] == 9
+
+
+@pytest.mark.asyncio
 async def test_runtime_bus_repairs_mojibake_payloads_before_delivery():
     captured: list[tuple[str, dict[str, object]]] = []
 
-    async def sink(session_id: str, message: dict[str, object]) -> None:
-        captured.append((session_id, message))
+    async def sink(run_id: str, message: dict[str, object]) -> None:
+        captured.append((run_id, message))
 
     repository = _Repository()
     bus = RuntimeBus(sink, repository=repository)
 
     event = await bus.emit(
+        run_id="session-1",
         session_id="session-1",
         event_type="error",
         payload={"content": "杈╄鍑洪敊: Your request was blocked."},
@@ -122,3 +163,21 @@ async def test_runtime_bus_send_drops_closed_socket_without_warning(caplog):
     assert delivered is False
     assert bus.get_connections("session-1") == []
     assert not [record for record in caplog.records if record.levelno >= logging.WARNING]
+
+
+@pytest.mark.asyncio
+async def test_runtime_bus_send_json_encodes_datetimes():
+    from datetime import datetime, timezone
+
+    bus = RuntimeBus()
+    websocket = _FakeWebSocket()
+
+    await bus.connect("session-1", websocket)
+    delivered = await bus.send(
+        "session-1",
+        websocket,
+        {"type": "status", "timestamp": datetime(2026, 7, 1, tzinfo=timezone.utc)},
+    )
+
+    assert delivered is True
+    assert websocket.messages == [{"type": "status", "timestamp": "2026-07-01T00:00:00+00:00"}]

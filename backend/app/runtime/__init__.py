@@ -14,7 +14,6 @@ __all__ = [
     "DebateOrchestrator",
     "DebateRuntimeService",
     "SessionRuntimeRepository",
-    "SessionStartResult",
     "RuntimeBus",
     "RuntimeEvent",
 ]
@@ -23,7 +22,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "DebateRunner": ("app.runtime.runner", "DebateRunner"),
     "DebateOrchestrator": ("app.runtime.orchestrator", "DebateOrchestrator"),
     "DebateRuntimeService": ("app.runtime.service", "DebateRuntimeService"),
-    "SessionStartResult": ("app.runtime.service", "SessionStartResult"),
     "SessionRuntimeRepository": ("app.runtime.session_repository", "SessionRuntimeRepository"),
     "RuntimeBus": ("app.runtime.bus", "RuntimeBus"),
     "RuntimeEvent": ("app.runtime.event_schema", "RuntimeEvent"),

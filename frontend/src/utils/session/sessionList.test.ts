@@ -38,12 +38,14 @@ describe('sessionList utils', () => {
     it('upserts an existing session and keeps the list sorted', () => {
         const updated = upsertSessionListItem(baseSessions, {
             ...baseSessions[0],
+            latest_run_id: 'run-1',
             current_turn: 3,
             created_at: '2026-03-22T00:00:00Z',
         });
 
         expect(updated.map((session) => session.id)).toEqual(['a', 'b']);
         expect(updated[0].current_turn).toBe(3);
+        expect(updated[0].latest_run_id).toBe('run-1');
     });
 
     it('merges appended pages without duplicating existing sessions', () => {

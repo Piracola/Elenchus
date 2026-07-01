@@ -79,7 +79,7 @@ def get_intervention_manager() -> "InterventionManager":
     """
     Get the singleton InterventionManager instance.
 
-    Manages pending user interventions for debate sessions.
+    Manages pending user interventions for debate runs.
     """
     from app.services.intervention_manager import InterventionManager
     return InterventionManager()

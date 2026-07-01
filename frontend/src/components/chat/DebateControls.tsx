@@ -5,21 +5,22 @@
 import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentConfigs } from '../../hooks/useAgentConfigs';
-import { useConnectionViewState, useSessionViewState } from '../../hooks/useDebateViewState';
+import { isRunStatusInProgress, useConnectionViewState, useSessionViewState } from '../../hooks/useDebateViewState';
 import { useDebateWebSocket } from '../../hooks/useDebateWebSocket';
 import { useSessionCreate } from '../../hooks/useSessionCreate';
 import {
     DEFAULT_MAX_TURNS,
+    DEFAULT_GROUP_DISCUSSION_ROUNDS,
     DEFAULT_SPEECH_MAX_CHARS,
+    parseGroupDiscussionRoundsInput,
     parseMaxTurnsInput,
     parseSpeechMaxCharsInput,
 } from '../../utils/agent/debateSession';
 import AgentConfigPanel from '../shared/AgentConfigPanel';
 
 function ActiveSessionControls() {
-    const { isDebating, isConnected, currentSession } = useConnectionViewState();
-    const sessionId = currentSession?.id || null;
-    const { startDebate, stopDebate, sendIntervention } = useDebateWebSocket(sessionId);
+    const { isDebating, isConnected, currentSession, activeRun, activeRunId } = useConnectionViewState();
+    const { startRun, resumeRun, stopRun, sendIntervention } = useDebateWebSocket(activeRunId);
     const [interventionText, setInterventionText] = useState('');
     const [maxTurnsInput, setMaxTurnsInput] = useState(
         currentSession?.max_turns != null ? String(currentSession.max_turns) : '',
@@ -33,11 +34,14 @@ function ActiveSessionControls() {
     }, [currentSession?.max_turns, currentSession?.id]);
 
     const maxTurns = parseMaxTurnsInput(maxTurnsInput);
-    const sessionIsRunning = isDebating;
-    const canResumeSession = !sessionIsRunning && currentSession?.status === 'in_progress';
+    const runStatus = activeRun?.status ?? null;
+    const canStopRun = Boolean(activeRunId && runStatus && isRunStatusInProgress(runStatus));
+    const runIsLive = canStopRun;
+    const canResumeRun = !runIsLive && Boolean(activeRunId && runStatus && isRunStatusInProgress(runStatus));
+    const canSendIntervention = Boolean(activeRunId && isConnected);
 
     const handleSendIntervention = () => {
-        if (!interventionText.trim() || !isConnected) return;
+        if (!interventionText.trim() || !canSendIntervention) return;
         sendIntervention(interventionText.trim());
         setInterventionText('');
     };
@@ -83,7 +87,7 @@ function ActiveSessionControls() {
                 </span>
             </div>
 
-            {!sessionIsRunning && (
+            {!runIsLive && (
                 <div
                     style={{
                         display: 'flex',
@@ -125,7 +129,7 @@ function ActiveSessionControls() {
                 onChange={(event) => setInterventionText(event.target.value)}
                 onKeyDown={(event) => event.key === 'Enter' && handleSendIntervention()}
                 placeholder={isConnected ? '输入干预意见...' : '连接已断开...'}
-                disabled={!isConnected}
+                disabled={!canSendIntervention}
                 style={{
                     flex: 1,
                     padding: '9px 12px',
@@ -134,18 +138,18 @@ function ActiveSessionControls() {
                     background: 'var(--bg-tertiary)',
                     color: 'var(--text-primary)',
                     outline: 'none',
-                    cursor: isConnected ? 'text' : 'not-allowed',
-                    opacity: isConnected ? 1 : 0.5,
+                    cursor: canSendIntervention ? 'text' : 'not-allowed',
+                    opacity: canSendIntervention ? 1 : 0.5,
                     fontSize: '13px',
                     minWidth: 0,
                 }}
             />
 
-            {sessionIsRunning ? (
+            {canStopRun ? (
                 <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={stopDebate}
+                    onClick={stopRun}
                     style={{
                         padding: '8px 14px',
                         borderRadius: 'var(--radius-md)',
@@ -165,14 +169,18 @@ function ActiveSessionControls() {
                     <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        onClick={() =>
-                            startDebate(
+                        onClick={() => {
+                            if (canResumeRun) {
+                                void resumeRun();
+                                return;
+                            }
+                            void startRun(
                                 currentSession?.topic || '新辩题',
                                 ['proposer', 'opposer'],
                                 maxTurns,
-                            )
-                        }
-                        disabled={!isConnected}
+                            );
+                        }}
+                        disabled={false}
                         style={{
                             padding: '8px 14px',
                             borderRadius: 'var(--radius-md)',
@@ -180,30 +188,30 @@ function ActiveSessionControls() {
                             background: 'var(--text-primary)',
                             color: 'var(--bg-primary)',
                             fontWeight: 600,
-                            cursor: isConnected ? 'pointer' : 'not-allowed',
-                            opacity: isConnected ? 1 : 0.5,
+                            cursor: 'pointer',
+                            opacity: 1,
                             fontSize: '12px',
                             flexShrink: 0,
                         }}
                     >
-                        {canResumeSession ? '继续辩论' : '开始辩论'}
+                        {canResumeRun ? '继续辩论' : '开始辩论'}
                     </motion.button>
                     <motion.button
-                        whileHover={isConnected && interventionText.trim() ? { scale: 1.02 } : {}}
-                        whileTap={isConnected && interventionText.trim() ? { scale: 0.98 } : {}}
+                        whileHover={canSendIntervention && interventionText.trim() ? { scale: 1.02 } : {}}
+                        whileTap={canSendIntervention && interventionText.trim() ? { scale: 0.98 } : {}}
                         onClick={handleSendIntervention}
-                        disabled={!isConnected || !interventionText.trim()}
+                        disabled={!canSendIntervention || !interventionText.trim()}
                         style={{
                             padding: '8px 14px',
                             borderRadius: 'var(--radius-md)',
                             border: 'none',
-                            background: isConnected && interventionText.trim()
+                            background: canSendIntervention && interventionText.trim()
                                 ? 'var(--accent-indigo)'
                                 : 'var(--bg-tertiary)',
-                            color: isConnected && interventionText.trim() ? '#fff' : 'var(--text-muted)',
+                            color: canSendIntervention && interventionText.trim() ? '#fff' : 'var(--text-muted)',
                             fontWeight: 600,
-                            cursor: isConnected && interventionText.trim() ? 'pointer' : 'not-allowed',
-                            opacity: isConnected && interventionText.trim() ? 1 : 0.5,
+                            cursor: canSendIntervention && interventionText.trim() ? 'pointer' : 'not-allowed',
+                            opacity: canSendIntervention && interventionText.trim() ? 1 : 0.5,
                             fontSize: '12px',
                             flexShrink: 0,
                         }}
@@ -219,8 +227,10 @@ function ActiveSessionControls() {
 function SessionCreator() {
     const [topic, setTopic] = useState('');
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
+    const [groupDiscussionRoundsInput, setGroupDiscussionRoundsInput] = useState('');
     const [proposerSpeechLimitInput, setProposerSpeechLimitInput] = useState('');
     const [opposerSpeechLimitInput, setOpposerSpeechLimitInput] = useState('');
+    const [groupDiscussionSpeechLimitInput, setGroupDiscussionSpeechLimitInput] = useState('');
     const { isCreating, createSession } = useSessionCreate();
     const {
         showAdvanced,
@@ -235,8 +245,10 @@ function SessionCreator() {
         buildAgentConfigs,
     } = useAgentConfigs();
     const maxTurns = parseMaxTurnsInput(maxTurnsInput);
+    const groupDiscussionRounds = parseGroupDiscussionRoundsInput(groupDiscussionRoundsInput);
     const proposerSpeechLimit = parseSpeechMaxCharsInput(proposerSpeechLimitInput);
     const opposerSpeechLimit = parseSpeechMaxCharsInput(opposerSpeechLimitInput);
+    const groupDiscussionSpeechLimit = parseSpeechMaxCharsInput(groupDiscussionSpeechLimitInput);
 
     const handleStart = async () => {
         if (!topic.trim()) return;
@@ -244,10 +256,14 @@ function SessionCreator() {
             topic,
             maxTurns,
             buildAgentConfigs(),
-            undefined,
+            {
+                consensus_enabled: true,
+                group_discussion_rounds: groupDiscussionRounds,
+            },
             {
                 proposer_max_chars: proposerSpeechLimit,
                 opposer_max_chars: opposerSpeechLimit,
+                group_discussion_max_chars: groupDiscussionSpeechLimit,
             },
         );
         setTopic('');
@@ -330,6 +346,64 @@ function SessionCreator() {
                                     type="number"
                                     value={opposerSpeechLimitInput}
                                     onChange={(event) => setOpposerSpeechLimitInput(event.target.value)}
+                                    placeholder={String(DEFAULT_SPEECH_MAX_CHARS)}
+                                    min={0}
+                                    max={20000}
+                                    style={{
+                                        height: '32px',
+                                        padding: '0 10px',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid transparent',
+                                        background: 'var(--bg-tertiary)',
+                                        color: 'var(--text-primary)',
+                                        outline: 'none',
+                                    }}
+                                />
+                            </label>
+                            <label
+                                style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '5px',
+                                    color: 'var(--text-secondary)',
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                }}
+                            >
+                                每轮赛前讨论
+                                <input
+                                    type="number"
+                                    value={groupDiscussionRoundsInput}
+                                    onChange={(event) => setGroupDiscussionRoundsInput(event.target.value)}
+                                    placeholder={String(DEFAULT_GROUP_DISCUSSION_ROUNDS)}
+                                    min={0}
+                                    max={5}
+                                    style={{
+                                        height: '32px',
+                                        padding: '0 10px',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid transparent',
+                                        background: 'var(--bg-tertiary)',
+                                        color: 'var(--text-primary)',
+                                        outline: 'none',
+                                    }}
+                                />
+                            </label>
+                            <label
+                                style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '5px',
+                                    color: 'var(--text-secondary)',
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                }}
+                            >
+                                赛前讨论字数上限
+                                <input
+                                    type="number"
+                                    value={groupDiscussionSpeechLimitInput}
+                                    onChange={(event) => setGroupDiscussionSpeechLimitInput(event.target.value)}
                                     placeholder={String(DEFAULT_SPEECH_MAX_CHARS)}
                                     min={0}
                                     max={20000}

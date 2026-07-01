@@ -13,6 +13,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.models.schemas import ContextRuntimeConfig
 from app.runtime_config_store import (
     SUPPORTED_SEARCH_PROVIDERS,
     load_runtime_config,
@@ -45,23 +46,10 @@ class SearchConfig(BaseModel):
         )
 
 
-class ContextWindowConfig(BaseModel):
-    recent_turns_to_keep: int = 3
-    enable_summary_compression: bool = True
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any] | None = None) -> ContextWindowConfig:
-        data = data or {}
-        return cls(
-            recent_turns_to_keep=int(data.get("recent_turns_to_keep") or 3),
-            enable_summary_compression=bool(data.get("enable_summary_compression", True)),
-        )
-
-
 class DebateConfig(BaseModel):
     default_max_turns: int = 5
     default_max_tokens: int = 64000
-    context_window: ContextWindowConfig = Field(default_factory=ContextWindowConfig)
+    context_runtime: ContextRuntimeConfig = Field(default_factory=ContextRuntimeConfig)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None = None) -> DebateConfig:
@@ -72,7 +60,9 @@ class DebateConfig(BaseModel):
         return cls(
             default_max_turns=int(data.get("default_max_turns") or 5),
             default_max_tokens=max_tokens,
-            context_window=ContextWindowConfig.from_dict(data.get("context_window")),
+            context_runtime=ContextRuntimeConfig.model_validate(
+                data.get("context_runtime") or {}
+            ),
         )
 
 

@@ -50,4 +50,9 @@ async def get_db() -> AsyncSession:
 
 async def init_db():
     """Initialize database resources for session-backed APIs."""
-    _get_engine()
+    engine = _get_engine()
+    # Import ledger models before metadata create_all.
+    from app.models import ledger  # noqa: F401
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)

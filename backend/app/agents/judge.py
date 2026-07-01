@@ -4,6 +4,7 @@ Judge node that evaluates each debater and produces structured scores.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -13,6 +14,7 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import ValidationError
 
+from app.agents.context_engine import build_context_packet
 from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.prompt_loader import get_judge_prompt
 from app.agents.runtime_progress import (
@@ -119,11 +121,30 @@ def _build_judge_instruction(
     dialogue_history: list[dict[str, Any]],
     shared_knowledge: list[dict[str, Any]],
     current_turn: int,
+    state: dict[str, Any] | None = None,
 ) -> str:
     """Build the user message for the judge."""
+    state = state or {
+        "dialogue_history": dialogue_history,
+        "shared_knowledge": shared_knowledge,
+        "current_turn": current_turn,
+    }
+    packet = build_context_packet(
+        state,
+        agent_role="judge",
+        task_lines=[
+            f"辩题：{topic}",
+            f"请评估 {role_to_judge} 在第 {current_turn + 1} 轮的表现。",
+        ],
+        live_constraints=[
+            "只根据正式辩手公开发言评分，不参考组内讨论文本进行加分。",
+            "若需要判断一致性，请优先依据历史摘要与该辩手本轮发言。",
+        ],
+    )
     parts = [
         f"## Task\nScore the **{role_to_judge}** debater for turn {current_turn + 1}.\n",
         f"## Debate Topic\n{topic}\n",
+        packet.render(),
         "## Complete Dialogue History",
     ]
 
@@ -256,6 +277,55 @@ def _default_scores() -> dict[str, Any]:
     return TurnScore(**fallback_dimensions).model_dump()
 
 
+async def _score_participant(
+    *,
+    topic: str,
+    role: str,
+    dialogue_history: list[dict[str, Any]],
+    shared_knowledge: list[dict[str, Any]],
+    current_turn: int,
+    system_prompt: str,
+    override: dict[str, Any] | None,
+    progress_callback,
+    state: dict[str, Any],
+) -> TurnScore | None:
+    instruction = _build_judge_instruction(
+        topic=topic,
+        role_to_judge=role,
+        dialogue_history=dialogue_history,
+        shared_knowledge=shared_knowledge,
+        current_turn=current_turn,
+        state=state,
+    )
+
+    for attempt in range(2):
+        try:
+            response_text = await invoke_text_model(
+                [
+                    SystemMessage(content=system_prompt),
+                    HumanMessage(content=instruction),
+                ],
+                override=override,
+                on_progress=progress_callback,
+                timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
+                heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
+            )
+            score = _parse_score_response(response_text)
+            if isinstance(score, TurnScore):
+                return score
+        except Exception as exc:
+            logger.warning(
+                "Judge invocation failed for [%s] attempt %d: %s",
+                role,
+                attempt + 1,
+                exc,
+            )
+
+        logger.warning("Judge retry for [%s] - attempt %d", role, attempt + 1)
+
+    return None
+
+
 async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
     """
     LangGraph node: judge evaluates each debater for the current turn.
@@ -266,7 +336,6 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
     topic = state["topic"]
     participants = state["participants"]
     dialogue_history = state.get("dialogue_history", [])
-    recent_dialogue_history = state.get("recent_dialogue_history", dialogue_history)
     shared_knowledge = state.get("shared_knowledge", [])
     current_turn = state.get("current_turn", 0)
     cumulative_scores = dict(state.get("cumulative_scores", {}))
@@ -284,56 +353,30 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
     )
 
     participant_set = set(participants)
-    preferred_history = (
-        recent_dialogue_history if isinstance(recent_dialogue_history, list) else dialogue_history
-    )
     evaluation_history = [
         entry
-        for entry in preferred_history
+        for entry in dialogue_history
         if isinstance(entry, dict) and entry.get("role") in participant_set
     ]
-    if not evaluation_history:
-        evaluation_history = [
-            entry
-            for entry in dialogue_history
-            if isinstance(entry, dict) and entry.get("role") in participant_set
+
+    score_results = await asyncio.gather(
+        *[
+            _score_participant(
+                topic=topic,
+                role=role,
+                dialogue_history=evaluation_history,
+                shared_knowledge=shared_knowledge,
+                current_turn=current_turn,
+                system_prompt=system_prompt,
+                override=override,
+                progress_callback=progress_callback,
+                state=state,
+            )
+            for role in participants
         ]
+    )
 
-    for role in participants:
-        instruction = _build_judge_instruction(
-            topic=topic,
-            role_to_judge=role,
-            dialogue_history=evaluation_history,
-            shared_knowledge=shared_knowledge,
-            current_turn=current_turn,
-        )
-
-        score: TurnScore | None = None
-        for attempt in range(2):
-            try:
-                response_text = await invoke_text_model(
-                    [
-                        SystemMessage(content=system_prompt),
-                        HumanMessage(content=instruction),
-                    ],
-                    override=override,
-                    on_progress=progress_callback,
-                    timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
-                    heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
-                )
-                score = _parse_score_response(response_text)
-                if isinstance(score, TurnScore):
-                    break
-            except Exception as exc:
-                logger.warning(
-                    "Judge invocation failed for [%s] attempt %d: %s",
-                    role,
-                    attempt + 1,
-                    exc,
-                )
-
-            logger.warning("Judge retry for [%s] - attempt %d", role, attempt + 1)
-
+    for role, score in zip(participants, score_results, strict=False):
         if isinstance(score, TurnScore):
             score_dict = score.model_dump()
             current_scores[role] = score_dict

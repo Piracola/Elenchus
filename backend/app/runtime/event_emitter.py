@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from .emitters.discussion import emit_discussion_entry as _emit_discussion_entry
+from .emitters.discussion import emit_discussion_entries as _emit_discussion_entries
 from .emitters.discussion import emit_consensus_summary as _emit_consensus_summary
 from .emitters.report import emit_fact_check as _emit_fact_check
 from .emitters.report import emit_judge_scores as _emit_judge_scores
@@ -39,9 +40,18 @@ class RuntimeEventEmitter:
         *,
         runtime_bus: "RuntimeBus" | None = None,
         emit_event: EventEmitter = noop_emit_event,
+        default_run_id: str | None = None,
     ) -> None:
         self._runtime_bus = runtime_bus
         self._emit_event = emit_event
+        self._default_run_id = default_run_id
+
+    def for_run(self, run_id: str) -> "RuntimeEventEmitter":
+        return RuntimeEventEmitter(
+            runtime_bus=self._runtime_bus,
+            emit_event=self._emit_event,
+            default_run_id=run_id,
+        )
 
     async def emit_runtime_event(
         self,
@@ -51,9 +61,14 @@ class RuntimeEventEmitter:
         payload: dict[str, Any] | None = None,
         source: str = "runtime.orchestrator",
         phase: str | None = None,
+        run_id: str | None = None,
     ) -> None:
+        resolved_run_id = run_id or self._default_run_id
+        if not resolved_run_id:
+            raise ValueError("Runtime events must be emitted with an explicit run_id.")
         if self._runtime_bus is not None:
             await self._runtime_bus.emit(
+                run_id=resolved_run_id,
                 session_id=session_id,
                 event_type=event_type,
                 payload=payload,
@@ -62,7 +77,7 @@ class RuntimeEventEmitter:
             )
             return
 
-        fallback_message = {"type": event_type, **(payload or {})}
+        fallback_message = {"type": event_type, "run_id": resolved_run_id, **(payload or {})}
         if phase:
             fallback_message["phase"] = phase
         await self._emit_event(session_id, fallback_message)
@@ -218,6 +233,19 @@ class RuntimeEventEmitter:
         prev_history_len: int,
     ) -> int:
         return await _emit_consensus_summary(
+            self.emit_runtime_event,
+            session_id,
+            final_state,
+            prev_history_len,
+        )
+
+    async def emit_discussion_entries(
+        self,
+        session_id: str,
+        final_state: dict[str, Any],
+        prev_history_len: int,
+    ) -> int:
+        return await _emit_discussion_entries(
             self.emit_runtime_event,
             session_id,
             final_state,

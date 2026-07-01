@@ -26,8 +26,8 @@ React Frontend
    │
    ▼
 FastAPI Backend
-├─ Sessions / Models / Search / Log APIs
-├─ WebSocket 会话控制
+├─ Sessions / Runs / Models / Search / Log APIs
+├─ WebSocket Run 事件订阅
 ├─ 文档上传与会话参考资料
 └─ 静态前端发布包回退
    │
@@ -49,8 +49,7 @@ Agent / LLM Layer
    ▼
 Persistence
 ├─ runtime/config.json
-├─ SQLite database
-└─ runtime/sessions/<session_id>/
+└─ SQLite database
 ```
 
 ## 3. 请求与事件流
@@ -63,14 +62,14 @@ HomeView
 → POST /api/sessions
 → backend/app/api/sessions.py
 → backend/app/services/session_service.py
-→ database + runtime session files
+→ SQLite sessions 表
 ```
 
 ### 启动辩论
 
 ```text
 DebateControls / useDebateWebSocket
-→ POST /api/sessions/{id}/start
+→ POST /api/sessions/{session_id}/runs
 → backend/app/api/session_runtime.py
 → DebateRuntimeService
 → Orchestrator
@@ -83,8 +82,8 @@ DebateControls / useDebateWebSocket
 ```text
 Runtime nodes
 → RuntimeBus
-→ events.jsonl
-→ WebSocket /api/ws/{session_id}
+→ SQLite run_events
+→ WebSocket /api/ws/runs/{run_id}
 → debateStore
 → ChatPanel / StatusBanner / live transcript
 ```
@@ -92,10 +91,10 @@ Runtime nodes
 ### 历史恢复
 
 ```text
-GET /api/sessions/{id}
-→ session.json
+GET /api/runs/{run_id}
+→ RunProjection
 → debateStore
-→ 历史消息与会话运行态
+→ 历史消息与运行态
 ```
 
 ## 4. 前端边界
@@ -118,8 +117,8 @@ GET /api/sessions/{id}
 
 - `backend/app/main.py`：FastAPI 应用装配、CORS、路由、健康检查、静态前端回退。
 - `backend/app/api/sessions.py`：会话 CRUD 与导出。
-- `backend/app/api/session_runtime.py`：前端启动 / 停止辅助端点、运行事件读取与导出。
-- `backend/app/api/websocket.py`：实时控制和事件通道。
+- `backend/app/api/session_runtime.py`：创建 Run、读取 Run、提交 RunCommand、读取 RunEvent。
+- `backend/app/api/websocket.py`：按 `run_id` 订阅实时事件与断线补拉。
 - `backend/app/api/models.py`：模型 provider 配置。
 - `backend/app/api/search.py`：搜索配置与健康检查。
 - `backend/app/api/session_documents.py`：会话参考文档接口。
@@ -132,15 +131,15 @@ GET /api/sessions/{id}
 
 - `DebateRuntimeService`：启动、停止、运行状态和用户干预队列。
 - `Orchestrator`：按会话模式选择运行链路。
-- `RuntimeBus`：创建事件、广播 WebSocket、追加事件文件。
-- `SessionRuntimeRepository`：读写运行时会话快照。
+- `RuntimeBus`：创建事件、广播 WebSocket、追加 SQLite run event。
+- `SessionRuntimeRepository`：从 Session + RunProjection/Checkpoint 构造运行输入，并把运行检查点写回 ledger。
 - `runtime/engines/langgraph.py`：装配并调用 LangGraph。
 
 运行事件是前后端之间的主契约之一。新增节点或事件时，需要同时确认：
 
-- 后端是否写入 `events.jsonl`。
+- 后端是否写入 SQLite `run_events`。
 - 前端是否能识别并渲染事件。
-- 历史恢复是否能从快照和事件恢复合理状态。
+- projector 是否能从事件和会话文档重建 `RunProjection`。
 
 ## 7. 模式边界
 
@@ -151,6 +150,7 @@ GET /api/sessions/{id}
 核心能力：
 
 - 正反方发言。
+- 每轮发言前的组内讨论简报。
 - 裁判评分。
 - 可选搜索增强。
 - 可选共识收敛总结。
@@ -159,6 +159,7 @@ GET /api/sessions/{id}
 
 - `backend/app/agents/graph.py`
 - `backend/app/agents/debater.py`
+- `backend/app/agents/group_discussion.py`
 - `backend/app/agents/judge.py`
 - `backend/app/agents/consensus.py`
 
@@ -171,7 +172,7 @@ GET /api/sessions/{id}
 - 独立 prompt。
 - 独立 graph。
 - 禁用搜索。
-- 不启用裁判、陪审团和评分。
+- 不启用裁判、组内讨论和评分。
 - 输出观察报告和最终复盘。
 - 自动注入内置谬误库。
 
@@ -185,13 +186,13 @@ GET /api/sessions/{id}
 
 ## 8. 参考资料边界
 
-会话参考资料是会话级输入能力，不是全局知识库。
+会话参考资料是 Session 级输入能力，不是全局知识库，也不是 Run 的运行事实。
 
 它负责：
 
 - 保存用户上传文档。
 - 解码并规范化纯文本 / Markdown。
-- 将文档内容作为 `context` 同步进当前会话 shared knowledge。
+- 将文档内容写入 SQLite `session_documents`，由 projector 派生为 Run 的 shared knowledge。
 
 用户上传资料不再经过 LLM 预处理，也不生成 term / claim / excerpt 结构化条目。诡辩实验模式的内置谬误库仍会生成内部标签条目，作为该模式的固定背景能力。
 
@@ -200,14 +201,13 @@ GET /api/sessions/{id}
 - `backend/app/api/session_documents.py`
 - `backend/app/services/document_service.py`
 - `backend/app/services/session_document_workflow.py`
-- `backend/app/storage/session_documents.py`
 - `backend/app/services/builtin_reference_service.py`（仅诡辩模式内置资料）
 
-运行时文件位置见 [runtime.md](./runtime.md)。
+运行时数据模型见 [runtime.md](./runtime.md)。
 
 ## 9. 配置与持久化
 
-当前活动配置源是 `runtime/config.json`，主要保存：
+当前活动配置源是 `runtime/config.json`，主要保存静态配置：
 
 - server 配置。
 - provider 配置。
@@ -215,7 +215,7 @@ GET /api/sessions/{id}
 - 日志配置。
 - 辩论默认配置。
 
-会话持久化同时使用 SQLite 和 `runtime/sessions/<session_id>/` 文件。调试恢复或导出问题时，优先同时看数据库记录、`session.json` 和 `events.jsonl`。
+运行真相统一保存在 SQLite：`sessions` 保存用户定义的辩题和配置，`runs` 保存一次执行，`run_events` 保存事实事件，`run_projections` 保存可重建读模型，`run_checkpoints` 保存恢复点。导出仍走现有 JSON / Markdown / HTML 能力，但数据源来自 SQLite 聚合结果。
 
 ## 10. 代码入口速查
 
@@ -223,7 +223,7 @@ GET /api/sessions/{id}
 | --- | --- |
 | 启动应用 | `backend/app/main.py` |
 | 创建 / 删除 / 导出会话 | `backend/app/api/sessions.py` |
-| 启动 / 停止辩论 | `backend/app/api/session_runtime.py` |
+| 创建 / 查看 / 控制 Run | `backend/app/api/session_runtime.py` |
 | 实时事件 | `backend/app/api/websocket.py`、`backend/app/runtime/bus.py` |
 | 标准辩论流程 | `backend/app/agents/graph.py` |
 | 诡辩实验流程 | `backend/app/agents/sophistry_graph.py` |

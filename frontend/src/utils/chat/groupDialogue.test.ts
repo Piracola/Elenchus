@@ -90,6 +90,21 @@ describe('groupDialogue', () => {
         expect(result[1].judge?.role).toBe('sophistry_round_report');
     });
 
+    it('renders group discussion as an independent agent row', () => {
+        const entries: DialogueEntry[] = [
+            { role: 'proposer', agent_name: 'Proposer', content: 'Opening', timestamp: '2024-01-01T00:00:00Z', citations: [], turn: 0 },
+            { role: 'opposer', agent_name: 'Opposer', content: 'Response', timestamp: '2024-01-01T00:00:30Z', citations: [], turn: 0 },
+            { role: 'group_discussion', agent_name: 'Group', content: 'Key issue.', timestamp: '2024-01-01T00:01:00Z', citations: [], turn: 0, discussion_kind: 'group_discussion' },
+            { role: 'judge', agent_name: 'Judge', content: 'Score', timestamp: '2024-01-01T00:02:00Z', citations: [], target_role: 'opposer', turn: 0 },
+        ];
+
+        const result = groupDialogue(entries);
+
+        expect(result).toHaveLength(3);
+        expect(result[2].agent?.role).toBe('group_discussion');
+        expect(result[1].judge?.role).toBe('judge');
+    });
+
     it('does not require intermediate token entries to keep final rows stable', () => {
         const entries: DialogueEntry[] = [
             { role: 'proposer', agent_name: 'Proposer', content: 'Final speech', timestamp: '2024-01-01T00:00:00Z', citations: [], event_id: 'evt_speech_end', turn: 0 },

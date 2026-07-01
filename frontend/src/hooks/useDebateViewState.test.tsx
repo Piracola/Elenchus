@@ -1,7 +1,7 @@
 import { cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useDebateStore } from '../stores/debateStore';
-import type { RuntimeEvent, Session } from '../types';
+import type { RuntimeEvent, RunSummary, Session } from '../types';
 import {
     useRuntimeViewState,
     useSessionViewState,
@@ -38,6 +38,7 @@ function makeRuntimeEvent(overrides: Partial<RuntimeEvent> = {}): RuntimeEvent {
     return {
         schema_version: '1.0',
         event_id: 'evt_selector',
+        run_id: 'run_view',
         session_id: 'session_view',
         seq: 1,
         timestamp: '2026-03-24T00:01:00Z',
@@ -45,6 +46,25 @@ function makeRuntimeEvent(overrides: Partial<RuntimeEvent> = {}): RuntimeEvent {
         type: 'status',
         phase: 'preparing',
         payload: { content: '准备中', node: 'speaker' },
+        ...overrides,
+    };
+}
+
+function makeRun(overrides: Partial<RunSummary> = {}): RunSummary {
+    return {
+        id: 'run_view',
+        session_id: 'session_view',
+        status: 'stalled',
+        current_turn: 5,
+        latest_seq: 8,
+        last_status_message: '等待恢复',
+        last_error_message: null,
+        started_at: null,
+        completed_at: null,
+        interrupted_at: null,
+        last_progress_at: null,
+        created_at: '2026-03-24T00:00:00Z',
+        updated_at: '2026-03-24T00:00:00Z',
         ...overrides,
     };
 }
@@ -82,6 +102,21 @@ describe('useDebateViewState', () => {
         expect(result.current.displayTurn).toBe(3);
     });
 
+    it('uses the active run summary before falling back to session runtime summary', () => {
+        useDebateStore.getState().setCurrentSession(makeSession({
+            current_turn: 1,
+            status: 'completed',
+        }));
+        useDebateStore.getState().setActiveRun(makeRun());
+
+        const { result } = renderHook(() => useSessionViewState());
+
+        expect(result.current.currentTurn).toBe(5);
+        expect(result.current.displayTurn).toBe(5);
+        expect(result.current.sessionStatus).toBe('error');
+        expect(result.current.runStatus).toBe('stalled');
+    });
+
     it('returns grouped runtime and transcript state for the active session', () => {
         useDebateStore.getState().setCurrentSession(makeSession({ status: 'completed' }));
         useDebateStore.getState().applyRuntimeEvent(makeRuntimeEvent());
@@ -95,6 +130,24 @@ describe('useDebateViewState', () => {
         expect(runtime.result.current.currentNode).toBe('speaker');
         expect(transcript.result.current.currentSessionId).toBe('session_view');
         expect(transcript.result.current.collapsedAgentMessages['event:evt_selector']).toBe(true);
+    });
+
+    it('ignores runtime events without a run_id even when an active run exists', () => {
+        useDebateStore.getState().setCurrentSession(makeSession());
+        useDebateStore.getState().setActiveRun(makeRun({
+            id: 'run_view',
+            status: 'running',
+        }));
+        useDebateStore.getState().applyRuntimeEvent(makeRuntimeEvent({
+            event_id: 'evt_without_run',
+            run_id: '',
+            payload: { content: 'should be ignored', node: 'speaker' },
+        }));
+
+        const runtime = renderHook(() => useRuntimeViewState());
+
+        expect(runtime.result.current.runtimeEventCount).toBe(0);
+        expect(runtime.result.current.currentStatus).toBe('');
     });
 
     it('keeps group discussion entries available in the transcript view', () => {
@@ -118,5 +171,28 @@ describe('useDebateViewState', () => {
 
         expect(transcript.result.current.currentSessionId).toBe('session_view');
         expect(transcript.result.current.collapsedAgentMessages).toEqual({});
+    });
+
+    it('derives terminal state from run_status_changed events', () => {
+        useDebateStore.getState().setCurrentSession(makeSession());
+        useDebateStore.getState().setActiveRun(makeRun({
+            status: 'running',
+        }));
+        useDebateStore.getState().applyRuntimeEvent(makeRuntimeEvent({
+            event_id: 'evt_run_status',
+            type: 'run_status_changed',
+            payload: {
+                status: 'failed',
+                content: '上游模型调用失败',
+            },
+        }));
+
+        const runtime = renderHook(() => useRuntimeViewState());
+        const session = renderHook(() => useSessionViewState());
+
+        expect(runtime.result.current.runStatus).toBe('failed');
+        expect(runtime.result.current.phase).toBe('error');
+        expect(runtime.result.current.currentStatus).toBe('上游模型调用失败');
+        expect(session.result.current.sessionStatus).toBe('error');
     });
 });

@@ -18,6 +18,7 @@ export type WSMessageType =
     | 'system'
     | 'mode_notice'
     | 'status'
+    | 'run_status_changed'
     | 'consensus_summary'
     | 'sophistry_round_report'
     | 'sophistry_final_report'
@@ -63,6 +64,7 @@ export interface WSMessage {
 export interface RuntimeEvent {
     schema_version: string;
     event_id: string;
+    run_id: string;
     session_id: string;
     seq: number;
     timestamp: string;

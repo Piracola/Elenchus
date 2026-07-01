@@ -16,6 +16,7 @@ class RuntimeEvent(TypedDict):
 
     schema_version: str
     event_id: str
+    run_id: str
     session_id: str
     seq: int
     timestamp: str
@@ -31,6 +32,7 @@ def _utcnow_iso() -> str:
 
 def build_runtime_event(
     *,
+    run_id: str,
     session_id: str,
     seq: int,
     event_type: str,
@@ -43,6 +45,7 @@ def build_runtime_event(
     event: RuntimeEvent = {
         "schema_version": RUNTIME_EVENT_SCHEMA_VERSION,
         "event_id": f"evt_{uuid4().hex[:12]}",
+        "run_id": run_id,
         "session_id": session_id,
         "seq": seq,
         "timestamp": _utcnow_iso(),

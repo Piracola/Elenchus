@@ -36,11 +36,11 @@ class ResolvedLLMConfig:
 
 async def _resolve_provider_info(
     override: dict[str, Any],
-) -> tuple[str | None, str | None, str | None, dict[str, Any]]:
+) -> tuple[str | None, str | None, str | None, str | None, dict[str, Any]]:
     """
     Resolve provider_type and api_base_url from override config or database.
 
-    Returns: (provider_type, api_base_url, api_key, custom_parameters)
+    Returns: (provider_type, api_base_url, api_key, default_model, custom_parameters)
     """
     from app.dependencies import get_agent_config_service
 
@@ -50,6 +50,7 @@ async def _resolve_provider_info(
         selection.provider_type,
         selection.api_base_url,
         selection.api_key,
+        selection.default_model,
         selection.custom_parameters,
     )
 
@@ -60,8 +61,8 @@ async def resolve_llm_config(
     """Resolve provider, credentials, and generation settings for one call."""
     override = override or {}
     settings = get_settings()
-    model = override.get("model", "gpt-4o")
-    provider_type, api_base_url, api_key, custom_parameters = await _resolve_provider_info(override)
+    provider_type, api_base_url, api_key, default_model, custom_parameters = await _resolve_provider_info(override)
+    model = override.get("model") or default_model
     temperature = override.get("temperature", 0.7)
     default_max_tokens = int(
         custom_parameters.get(
@@ -75,6 +76,17 @@ async def resolve_llm_config(
         raise ValueError(
             "Model invocation blocked: the selected agent is missing an API key. "
             "Open Settings and choose or create a default model provider first."
+        )
+    if not model:
+        provider_id = str(override.get("provider_id", "") or "")
+        if provider_id:
+            raise ValueError(
+                "Model invocation blocked: the selected provider has no resolved model. "
+                "Open Settings and choose a concrete model for that provider."
+            )
+        raise ValueError(
+            "Model invocation blocked: no model could be resolved for this request. "
+            "Open Settings and ensure the default provider has at least one model."
         )
 
     return ResolvedLLMConfig(

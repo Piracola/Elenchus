@@ -7,6 +7,7 @@ import { getMessageFontTokens } from '../config/display';
 import type { DebateMode } from '../types';
 import {
     parseMaxTurnsInput,
+    parseGroupDiscussionRoundsInput,
     parseSpeechMaxCharsInput,
 } from '../utils/agent/debateSession';
 import { HomeComposerCard } from './home/HomeComposerCard';
@@ -44,8 +45,10 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
     const [topic, setTopic] = useState('');
     const [debateMode, setDebateMode] = useState<DebateMode>('standard');
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
+    const [groupDiscussionRoundsInput, setGroupDiscussionRoundsInput] = useState('');
     const [proposerSpeechLimitInput, setProposerSpeechLimitInput] = useState('');
     const [opposerSpeechLimitInput, setOpposerSpeechLimitInput] = useState('');
+    const [groupDiscussionSpeechLimitInput, setGroupDiscussionSpeechLimitInput] = useState('');
     const [pendingDocuments, setPendingDocuments] = useState<PendingReferenceDocument[]>([]);
     const { isCreating, error: createError, createSession, clearError } = useSessionCreate();
     const {
@@ -68,8 +71,10 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
     const messageFontSize = displaySettings.messageFontSize ?? 15;
     const homeFontSizes = useMemo(() => getMessageFontTokens(messageFontSize).home, [messageFontSize]);
     const maxTurns = parseMaxTurnsInput(maxTurnsInput);
+    const groupDiscussionRounds = parseGroupDiscussionRoundsInput(groupDiscussionRoundsInput);
     const proposerSpeechLimit = parseSpeechMaxCharsInput(proposerSpeechLimitInput);
     const opposerSpeechLimit = parseSpeechMaxCharsInput(opposerSpeechLimitInput);
+    const groupDiscussionSpeechLimit = parseSpeechMaxCharsInput(groupDiscussionSpeechLimitInput);
 
     useEffect(() => {
         const scrollContainer = homeScrollRef.current;
@@ -168,13 +173,16 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                 isSophistryMode
                     ? {
                         consensus_enabled: false,
+                        group_discussion_rounds: 0,
                     }
                     : {
                         consensus_enabled: true,
+                        group_discussion_rounds: groupDiscussionRounds,
                     },
                 {
                     proposer_max_chars: proposerSpeechLimit,
                     opposer_max_chars: opposerSpeechLimit,
+                    group_discussion_max_chars: groupDiscussionSpeechLimit,
                 },
                 debateMode,
                 isSophistryMode
@@ -332,8 +340,10 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                         isSophistryMode={isSophistryMode}
                         showAdvanced={showAdvanced}
                         maxTurnsInput={maxTurnsInput}
+                        groupDiscussionRoundsInput={groupDiscussionRoundsInput}
                         proposerSpeechLimitInput={proposerSpeechLimitInput}
                         opposerSpeechLimitInput={opposerSpeechLimitInput}
+                        groupDiscussionSpeechLimitInput={groupDiscussionSpeechLimitInput}
                         homeFontSizes={homeFontSizes}
                         pendingDocuments={pendingDocuments}
                         onDebateModeChange={setDebateMode}
@@ -346,8 +356,10 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                         }}
                         onShowAdvancedChange={handleShowAdvancedChange}
                         onMaxTurnsChange={setMaxTurnsInput}
+                        onGroupDiscussionRoundsChange={setGroupDiscussionRoundsInput}
                         onProposerSpeechLimitChange={setProposerSpeechLimitInput}
                         onOpposerSpeechLimitChange={setOpposerSpeechLimitInput}
+                        onGroupDiscussionSpeechLimitChange={setGroupDiscussionSpeechLimitInput}
                         onCreateDebate={() => {
                             void handleCreateDebate();
                         }}

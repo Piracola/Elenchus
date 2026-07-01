@@ -11,10 +11,12 @@ export type LiveSpeechViewModel = {
 
 export type LiveTranscriptViewModel = {
     speech: LiveSpeechViewModel | null;
+    groupDiscussion: LiveSpeechViewModel | null;
 };
 
 export const EMPTY_LIVE_TRANSCRIPT: LiveTranscriptViewModel = {
     speech: null,
+    groupDiscussion: null,
 };
 
 type LiveTranscriptArgs = {
@@ -32,6 +34,7 @@ type LiveTranscriptArgs = {
 };
 
 const SPEECH_STATUS = '正在发言...';
+const GROUP_DISCUSSION_STATUS = '组内讨论正在生成本轮赛前简报...';
 const RUNTIME_NODE_PREFIX = 'runtime.node.';
 
 function sanitizeStreamContent(content: string): string {
@@ -61,6 +64,13 @@ function createEntryFromEvent(event: RuntimeEvent, fallbackRole = ''): DialogueE
         event_id: event.event_id,
         turn: payloadNumber(event, 'turn'),
     };
+}
+
+function hasGroupDiscussionFor(history: DialogueEntry[], turn?: number): boolean {
+    return history.some((entry) => (
+        entry.role === 'group_discussion'
+        && (turn === undefined || entry.turn === turn)
+    ));
 }
 
 function getEventNode(event: RuntimeEvent): string {
@@ -203,8 +213,30 @@ function buildLiveSpeech(args: LiveTranscriptArgs): LiveSpeechViewModel | null {
     return buildSpeechPlaceholder(args);
 }
 
+function buildGroupDiscussionPlaceholder(args: LiveTranscriptArgs): LiveSpeechViewModel | null {
+    if (!args.currentSessionId || !args.isDebating) return null;
+    if (args.currentNode !== 'group_discussion') return null;
+    if (hasGroupDiscussionFor(args.dialogueHistory, args.currentTurn)) return null;
+
+    return {
+        entry: {
+            role: 'group_discussion',
+            agent_name: '组内讨论',
+            content: '',
+            citations: [],
+            timestamp: '',
+            turn: args.currentTurn,
+            discussion_kind: 'group_discussion',
+        },
+        content: '',
+        status: args.currentStatus || GROUP_DISCUSSION_STATUS,
+        source: 'placeholder',
+    };
+}
+
 export function buildLiveTranscriptViewModel(args: LiveTranscriptArgs): LiveTranscriptViewModel {
     return {
         speech: buildLiveSpeech(args),
+        groupDiscussion: buildGroupDiscussionPlaceholder(args),
     };
 }

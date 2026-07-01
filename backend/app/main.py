@@ -18,8 +18,10 @@ from app.api.websocket import router as ws_router
 from app.api.models import router as models_router
 from app.api.log import router as log_router
 from app.api.search import router as search_router
+from app.api.settings import router as settings_router
 from app.api.search import build_search_health_payload
-from app.dependencies import get_search_factory
+from app.dependencies import get_debate_runtime_service, get_search_factory
+from app.db.database import init_db
 from app.services.log_service import setup_logging, get_logger
 
 settings = get_settings()
@@ -31,6 +33,10 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     """Application startup / shutdown lifecycle."""
     logger.info("Elenchus starting up...")
+    await init_db()
+    repaired_runs = await get_debate_runtime_service().reconcile_all_run_liveness()
+    if repaired_runs > 0:
+        logger.warning("Reconciled %s stale run(s) on startup.", repaired_runs)
     yield
     # Cleanup search provider resources
     search_factory = get_search_factory()
@@ -65,6 +71,7 @@ app.include_router(ws_router, prefix="/api")
 app.include_router(models_router, prefix="/api/models", tags=["models"])
 app.include_router(log_router, prefix="/api")
 app.include_router(search_router, prefix="/api")
+app.include_router(settings_router, prefix="/api")
 
 
 # ── Health / diagnostic endpoints ────────────────────────────────

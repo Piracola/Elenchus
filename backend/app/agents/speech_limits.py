@@ -8,6 +8,7 @@ from typing import Any
 ROLE_LIMIT_KEYS = {
     "proposer": "proposer_max_chars",
     "opposer": "opposer_max_chars",
+    "group_discussion": "group_discussion_max_chars",
 }
 
 

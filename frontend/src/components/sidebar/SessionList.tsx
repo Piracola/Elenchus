@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { AlertCircle, CheckCircle2, Clock3, PanelLeftClose, Plus, Search, Settings, Sun, Moon, Trash2 } from 'lucide-react';
 import { useThemeStore } from '../../stores/themeStore';
+import { useDebateStore } from '../../stores/debateStore';
 import { api } from '../../api/client';
 import {
     useSessionActions,
@@ -104,9 +105,14 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
         sessionSelectionRequestRef.current = requestId;
         try {
             const fullSession = await api.sessions.get(item.id);
+            const latestRunId = fullSession.latest_run_id ?? item.latest_run_id ?? null;
+            const latestRun = latestRunId ? await api.runs.get(latestRunId) : null;
             if (sessionSelectionRequestRef.current !== requestId) return;
 
             setCurrentSession(fullSession);
+            if (latestRun) {
+                useDebateStore.getState().setActiveRun(latestRun.run);
+            }
         } catch (err) {
             console.error('Failed to load session details', err);
             toast('加载辩论记录失败', 'error');

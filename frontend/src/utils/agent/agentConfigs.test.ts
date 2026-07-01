@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    buildSelectedConfigKey,
     buildAgentConfigsPayload,
     DEFAULT_AGENT_TEMPERATURE,
     parseAgentTemperatureInput,
@@ -38,12 +39,14 @@ describe('agentConfigs utils', () => {
                 opposer: '',
                 judge: '',
                 fact_checker: '',
+                group_discussion: '',
             },
             {
                 proposer: '0.2',
                 opposer: '',
                 judge: '',
                 fact_checker: '',
+                group_discussion: '',
             },
         );
 
@@ -66,12 +69,14 @@ describe('agentConfigs utils', () => {
                 opposer: '',
                 judge: '',
                 fact_checker: '',
+                group_discussion: '',
             },
             {
                 proposer: String(DEFAULT_AGENT_TEMPERATURE),
                 opposer: '',
                 judge: '',
                 fact_checker: '',
+                group_discussion: '',
             },
         );
 
@@ -84,6 +89,18 @@ describe('agentConfigs utils', () => {
                 temperature: DEFAULT_AGENT_TEMPERATURE,
             },
         });
+    });
+
+    it('builds the same selected key shape used by agent config dropdowns', () => {
+        expect(buildSelectedConfigKey([baseProvider], {
+            providerId: 'provider-openai',
+            model: 'gpt-4.1-mini',
+        })).toBe('provider-openai::gpt-4.1-mini');
+
+        expect(buildSelectedConfigKey([baseProvider], {
+            providerId: 'provider-openai',
+            model: null,
+        })).toBe('provider-openai::gpt-4o');
     });
 
 });

@@ -1,2 +1,1 @@
-"""File-backed storage helpers for session history."""
-
+"""Storage package kept for compatibility with older import paths."""

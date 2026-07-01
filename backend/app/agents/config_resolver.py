@@ -20,6 +20,7 @@ AGENT_CONFIG_FALLBACKS: dict[str, list[str]] = {
     "fact_checker": ["fact_checker"],
     # Consensus and sophistry observers fall back to judge.
     "consensus": ["consensus", "judge"],
+    "group_discussion": ["group_discussion", "judge"],
     "observer": ["observer", "judge"],
     # Generic fallback
     "debater": ["debater"],

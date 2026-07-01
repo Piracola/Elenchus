@@ -18,6 +18,7 @@ from .session_dialogue_helpers import (
 SAFE_RESUME_NODES = {
     "",
     "manage_context",
+    "group_discussion",
     "advance_turn",
     "consensus",
     "sophistry_postmortem",
@@ -70,11 +71,6 @@ def normalize_resumable_snapshot(
     if isinstance(current_mode_report, dict) and coerce_int(current_mode_report.get("turn")) == current_turn:
         snapshot["current_mode_report"] = None
 
-    snapshot["recent_dialogue_history"] = [
-        entry
-        for entry in snapshot["dialogue_history"]
-        if entry_turn(entry) == current_turn
-    ] or snapshot["dialogue_history"]
     snapshot["current_speaker"] = ""
     snapshot["current_speaker_index"] = -1
     snapshot["messages"] = []

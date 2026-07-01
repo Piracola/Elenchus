@@ -100,4 +100,25 @@ describe('buildLiveTranscriptViewModel', () => {
         });
     });
 
+    it('shows an independent group discussion placeholder while that node is active', () => {
+        const live = buildLiveTranscriptViewModel(baseArgs({
+            phase: 'processing',
+            currentNode: 'group_discussion',
+            currentStatus: '组内讨论正在生成本轮赛前简报...',
+            isDebating: true,
+        }));
+
+        expect(live.groupDiscussion).toMatchObject({
+            content: '',
+            status: '组内讨论正在生成本轮赛前简报...',
+            source: 'placeholder',
+            entry: {
+                role: 'group_discussion',
+                turn: 0,
+                discussion_kind: 'group_discussion',
+            },
+        });
+        expect(live.speech).toBeNull();
+    });
+
 });

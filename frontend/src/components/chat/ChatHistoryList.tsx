@@ -152,6 +152,14 @@ export default function ChatHistoryList({
                     status={liveTranscript.speech.status}
                 />
             )}
+
+            {liveTranscript.groupDiscussion && (
+                <StreamingMessage
+                    entry={liveTranscript.groupDiscussion.entry}
+                    content={liveTranscript.groupDiscussion.content}
+                    status={liveTranscript.groupDiscussion.status}
+                />
+            )}
         </div>
     );
 }

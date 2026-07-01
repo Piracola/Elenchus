@@ -1,6 +1,4 @@
-"""
-Session CRUD REST API backed by file-based session storage.
-"""
+"""Session configuration, run export, and document REST API routes."""
 
 from __future__ import annotations
 
@@ -16,6 +14,7 @@ from app.models.schemas import (
     SessionResponse,
 )
 from app.services import export, session_service
+from app.services.run_service import export_payload as export_run_payload
 
 router = APIRouter(tags=["sessions"])
 router.include_router(session_documents_router)
@@ -78,6 +77,7 @@ async def export_session(
     session_id: str,
     format: ExportFormat = Query(default=ExportFormat.JSON),
     categories: list[str] | None = Query(default=None),
+    run_id: str | None = Query(default=None),
 ):
     """
     Export full session data.
@@ -85,7 +85,7 @@ async def export_session(
     - format=markdown returns a markdown file
     - format=html returns a static HTML reading page
     """
-    data = await session_service.get_session(session_id)
+    data = await export_run_payload(session_id, run_id=run_id)
     if data is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
