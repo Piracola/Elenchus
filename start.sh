@@ -65,10 +65,6 @@ check_command() {
     command -v "$1" >/dev/null 2>&1
 }
 
-get_python_version() {
-    python3 --version 2>&1 | awk '{print $2}'
-}
-
 get_node_version() {
     node --version 2>&1 | sed 's/v//'
 }
@@ -197,6 +193,23 @@ CHECKS_PASSED=true
 
 if test_env_cache_valid "$ENV_CACHE_FILE"; then
     print_success "Environment check passed (cached)"
+    if [[ "$FRONTEND_ONLY" != true ]]; then
+        if ! check_command uv; then
+            print_error "uv not found, please install uv"
+            CHECKS_PASSED=false
+        fi
+    fi
+
+    if [[ "$BACKEND_ONLY" != true ]]; then
+        if ! check_command node; then
+            print_error "Node.js not found, please install Node.js 18+"
+            CHECKS_PASSED=false
+        fi
+        if ! check_command npm; then
+            print_error "npm not found"
+            CHECKS_PASSED=false
+        fi
+    fi
 else
     if [[ "$FRONTEND_ONLY" != true ]]; then
         echo "Checking uv..."
@@ -287,7 +300,10 @@ if [[ "$BACKEND_ONLY" != true ]]; then
     if [[ "$SKIP_INSTALL" != true ]]; then
         if [[ ! -d "node_modules" ]] || test_dependency_refresh_needed "$FRONTEND_STATE_FILE" "${FRONTEND_DEPS[@]}"; then
             print_info "Installing frontend dependencies..."
-            npm install --silent 2>/dev/null || true
+            if ! npm install --silent 2>/dev/null; then
+                print_error "Frontend dependency installation failed"
+                exit 1
+            fi
             save_dependency_fingerprint "$FRONTEND_STATE_FILE" "${FRONTEND_DEPS[@]}"
             print_success "Frontend dependencies installed"
         else

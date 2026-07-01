@@ -243,3 +243,4 @@ Elenchus 是辩论、分析、配置和运行观察工具。界面应该冷静�
 - [系统架构总览](./architecture.md)
 - [运行时与历史恢复](./runtime.md)
 - [快速开始](./getting-started.md)
+- [CI 失败排查清单](./ci-troubleshooting.md)

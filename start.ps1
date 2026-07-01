@@ -85,72 +85,6 @@ function Invoke-CommandCapture {
     }
 }
 
-function Resolve-PythonRuntime {
-    param(
-        [string[]]$PreferredPaths = @()
-    )
-
-    $candidates = @()
-
-    foreach ($preferredPath in $PreferredPaths) {
-        if ([string]::IsNullOrWhiteSpace($preferredPath) -or -not (Test-Path $preferredPath)) {
-            continue
-        }
-
-        $candidates += [pscustomobject]@{
-            CommandLabel = $preferredPath
-            FilePath     = $preferredPath
-            Arguments    = @()
-        }
-    }
-
-    $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
-    if ($pythonCmd) {
-        $candidates += [pscustomobject]@{
-            CommandLabel = "python"
-            FilePath     = Resolve-CommandPath -Command $pythonCmd
-            Arguments    = @()
-        }
-    }
-
-    $pyCmd = Get-Command py -ErrorAction SilentlyContinue
-    if ($pyCmd) {
-        $pyPath = Resolve-CommandPath -Command $pyCmd
-        $candidates += [pscustomobject]@{
-            CommandLabel = "py -3"
-            FilePath     = $pyPath
-            Arguments    = @("-3")
-        }
-        $candidates += [pscustomobject]@{
-            CommandLabel = "py"
-            FilePath     = $pyPath
-            Arguments    = @()
-        }
-    }
-
-    foreach ($candidate in $candidates) {
-        if ([string]::IsNullOrWhiteSpace($candidate.FilePath)) {
-            continue
-        }
-
-        $versionResult = Invoke-CommandCapture -FilePath $candidate.FilePath -Arguments ($candidate.Arguments + @("--version"))
-        if (-not $versionResult.Success -or [string]::IsNullOrWhiteSpace($versionResult.Text)) {
-            continue
-        }
-
-        if ($versionResult.Text -match "Python\s+([0-9][^\s]*)") {
-            return [pscustomobject]@{
-                CommandLabel = $candidate.CommandLabel
-                FilePath     = $candidate.FilePath
-                Arguments    = $candidate.Arguments
-                Version      = $Matches[1]
-            }
-        }
-    }
-
-    return $null
-}
-
 function Get-ExecutableVersion {
     param(
         [Parameter(Mandatory = $true)]
@@ -351,6 +285,19 @@ if ($null -ne $cachedEnv) {
         $UvInfo = Get-ExecutableVersion -CommandName "uv"
         if (-not $UvInfo) {
             Print-Err "uv not found or unusable, please install uv"
+            $checksPassed = $false
+        }
+    }
+    if (-not $BackendOnly) {
+        $nodeInfo = Get-ExecutableVersion -CommandName "node" -PrefixToTrim "v"
+        if (-not $nodeInfo) {
+            Print-Err "Node.js not found or unusable, please install Node.js 18+"
+            $checksPassed = $false
+        }
+
+        $npmInfo = Get-ExecutableVersion -CommandName "npm"
+        if (-not $npmInfo) {
+            Print-Err "npm not found"
             $checksPassed = $false
         }
     }

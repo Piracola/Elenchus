@@ -19,6 +19,10 @@
 - [开发指南](./development.md)：后端、前端、UI 风格和编码约定。
 - [Python 依赖迁移计划](./dependency-migration-plan.md)：后端 `pyproject.toml + uv.lock` 依赖体系和迁移验收标准。
 
+## 维护与排查
+
+- [CI 失败排查清单](./ci-troubleshooting.md)：前端、后端、发布构建三类 GitHub Actions 红灯的最小排查路径。
+
 ## 维护规则
 
 - 启动步骤只写在 [快速开始](./getting-started.md)，其他文档只链接它。
