@@ -50,6 +50,7 @@ htmlcov/
 node_modules/
 dist/
 frontend/dist/
+/video/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
