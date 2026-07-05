@@ -153,6 +153,28 @@ def test_export_json_preserves_unicode_content():
     assert '"value": "中文内容"' in payload
 
 
+def test_export_json_compacts_session_payload_for_user_export():
+    payload = build_markdown_session_payload()
+    payload["run_id"] = "run123"
+    payload["run_events"] = [{"type": "status", "payload": {"content": "working"}}]
+    payload["projection"] = {"dialogue_history": payload["dialogue_history"]}
+    payload["shared_knowledge"] = [{"type": "memo", "content": "internal"}]
+    payload["agent_configs"] = {"judge": {"model": "secret"}}
+    payload["reasoning_config"] = {"consensus_enabled": True}
+    payload["speech_config"] = {"proposer_max_chars": 0}
+
+    exported = json.loads(export.export_json(payload))
+
+    assert exported["topic"] == "人工智能是否会改变教育"
+    assert exported["dialogue_history"] == payload["dialogue_history"]
+    assert "run_events" not in exported
+    assert "projection" not in exported
+    assert "shared_knowledge" not in exported
+    assert "agent_configs" not in exported
+    assert "reasoning_config" not in exported
+    assert "speech_config" not in exported
+
+
 def test_export_html_renders_static_reading_page_with_controls():
     html = export.export_html(build_markdown_session_payload())
 

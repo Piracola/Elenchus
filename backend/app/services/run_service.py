@@ -143,15 +143,7 @@ async def update_run_state(
     if summary is None:
         return None
     if state_snapshot is not None:
-        await _ledger.append_run_event(
-            run_id=run_id,
-            session_id=summary["session_id"],
-            event_type="projection_snapshot",
-            payload={"state_snapshot": state_snapshot},
-            source="runtime.snapshot",
-            phase="checkpoint",
-        )
-        await _projector.apply_event(run_id)
+        await _projector.apply_snapshot(run_id, state_snapshot)
     else:
         await _projector.rebuild_projection(run_id)
     return summary

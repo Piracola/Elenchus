@@ -4,9 +4,9 @@ from typing import Any, Awaitable, Callable
 
 from sqlalchemy import desc, select
 
-from app.models.ledger import RunEventRecord, RunProjectionRecord, RunRecord, SessionRecord
+from app.models.ledger import RunProjectionRecord, RunRecord, SessionRecord
 
-from .state import event_to_dict, session_status_from_run
+from .state import session_status_from_run
 
 
 async def build_export_payload(
@@ -37,7 +37,6 @@ async def build_export_payload(
 
     projection = await rebuild_projection(run.id) if run is not None else None
     projected_data = projection.projection if projection and isinstance(projection.projection, dict) else {}
-    events = await _events_for_export(session_factory, run.id) if run is not None else []
     return {
         "id": session.id,
         "session_id": session.id,
@@ -62,16 +61,4 @@ async def build_export_payload(
         "mode_artifacts": projected_data.get("mode_artifacts", []),
         "current_mode_report": projected_data.get("current_mode_report"),
         "final_mode_report": projected_data.get("final_mode_report"),
-        "run_events": events,
-        "projection": projected_data,
     }
-
-
-async def _events_for_export(session_factory: Any, run_id: str) -> list[dict[str, Any]]:
-    async with session_factory() as db:
-        result = await db.execute(
-            select(RunEventRecord)
-            .where(RunEventRecord.run_id == run_id)
-            .order_by(RunEventRecord.seq)
-        )
-        return [event_to_dict(record) for record in result.scalars()]

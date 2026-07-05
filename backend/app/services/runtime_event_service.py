@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.runtime.event_persistence import should_persist_runtime_event
 from app.services import run_service
 from app.text_repair import repair_text_tree
 
@@ -30,6 +31,12 @@ async def create_runtime_event(event: dict[str, Any]) -> dict[str, Any]:
     run_id = record["run_id"]
     session_id = record["session_id"]
     if not run_id or not session_id:
+        return record
+    if not should_persist_runtime_event(
+        record["type"],
+        record["payload"],
+        source=record["source"],
+    ):
         return record
 
     return await run_service.append_run_event(

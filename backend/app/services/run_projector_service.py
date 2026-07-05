@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from app.db.database import get_session_factory
 from app.models.ledger import RunEventRecord, RunProjectionRecord, RunRecord, SessionRecord
+from app.services.session_service_helpers import sanitize_state_snapshot
 
 from .run_projector.events import apply_event_to_projection
 from .run_projector.export import build_export_payload
@@ -105,6 +106,49 @@ class RunProjectorService:
             else:
                 projection.latest_seq = latest_seq
                 projection.projection = projected_data
+            sync_projection_record(projection, run, projected_data)
+            await db.commit()
+            return projection
+
+    async def apply_snapshot(
+        self,
+        run_id: str,
+        state_snapshot: dict[str, Any],
+    ) -> RunProjectionRecord | None:
+        async with self._session_factory() as db:
+            run = await db.get(RunRecord, run_id)
+            if run is None:
+                return None
+            session = await db.get(SessionRecord, run.session_id)
+            if session is None:
+                return None
+
+            projection = await db.get(RunProjectionRecord, run_id)
+            if projection is None:
+                projected_data = default_projection(session)
+                context_entries, builtin_docs = await document_projection_entries(db, session.id)
+                if context_entries:
+                    projected_data["shared_knowledge"] = context_entries
+                if builtin_docs:
+                    projected_data["builtin_reference_docs"] = builtin_docs
+                projection = RunProjectionRecord(
+                    run_id=run.id,
+                    session_id=run.session_id,
+                    version=0,
+                    status=run.status,
+                    current_turn=run.current_turn,
+                    latest_seq=run.latest_seq,
+                    node="",
+                    status_message="",
+                    projection=projected_data,
+                    updated_at=utcnow(),
+                )
+                db.add(projection)
+            else:
+                projected_data = dict(projection.projection or {})
+
+            projected_data.update(sanitize_state_snapshot(state_snapshot))
+            projection.latest_seq = max(int(projection.latest_seq or 0), int(run.latest_seq or 0))
             sync_projection_record(projection, run, projected_data)
             await db.commit()
             return projection

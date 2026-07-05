@@ -124,6 +124,84 @@ async def test_runtime_bus_refreshes_sequence_when_repository_moves_ahead():
 
 
 @pytest.mark.asyncio
+async def test_runtime_bus_does_not_advance_persisted_sequence_for_speech_tokens():
+    captured: list[tuple[str, dict[str, object]]] = []
+
+    async def sink(run_id: str, message: dict[str, object]) -> None:
+        captured.append((run_id, message))
+
+    repository = _Repository()
+    bus = RuntimeBus(sink, repository=repository)
+
+    first = await bus.emit(
+        run_id="run123abcdef",
+        session_id="session12345",
+        event_type="status",
+        payload={"content": "first"},
+        source="test",
+    )
+    token = await bus.emit(
+        run_id="run123abcdef",
+        session_id="session12345",
+        event_type="speech_token",
+        payload={"token": "hello"},
+        source="test",
+    )
+    second = await bus.emit(
+        run_id="run123abcdef",
+        session_id="session12345",
+        event_type="status",
+        payload={"content": "second"},
+        source="test",
+    )
+
+    assert first["seq"] == 1
+    assert token["seq"] == -1
+    assert second["seq"] == 2
+    assert [event["type"] for event in repository.persisted] == ["status", "status"]
+    assert [message["seq"] for _, message in captured] == [1, -1, 2]
+
+
+@pytest.mark.asyncio
+async def test_runtime_bus_does_not_persist_transient_progress_events():
+    captured: list[tuple[str, dict[str, object]]] = []
+
+    async def sink(run_id: str, message: dict[str, object]) -> None:
+        captured.append((run_id, message))
+
+    repository = _Repository()
+    bus = RuntimeBus(sink, repository=repository)
+
+    heartbeat = await bus.emit(
+        run_id="run123abcdef",
+        session_id="session12345",
+        event_type="status",
+        payload={"content": "still working", "heartbeat": True, "elapsed_seconds": 3},
+        source="runtime.node.judge.heartbeat",
+    )
+    speech_start = await bus.emit(
+        run_id="run123abcdef",
+        session_id="session12345",
+        event_type="speech_start",
+        payload={"role": "proposer"},
+        source="runtime.node.speaker",
+    )
+    persisted = await bus.emit(
+        run_id="run123abcdef",
+        session_id="session12345",
+        event_type="speech_end",
+        payload={"role": "proposer", "content": "正式发言"},
+        source="runtime.node.speaker",
+    )
+
+    assert heartbeat["seq"] == -1
+    assert speech_start["seq"] == -1
+    assert persisted["seq"] == 1
+    assert [event["type"] for event in repository.persisted] == ["speech_end"]
+    assert [message["seq"] for _, message in captured] == [-1, -1, 1]
+
+
+@pytest.mark.asyncio
 async def test_runtime_bus_repairs_mojibake_payloads_before_delivery():
     captured: list[tuple[str, dict[str, object]]] = []
 

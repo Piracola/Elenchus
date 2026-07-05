@@ -46,7 +46,7 @@ async def test_run_projection_can_be_rebuilt_after_manual_deletion(db_session):
 
 
 @pytest.mark.asyncio
-async def test_snapshot_event_rebuilds_projection_after_manual_deletion(db_session):
+async def test_snapshot_updates_projection_without_runtime_event(db_session):
     session = await session_service.create_session(
         SessionCreate(topic="Snapshot rebuild"),
     )
@@ -80,17 +80,56 @@ async def test_snapshot_event_rebuilds_projection_after_manual_deletion(db_sessi
         },
     )
 
-    async with run_service._ledger._session_factory() as db:  # noqa: SLF001
-        projection = await db.get(RunProjectionRecord, run_id)
-        if projection is not None:
-            await db.delete(projection)
-            await db.commit()
-
     rebuilt = await run_service.get_run_projection(run_id)
+    events = await run_service.list_run_events(run_id)
 
     assert rebuilt is not None
     assert rebuilt.projection["dialogue_history"][0]["content"] == "persisted by event"
     assert rebuilt.projection["shared_knowledge"] == [{"type": "memo", "content": "ledger fact"}]
+    assert events == []
+
+
+@pytest.mark.asyncio
+async def test_update_run_state_applies_snapshot_without_persisting_event(db_session):
+    session = await session_service.create_session(
+        SessionCreate(topic="Snapshot compact"),
+    )
+    created = await run_service.create_run(
+        session["id"],
+        topic=session["topic"],
+        participants=session["participants"],
+        max_turns=session["max_turns"],
+        agent_configs=session.get("agent_configs", {}),
+    )
+    run_id = created["run"]["id"]
+
+    await run_service.update_run_state(
+        run_id,
+        current_turn=1,
+        status="in_progress",
+        state_snapshot={
+            "dialogue_history": [
+                {
+                    "role": "proposer",
+                    "agent_name": "Proposer",
+                    "content": "stored in projection only",
+                    "citations": [],
+                    "timestamp": "2026-03-20T00:00:00Z",
+                }
+            ],
+            "shared_knowledge": [],
+            "current_scores": {},
+            "cumulative_scores": {},
+            "agent_configs": {},
+        },
+    )
+
+    projection = await run_service.get_run_projection(run_id)
+    events = await run_service.list_run_events(run_id)
+
+    assert projection is not None
+    assert projection.projection["dialogue_history"][0]["content"] == "stored in projection only"
+    assert [event["type"] for event in events] == []
 
 
 @pytest.mark.asyncio

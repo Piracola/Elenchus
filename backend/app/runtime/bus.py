@@ -13,6 +13,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from app.runtime.event_schema import RuntimeEvent, build_runtime_event
+from app.runtime.event_persistence import should_persist_runtime_event
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +189,11 @@ class RuntimeBus:
         source: str = "runtime",
         phase: str | None = None,
     ) -> RuntimeEvent:
+        persisted = should_persist_runtime_event(
+            event_type,
+            payload,
+            source=source,
+        )
         event = await self.create_event(
             run_id=run_id,
             session_id=session_id,
@@ -195,10 +201,9 @@ class RuntimeBus:
             payload=payload,
             source=source,
             phase=phase,
+            persisted=persisted,
         )
-        # Skip persistence for high-frequency events (speech_token, heartbeat)
-        # to avoid database write bottleneck during streaming
-        if self._repository is not None and event_type not in ("speech_token",):
+        if self._repository is not None and persisted:
             persisted_event = await self._repository.persist_runtime_event(event)
             if isinstance(persisted_event, dict):
                 event = persisted_event

@@ -76,6 +76,32 @@ async def test_runtime_event_history_writes_sqlite_run_events(db_session):
 
 
 @pytest.mark.asyncio
+async def test_runtime_event_history_skips_transient_progress_events(db_session):
+    session = await session_service.create_session(
+        SessionCreate(topic="Runtime transient events"),
+    )
+    session_id = session["id"]
+    created = await run_service.create_run(
+        session_id,
+        topic=session["topic"],
+        participants=session["participants"],
+        max_turns=session["max_turns"],
+        agent_configs=session.get("agent_configs", {}),
+    )
+    run_id = created["run"]["id"]
+
+    event = make_event(1, run_id=run_id, session_id=session_id)
+    event["source"] = "runtime.node.judge.heartbeat"
+    event["payload"] = {"content": "still judging", "heartbeat": True}
+
+    returned = await runtime_event_service.create_runtime_event(event)
+
+    assert returned["seq"] == 1
+    assert await run_service.list_run_events(run_id) == []
+    assert await runtime_event_service.get_latest_runtime_event_seq(run_id) == 0
+
+
+@pytest.mark.asyncio
 async def test_delete_runtime_events_preserves_run_created_payload(db_session):
     session = await session_service.create_session(
         SessionCreate(topic="Clear runtime events"),
