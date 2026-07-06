@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Elenchus 视频生成器</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          </div>
+          <div>
+            <p class="kicker">Elenchus Video</p>
+            <h1>视频生成控制台</h1>
+          </div>
+        </div>
+        <div class="topbar-meta">
+          <span class="status-pill" id="statusPill">等待导入</span>
+        </div>
+      </header>
+
+      <aside class="control-rail">
+        <section class="panel import-panel">
+          <div class="panel-title">
+            <span class="panel-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            </span>
+            <h2>导入会话</h2>
+          </div>
+          <label class="drop-zone" id="dropZone">
+            <input id="fileInput" type="file" accept=".json,application/json" />
+            <span class="drop-title">点击或拖入 Elenchus 导出 JSON</span>
+            <span class="drop-subtitle">拖入后会自动写入 Remotion 输入文件，可直接渲染</span>
+          </label>
+          <div class="field-row">
+            <label class="text-field">
+              <span>视频标题覆盖</span>
+              <input id="titleInput" type="text" placeholder="留空则使用导出 JSON 的辩题" />
+            </label>
+            <button class="primary" id="saveButton" type="button" disabled title="把当前会话和标题写入 Remotion 输入文件">写入并应用</button>
+          </div>
+        </section>
+
+        <section class="panel summary-panel">
+          <div class="panel-title">
+            <span class="panel-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+            </span>
+            <h2>会话摘要</h2>
+            <span class="panel-badge" id="sourceName">当前示例数据</span>
+          </div>
+          <div class="summary-grid">
+            <article class="metric topic-metric">
+              <span>辩题</span>
+              <strong id="topicMetric">-</strong>
+            </article>
+            <article class="metric">
+              <span>轮次</span>
+              <strong id="turnMetric">-</strong>
+            </article>
+            <article class="metric">
+              <span>发言</span>
+              <strong id="speechMetric">-</strong>
+            </article>
+            <article class="metric">
+              <span>裁判评分</span>
+              <strong id="scoreMetric">-</strong>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel actions-panel">
+          <div class="panel-title">
+            <span class="panel-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+            </span>
+            <h2>操作</h2>
+          </div>
+          <div class="action-grid">
+            <button id="studioButton" type="button" class="action-studio">
+              <span class="btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+              </span>
+              打开 Studio
+            </button>
+            <button id="stillButton" type="button" class="action-still">
+              <span class="btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+              </span>
+              抽帧检查
+            </button>
+            <button id="renderButton" type="button" class="primary action-render">
+              <span class="btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              </span>
+              渲染 MP4
+            </button>
+            <button id="fastRenderButton" type="button" class="action-render">
+              <span class="btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+              </span>
+              快速渲染
+            </button>
+            <button id="openOutButton" type="button" class="action-folder">
+              <span class="btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+              </span>
+              打开输出目录
+            </button>
+          </div>
+        </section>
+
+        <section class="panel config-panel">
+          <div class="panel-title">
+            <span class="panel-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            </span>
+            <h2>生成配置</h2>
+            <span class="panel-badge" id="configStatus">默认配置</span>
+          </div>
+
+          <div class="config-tabs">
+            <button class="config-tab active" id="videoConfigTab" type="button">
+              <span class="tab-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+              </span>
+              视频
+            </button>
+            <button class="config-tab" id="ttsConfigTab" type="button">
+              <span class="tab-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+              </span>
+              TTS
+            </button>
+          </div>
+
+          <div class="config-section" id="videoConfigSection">
+            <div class="simple-video-grid">
+              <label class="wide-field">
+                画质和体积
+                <select id="videoPresetInput">
+                  <option value="recommended">推荐：清晰，体积较小</option>
+                  <option value="tiny">更小：适合快速分享</option>
+                  <option value="sharp">更清晰：体积会更大</option>
+                  <option value="custom">自定义：使用高级参数</option>
+                </select>
+              </label>
+              <label>
+                编码兼容性
+                <select id="codecProfileInput">
+                  <option value="compatible">兼容优先</option>
+                  <option value="small">体积优先</option>
+                </select>
+              </label>
+              <label>
+                音频
+                <select id="audioModeInput">
+                  <option value="normal">正常保留</option>
+                  <option value="small">压小音频</option>
+                  <option value="muted">不要音频</option>
+                </select>
+              </label>
+              <label class="wide-field">
+                渲染分辨率
+                <select id="scaleInput">
+                  <option value="1">原始 1920×1080</option>
+                  <option value="0.75">较高 1440×810</option>
+                  <option value="0.5">中等 960×540（预览推荐）</option>
+                  <option value="0.25">最低 480×270</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="preset-summary" id="videoPresetSummary">推荐设置会自动限制视频码率，适合先出片检查。</div>
+            <div class="config-warning" id="codecWarning" hidden>
+              <span class="warning-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+              </span>
+              当前编码格式在浏览器预览中可能无法播放，但输出文件本身是正常的。如需在控制台直接预览视频，建议切换为 H.264。
+            </div>
+
+            <details class="advanced-config" id="advancedVideoConfig">
+              <summary>高级参数</summary>
+              <div class="config-grid">
+                <label>
+                  编码格式
+                  <select id="videoCodecInput">
+                    <option value="h264">H.264</option>
+                    <option value="h265">H.265</option>
+                    <option value="vp8">VP8</option>
+                    <option value="vp9">VP9</option>
+                  </select>
+                </label>
+                <label>
+                  质量模式
+                  <select id="rateControlInput">
+                    <option value="bitrate">固定码率</option>
+                    <option value="crf">CRF</option>
+                  </select>
+                </label>
+                <label>
+                  CRF 质量
+                  <input id="crfInput" type="number" min="0" max="51" step="1" />
+                </label>
+                <label>
+                  视频码率
+                  <input id="videoBitrateInput" type="text" placeholder="2500k" />
+                </label>
+                <label>
+                  音频码率
+                  <input id="audioBitrateInput" type="text" placeholder="128k" />
+                </label>
+                <label>
+                  最大码率
+                  <input id="maxRateInput" type="text" placeholder="3500k" />
+                </label>
+                <label>
+                  码率缓冲
+                  <input id="bufferSizeInput" type="text" placeholder="7000k" />
+                </label>
+                <label>
+                  渲染并发
+                  <input id="renderConcurrencyInput" type="text" placeholder="50%" />
+                </label>
+                <label>
+                  像素格式
+                  <select id="pixelFormatInput">
+                    <option value="yuv420p">yuv420p</option>
+                    <option value="yuva420p">yuva420p</option>
+                    <option value="yuv444p">yuv444p</option>
+                  </select>
+                </label>
+                <label>
+                  x264 预设
+                  <select id="x264PresetInput">
+                    <option value="ultrafast">ultrafast</option>
+                    <option value="veryfast">veryfast</option>
+                    <option value="faster">faster</option>
+                    <option value="fast">fast</option>
+                    <option value="medium">medium</option>
+                    <option value="slow">slow</option>
+                  </select>
+                </label>
+              </div>
+              <label class="check-row">
+                <input id="mutedInput" type="checkbox" />
+                不渲染音频
+              </label>
+            </details>
+          </div>
+
+          <div class="config-section" id="ttsConfigSection" hidden>
+            <div class="config-grid">
+              <label>
+                服务商
+                <select id="ttsProviderInput">
+                  <option value="mimo">MiMo</option>
+                  <option value="custom">自定义</option>
+                </select>
+              </label>
+              <label>
+                输出格式
+                <select id="ttsFormatInput">
+                  <option value="mp3">MP3</option>
+                  <option value="wav">WAV</option>
+                  <option value="aac">AAC</option>
+                </select>
+              </label>
+              <label class="wide-field">
+                API 地址
+                <input id="ttsBaseUrlInput" type="url" placeholder="https://..." />
+              </label>
+              <label class="wide-field">
+                API Key
+                <input id="ttsApiKeyInput" type="password" autocomplete="off" />
+              </label>
+              <label>
+                模型
+                <input id="ttsModelInput" type="text" placeholder="例如 tts-..." />
+              </label>
+              <label>
+                音色
+                <input id="ttsVoiceInput" type="text" placeholder="voice id" />
+              </label>
+              <label>
+                采样率
+                <input id="ttsSampleRateInput" type="number" min="8000" step="1000" />
+              </label>
+              <label>
+                语速
+                <input id="ttsSpeedInput" type="number" min="0.5" max="2" step="0.05" />
+              </label>
+              <label>
+                TTS 并发
+                <input id="ttsConcurrencyInput" type="number" min="1" max="8" step="1" />
+              </label>
+            </div>
+            <button class="primary" id="generateTtsButton" type="button">生成配音</button>
+          </div>
+
+          <div class="config-actions">
+            <button class="secondary" id="resetConfigButton" type="button">恢复默认</button>
+            <button class="primary" id="saveConfigButton" type="button">保存配置</button>
+          </div>
+        </section>
+
+        <section class="panel command-panel">
+          <div class="panel-title">
+            <span class="panel-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+            </span>
+            <h2>命令日志</h2>
+            <span class="panel-badge" id="logHint">最近一次执行</span>
+          </div>
+          <pre id="logOutput">暂无日志。</pre>
+        </section>
+      </aside>
+
+      <main class="stage">
+        <section class="panel preview-panel">
+          <div class="preview-head">
+            <div class="panel-title">
+              <span class="panel-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              </span>
+              <div>
+                <h2>输出预览</h2>
+                <span class="preview-subtitle" id="assetMeta">等待生成截图或视频</span>
+              </div>
+            </div>
+            <div class="preview-tools">
+              <div class="segmented" aria-label="预览类型">
+                <button class="segment active" id="frameTab" type="button">截图</button>
+                <button class="segment" id="videoTab" type="button">视频</button>
+              </div>
+              <button id="refreshAssetsButton" type="button" class="tool-button" title="刷新">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="preview-canvas">
+            <div class="preview-aspect-shell">
+              <img id="framePreview" class="preview-media" alt="抽帧预览" />
+              <video id="videoPreview" class="preview-media" controls preload="metadata" playsinline></video>
+              <div id="emptyPreview" class="empty-preview">
+                <div class="empty-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                </div>
+                <strong>暂无可预览产物</strong>
+                <span id="emptyPreviewText">点击“抽帧检查”生成截图，或点击“渲染 MP4”生成视频。</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="asset-grid">
+            <div class="asset-card" id="frameAsset">
+              <div class="asset-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+              </div>
+              <div class="asset-info">
+                <span>截图</span>
+                <strong>未生成</strong>
+              </div>
+            </div>
+            <div class="asset-card" id="videoAsset">
+              <div class="asset-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              </div>
+              <div class="asset-info">
+                <span>视频</span>
+                <strong>未生成</strong>
+              </div>
+            </div>
+            <div class="asset-card" id="fastVideoAsset">
+              <div class="asset-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+              </div>
+              <div class="asset-info">
+                <span>快速视频</span>
+                <strong>未生成</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel round-panel">
+          <div class="panel-title">
+            <span class="panel-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+            </span>
+            <h2>轮次预览</h2>
+          </div>
+          <div id="roundList" class="round-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>
