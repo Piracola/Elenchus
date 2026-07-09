@@ -24,9 +24,22 @@ if (-not (Test-Command "npm")) {
     throw "npm was not found. Please install Node.js/npm or add npm to PATH."
 }
 
+if (-not (Test-Command "python")) {
+    throw "Python was not found. Edge TTS needs Python. Please install Python 3 or add python to PATH."
+}
+
 if (-not (Test-Path (Join-Path $RootDir "node_modules"))) {
     Write-Step "Installing dependencies for first launch..."
     npm install
+}
+
+$edgeTtsCheck = & python -c "import edge_tts" 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Step "Installing Edge TTS for voice generation..."
+    python -m pip install edge-tts
+    if ($LASTEXITCODE -ne 0) {
+        throw "edge-tts installation failed. Please run manually: python -m pip install edge-tts"
+    }
 }
 
 $existing = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue

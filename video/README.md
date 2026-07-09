@@ -68,9 +68,15 @@ round 场景
 
 ## TTS 配音
 
-网页控制台的「TTS」配置页填入服务商地址、API Key、模型、音色等参数后，点击「生成配音」即可：
+网页控制台的「TTS」配置页默认使用 Edge TTS。Edge TTS 通过 Python 包 `edge-tts` 调用，不需要 API Key；启动脚本会自动检查并安装它，也可以手动安装：
 
-1. 按 `video-script.json` 中的辩手 segment 逐段调用 MiMo / 自定义 TTS 接口。
+```bash
+python -m pip install edge-tts
+```
+
+点击「生成配音」后：
+
+1. 按 `video-script.json` 中的辩手 segment 逐段调用 Edge TTS。MiMo / 自定义接口仍保留为备用服务商。
 2. 将同一轮内的 segment 音频拼接为 `public/audio/<scene-id>.<format>`。
 3. 把 `session-audio.json` 写入 `public/data/`，记录 scene 音频、`scriptHash`、segment 级 `startFrame` / `endFrame`。
 4. Remotion 和 Canvas 快速渲染都用同一套 segment cue 生成高亮时间轴。

@@ -264,11 +264,12 @@
               <label>
                 服务商
                 <select id="ttsProviderInput">
+                  <option value="edge">Edge TTS（推荐）</option>
                   <option value="mimo">MiMo</option>
                   <option value="custom">自定义</option>
                 </select>
               </label>
-              <label>
+              <label id="ttsFormatField">
                 输出格式
                 <select id="ttsFormatInput">
                   <option value="mp3">MP3</option>
@@ -276,23 +277,23 @@
                   <option value="aac">AAC</option>
                 </select>
               </label>
-              <label class="wide-field">
+              <label class="wide-field" id="ttsBaseUrlField">
                 API 地址
                 <input id="ttsBaseUrlInput" type="url" placeholder="https://..." />
               </label>
-              <label class="wide-field">
+              <label class="wide-field" id="ttsApiKeyField">
                 API Key
                 <input id="ttsApiKeyInput" type="password" autocomplete="off" />
               </label>
-              <label>
+              <label id="ttsModelField">
                 模型
                 <input id="ttsModelInput" type="text" placeholder="例如 tts-..." />
               </label>
               <label>
                 音色
-                <input id="ttsVoiceInput" type="text" placeholder="voice id" />
+                <input id="ttsVoiceInput" type="text" placeholder="zh-CN-XiaoxiaoNeural" />
               </label>
-              <label>
+              <label id="ttsSampleRateField">
                 采样率
                 <input id="ttsSampleRateInput" type="number" min="8000" step="1000" />
               </label>
@@ -305,6 +306,7 @@
                 <input id="ttsConcurrencyInput" type="number" min="1" max="8" step="1" />
               </label>
             </div>
+            <div class="preset-summary" id="ttsProviderSummary">Edge TTS 不需要 API Key，适合先生成自然中文配音。</div>
             <button class="primary" id="generateTtsButton" type="button">生成配音</button>
           </div>
 

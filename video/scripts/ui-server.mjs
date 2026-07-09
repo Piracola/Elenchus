@@ -16,6 +16,7 @@ const localConfigPath = join(rootDir, "config.local.json");
 const remotionCli = join(rootDir, "node_modules", "@remotion", "cli", "remotion-cli.js");
 const tsxCli = join(rootDir, "node_modules", "tsx", "dist", "cli.mjs");
 const ffmpegPath = join(rootDir, "node_modules", "@remotion", "compositor-win32-x64-msvc", "ffmpeg.exe");
+const edgeTtsBridgePath = join(rootDir, "scripts", "edge_tts_bridge.py");
 const host = "127.0.0.1";
 const port = Number(process.env.PORT || 4317);
 
@@ -50,15 +51,15 @@ const defaultConfig = {
     muted: false,
   },
   tts: {
-    provider: "mimo",
+    provider: "edge",
     baseUrl: "",
     apiKey: "",
     model: "",
-    voice: "mimo_default",
-    format: "wav",
+    voice: "zh-CN-XiaoxiaoNeural",
+    format: "mp3",
     sampleRate: "24000",
     speed: "1",
-    concurrency: "2",
+    concurrency: "1",
   },
   script: {
     textPreset: "standard",
@@ -702,6 +703,111 @@ const safeTtsFormat = (format) => {
   return ["wav", "mp3", "aac"].includes(value) ? value : "wav";
 };
 
+const ttsProvider = (tts) => String(tts?.provider || "edge").trim().toLowerCase();
+
+const effectiveTtsFormat = (tts) => (ttsProvider(tts) === "edge" ? "mp3" : safeTtsFormat(tts?.format));
+
+const edgeVoice = (tts) => {
+  const voice = String(tts?.voice || "").trim();
+  if (!voice || voice === "mimo_default") {
+    return "zh-CN-XiaoxiaoNeural";
+  }
+  return voice;
+};
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const edgeRateFromSpeed = (speed) => {
+  const numeric = Number(speed);
+  const rate = Number.isFinite(numeric) && numeric > 0 ? numeric : 1;
+  const percent = clamp(Math.round((rate - 1) * 100), -50, 100);
+  return `${percent >= 0 ? "+" : ""}${percent}%`;
+};
+
+const edgeProsodyValue = (value, fallback) => {
+  const text = String(value || "").trim();
+  return text || fallback;
+};
+
+const findPythonCommand = () => {
+  const candidates = [
+    process.env.PYTHON ? { command: process.env.PYTHON, args: [] } : null,
+    { command: "python", args: [] },
+    { command: "py", args: ["-3"] },
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const result = spawnSync(candidate.command, [...candidate.args, "--version"], {
+      cwd: rootDir,
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    if (result.status === 0) {
+      return candidate;
+    }
+  }
+
+  return null;
+};
+
+const synthesizeEdgeAudioFile = async (tts, text, outputPath) => {
+  const python = findPythonCommand();
+  if (!python) {
+    throw new Error("未找到 Python。Edge TTS 需要 Python 运行环境，请先安装 Python 3。");
+  }
+
+  const tempDir = mkdtempSync(join(tmpdir(), "elenchus-edge-tts-"));
+  const textPath = join(tempDir, "input.txt");
+  writeFileSync(textPath, text, "utf8");
+
+  const args = [
+    ...python.args,
+    edgeTtsBridgePath,
+    "--text-file",
+    textPath,
+    "--output",
+    outputPath,
+    "--voice",
+    edgeVoice(tts),
+    "--rate",
+    edgeRateFromSpeed(tts.speed),
+    "--volume",
+    edgeProsodyValue(tts.volume, "+0%"),
+    "--pitch",
+    edgeProsodyValue(tts.pitch, "+0Hz"),
+  ];
+
+  try {
+    await new Promise((resolveRun, reject) => {
+      let stderr = "";
+      const child = spawn(python.command, args, {
+        cwd: rootDir,
+        stdio: ["ignore", "ignore", "pipe"],
+        windowsHide: true,
+      });
+
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk.toString();
+        if (stderr.length > 16000) {
+          stderr = stderr.slice(-16000);
+        }
+      });
+      child.on("error", reject);
+      child.on("close", (code) => {
+        if (code === 0 && existsSync(outputPath) && statSync(outputPath).size > 0) {
+          resolveRun();
+          return;
+        }
+
+        const detail = stderr.trim().slice(-800);
+        reject(new Error(detail || `Edge TTS 退出码 ${code}`));
+      });
+    });
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+};
+
 const parseTtsResponse = async (response) => {
   if (!response.ok) {
     const contentType = response.headers.get("content-type") || "";
@@ -836,6 +942,8 @@ const isRetryableTtsError = (error) => {
 const synthesizeChunkFiles = async (tts, text, workDir, prefix, maxChars = TTS_CHUNK_TARGET_CHARS) => {
   const chunks = splitTextForTts(text, maxChars);
   const files = [];
+  const format = effectiveTtsFormat(tts);
+  const isEdge = ttsProvider(tts) === "edge";
 
   for (const [index, chunk] of chunks.entries()) {
     const chunkText = cleanTextForTts(chunk);
@@ -843,10 +951,14 @@ const synthesizeChunkFiles = async (tts, text, workDir, prefix, maxChars = TTS_C
       continue;
     }
 
-    const filePath = join(workDir, `${prefix}-${String(index + 1).padStart(3, "0")}.${safeTtsFormat(tts.format)}`);
+    const filePath = join(workDir, `${prefix}-${String(index + 1).padStart(3, "0")}.${format}`);
     try {
-      const buffer = await fetchAudioBuffer(tts, chunkText);
-      writeFileSync(filePath, buffer);
+      if (isEdge) {
+        await synthesizeEdgeAudioFile(tts, chunkText, filePath);
+      } else {
+        const buffer = await fetchAudioBuffer(tts, chunkText);
+        writeFileSync(filePath, buffer);
+      }
       files.push(filePath);
     } catch (error) {
       if (!isRetryableTtsError(error) || chunkText.length <= TTS_RETRY_MIN_CHARS) {
@@ -908,8 +1020,11 @@ const safeFileToken = (value) =>
 const generateTts = async (request, response) => {
   const config = loadConfig();
   const tts = config.tts;
+  const provider = ttsProvider(tts);
+  const providerLabel = provider === "edge" ? "Edge TTS" : provider === "mimo" ? "MiMo TTS" : "自定义 TTS";
+  const format = effectiveTtsFormat(tts);
 
-  if (!tts.baseUrl || !tts.apiKey) {
+  if (provider !== "edge" && (!tts.baseUrl || !tts.apiKey)) {
     jsonResponse(response, 400, { ok: false, message: "请先配置 TTS 地址和 API Key。" });
     return;
   }
@@ -930,9 +1045,10 @@ const generateTts = async (request, response) => {
 
   mkdirSync(audioDir, { recursive: true });
 
-  const scenes = await mapLimit(requiredTurns, Number(tts.concurrency) || 2, async ({ round, segments }) => {
+  const concurrency = clamp(Math.round(Number(tts.concurrency) || (provider === "edge" ? 1 : 2)), 1, provider === "edge" ? 2 : 8);
+  const scenes = await mapLimit(requiredTurns, concurrency, async ({ round, segments }) => {
     const id = round.id;
-    const fileName = `${id}.${safeTtsFormat(tts.format)}`;
+    const fileName = `${id}.${format}`;
     const audioPath = join(audioDir, fileName);
     const audioFile = `audio/${fileName}`;
     const tempDir = mkdtempSync(join(tmpdir(), `elenchus-${id}-`));
@@ -949,9 +1065,9 @@ const generateTts = async (request, response) => {
         }
 
         const token = `${safeFileToken(segment.id)}-${String(index + 1).padStart(3, "0")}`;
-        const segmentPath = join(tempDir, `${token}.${safeTtsFormat(tts.format)}`);
+        const segmentPath = join(tempDir, `${token}.${format}`);
         const chunkFiles = await synthesizeChunkFiles(tts, text, tempDir, token);
-        await concatAudioFiles(chunkFiles, segmentPath, safeTtsFormat(tts.format));
+        await concatAudioFiles(chunkFiles, segmentPath, format);
         const metadata = await parseFile(segmentPath);
         const segmentFrames = Math.ceil((metadata.format.duration || 0) * FPS);
         if (segmentFrames <= 0) {
@@ -972,7 +1088,7 @@ const generateTts = async (request, response) => {
       if (segmentAudioFiles.length === 0) {
         return null;
       }
-      await concatAudioFiles(segmentAudioFiles, audioPath, safeTtsFormat(tts.format));
+      await concatAudioFiles(segmentAudioFiles, audioPath, format);
       const metadata = await parseFile(audioPath);
       const durationFrames = Math.max(cursorFrame, Math.ceil((metadata.format.duration || 0) * FPS));
       if (durationFrames <= 0) {
@@ -998,8 +1114,8 @@ const generateTts = async (request, response) => {
       ok: false,
       message:
         okScenes.length === 0
-          ? `配音生成失败。${failedScenes.map((s) => `${s.id}: ${s.error}`).join("；")}`
-          : `配音未全部生成成功。已完成 ${okScenes.length} 轮，失败 ${failedScenes.length} 轮。${failedScenes.map((s) => `${s.id}: ${s.error}`).join("；")}`,
+          ? `${providerLabel} 配音生成失败。${failedScenes.map((s) => `${s.id}: ${s.error}`).join("；")}`
+          : `${providerLabel} 配音未全部生成成功。已完成 ${okScenes.length} 轮，失败 ${failedScenes.length} 轮。${failedScenes.map((s) => `${s.id}: ${s.error}`).join("；")}`,
       scenes: okScenes,
       failed: failedScenes,
     });
@@ -1028,7 +1144,7 @@ const generateTts = async (request, response) => {
 
   jsonResponse(response, 200, {
     ok: true,
-    message: `已为 ${okScenes.length} 个场景生成配音${failedScenes.length ? `，${failedScenes.length} 个失败` : ""}。`,
+    message: `${providerLabel} 已为 ${okScenes.length} 个场景生成配音${failedScenes.length ? `，${failedScenes.length} 个失败` : ""}。`,
     scenes: okScenes,
     failed: failedScenes,
   });

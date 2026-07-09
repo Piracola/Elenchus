@@ -144,15 +144,15 @@ const defaultConfig = {
     muted: false,
   },
   tts: {
-    provider: "mimo",
+    provider: "edge",
     baseUrl: "",
     apiKey: "",
     model: "",
-    voice: "mimo_default",
-    format: "wav",
+    voice: "zh-CN-XiaoxiaoNeural",
+    format: "mp3",
     sampleRate: "24000",
     speed: "1",
-    concurrency: "2",
+    concurrency: "1",
   },
   script: {
     textPreset: "standard",
@@ -227,6 +227,27 @@ const scriptPresetSettings = {
   detailed: "细致切分：约 140 字一段，高亮更细，TTS 请求次数会更多。",
 };
 
+const ttsProviderSettings = {
+  edge: {
+    summary: "Edge TTS 不需要 API Key，中文音色自然。输出会固定为 MP3，适合当前视频流程。",
+    defaultVoice: "zh-CN-XiaoxiaoNeural",
+    defaultFormat: "mp3",
+    defaultConcurrency: "1",
+  },
+  mimo: {
+    summary: "MiMo 作为备用接口保留。需要填写 API 地址、API Key、模型和音色。",
+    defaultVoice: "mimo_default",
+    defaultFormat: "wav",
+    defaultConcurrency: "2",
+  },
+  custom: {
+    summary: "自定义接口会按 OpenAI 兼容格式请求。需要填写 API 地址、API Key、模型和音色。",
+    defaultVoice: "",
+    defaultFormat: "wav",
+    defaultConcurrency: "2",
+  },
+};
+
 const mergeConfig = (config) => ({
   video: { ...defaultConfig.video, ...(config?.video || {}) },
   tts: { ...defaultConfig.tts, ...(config?.tts || {}) },
@@ -268,6 +289,45 @@ const renderVideoPresetSummary = () => {
 const renderScriptPresetSummary = () => {
   const preset = readValue("scriptPresetInput") || "standard";
   $("scriptPresetSummary").textContent = scriptPresetSettings[preset] || scriptPresetSettings.standard;
+};
+
+const renderTtsProviderFields = () => {
+  const provider = readValue("ttsProviderInput") || "edge";
+  const isEdge = provider === "edge";
+  const settings = ttsProviderSettings[provider] || ttsProviderSettings.edge;
+
+  ["ttsBaseUrlField", "ttsApiKeyField", "ttsModelField", "ttsSampleRateField"].forEach((id) => {
+    const element = $(id);
+    if (element) {
+      element.hidden = isEdge;
+    }
+  });
+
+  $("ttsFormatInput").disabled = isEdge;
+  if (isEdge) {
+    setValue("ttsFormatInput", "mp3");
+    if (!readValue("ttsVoiceInput") || readValue("ttsVoiceInput") === "mimo_default") {
+      setValue("ttsVoiceInput", settings.defaultVoice);
+    }
+    if (!readValue("ttsConcurrencyInput") || Number(readValue("ttsConcurrencyInput")) > 2) {
+      setValue("ttsConcurrencyInput", settings.defaultConcurrency);
+    }
+  }
+
+  $("ttsProviderSummary").textContent = settings.summary;
+};
+
+const applyTtsProviderDefaults = () => {
+  const provider = readValue("ttsProviderInput") || "edge";
+  const settings = ttsProviderSettings[provider] || ttsProviderSettings.edge;
+  setValue("ttsFormatInput", settings.defaultFormat);
+  if (!readValue("ttsVoiceInput") || readValue("ttsVoiceInput") === "mimo_default" || provider === "edge") {
+    setValue("ttsVoiceInput", settings.defaultVoice);
+  }
+  if (!readValue("ttsConcurrencyInput") || provider === "edge") {
+    setValue("ttsConcurrencyInput", settings.defaultConcurrency);
+  }
+  renderTtsProviderFields();
 };
 
 const applySimpleVideoSelections = () => {
@@ -343,6 +403,7 @@ const renderConfig = () => {
   setValue("ttsSampleRateInput", tts.sampleRate);
   setValue("ttsSpeedInput", tts.speed);
   setValue("ttsConcurrencyInput", tts.concurrency);
+  renderTtsProviderFields();
   setValue("scriptPresetInput", script.textPreset);
   renderScriptPresetSummary();
 
@@ -864,6 +925,7 @@ const boot = async () => {
   $("ttsConfigTab").addEventListener("click", () => setConfigTab("tts"));
   $("scriptConfigTab").addEventListener("click", () => setConfigTab("script"));
   $("scriptPresetInput").addEventListener("change", renderScriptPresetSummary);
+  $("ttsProviderInput").addEventListener("change", applyTtsProviderDefaults);
   ["videoPresetInput", "codecProfileInput", "audioModeInput", "scaleInput"].forEach((id) => {
     $(id).addEventListener("change", applySimpleVideoSelections);
   });
@@ -902,7 +964,7 @@ const boot = async () => {
   $("generateTtsButton").addEventListener("click", async () => {
     setStatus("生成配音中", "running");
     setLogHint("TTS");
-    setLog("正在调用 MiMo TTS 生成每轮配音，请稍候...");
+    setLog(`正在调用 ${readValue("ttsProviderInput") === "edge" ? "Edge TTS" : "TTS"} 生成每轮配音，请稍候...`);
     try {
       const data = await postJson("/api/generate-tts");
       setStatus(data.ok ? "配音已生成" : "失败", data.ok ? "success" : "error");
