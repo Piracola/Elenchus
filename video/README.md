@@ -76,7 +76,7 @@ python -m pip install edge-tts
 
 点击「生成配音」后：
 
-1. 按 `video-script.json` 中的辩手 segment 逐段调用 Edge TTS。MiMo / 自定义接口仍保留为备用服务商。
+1. 按 `video-script.json` 中的辩手 segment 逐段调用 Edge TTS；正方、反方可以在控制台选择不同音色。MiMo / 自定义接口仍保留为备用服务商。
 2. 将同一轮内的 segment 音频拼接为 `public/audio/<scene-id>.<format>`。
 3. 把 `session-audio.json` 写入 `public/data/`，记录 scene 音频、`scriptHash`、segment 级 `startFrame` / `endFrame`。
 4. Remotion 和 Canvas 快速渲染都用同一套 segment cue 生成高亮时间轴。

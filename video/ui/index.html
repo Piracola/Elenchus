@@ -290,9 +290,25 @@
                 <input id="ttsModelInput" type="text" placeholder="例如 tts-..." />
               </label>
               <label>
-                音色
+                默认音色
                 <select id="ttsVoiceInput"></select>
               </label>
+              <div class="wide-field role-voice-field" id="ttsRoleVoicesField">
+                <div class="role-voice-head">
+                  <span>角色音色</span>
+                  <small>生成配音时按发言角色自动切换</small>
+                </div>
+                <div class="role-voice-grid">
+                  <label>
+                    正方
+                    <select id="ttsProposerVoiceInput"></select>
+                  </label>
+                  <label>
+                    反方
+                    <select id="ttsOpposerVoiceInput"></select>
+                  </label>
+                </div>
+              </div>
               <label id="ttsSampleRateField">
                 采样率
                 <input id="ttsSampleRateInput" type="number" min="8000" step="1000" />

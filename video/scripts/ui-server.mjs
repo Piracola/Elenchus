@@ -56,6 +56,10 @@ const defaultConfig = {
     apiKey: "",
     model: "",
     voice: "zh-CN-XiaoxiaoNeural",
+    roleVoices: {
+      proposer: "zh-CN-XiaoxiaoNeural",
+      opposer: "zh-CN-YunxiNeural",
+    },
     format: "mp3",
     sampleRate: "24000",
     speed: "1",
@@ -66,11 +70,17 @@ const defaultConfig = {
   },
 };
 
-const mergeConfig = (config) => ({
-  video: { ...defaultConfig.video, ...(config?.video || {}) },
-  tts: { ...defaultConfig.tts, ...(config?.tts || {}) },
-  script: { ...defaultConfig.script, ...(config?.script || {}) },
-});
+const mergeConfig = (config) => {
+  const tts = { ...defaultConfig.tts, ...(config?.tts || {}) };
+  return {
+    video: { ...defaultConfig.video, ...(config?.video || {}) },
+    tts: {
+      ...tts,
+      roleVoices: { ...defaultConfig.tts.roleVoices, ...(config?.tts?.roleVoices || {}) },
+    },
+    script: { ...defaultConfig.script, ...(config?.script || {}) },
+  };
+};
 
 const FPS = 30;
 const audioDir = join(rootDir, "public", "audio");
@@ -715,6 +725,19 @@ const edgeVoice = (tts) => {
   return voice;
 };
 
+const roleVoiceForTts = (tts, role) => {
+  if (ttsProvider(tts) !== "edge") {
+    return String(tts?.voice || "").trim();
+  }
+  const roleVoice = String(tts?.roleVoices?.[role] || "").trim();
+  return roleVoice || edgeVoice(tts);
+};
+
+const ttsForSegment = (tts, segment) => ({
+  ...tts,
+  voice: roleVoiceForTts(tts, segment?.role),
+});
+
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const edgeRateFromSpeed = (speed) => {
@@ -1066,7 +1089,7 @@ const generateTts = async (request, response) => {
 
         const token = `${safeFileToken(segment.id)}-${String(index + 1).padStart(3, "0")}`;
         const segmentPath = join(tempDir, `${token}.${format}`);
-        const chunkFiles = await synthesizeChunkFiles(tts, text, tempDir, token);
+        const chunkFiles = await synthesizeChunkFiles(ttsForSegment(tts, segment), text, tempDir, token);
         await concatAudioFiles(chunkFiles, segmentPath, format);
         const metadata = await parseFile(segmentPath);
         const segmentFrames = Math.ceil((metadata.format.duration || 0) * FPS);

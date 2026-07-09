@@ -531,6 +531,41 @@ h2 {
   grid-column: 1 / -1;
 }
 
+.role-voice-field {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
+}
+
+.role-voice-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.role-voice-head small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.role-voice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.role-voice-grid label {
+  min-width: 0;
+}
+
 .check-row {
   display: flex;
   align-items: center;

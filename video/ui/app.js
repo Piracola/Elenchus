@@ -149,6 +149,10 @@ const defaultConfig = {
     apiKey: "",
     model: "",
     voice: "zh-CN-XiaoxiaoNeural",
+    roleVoices: {
+      proposer: "zh-CN-XiaoxiaoNeural",
+      opposer: "zh-CN-YunxiNeural",
+    },
     format: "mp3",
     sampleRate: "24000",
     speed: "1",
@@ -244,6 +248,11 @@ const edgeVoiceOptions = [
   { value: "zh-TW-YunJheNeural", label: "云哲（男，台湾普通话）" },
 ];
 
+const roleVoiceFields = [
+  { role: "proposer", id: "ttsProposerVoiceInput", label: "正方" },
+  { role: "opposer", id: "ttsOpposerVoiceInput", label: "反方" },
+];
+
 const voiceOptionLabel = (option) => `${option.label} - ${option.value}`;
 
 const voiceOptionsForProvider = (provider, currentVoice = "") => {
@@ -257,8 +266,11 @@ const voiceOptionsForProvider = (provider, currentVoice = "") => {
   return value ? [{ value, label: "当前自定义音色" }] : [{ value: "", label: "请先选择服务商默认音色" }];
 };
 
-const populateVoiceOptions = (provider, currentVoice = "") => {
-  const select = $("ttsVoiceInput");
+const populateVoiceOptions = (provider, currentVoice = "", selectId = "ttsVoiceInput") => {
+  const select = $(selectId);
+  if (!select) {
+    return;
+  }
   const options = voiceOptionsForProvider(provider, currentVoice);
   const hasCurrent = options.some((option) => option.value === currentVoice);
   const finalOptions =
@@ -274,6 +286,12 @@ const populateVoiceOptions = (provider, currentVoice = "") => {
     select.appendChild(element);
   });
   select.value = currentVoice && finalOptions.some((option) => option.value === currentVoice) ? currentVoice : finalOptions[0]?.value || "";
+};
+
+const populateRoleVoiceOptions = (provider, roleVoices = {}) => {
+  roleVoiceFields.forEach(({ role, id }) => {
+    populateVoiceOptions(provider, roleVoices?.[role] || defaultConfig.tts.roleVoices[role], id);
+  });
 };
 
 const ttsProviderSettings = {
@@ -297,11 +315,17 @@ const ttsProviderSettings = {
   },
 };
 
-const mergeConfig = (config) => ({
-  video: { ...defaultConfig.video, ...(config?.video || {}) },
-  tts: { ...defaultConfig.tts, ...(config?.tts || {}) },
-  script: { ...defaultConfig.script, ...(config?.script || {}) },
-});
+const mergeConfig = (config) => {
+  const tts = { ...defaultConfig.tts, ...(config?.tts || {}) };
+  return {
+    video: { ...defaultConfig.video, ...(config?.video || {}) },
+    tts: {
+      ...tts,
+      roleVoices: { ...defaultConfig.tts.roleVoices, ...(config?.tts?.roleVoices || {}) },
+    },
+    script: { ...defaultConfig.script, ...(config?.script || {}) },
+  };
+};
 
 const setValue = (id, value) => {
   $(id).value = value ?? "";
@@ -345,8 +369,10 @@ const renderTtsProviderFields = () => {
   const isEdge = provider === "edge";
   const settings = ttsProviderSettings[provider] || ttsProviderSettings.edge;
   const currentVoice = readValue("ttsVoiceInput") || settings.defaultVoice;
+  const roleVoices = readRoleVoiceForm();
 
   populateVoiceOptions(provider, currentVoice);
+  populateRoleVoiceOptions(provider, roleVoices);
 
   ["ttsBaseUrlField", "ttsApiKeyField", "ttsModelField", "ttsSampleRateField"].forEach((id) => {
     const element = $(id);
@@ -356,11 +382,17 @@ const renderTtsProviderFields = () => {
   });
 
   $("ttsFormatInput").disabled = isEdge;
+  $("ttsRoleVoicesField").hidden = !isEdge;
   if (isEdge) {
     setValue("ttsFormatInput", "mp3");
     if (!readValue("ttsVoiceInput") || readValue("ttsVoiceInput") === "mimo_default") {
       setValue("ttsVoiceInput", settings.defaultVoice);
     }
+    roleVoiceFields.forEach(({ role, id }) => {
+      if (!readValue(id) || readValue(id) === "mimo_default") {
+        setValue(id, defaultConfig.tts.roleVoices[role]);
+      }
+    });
     if (!readValue("ttsConcurrencyInput") || Number(readValue("ttsConcurrencyInput")) > 2) {
       setValue("ttsConcurrencyInput", settings.defaultConcurrency);
     }
@@ -374,8 +406,14 @@ const applyTtsProviderDefaults = () => {
   const settings = ttsProviderSettings[provider] || ttsProviderSettings.edge;
   setValue("ttsFormatInput", settings.defaultFormat);
   populateVoiceOptions(provider, settings.defaultVoice);
+  populateRoleVoiceOptions(provider, defaultConfig.tts.roleVoices);
   if (!readValue("ttsVoiceInput") || readValue("ttsVoiceInput") === "mimo_default" || provider === "edge") {
     setValue("ttsVoiceInput", settings.defaultVoice);
+  }
+  if (provider === "edge") {
+    roleVoiceFields.forEach(({ role, id }) => {
+      setValue(id, defaultConfig.tts.roleVoices[role]);
+    });
   }
   if (!readValue("ttsConcurrencyInput") || provider === "edge") {
     setValue("ttsConcurrencyInput", settings.defaultConcurrency);
@@ -453,6 +491,8 @@ const renderConfig = () => {
   setValue("ttsModelInput", tts.model);
   populateVoiceOptions(tts.provider, tts.voice);
   setValue("ttsVoiceInput", tts.voice);
+  populateRoleVoiceOptions(tts.provider, tts.roleVoices);
+  roleVoiceFields.forEach(({ role, id }) => setValue(id, tts.roleVoices?.[role] || defaultConfig.tts.roleVoices[role]));
   setValue("ttsFormatInput", tts.format);
   setValue("ttsSampleRateInput", tts.sampleRate);
   setValue("ttsSpeedInput", tts.speed);
@@ -463,6 +503,11 @@ const renderConfig = () => {
 
   renderConfigStatus();
 };
+
+const readRoleVoiceForm = () => ({
+  proposer: readValue("ttsProposerVoiceInput"),
+  opposer: readValue("ttsOpposerVoiceInput"),
+});
 
 const readConfigForm = () => ({
   video: {
@@ -488,6 +533,7 @@ const readConfigForm = () => ({
     apiKey: readValue("ttsApiKeyInput"),
     model: readValue("ttsModelInput"),
     voice: readValue("ttsVoiceInput"),
+    roleVoices: readRoleVoiceForm(),
     format: readValue("ttsFormatInput"),
     sampleRate: readValue("ttsSampleRateInput"),
     speed: readValue("ttsSpeedInput"),
