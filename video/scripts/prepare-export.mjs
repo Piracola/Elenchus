@@ -26,6 +26,12 @@ if (!Array.isArray(parsed.dialogue_history)) {
   process.exit(1);
 }
 
+const SOPHISTRY_ROLES = new Set(["sophistry_round_report", "sophistry_final_report"]);
+const hasSophistry = parsed.dialogue_history.some((entry) => SOPHISTRY_ROLES.has(String(entry?.role || "")));
+if (hasSophistry) {
+  console.warn("警告：当前导出来自诡辩实验模式，观察员报告不会出现在视频中。视频生成器当前仅支持标准辩论模式。");
+}
+
 mkdirSync("public/data", { recursive: true });
 copyFileSync(sourcePath, "public/data/session-export.json");
 const script = buildVideoScript(parsed, "standard");

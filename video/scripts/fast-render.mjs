@@ -318,7 +318,7 @@ const encodeVideoSegments = async (video) => {
       "-loop",
       "1",
       "-framerate",
-      "25",
+      String(FPS),
       "-i",
       framePath,
       "-t",
@@ -332,7 +332,7 @@ const encodeVideoSegments = async (video) => {
       "-pix_fmt",
       "yuv420p",
       "-r",
-      "25",
+      String(FPS),
       segmentPath,
     ]);
     listLines.push(`file '${segmentPath.replace(/\\/g, "/").replace(/'/g, "'\\''")}'`);

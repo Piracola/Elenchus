@@ -90,18 +90,6 @@ const TTS_CHUNK_TARGET_CHARS = 680;
 const TTS_RETRY_MIN_CHARS = 180;
 const TTS_ERROR_PREVIEW_CHARS = 200;
 
-const stripThinking = (text) => {
-  let value = String(text || "");
-  while (/^\s*<think\b[^>]*>/i.test(value)) {
-    const close = value.search(/<\/think\s*>/i);
-    if (close < 0) {
-      return value;
-    }
-    value = value.slice(close).replace(/^<\/think\s*>\s*/i, "");
-  }
-  return value;
-};
-
 const stripAnsi = (text) => String(text || "").replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "");
 
 const appendTaskOutput = (task, chunk) => {
@@ -157,19 +145,6 @@ const cleanupOldTasks = () => {
   finished.slice(20).forEach((task) => tasks.delete(task.id));
 };
 
-const cleanTextForTts = (text) =>
-  stripThinking(text)
-    .replace(/^```[a-zA-Z0-9_-]*\s*$/gm, "")
-    .replace(/^~~~[a-zA-Z0-9_-]*\s*$/gm, "")
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/\*([^*\n]+)\*/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/^\s*[-*+]\s+/gm, "")
-    .replace(/\n{2,}/g, "\n")
-    .replace(/\s+/g, " ")
-    .trim();
-
 const splitLongTtsPart = (text, maxChars) => {
   if (text.length <= maxChars) {
     return [text];
@@ -212,7 +187,7 @@ const splitLongTtsPart = (text, maxChars) => {
 };
 
 const splitTextForTts = (text, maxChars = TTS_CHUNK_TARGET_CHARS) => {
-  const normalized = cleanTextForTts(text);
+  const normalized = cleanSegmentTextForTts(text);
   if (!normalized) {
     return [];
   }
@@ -258,29 +233,6 @@ const splitTextForTts = (text, maxChars = TTS_CHUNK_TARGET_CHARS) => {
   }
 
   return chunks;
-};
-
-const nonSpeakerRoles = new Set([
-  "judge",
-  "system",
-  "fact_checker",
-  "group_discussion",
-  "consensus_summary",
-  "audience",
-  "error",
-  "sophistry_round_report",
-  "sophistry_final_report",
-]);
-
-const groupByTurn = (history) => {
-  const turns = new Map();
-  history.forEach((entry, index) => {
-    const turn = Number.isInteger(entry?.turn) && entry.turn >= 0 ? entry.turn : 0;
-    const items = turns.get(turn) || [];
-    items.push({ entry, index });
-    turns.set(turn, items);
-  });
-  return [...turns.entries()].sort((a, b) => a[0] - b[0]);
 };
 
 const mapLimit = async (array, limit, fn) => {
@@ -591,6 +543,13 @@ const loadOutputAssets = () => ({
   outDir,
 });
 
+const SOPHISTRY_ROLES = new Set(["sophistry_round_report", "sophistry_final_report"]);
+
+const detectSophistryEntries = (session) => {
+  const history = Array.isArray(session?.dialogue_history) ? session.dialogue_history : [];
+  return history.some((entry) => SOPHISTRY_ROLES.has(String(entry?.role || "")));
+};
+
 const importJson = async (request, response) => {
   const rawBody = await readBody(request);
   const body = JSON.parse(rawBody || "{}");
@@ -619,12 +578,18 @@ const importJson = async (request, response) => {
   };
   const { props, script } = writeVideoScriptForSession(session, nextProps);
 
+  const warnings = [];
+  if (detectSophistryEntries(session)) {
+    warnings.push("当前导出来自诡辩实验模式，观察员报告不会出现在视频中。视频生成器当前仅支持标准辩论模式。");
+  }
+
   jsonResponse(response, 200, {
     ok: true,
     message: "已写入 Remotion 输入文件，并生成视频脚本切分层。",
     sourceName,
     props,
     scriptStats: scriptStats(script),
+    ...(warnings.length ? { warnings } : {}),
   });
 };
 
@@ -969,7 +934,7 @@ const synthesizeChunkFiles = async (tts, text, workDir, prefix, maxChars = TTS_C
   const isEdge = ttsProvider(tts) === "edge";
 
   for (const [index, chunk] of chunks.entries()) {
-    const chunkText = cleanTextForTts(chunk);
+    const chunkText = cleanSegmentTextForTts(chunk);
     if (!chunkText) {
       continue;
     }

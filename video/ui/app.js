@@ -815,6 +815,7 @@ const loadFile = async (file) => {
       `发言条数：${parsed.dialogue_history.length}`,
       data.message,
       scriptStatsText(data.scriptStats),
+      ...(data.warnings || []),
     ]
       .filter(Boolean)
       .join("\n"),
