@@ -150,6 +150,29 @@ const cleanTextForTts = (text) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const nonSpeakerRoles = new Set([
+  "judge",
+  "system",
+  "fact_checker",
+  "group_discussion",
+  "consensus_summary",
+  "audience",
+  "error",
+  "sophistry_round_report",
+  "sophistry_final_report",
+]);
+
+const groupByTurn = (history) => {
+  const turns = new Map();
+  history.forEach((entry, index) => {
+    const turn = Number.isInteger(entry?.turn) && entry.turn >= 0 ? entry.turn : 0;
+    const items = turns.get(turn) || [];
+    items.push({ entry, index });
+    turns.set(turn, items);
+  });
+  return [...turns.entries()].sort((a, b) => a[0] - b[0]);
+};
+
 const mapLimit = async (array, limit, fn) => {
   const results = [];
   const iterator = array.entries();
@@ -631,9 +654,9 @@ const generateTts = async (request, response) => {
   mkdirSync(audioDir, { recursive: true });
 
   await mapLimit(turns, Number(tts.concurrency) || 2, async ([turn, items]) => {
-    const speakers = items.filter(({ entry }) => !nonSpeakerRoles.has(String(entry.role || "")));
+    const speakers = items.filter(({ entry }) => !nonSpeakerRoles.has(String(entry?.role || "")));
     const text = speakers
-      .map(({ entry }) => cleanTextForTts(entry.content))
+      .map(({ entry }) => cleanTextForTts(entry?.content))
       .filter(Boolean)
       .join("。");
     if (!text) {
@@ -641,7 +664,7 @@ const generateTts = async (request, response) => {
     }
 
     const id = `turn-${turn + 1}`;
-    const fileName = `${id}.${tts.format || "mp3"}`;
+    const fileName = `${id}.${safeTtsFormat(tts.format)}`;
     const audioPath = join(audioDir, fileName);
     const audioFile = `audio/${fileName}`;
 
