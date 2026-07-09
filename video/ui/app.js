@@ -227,6 +227,55 @@ const scriptPresetSettings = {
   detailed: "细致切分：约 140 字一段，高亮更细，TTS 请求次数会更多。",
 };
 
+const edgeVoiceOptions = [
+  { value: "zh-CN-XiaoxiaoNeural", label: "晓晓（女，普通话，温暖）" },
+  { value: "zh-CN-XiaoyiNeural", label: "晓伊（女，普通话，活泼）" },
+  { value: "zh-CN-YunjianNeural", label: "云健（男，普通话，激情）" },
+  { value: "zh-CN-YunxiNeural", label: "云希（男，普通话，阳光）" },
+  { value: "zh-CN-YunxiaNeural", label: "云夏（男，普通话，可爱）" },
+  { value: "zh-CN-YunyangNeural", label: "云扬（男，普通话，新闻播报）" },
+  { value: "zh-CN-liaoning-XiaobeiNeural", label: "晓北（女，辽宁方言，幽默）" },
+  { value: "zh-CN-shaanxi-XiaoniNeural", label: "晓妮（女，陕西方言，明亮）" },
+  { value: "zh-HK-HiuGaaiNeural", label: "晓佳（女，香港粤语）" },
+  { value: "zh-HK-HiuMaanNeural", label: "晓曼（女，香港粤语）" },
+  { value: "zh-HK-WanLungNeural", label: "云龙（男，香港粤语）" },
+  { value: "zh-TW-HsiaoChenNeural", label: "晓臻（女，台湾普通话）" },
+  { value: "zh-TW-HsiaoYuNeural", label: "晓雨（女，台湾普通话）" },
+  { value: "zh-TW-YunJheNeural", label: "云哲（男，台湾普通话）" },
+];
+
+const voiceOptionLabel = (option) => `${option.label} - ${option.value}`;
+
+const voiceOptionsForProvider = (provider, currentVoice = "") => {
+  if (provider === "edge") {
+    return edgeVoiceOptions;
+  }
+  if (provider === "mimo") {
+    return [{ value: "mimo_default", label: "MiMo 默认音色" }];
+  }
+  const value = currentVoice || "";
+  return value ? [{ value, label: "当前自定义音色" }] : [{ value: "", label: "请先选择服务商默认音色" }];
+};
+
+const populateVoiceOptions = (provider, currentVoice = "") => {
+  const select = $("ttsVoiceInput");
+  const options = voiceOptionsForProvider(provider, currentVoice);
+  const hasCurrent = options.some((option) => option.value === currentVoice);
+  const finalOptions =
+    currentVoice && !hasCurrent
+      ? [{ value: currentVoice, label: "当前配置音色" }, ...options]
+      : options;
+
+  select.innerHTML = "";
+  finalOptions.forEach((option) => {
+    const element = document.createElement("option");
+    element.value = option.value;
+    element.textContent = provider === "edge" ? voiceOptionLabel(option) : `${option.label}${option.value ? ` - ${option.value}` : ""}`;
+    select.appendChild(element);
+  });
+  select.value = currentVoice && finalOptions.some((option) => option.value === currentVoice) ? currentVoice : finalOptions[0]?.value || "";
+};
+
 const ttsProviderSettings = {
   edge: {
     summary: "Edge TTS 不需要 API Key，中文音色自然。输出会固定为 MP3，适合当前视频流程。",
@@ -295,6 +344,9 @@ const renderTtsProviderFields = () => {
   const provider = readValue("ttsProviderInput") || "edge";
   const isEdge = provider === "edge";
   const settings = ttsProviderSettings[provider] || ttsProviderSettings.edge;
+  const currentVoice = readValue("ttsVoiceInput") || settings.defaultVoice;
+
+  populateVoiceOptions(provider, currentVoice);
 
   ["ttsBaseUrlField", "ttsApiKeyField", "ttsModelField", "ttsSampleRateField"].forEach((id) => {
     const element = $(id);
@@ -321,6 +373,7 @@ const applyTtsProviderDefaults = () => {
   const provider = readValue("ttsProviderInput") || "edge";
   const settings = ttsProviderSettings[provider] || ttsProviderSettings.edge;
   setValue("ttsFormatInput", settings.defaultFormat);
+  populateVoiceOptions(provider, settings.defaultVoice);
   if (!readValue("ttsVoiceInput") || readValue("ttsVoiceInput") === "mimo_default" || provider === "edge") {
     setValue("ttsVoiceInput", settings.defaultVoice);
   }
@@ -398,6 +451,7 @@ const renderConfig = () => {
   setValue("ttsBaseUrlInput", tts.baseUrl);
   setValue("ttsApiKeyInput", tts.apiKey);
   setValue("ttsModelInput", tts.model);
+  populateVoiceOptions(tts.provider, tts.voice);
   setValue("ttsVoiceInput", tts.voice);
   setValue("ttsFormatInput", tts.format);
   setValue("ttsSampleRateInput", tts.sampleRate);
