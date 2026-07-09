@@ -87,7 +87,10 @@ const audioDir = join(rootDir, "public", "audio");
 const tasks = new Map();
 const MAX_TASK_OUTPUT = 240000;
 const TTS_CHUNK_TARGET_CHARS = 680;
+const EDGE_TTS_CHUNK_TARGET_CHARS = 320;
 const TTS_RETRY_MIN_CHARS = 180;
+const EDGE_TTS_RETRY_MIN_CHARS = 90;
+const EDGE_TTS_CHILD_TIMEOUT_MS = 60000;
 const TTS_ERROR_PREVIEW_CHARS = 200;
 
 const stripAnsi = (text) => String(text || "").replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "");
@@ -234,6 +237,8 @@ const splitTextForTts = (text, maxChars = TTS_CHUNK_TARGET_CHARS) => {
 
   return chunks;
 };
+
+const sleep = (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 
 const mapLimit = async (array, limit, fn) => {
   const results = [];
@@ -662,6 +667,17 @@ const runFfmpeg = (args) =>
     });
   });
 
+const killChildProcess = (child) => {
+  if (!child || child.killed) {
+    return;
+  }
+  try {
+    child.kill("SIGKILL");
+  } catch {
+    // The process may have exited between timeout and cleanup.
+  }
+};
+
 const ttsEndpoint = (baseUrl) => {
   const normalized = String(baseUrl || "").trim().replace(/\/+$/, "");
   if (!normalized) {
@@ -763,16 +779,32 @@ const synthesizeEdgeAudioFile = async (tts, text, outputPath) => {
     edgeProsodyValue(tts.volume, "+0%"),
     "--pitch",
     edgeProsodyValue(tts.pitch, "+0Hz"),
+    "--timeout",
+    "45",
   ];
 
   try {
     await new Promise((resolveRun, reject) => {
       let stderr = "";
+      let timedOut = false;
+      let settled = false;
       const child = spawn(python.command, args, {
         cwd: rootDir,
         stdio: ["ignore", "ignore", "pipe"],
         windowsHide: true,
       });
+      const timeout = setTimeout(() => {
+        timedOut = true;
+        killChildProcess(child);
+      }, EDGE_TTS_CHILD_TIMEOUT_MS);
+      const settle = (callback, value) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeout);
+        callback(value);
+      };
 
       child.stderr.on("data", (chunk) => {
         stderr += chunk.toString();
@@ -780,15 +812,19 @@ const synthesizeEdgeAudioFile = async (tts, text, outputPath) => {
           stderr = stderr.slice(-16000);
         }
       });
-      child.on("error", reject);
+      child.on("error", (error) => settle(reject, error));
       child.on("close", (code) => {
+        if (timedOut) {
+          settle(reject, new Error(`Edge TTS 请求超时（${Math.round(EDGE_TTS_CHILD_TIMEOUT_MS / 1000)} 秒）。`));
+          return;
+        }
         if (code === 0 && existsSync(outputPath) && statSync(outputPath).size > 0) {
-          resolveRun();
+          settle(resolveRun);
           return;
         }
 
         const detail = stderr.trim().slice(-800);
-        reject(new Error(detail || `Edge TTS 退出码 ${code}`));
+        settle(reject, new Error(detail || `Edge TTS 退出码 ${code}`));
       });
     });
   } finally {
@@ -924,14 +960,18 @@ const fetchAudioBuffer = async (tts, text) => {
 
 const isRetryableTtsError = (error) => {
   const message = error instanceof Error ? error.message : String(error);
-  return /504|网关错误|超时|timed out|gateway|html 错页|text\/html|<!doctype html>/i.test(message);
+  return /504|网关错误|超时|timed out|gateway|html 错页|text\/html|<!doctype html|NoAudioReceived|没有返回音频|No audio was received/i.test(
+    message,
+  );
 };
 
 const synthesizeChunkFiles = async (tts, text, workDir, prefix, maxChars = TTS_CHUNK_TARGET_CHARS) => {
-  const chunks = splitTextForTts(text, maxChars);
+  const isEdge = ttsProvider(tts) === "edge";
+  const chunkMaxChars = isEdge ? Math.min(maxChars, EDGE_TTS_CHUNK_TARGET_CHARS) : maxChars;
+  const chunks = splitTextForTts(text, chunkMaxChars);
   const files = [];
   const format = effectiveTtsFormat(tts);
-  const isEdge = ttsProvider(tts) === "edge";
+  const retryMinChars = isEdge ? EDGE_TTS_RETRY_MIN_CHARS : TTS_RETRY_MIN_CHARS;
 
   for (const [index, chunk] of chunks.entries()) {
     const chunkText = cleanSegmentTextForTts(chunk);
@@ -949,11 +989,12 @@ const synthesizeChunkFiles = async (tts, text, workDir, prefix, maxChars = TTS_C
       }
       files.push(filePath);
     } catch (error) {
-      if (!isRetryableTtsError(error) || chunkText.length <= TTS_RETRY_MIN_CHARS) {
+      if (!isRetryableTtsError(error) || chunkText.length <= retryMinChars) {
         throw new Error(`片段 ${index + 1} 生成失败（约 ${chunkText.length} 字）：${error instanceof Error ? error.message : String(error)}`);
       }
 
-      const smallerMaxChars = Math.max(TTS_RETRY_MIN_CHARS, Math.floor(chunkText.length / 2));
+      await sleep(isEdge ? 900 : 300);
+      const smallerMaxChars = Math.max(retryMinChars, Math.floor(chunkText.length / 2));
       const retryFiles = await synthesizeChunkFiles(
         tts,
         chunkText,
