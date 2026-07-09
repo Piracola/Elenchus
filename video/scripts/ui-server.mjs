@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { extname, join, normalize, resolve, sep } from "node:path";
@@ -14,6 +14,7 @@ const outDir = join(rootDir, "out");
 const localConfigPath = join(rootDir, "config.local.json");
 const remotionCli = join(rootDir, "node_modules", "@remotion", "cli", "remotion-cli.js");
 const tsxCli = join(rootDir, "node_modules", "tsx", "dist", "cli.mjs");
+const ffmpegPath = join(rootDir, "node_modules", "@remotion", "compositor-win32-x64-msvc", "ffmpeg.exe");
 const host = "127.0.0.1";
 const port = Number(process.env.PORT || 4317);
 
@@ -69,6 +70,9 @@ const FPS = 30;
 const audioDir = join(rootDir, "public", "audio");
 const tasks = new Map();
 const MAX_TASK_OUTPUT = 240000;
+const TTS_CHUNK_TARGET_CHARS = 680;
+const TTS_RETRY_MIN_CHARS = 180;
+const TTS_ERROR_PREVIEW_CHARS = 200;
 
 const stripThinking = (text) => {
   let value = String(text || "");
@@ -149,6 +153,96 @@ const cleanTextForTts = (text) =>
     .replace(/\n{2,}/g, "\n")
     .replace(/\s+/g, " ")
     .trim();
+
+const splitLongTtsPart = (text, maxChars) => {
+  if (text.length <= maxChars) {
+    return [text];
+  }
+
+  const clauseTokens = text.split(/([，、：,:])/).filter(Boolean);
+  const chunks = [];
+  let current = "";
+
+  for (const token of clauseTokens) {
+    if (token.length > maxChars) {
+      if (current) {
+        chunks.push(current);
+        current = "";
+      }
+      for (let index = 0; index < token.length; index += maxChars) {
+        chunks.push(token.slice(index, index + maxChars));
+      }
+      continue;
+    }
+
+    if (!current) {
+      current = token;
+      continue;
+    }
+
+    if (current.length + token.length <= maxChars) {
+      current += token;
+    } else {
+      chunks.push(current);
+      current = token;
+    }
+  }
+
+  if (current) {
+    chunks.push(current);
+  }
+
+  return chunks;
+};
+
+const splitTextForTts = (text, maxChars = TTS_CHUNK_TARGET_CHARS) => {
+  const normalized = cleanTextForTts(text);
+  if (!normalized) {
+    return [];
+  }
+
+  const sentenceTokens = normalized.split(/([。！？；!?;\n]+)/).filter(Boolean);
+  const sentences = [];
+  let buffer = "";
+
+  for (const token of sentenceTokens) {
+    buffer += token;
+    if (/[。！？；!?;\n]/.test(token)) {
+      sentences.push(buffer.trim());
+      buffer = "";
+    }
+  }
+  if (buffer.trim()) {
+    sentences.push(buffer.trim());
+  }
+
+  const parts = sentences.flatMap((sentence) => splitLongTtsPart(sentence, maxChars));
+  const chunks = [];
+  let current = "";
+
+  for (const part of parts) {
+    const value = part.trim();
+    if (!value) {
+      continue;
+    }
+    if (!current) {
+      current = value;
+      continue;
+    }
+    if (current.length + value.length <= maxChars) {
+      current += value;
+    } else {
+      chunks.push(current);
+      current = value;
+    }
+  }
+
+  if (current) {
+    chunks.push(current);
+  }
+
+  return chunks;
+};
 
 const nonSpeakerRoles = new Set([
   "judge",
@@ -497,6 +591,30 @@ const openOutputDir = (response) => {
   }
 };
 
+const runFfmpeg = (args) =>
+  new Promise((resolveRun, reject) => {
+    let stderr = "";
+    const child = spawn(ffmpegPath, args, {
+      cwd: rootDir,
+      stdio: ["ignore", "ignore", "pipe"],
+      windowsHide: true,
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+      if (stderr.length > 16000) {
+        stderr = stderr.slice(-16000);
+      }
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolveRun();
+        return;
+      }
+      reject(new Error(`ffmpeg 处理音频失败：${stderr.trim().slice(-400) || `退出码 ${code}`}`));
+    });
+  });
+
 const ttsEndpoint = (baseUrl) => {
   const normalized = String(baseUrl || "").trim().replace(/\/+$/, "");
   if (!normalized) {
@@ -515,8 +633,12 @@ const safeTtsFormat = (format) => {
 
 const parseTtsResponse = async (response) => {
   if (!response.ok) {
+    const contentType = response.headers.get("content-type") || "";
     const errorText = await response.text().catch(() => "");
-    throw new Error(`TTS 请求失败：${response.status} ${errorText.slice(0, 200)}`);
+    if (/text\/html/i.test(contentType) && response.status >= 500) {
+      throw new Error(`TTS 中转服务超时或网关错误（${response.status}，返回了 HTML 错页）。通常是单次文本过长或上游生成超时。`);
+    }
+    throw new Error(`TTS 请求失败：${response.status} ${errorText.slice(0, TTS_ERROR_PREVIEW_CHARS)}`);
   }
 
   const contentType = response.headers.get("content-type") || "";
@@ -588,6 +710,9 @@ const fetchAudioBufferWithCurl = async (endpoint, apiKey, body) => {
   try {
     data = JSON.parse(text);
   } catch {
+    if (/^\s*(<!DOCTYPE html>|<html\b)/i.test(text)) {
+      throw new Error("TTS 中转服务超时或网关错误（返回了 HTML 错页）。通常是单次文本过长或上游生成超时。");
+    }
     return result.stdout;
   }
 
@@ -632,6 +757,77 @@ const fetchAudioBuffer = async (tts, text) => {
   }
 };
 
+const isRetryableTtsError = (error) => {
+  const message = error instanceof Error ? error.message : String(error);
+  return /504|网关错误|超时|timed out|gateway|html 错页|text\/html|<!doctype html>/i.test(message);
+};
+
+const synthesizeChunkFiles = async (tts, text, workDir, prefix, maxChars = TTS_CHUNK_TARGET_CHARS) => {
+  const chunks = splitTextForTts(text, maxChars);
+  const files = [];
+
+  for (const [index, chunk] of chunks.entries()) {
+    const chunkText = cleanTextForTts(chunk);
+    if (!chunkText) {
+      continue;
+    }
+
+    const filePath = join(workDir, `${prefix}-${String(index + 1).padStart(3, "0")}.${safeTtsFormat(tts.format)}`);
+    try {
+      const buffer = await fetchAudioBuffer(tts, chunkText);
+      writeFileSync(filePath, buffer);
+      files.push(filePath);
+    } catch (error) {
+      if (!isRetryableTtsError(error) || chunkText.length <= TTS_RETRY_MIN_CHARS) {
+        throw new Error(`片段 ${index + 1} 生成失败（约 ${chunkText.length} 字）：${error instanceof Error ? error.message : String(error)}`);
+      }
+
+      const smallerMaxChars = Math.max(TTS_RETRY_MIN_CHARS, Math.floor(chunkText.length / 2));
+      const retryFiles = await synthesizeChunkFiles(
+        tts,
+        chunkText,
+        workDir,
+        `${prefix}-${String(index + 1).padStart(3, "0")}`,
+        smallerMaxChars,
+      );
+      files.push(...retryFiles);
+    }
+  }
+
+  return files;
+};
+
+const concatAudioFiles = async (inputPaths, outputPath, format) => {
+  if (inputPaths.length === 0) {
+    throw new Error("没有可拼接的音频片段。");
+  }
+  if (inputPaths.length === 1) {
+    copyFileSync(inputPaths[0], outputPath);
+    return;
+  }
+
+  const tempDir = mkdtempSync(join(tmpdir(), "elenchus-tts-concat-"));
+  const listPath = join(tempDir, "concat-list.txt");
+  const lines = inputPaths.map((filePath) => `file '${filePath.replace(/\\/g, "/").replace(/'/g, "'\\''")}'`);
+  writeFileSync(listPath, `${lines.join("\n")}\n`, "utf8");
+
+  const args = ["-hide_banner", "-y", "-f", "concat", "-safe", "0", "-i", listPath, "-vn"];
+  if (format === "wav") {
+    args.push("-c:a", "pcm_s16le");
+  } else if (format === "mp3") {
+    args.push("-c:a", "libmp3lame", "-b:a", "128k");
+  } else {
+    args.push("-c:a", "aac", "-b:a", "128k");
+  }
+  args.push(outputPath);
+
+  try {
+    await runFfmpeg(args);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+};
+
 const generateTts = async (request, response) => {
   const config = loadConfig();
   const tts = config.tts;
@@ -649,46 +845,61 @@ const generateTts = async (request, response) => {
 
   const history = Array.isArray(session.dialogue_history) ? session.dialogue_history : [];
   const turns = groupByTurn(history);
-  const scenes = [];
+  const requiredTurns = turns
+    .map(([turn, items]) => {
+      const speakers = items.filter(({ entry }) => !nonSpeakerRoles.has(String(entry?.role || "")));
+      const text = speakers
+        .map(({ entry }) => cleanTextForTts(entry?.content))
+        .filter(Boolean)
+        .join("。");
+      return { turn, text };
+    })
+    .filter(({ text }) => text);
 
   mkdirSync(audioDir, { recursive: true });
 
-  await mapLimit(turns, Number(tts.concurrency) || 2, async ([turn, items]) => {
-    const speakers = items.filter(({ entry }) => !nonSpeakerRoles.has(String(entry?.role || "")));
-    const text = speakers
-      .map(({ entry }) => cleanTextForTts(entry?.content))
-      .filter(Boolean)
-      .join("。");
-    if (!text) {
-      return;
-    }
-
+  const scenes = await mapLimit(requiredTurns, Number(tts.concurrency) || 2, async ({ turn, text }) => {
     const id = `turn-${turn + 1}`;
     const fileName = `${id}.${safeTtsFormat(tts.format)}`;
     const audioPath = join(audioDir, fileName);
     const audioFile = `audio/${fileName}`;
+    const tempDir = mkdtempSync(join(tmpdir(), `elenchus-${id}-`));
 
     try {
-      const buffer = await fetchAudioBuffer(tts, text);
-      writeFileSync(audioPath, buffer);
+      const chunkFiles = await synthesizeChunkFiles(tts, text, tempDir, id);
+      if (chunkFiles.length === 0) {
+        return null;
+      }
+      await concatAudioFiles(chunkFiles, audioPath, safeTtsFormat(tts.format));
       const metadata = await parseFile(audioPath);
       const durationFrames = Math.ceil((metadata.format.duration || 0) * FPS);
       if (durationFrames <= 0) {
         throw new Error("无法解析音频时长。");
       }
-      scenes.push({ id, audioFile, durationFrames });
+      return { id, audioFile, durationFrames };
     } catch (error) {
-      scenes.push({ id, audioFile, durationFrames: 0, error: error instanceof Error ? error.message : String(error) });
+      rmSync(audioPath, { force: true });
+      return { id, audioFile, durationFrames: 0, error: error instanceof Error ? error.message : String(error) };
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
-  const okScenes = scenes.filter((s) => s.durationFrames > 0);
-  const failedScenes = scenes.filter((s) => s.error);
+  const realizedScenes = scenes.filter(Boolean);
+  const okScenes = realizedScenes
+    .filter((s) => s.durationFrames > 0)
+    .sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true }));
+  const failedScenes = realizedScenes.filter((s) => s.error);
 
-  if (okScenes.length === 0) {
-    jsonResponse(response, 500, {
+  if (okScenes.length === 0 || failedScenes.length > 0) {
+    jsonResponse(response, 502, {
       ok: false,
-      message: `配音生成失败。${failedScenes.map((s) => `${s.id}: ${s.error}`).join("；")}`,
+      message:
+        okScenes.length === 0
+          ? `配音生成失败。${failedScenes.map((s) => `${s.id}: ${s.error}`).join("；")}`
+          : `配音未全部生成成功。已完成 ${okScenes.length} 轮，失败 ${failedScenes.length} 轮。${failedScenes.map((s) => `${s.id}: ${s.error}`).join("；")}`,
+      scenes: okScenes,
+      failed: failedScenes,
     });
     return;
   }
