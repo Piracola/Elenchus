@@ -29,16 +29,8 @@ export type ElenchusEntry = {
 export type ElenchusExport = {
   topic?: string;
   participants?: string[];
-  max_turns?: number;
-  current_turn?: number;
   dialogue_history?: ElenchusEntry[];
   current_scores?: Record<string, ScoreBlock>;
-  cumulative_scores?: Record<string, Record<string, number[]>>;
-  run_events?: Array<{
-    type?: string;
-    payload?: Record<string, unknown>;
-    timestamp?: string;
-  }>;
 };
 
 export type ScoreDimension = {

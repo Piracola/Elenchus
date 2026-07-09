@@ -7,7 +7,6 @@ import {
   Series,
   staticFile,
   useCurrentFrame,
-  useVideoConfig,
 } from "remotion";
 
 import {
@@ -192,7 +191,6 @@ const IntroCard: React.FC<{ title: string; text: string; accent: string }> = ({ 
 
 const RoundSceneView: React.FC<{ scene: DebateScene; video: DebateVideoModel }> = ({ scene, video }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
   const enter = useEntrance();
   const progress = interpolate(frame, [0, scene.durationInFrames], [0, 1], {
     extrapolateLeft: "clamp",
@@ -261,7 +259,7 @@ const RoundSceneView: React.FC<{ scene: DebateScene; video: DebateVideoModel }> 
             minHeight: 0,
           }}
         >
-          <SpeakerColumn scene={scene} frame={frame} fps={fps} />
+          <SpeakerColumn scene={scene} frame={frame} />
           <InfoColumn scene={scene} />
         </main>
 
@@ -379,11 +377,12 @@ const computeLyricLayout = (lines: LineCue[], activeIndex: number) => {
   return { items, totalHeight: top };
 };
 
-const SpeakerColumn: React.FC<{ scene: DebateScene; frame: number; fps: number }> = ({
+const SpeakerColumn: React.FC<{ scene: DebateScene; frame: number }> = ({
   scene,
   frame,
 }) => {
   const lines = scene.speakerLines;
+  // VIDEO_HEIGHT(1080) - top/bottom padding(42+34) - header row(104) - footer row(42) - grid gaps(18*2) - ColumnShell header(68)
   const viewportHeight = 754;
   const transitionFrames = 10;
 

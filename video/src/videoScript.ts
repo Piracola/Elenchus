@@ -38,7 +38,7 @@ export const ROLE_LABELS: Record<string, string> = {
   system: "系统",
 };
 
-const DIMENSION_LABELS: Record<string, string> = {
+export const DIMENSION_LABELS: Record<string, string> = {
   logical_rigor: "逻辑严密度",
   evidence_quality: "证据质量",
   topic_focus: "切题度与定义稳定",
@@ -47,7 +47,7 @@ const DIMENSION_LABELS: Record<string, string> = {
   persuasiveness: "价值立意与说服力",
 };
 
-const SCORE_KEYS = Object.keys(DIMENSION_LABELS);
+export const SCORE_KEYS = Object.keys(DIMENSION_LABELS);
 
 const PRESET_OPTIONS: Record<ScriptSegmentationPreset, ScriptSegmentationOptions> = {
   standard: { mode: "standard", minChars: 80, targetChars: 200, maxChars: 260 },

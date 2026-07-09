@@ -19,23 +19,16 @@ import {
 import {
   buildVideoScript,
   charCount,
+  DIMENSION_LABELS,
   distributeFramesByWeight,
   estimateSegmentDurationFrames,
   roleLabel,
+  SCORE_KEYS,
   segmentCuesToLineCues,
 } from "./videoScript";
 
 const PRE_ROLL_FRAMES = Math.ceil(1.2 * FPS);
 const POST_ROLL_FRAMES = Math.ceil(1.2 * FPS);
-
-const DIMENSION_LABELS: Record<string, string> = {
-  logical_rigor: "逻辑严密度",
-  evidence_quality: "证据质量",
-  topic_focus: "切题度与定义稳定",
-  rebuttal_strength: "反驳力度",
-  consistency: "前后一致性",
-  persuasiveness: "价值立意与说服力",
-};
 
 const DIMENSION_WEIGHTS: Record<string, number> = {
   logical_rigor: 20,
@@ -45,8 +38,6 @@ const DIMENSION_WEIGHTS: Record<string, number> = {
   consistency: 15,
   persuasiveness: 15,
 };
-
-const SCORE_KEYS = Object.keys(DIMENSION_LABELS);
 
 const toTextItem = (speech: VideoScriptSpeech): TextItem => ({
   id: speech.id,
