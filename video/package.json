@@ -10,7 +10,9 @@
     "render": "remotion render src/index.ts DebateTranscript out/debate.mp4 --props=public/data/render-props.json",
     "still": "remotion still src/index.ts DebateTranscript out/frame.png --frame=120 --props=public/data/render-props.json",
     "fast-render": "tsx scripts/fast-render.mjs",
-    "fast-frame": "tsx scripts/fast-render.mjs --frames-only"
+    "fast-frame": "tsx scripts/fast-render.mjs --frames-only",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.2",
@@ -27,6 +29,7 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "tsx": "^4.23.0",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "vitest": "^3.0.0"
   }
 }
