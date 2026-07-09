@@ -26,6 +26,7 @@ const state = {
   config: null,
   configOrigin: "default",
   configTab: "video",
+  scriptStats: null,
   activeTaskId: null,
 };
 
@@ -153,6 +154,9 @@ const defaultConfig = {
     speed: "1",
     concurrency: "2",
   },
+  script: {
+    textPreset: "standard",
+  },
 };
 
 const videoPresetSettings = {
@@ -217,9 +221,16 @@ const audioModeSettings = {
   muted: { audioBitrate: "64k", muted: true, summary: "不输出音频。" },
 };
 
+const scriptPresetSettings = {
+  standard: "标准切分：约 200 字一段，阅读节奏和 TTS 成功率比较均衡。",
+  compact: "紧凑切分：约 260 字一段，视频更短，但单屏文字会更多。",
+  detailed: "细致切分：约 140 字一段，高亮更细，TTS 请求次数会更多。",
+};
+
 const mergeConfig = (config) => ({
   video: { ...defaultConfig.video, ...(config?.video || {}) },
   tts: { ...defaultConfig.tts, ...(config?.tts || {}) },
+  script: { ...defaultConfig.script, ...(config?.script || {}) },
 });
 
 const setValue = (id, value) => {
@@ -252,6 +263,11 @@ const renderVideoPresetSummary = () => {
   ].filter(Boolean);
   $("videoPresetSummary").textContent = parts.join(" ");
   renderCodecWarning();
+};
+
+const renderScriptPresetSummary = () => {
+  const preset = readValue("scriptPresetInput") || "standard";
+  $("scriptPresetSummary").textContent = scriptPresetSettings[preset] || scriptPresetSettings.standard;
 };
 
 const applySimpleVideoSelections = () => {
@@ -299,6 +315,7 @@ const renderConfig = () => {
   const config = mergeConfig(state.config);
   const video = config.video;
   const tts = config.tts;
+  const script = config.script;
 
   setValue("videoPresetInput", video.preset);
   setValue("codecProfileInput", video.codecProfile);
@@ -326,6 +343,8 @@ const renderConfig = () => {
   setValue("ttsSampleRateInput", tts.sampleRate);
   setValue("ttsSpeedInput", tts.speed);
   setValue("ttsConcurrencyInput", tts.concurrency);
+  setValue("scriptPresetInput", script.textPreset);
+  renderScriptPresetSummary();
 
   renderConfigStatus();
 };
@@ -359,6 +378,9 @@ const readConfigForm = () => ({
     speed: readValue("ttsSpeedInput"),
     concurrency: readValue("ttsConcurrencyInput"),
   },
+  script: {
+    textPreset: readValue("scriptPresetInput"),
+  },
 });
 
 const syncRateControlFields = () => {
@@ -374,8 +396,10 @@ const setConfigTab = (tab) => {
   state.configTab = tab;
   $("videoConfigTab").classList.toggle("active", tab === "video");
   $("ttsConfigTab").classList.toggle("active", tab === "tts");
+  $("scriptConfigTab").classList.toggle("active", tab === "script");
   $("videoConfigSection").hidden = tab !== "video";
   $("ttsConfigSection").hidden = tab !== "tts";
+  $("scriptConfigSection").hidden = tab !== "script";
 };
 
 const renderConfigStatus = () => {
@@ -404,10 +428,14 @@ const saveConfig = async () => {
   const data = await postJson("/api/config", { config: readConfigForm() });
   state.config = mergeConfig(data.config);
   state.configOrigin = "saved";
+  if (data.scriptStats) {
+    state.scriptStats = data.scriptStats;
+    renderSummary();
+  }
   renderConfig();
   setStatus("已保存", "success");
   setLogHint("配置");
-  setLog("配置已保存到 config.local.json，服务重启后仍会恢复。");
+  setLog(["配置已保存到 config.local.json，服务重启后仍会恢复。", data.message, scriptStatsText(data.scriptStats)].filter(Boolean).join("\n"));
 };
 
 const resetConfig = async () => {
@@ -418,10 +446,14 @@ const resetConfig = async () => {
   const data = await postJson("/api/config", { config: defaultConfig });
   state.config = mergeConfig(data.config);
   state.configOrigin = "default";
+  if (data.scriptStats) {
+    state.scriptStats = data.scriptStats;
+    renderSummary();
+  }
   renderConfig();
   setStatus("已恢复默认", "success");
   setLogHint("配置");
-  setLog("已恢复默认配置。");
+  setLog(["已恢复默认配置。", data.message, scriptStatsText(data.scriptStats)].filter(Boolean).join("\n"));
 };
 
 const groupByTurn = (history) => {
@@ -444,12 +476,36 @@ const summarize = (session) => {
   return { history, rounds, speeches, judgeEntries, scored };
 };
 
+const summarizeScript = (script) => {
+  const rounds = Array.isArray(script?.rounds) ? script.rounds : [];
+  const speakerSegments = rounds.reduce((sum, round) => sum + (round.speakerSegments?.length || 0), 0);
+  const judgeSegments = rounds.reduce((sum, round) => sum + (round.judgeSegments?.length || 0), 0);
+  const scoreSegments = rounds.reduce((sum, round) => sum + (round.scoreSegments?.length || 0), 0);
+  return {
+    rounds: rounds.length,
+    speakerSegments,
+    judgeSegments,
+    scoreSegments,
+    totalSegments: speakerSegments + judgeSegments + scoreSegments,
+    preset: script?.segmentation?.mode || "standard",
+  };
+};
+
+const scriptStatsText = (stats) => {
+  if (!stats) {
+    return "";
+  }
+  return `文案切分：${stats.preset}，辩手 ${stats.speakerSegments} 段，裁判 ${stats.judgeSegments} 段，评分 ${stats.scoreSegments} 段`;
+};
+
 const renderSummary = () => {
   const session = state.session;
   const { rounds, speeches, scored } = summarize(session);
   $("topicMetric").textContent = session?.topic || "-";
   $("turnMetric").textContent = rounds.length ? `${rounds.length}` : "-";
-  $("speechMetric").textContent = `${speeches.length} 条`;
+  $("speechMetric").textContent = state.scriptStats
+    ? `${speeches.length} 条 / ${state.scriptStats.speakerSegments} 段`
+    : `${speeches.length} 条`;
   $("scoreMetric").textContent = `${scored.length} 条`;
   $("sourceName").textContent = state.sourceName || "当前数据";
   $("saveButton").disabled = !session;
@@ -587,9 +643,21 @@ const loadFile = async (file) => {
     sourceName: state.sourceName,
     title: $("titleInput").value.trim(),
   });
+  state.scriptStats = data.scriptStats || null;
+  renderSummary();
   setStatus("已写入", "success");
   setLogHint("导入完成");
-  setLog(`已载入并写入：${file.name}\n辩题：${parsed.topic || "-"}\n发言条数：${parsed.dialogue_history.length}\n${data.message}`);
+  setLog(
+    [
+      `已载入并写入：${file.name}`,
+      `辩题：${parsed.topic || "-"}`,
+      `发言条数：${parsed.dialogue_history.length}`,
+      data.message,
+      scriptStatsText(data.scriptStats),
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  );
 };
 
 const postJson = async (url, body = {}) => {
@@ -675,9 +743,11 @@ const saveCurrent = async () => {
     sourceName: state.sourceName,
     title: $("titleInput").value.trim(),
   });
+  state.scriptStats = data.scriptStats || null;
+  renderSummary();
   setStatus("已写入", "success");
   setLogHint("导入完成");
-  setLog(`已写入 Remotion 输入文件。\n${data.message}\n如修改了标题，下一次渲染会使用新标题。`);
+  setLog(`已写入 Remotion 输入文件。\n${data.message}\n${scriptStatsText(data.scriptStats)}\n如修改了标题，下一次渲染会使用新标题。`);
 };
 
 const runCommand = async (command) => {
@@ -711,6 +781,7 @@ const boot = async () => {
     if (current.session) {
       state.session = current.session;
       state.sourceName = current.props?.sourceName || "当前 Remotion 输入";
+      state.scriptStats = current.script ? summarizeScript(current.script) : null;
       $("titleInput").value = current.props?.title || current.session.topic || "";
       setStatus("当前数据", "success");
       renderSummary();
@@ -791,6 +862,8 @@ const boot = async () => {
   $("videoTab").addEventListener("click", () => setPreviewMode("video"));
   $("videoConfigTab").addEventListener("click", () => setConfigTab("video"));
   $("ttsConfigTab").addEventListener("click", () => setConfigTab("tts"));
+  $("scriptConfigTab").addEventListener("click", () => setConfigTab("script"));
+  $("scriptPresetInput").addEventListener("change", renderScriptPresetSummary);
   ["videoPresetInput", "codecProfileInput", "audioModeInput", "scaleInput"].forEach((id) => {
     $(id).addEventListener("change", applySimpleVideoSelections);
   });

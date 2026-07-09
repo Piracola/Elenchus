@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "ui": "node scripts/ui-server.mjs",
-    "prepare:export": "node scripts/prepare-export.mjs",
+    "ui": "tsx scripts/ui-server.mjs",
+    "prepare:export": "tsx scripts/prepare-export.mjs",
     "studio": "remotion studio src/index.ts --props=public/data/render-props.json",
     "render": "remotion render src/index.ts DebateTranscript out/debate.mp4 --props=public/data/render-props.json",
     "still": "remotion still src/index.ts DebateTranscript out/frame.png --frame=120 --props=public/data/render-props.json",

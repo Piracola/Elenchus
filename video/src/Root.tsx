@@ -8,6 +8,7 @@ import {
   DebateVideoProps,
   ElenchusExport,
   FPS,
+  VideoScript,
   VIDEO_HEIGHT,
   VIDEO_WIDTH,
 } from "./types";
@@ -33,6 +34,21 @@ const loadExport = async (dataFile: string): Promise<ElenchusExport> => {
   return (await response.json()) as ElenchusExport;
 };
 
+const loadVideoScript = async (scriptFile?: string): Promise<VideoScript | undefined> => {
+  if (!scriptFile) {
+    return undefined;
+  }
+  try {
+    const response = await fetch(staticFile(scriptFile));
+    if (!response.ok) {
+      return undefined;
+    }
+    return (await response.json()) as VideoScript;
+  } catch {
+    return undefined;
+  }
+};
+
 const loadAudioManifest = async (audioManifest?: string): Promise<AudioManifest | undefined> => {
   if (!audioManifest) {
     return undefined;
@@ -50,8 +66,9 @@ const loadAudioManifest = async (audioManifest?: string): Promise<AudioManifest 
 
 const calculateMetadata: CalculateMetadataFunction<DebateVideoProps> = async ({ props }) => {
   const raw = await loadExport(props.dataFile);
+  const script = await loadVideoScript(props.scriptFile);
   const audioManifest = await loadAudioManifest(props.audioManifest);
-  const video = buildVideoModel(raw, props, audioManifest);
+  const video = buildVideoModel(raw, props, audioManifest, script);
 
   return {
     durationInFrames: video.durationInFrames,

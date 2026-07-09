@@ -76,6 +76,14 @@ const loadAudioManifest = (props) => {
   return existsSync(manifestPath) ? readJson(manifestPath) : undefined;
 };
 
+const loadVideoScript = (props) => {
+  if (!props.scriptFile) {
+    return undefined;
+  }
+  const scriptPath = join(publicDir, props.scriptFile);
+  return existsSync(scriptPath) ? readJson(scriptPath) : undefined;
+};
+
 const run = (args) =>
   new Promise((resolveRun, reject) => {
     const child = spawn(ffmpegPath, args, {
@@ -358,7 +366,8 @@ const main = async () => {
   const dataFile = props.dataFile || "data/session-export.json";
   const raw = readJson(join(publicDir, dataFile));
   const audioManifest = loadAudioManifest(props);
-  const video = buildVideoModel(raw, props, audioManifest);
+  const videoScript = loadVideoScript(props);
+  const video = buildVideoModel(raw, props, audioManifest, videoScript);
 
   console.log(`Canvas 快速渲染：${video.scenes.length} 个场景，${(video.durationInFrames / FPS / 60).toFixed(1)} 分钟`);
   writeFrameImages(video);

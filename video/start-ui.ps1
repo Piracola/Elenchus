@@ -64,4 +64,9 @@ Start-Process `
     -WindowStyle Hidden
 
 Write-Step "Server logs will appear below."
-node scripts/ui-server.mjs
+$TsxCli = Join-Path $RootDir "node_modules\tsx\dist\cli.mjs"
+if (-not (Test-Path $TsxCli)) {
+    throw "tsx was not found in node_modules. Please run npm install in the video directory."
+}
+
+node $TsxCli scripts/ui-server.mjs

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFile } from "music-metadata";
+import { buildVideoScript, cleanTextForTts as cleanSegmentTextForTts, segmentCuesToLineCues } from "../src/videoScript.ts";
 
 const rootDir = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const uiDir = join(rootDir, "ui");
@@ -59,11 +60,15 @@ const defaultConfig = {
     speed: "1",
     concurrency: "2",
   },
+  script: {
+    textPreset: "standard",
+  },
 };
 
 const mergeConfig = (config) => ({
   video: { ...defaultConfig.video, ...(config?.video || {}) },
   tts: { ...defaultConfig.tts, ...(config?.tts || {}) },
+  script: { ...defaultConfig.script, ...(config?.script || {}) },
 });
 
 const FPS = 30;
@@ -481,7 +486,75 @@ const loadCurrentData = () => {
   const propsPath = join(publicDataDir, "render-props.json");
   const session = existsSync(sessionPath) ? JSON.parse(readFileSync(sessionPath, "utf8")) : null;
   const props = existsSync(propsPath) ? JSON.parse(readFileSync(propsPath, "utf8")) : null;
-  return { session, props };
+  const scriptPath = props?.scriptFile ? join(publicDir, props.scriptFile) : join(publicDataDir, "video-script.json");
+  const script = existsSync(scriptPath) ? JSON.parse(readFileSync(scriptPath, "utf8")) : null;
+  return { session, props, script };
+};
+
+const scriptStats = (script) => {
+  const rounds = Array.isArray(script?.rounds) ? script.rounds : [];
+  const speakerSegments = rounds.reduce((sum, round) => sum + (round.speakerSegments?.length || 0), 0);
+  const judgeSegments = rounds.reduce((sum, round) => sum + (round.judgeSegments?.length || 0), 0);
+  const scoreSegments = rounds.reduce((sum, round) => sum + (round.scoreSegments?.length || 0), 0);
+  return {
+    rounds: rounds.length,
+    speakerSegments,
+    judgeSegments,
+    scoreSegments,
+    totalSegments: speakerSegments + judgeSegments + scoreSegments,
+    preset: script?.segmentation?.mode || "standard",
+  };
+};
+
+const loadAudioManifestForProps = (props) => {
+  if (!props?.audioManifest) {
+    return null;
+  }
+  const manifestPath = join(publicDir, props.audioManifest);
+  if (!existsSync(manifestPath)) {
+    return null;
+  }
+  return JSON.parse(readFileSync(manifestPath, "utf8"));
+};
+
+const audioManifestMatchesScript = (props, script) => {
+  const manifest = loadAudioManifestForProps(props);
+  return Boolean(
+    manifest &&
+      script?.scriptHash &&
+      manifest.scriptHash === script.scriptHash &&
+      Array.isArray(manifest.scenes) &&
+      manifest.scenes.some((scene) => scene.audioFile),
+  );
+};
+
+const writeVideoScriptForSession = (session, props = {}, options = {}) => {
+  if (!session || !Array.isArray(session.dialogue_history)) {
+    return { props, script: null };
+  }
+
+  mkdirSync(publicDataDir, { recursive: true });
+  const config = options.config || loadConfig();
+  const textPreset = String(config.script?.textPreset || "standard");
+  const script = buildVideoScript(session, textPreset);
+  const scriptFile = "data/video-script.json";
+  const scriptPath = join(publicDir, scriptFile);
+  writeFileSync(scriptPath, `${JSON.stringify(script, null, 2)}\n`, "utf8");
+
+  const nextProps = {
+    ...props,
+    dataFile: props.dataFile || "data/session-export.json",
+    scriptFile,
+    textPreset,
+  };
+
+  if (nextProps.audioManifest && !audioManifestMatchesScript(nextProps, script)) {
+    delete nextProps.audioManifest;
+  }
+
+  const propsPath = join(publicDataDir, "render-props.json");
+  writeFileSync(propsPath, `${JSON.stringify(nextProps, null, 2)}\n`, "utf8");
+  return { props: nextProps, script };
 };
 
 const outputAsset = (name) => {
@@ -527,46 +600,44 @@ const importJson = async (request, response) => {
 
   mkdirSync(publicDataDir, { recursive: true });
   writeFileSync(join(publicDataDir, "session-export.json"), `${JSON.stringify(session, null, 2)}\n`, "utf8");
-  writeFileSync(
-    propsPath,
-    `${JSON.stringify(
-      {
-        dataFile: "data/session-export.json",
-        sourceName,
-        ...(title ? { title } : {}),
-        ...(keepAudioManifest ? { audioManifest: previousAudioManifest } : {}),
-      },
-      null,
-      2,
-    )}\n`,
-    "utf8",
-  );
+  const nextProps = {
+    dataFile: "data/session-export.json",
+    sourceName,
+    ...(title ? { title } : {}),
+    ...(keepAudioManifest ? { audioManifest: previousAudioManifest } : {}),
+  };
+  const { props, script } = writeVideoScriptForSession(session, nextProps);
 
-  jsonResponse(response, 200, { ok: true, message: "已写入 Remotion 输入文件。", sourceName });
+  jsonResponse(response, 200, {
+    ok: true,
+    message: "已写入 Remotion 输入文件，并生成视频脚本切分层。",
+    sourceName,
+    props,
+    scriptStats: scriptStats(script),
+  });
 };
 
 const hasGeneratedAudio = () => {
-  const propsPath = join(publicDataDir, "render-props.json");
-  if (!existsSync(propsPath)) {
-    return false;
-  }
-  const props = JSON.parse(readFileSync(propsPath, "utf8"));
-  if (!props.audioManifest) {
-    return false;
-  }
-  const manifestPath = join(publicDir, props.audioManifest);
-  if (!existsSync(manifestPath)) {
-    return false;
-  }
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  return Array.isArray(manifest.scenes) && manifest.scenes.some((scene) => scene.audioFile);
+  const { props, script } = loadCurrentData();
+  return audioManifestMatchesScript(props, script);
 };
 
 const updateConfig = async (request, response) => {
   const rawBody = await readBody(request, 1024 * 1024);
   const body = JSON.parse(rawBody || "{}");
   const config = saveConfig(body.config || {});
-  jsonResponse(response, 200, { ok: true, message: "配置已保存。", config, origin: "saved" });
+  const { session, props } = loadCurrentData();
+  let script = null;
+  if (session && props) {
+    script = writeVideoScriptForSession(session, props, { config }).script;
+  }
+  jsonResponse(response, 200, {
+    ok: true,
+    message: script ? "配置已保存，并按新文案切分设置刷新视频脚本。" : "配置已保存。",
+    config,
+    origin: "saved",
+    scriptStats: scriptStats(script),
+  });
 };
 
 const openOutputDir = (response) => {
@@ -828,6 +899,12 @@ const concatAudioFiles = async (inputPaths, outputPath, format) => {
   }
 };
 
+const safeFileToken = (value) =>
+  String(value || "segment")
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96) || "segment";
+
 const generateTts = async (request, response) => {
   const config = loadConfig();
   const tts = config.tts;
@@ -837,46 +914,71 @@ const generateTts = async (request, response) => {
     return;
   }
 
-  const { session } = loadCurrentData();
+  const { session, props } = loadCurrentData();
   if (!session) {
     jsonResponse(response, 400, { ok: false, message: "请先导入 Elenchus 导出 JSON。" });
     return;
   }
 
-  const history = Array.isArray(session.dialogue_history) ? session.dialogue_history : [];
-  const turns = groupByTurn(history);
-  const requiredTurns = turns
-    .map(([turn, items]) => {
-      const speakers = items.filter(({ entry }) => !nonSpeakerRoles.has(String(entry?.role || "")));
-      const text = speakers
-        .map(({ entry }) => cleanTextForTts(entry?.content))
-        .filter(Boolean)
-        .join("。");
-      return { turn, text };
-    })
-    .filter(({ text }) => text);
+  const { props: refreshedProps, script } = writeVideoScriptForSession(session, props || {}, { config });
+  const requiredTurns = (script?.rounds || [])
+    .map((round) => ({
+      round,
+      segments: (round.speakerSegments || []).filter((segment) => cleanSegmentTextForTts(segment.text)),
+    }))
+    .filter(({ segments }) => segments.length > 0);
 
   mkdirSync(audioDir, { recursive: true });
 
-  const scenes = await mapLimit(requiredTurns, Number(tts.concurrency) || 2, async ({ turn, text }) => {
-    const id = `turn-${turn + 1}`;
+  const scenes = await mapLimit(requiredTurns, Number(tts.concurrency) || 2, async ({ round, segments }) => {
+    const id = round.id;
     const fileName = `${id}.${safeTtsFormat(tts.format)}`;
     const audioPath = join(audioDir, fileName);
     const audioFile = `audio/${fileName}`;
     const tempDir = mkdtempSync(join(tmpdir(), `elenchus-${id}-`));
 
     try {
-      const chunkFiles = await synthesizeChunkFiles(tts, text, tempDir, id);
-      if (chunkFiles.length === 0) {
+      const segmentAudioFiles = [];
+      const segmentCues = [];
+      let cursorFrame = 0;
+
+      for (const [index, segment] of segments.entries()) {
+        const text = cleanSegmentTextForTts(segment.text);
+        if (!text) {
+          continue;
+        }
+
+        const token = `${safeFileToken(segment.id)}-${String(index + 1).padStart(3, "0")}`;
+        const segmentPath = join(tempDir, `${token}.${safeTtsFormat(tts.format)}`);
+        const chunkFiles = await synthesizeChunkFiles(tts, text, tempDir, token);
+        await concatAudioFiles(chunkFiles, segmentPath, safeTtsFormat(tts.format));
+        const metadata = await parseFile(segmentPath);
+        const segmentFrames = Math.ceil((metadata.format.duration || 0) * FPS);
+        if (segmentFrames <= 0) {
+          throw new Error(`无法解析 ${segment.id} 的音频时长。`);
+        }
+
+        segmentAudioFiles.push(segmentPath);
+        segmentCues.push({
+          ...segment,
+          text,
+          charCount: text.replace(/\s+/g, "").length,
+          startFrame: cursorFrame,
+          endFrame: cursorFrame + segmentFrames,
+        });
+        cursorFrame += segmentFrames;
+      }
+
+      if (segmentAudioFiles.length === 0) {
         return null;
       }
-      await concatAudioFiles(chunkFiles, audioPath, safeTtsFormat(tts.format));
+      await concatAudioFiles(segmentAudioFiles, audioPath, safeTtsFormat(tts.format));
       const metadata = await parseFile(audioPath);
-      const durationFrames = Math.ceil((metadata.format.duration || 0) * FPS);
+      const durationFrames = Math.max(cursorFrame, Math.ceil((metadata.format.duration || 0) * FPS));
       if (durationFrames <= 0) {
         throw new Error("无法解析音频时长。");
       }
-      return { id, audioFile, durationFrames };
+      return { id, audioFile, durationFrames, segmentCues, lineCues: segmentCuesToLineCues(segmentCues) };
     } catch (error) {
       rmSync(audioPath, { force: true });
       return { id, audioFile, durationFrames: 0, error: error instanceof Error ? error.message : String(error) };
@@ -907,14 +1009,22 @@ const generateTts = async (request, response) => {
   mkdirSync(publicDataDir, { recursive: true });
   writeFileSync(
     join(publicDataDir, "session-audio.json"),
-    `${JSON.stringify({ scenes: okScenes }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        scriptFile: refreshedProps.scriptFile || "data/video-script.json",
+        scriptHash: script?.scriptHash,
+        scenes: okScenes,
+      },
+      null,
+      2,
+    )}\n`,
     "utf8",
   );
 
   const propsPath = join(publicDataDir, "render-props.json");
-  const props = existsSync(propsPath) ? JSON.parse(readFileSync(propsPath, "utf8")) : {};
-  props.audioManifest = "data/session-audio.json";
-  writeFileSync(propsPath, `${JSON.stringify(props, null, 2)}\n`, "utf8");
+  const renderProps = existsSync(propsPath) ? JSON.parse(readFileSync(propsPath, "utf8")) : {};
+  renderProps.audioManifest = "data/session-audio.json";
+  writeFileSync(propsPath, `${JSON.stringify(renderProps, null, 2)}\n`, "utf8");
 
   jsonResponse(response, 200, {
     ok: true,
@@ -933,6 +1043,13 @@ const runCommand = async (request, response) => {
   if (!command) {
     jsonResponse(response, 400, { ok: false, message: "未知命令。" });
     return;
+  }
+
+  if (["still", "render", "fast-render", "studio"].includes(name)) {
+    const { session, props } = loadCurrentData();
+    if (session && props) {
+      writeVideoScriptForSession(session, props);
+    }
   }
 
   const args = typeof command.args === "function" ? command.args() : command.args;

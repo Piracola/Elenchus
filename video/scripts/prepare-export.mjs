@@ -1,5 +1,6 @@
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
+import { buildVideoScript } from "../src/videoScript.ts";
 
 const sourceArg = process.argv[2];
 
@@ -27,12 +28,16 @@ if (!Array.isArray(parsed.dialogue_history)) {
 
 mkdirSync("public/data", { recursive: true });
 copyFileSync(sourcePath, "public/data/session-export.json");
+const script = buildVideoScript(parsed, "standard");
+writeFileSync("public/data/video-script.json", `${JSON.stringify(script, null, 2)}\n`, "utf8");
 
 writeFileSync(
   "public/data/render-props.json",
   `${JSON.stringify(
     {
       dataFile: "data/session-export.json",
+      scriptFile: "data/video-script.json",
+      textPreset: "standard",
       sourceName: basename(sourcePath),
     },
     null,
@@ -43,3 +48,4 @@ writeFileSync(
 
 console.log(`已复制导出文件：${sourcePath}`);
 console.log("视频数据入口：public/data/session-export.json");
+console.log(`视频脚本切分：${script.rounds.length} 轮，${script.rounds.reduce((sum, round) => sum + round.speakerSegments.length, 0)} 个辩手片段`);
