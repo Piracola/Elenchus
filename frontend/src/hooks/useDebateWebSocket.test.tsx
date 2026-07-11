@@ -361,6 +361,22 @@ describe('useDebateWebSocket', () => {
         expect(MockWebSocket.instances).toHaveLength(1);
     });
 
+    it('subscribes after the authoritative run sequence when a historical run is opened', () => {
+        useDebateStore.getState().setActiveRun(makeRun('run-a', 'session-a', {
+            status: 'stalled',
+            current_turn: 5,
+            latest_seq: 42,
+        }));
+
+        renderHook(
+            ({ runId }) => useDebateWebSocket(runId),
+            { initialProps: { runId: 'run-a' } },
+        );
+
+        expect(MockWebSocket.instances[0].url).toContain('/ws/runs/run-a?after_seq=42');
+        expect(useDebateStore.getState().lastEventSeqByRun['run-a']).toBe(42);
+    });
+
     it('keeps the current ping timer alive when an old timer fires after switching runs', () => {
         const { rerender } = renderHook(
             ({ runId }) => useDebateWebSocket(runId),
@@ -454,6 +470,27 @@ describe('useDebateWebSocket', () => {
         });
     });
 
+    it('marks the run as live immediately after startRun succeeds', async () => {
+        createRunMock.mockResolvedValueOnce(makeRun('run-created', 'session-a', {
+            status: 'initializing',
+            last_status_message: '辩论准备中...',
+        }));
+
+        const { result } = renderHook(
+            ({ runId }) => useDebateWebSocket(runId),
+            { initialProps: { runId: 'run-a' } },
+        );
+
+        await act(async () => {
+            await result.current.startRun('Updated topic', ['proposer', 'opposer'], 6);
+        });
+
+        const state = useDebateStore.getState();
+        expect(state.activeRun?.status).toBe('initializing');
+        expect(state.isDebating).toBe(true);
+        expect(state.phase).toBe('initializing');
+    });
+
     it('sends stop as a run command and leaves websocket control passive', async () => {
         const { result } = renderHook(
             ({ runId }) => useDebateWebSocket(runId),
@@ -493,7 +530,7 @@ describe('useDebateWebSocket', () => {
         expect(createRunMock).not.toHaveBeenCalled();
         expect(commandRunMock).toHaveBeenCalledWith('run-a', 'resume');
         expect(useDebateStore.getState().isDebating).toBe(true);
-        expect(useDebateStore.getState().phase).toBe('initializing');
+        expect(useDebateStore.getState().phase).toBe('processing');
         expect(useDebateStore.getState().activeRun?.status).toBe('running');
     });
 

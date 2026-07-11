@@ -109,7 +109,14 @@ def main() -> None:
     if _should_open_browser():
         _open_browser_later(f"http://{browser_host}:{port}")
 
-    uvicorn.run(app, host=host, port=port, reload=False)
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        reload=False,
+        access_log=False,
+        log_config=None,
+    )
 
 
 if __name__ == "__main__":

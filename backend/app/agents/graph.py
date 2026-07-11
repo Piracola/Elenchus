@@ -100,6 +100,8 @@ class DebateGraphState(TypedDict, total=False):
     last_progress_at: str
     last_status_message: str
     resume_count: int
+    resume_next_node: str
+    resume_origin_turn: int
     interrupted_at: str | None
     
     # Node execution tracking
@@ -304,6 +306,9 @@ def _current_turn_group_discussion_count(state: DebateGraphState) -> int:
 
 
 def _should_run_pre_round_group_discussion(state: DebateGraphState) -> bool:
+    current_turn = _coerce_turn(state.get("current_turn", 0), 0)
+    if current_turn < 0:
+        return False
     configured_rounds = _get_group_discussion_rounds(state)
     if configured_rounds <= 0:
         return False
@@ -348,6 +353,12 @@ def _has_consensus_summary(state: DebateGraphState) -> bool:
 
 def should_route_after_manage_context(state: DebateGraphState) -> str:
     """Avoid starting another round when a resumed run is already at the turn limit."""
+    resume_next_node = str(state.get("resume_next_node", "") or "")
+    resume_origin_turn = _coerce_turn(state.get("resume_origin_turn", -1), -1)
+    current_turn = _coerce_turn(state.get("current_turn", 0), 0)
+    if resume_next_node and resume_origin_turn == current_turn:
+        return resume_next_node
+
     if not _turn_limit_reached(state):
         if _should_run_pre_round_group_discussion(state):
             return "group_discussion"

@@ -365,6 +365,45 @@ async def test_create_session_persists_speech_config():
 
 
 @pytest.mark.asyncio
+async def test_create_session_updates_recent_debate_config():
+    created = await session_service.create_session(
+        SessionCreate(
+            topic="Reusable setup",
+            max_turns=7,
+            agent_configs={
+                "proposer": {
+                    "provider_id": "openai-main",
+                    "provider_type": "openai",
+                    "model": "gpt-4.1",
+                    "temperature": 0.4,
+                }
+            },
+            reasoning_config={
+                "consensus_enabled": False,
+                "group_discussion_rounds": 2,
+            },
+            speech_config={
+                "proposer_max_chars": 1200,
+                "opposer_max_chars": 1000,
+                "group_discussion_max_chars": 600,
+            },
+        ),
+    )
+
+    recent = await session_service.get_recent_debate_config()
+
+    assert recent is not None
+    assert recent["source_session_id"] == created["id"]
+    assert recent["max_turns"] == 7
+    assert recent["agent_configs"]["proposer"]["model"] == "gpt-4.1"
+    assert recent["reasoning_config"] == {
+        "consensus_enabled": False,
+        "group_discussion_rounds": 2,
+    }
+    assert recent["speech_config"]["proposer_max_chars"] == 1200
+
+
+@pytest.mark.asyncio
 async def test_create_sophistry_session_enforces_mode_specific_defaults():
     created = await session_service.create_session(
         SessionCreate(

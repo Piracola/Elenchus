@@ -58,7 +58,19 @@ JSON / Markdown / HTML 导出继续复用现有导出链路，但数据源来自
 
 默认导出 session 的最新 run；前端有明确 `activeRunId` 时会导出该 run。
 
-## 5. 排查顺序
+## 5. 日志边界
+
+运行时记录分三层，不再把所有细节都打印到终端：
+
+- SQLite ledger：保存权威事实，包括 Session、Run、事件、投影、检查点、命令和文档记录。
+- `runtime/logs/`：保存应用层排障日志，包括异常堆栈、外部调用失败、恢复修复和重要生命周期。
+- 控制台：只显示启动/关闭、少量关键生命周期和 `WARNING` 以上问题。
+
+默认直接舍弃控制台上的高频技术噪音，例如 SQLAlchemy 的逐条 SQL、事务 `BEGIN/ROLLBACK`、HTTP access log、底层 HTTP 客户端调试日志。这些信息体量大、重复多，通常不能解释运行真相；如果要复盘某次辩论，应优先查 SQLite 账本和导出结果。
+
+`server.debug` 只表示应用调试模式，不会打开 SQLAlchemy `echo`。如确实需要逐条 SQL 调试，应在本地临时改代码或用数据库工具查看，不要把它作为默认运行日志。
+
+## 6. 排查顺序
 
 遇到历史恢复、导出或卡死问题时，优先看：
 
@@ -69,7 +81,7 @@ JSON / Markdown / HTML 导出继续复用现有导出链路，但数据源来自
 
 `runtime/config.json` 只解释静态配置，不解释某次运行为什么走到某个状态。
 
-## 6. 文档边界
+## 7. 文档边界
 
 - [architecture.md](./architecture.md)：解释系统分层、API、运行链路和模块入口。
 - [getting-started.md](./getting-started.md)：解释如何启动项目。

@@ -102,15 +102,19 @@ class SessionRuntimeRepository:
                 ),
                 "current_turn": current_run.current_turn or 0,
                 "max_turns": max_turns,
-                "current_speaker": "",
-                "current_speaker_index": -1,
+                "current_speaker": str(session_snapshot.get("current_speaker", "") or ""),
+                "current_speaker_index": int(session_snapshot.get("current_speaker_index", -1) or -1),
                 "dialogue_history": dialogue_history,
                 "judge_history": judge_history,
                 "shared_knowledge": session_snapshot.get(
                     "shared_knowledge",
                     [],
                 ),
-                "messages": [],
+                "messages": (
+                    session_snapshot.get("messages", [])
+                    if isinstance(session_snapshot.get("messages", []), list)
+                    else []
+                ),
                 "current_scores": session_snapshot.get(
                     "current_scores",
                     {},
@@ -133,6 +137,8 @@ class SessionRuntimeRepository:
                     session_snapshot.get("last_status_message", "") or ""
                 ),
                 "resume_count": int(session_snapshot.get("resume_count", 0) or 0),
+                "resume_next_node": str(session_snapshot.get("resume_next_node", "") or ""),
+                "resume_origin_turn": int(session_snapshot.get("resume_origin_turn", -1) or -1),
                 "interrupted_at": str(session_snapshot.get("interrupted_at", "") or "") or None,
                 "agent_configs": (
                     agent_configs

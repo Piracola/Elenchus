@@ -17,6 +17,7 @@ import {
 
 const EXPORT_CONTENT_OPTIONS: { value: MarkdownExportCategory; label: string }[] = [
   { value: 'thinking_content', label: '思维链' },
+  { value: 'group_discussion', label: '组内讨论' },
   { value: 'judge_messages', label: '裁判消息' },
   { value: 'consensus_summary', label: '共识收敛消息' },
 ];

@@ -38,6 +38,9 @@ describe('buildTranscriptViewModel', () => {
         });
 
         expect(viewModel.consensusEntries).toEqual([consensus]);
+        expect(viewModel.rows).toHaveLength(1);
+        expect(viewModel.rows[0].agent).toBe(speaker);
+        expect(viewModel.rows[0].system).toBeUndefined();
         expect(viewModel.rowViewModels[0].insightSections).toEqual([]);
     });
 });

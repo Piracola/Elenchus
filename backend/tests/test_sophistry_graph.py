@@ -73,3 +73,22 @@ def test_sophistry_graph_routes_resumed_final_turn_to_postmortem_or_end():
             "final_mode_report": None,
         }
     ) == "set_speaker"
+
+
+def test_sophistry_graph_honors_resume_node_without_repeating_speaker():
+    assert should_route_after_manage_context(
+        {
+            "current_turn": 1,
+            "max_turns": 2,
+            "resume_origin_turn": 1,
+            "resume_next_node": "sophistry_observer",
+        }
+    ) == "observer"
+    assert should_route_after_manage_context(
+        {
+            "current_turn": 1,
+            "max_turns": 2,
+            "resume_origin_turn": 1,
+            "resume_next_node": "advance_turn",
+        }
+    ) == "advance_turn"

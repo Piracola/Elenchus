@@ -71,9 +71,30 @@ describe('buildLiveTranscriptViewModel', () => {
         });
     });
 
-    it('restores a speaker status event as a placeholder before speech_start is emitted', () => {
+    it('does not restore a speaker placeholder from old events when the run is idle', () => {
         const live = buildLiveTranscriptViewModel(baseArgs({
             isDebating: false,
+            runtimeEvents: [
+                makeRuntimeEvent({
+                    event_id: 'evt_status_speaker',
+                    session_id: 'session_1',
+                    seq: 5,
+                    type: 'status',
+                    phase: 'speaking',
+                    payload: {
+                        content: '辩手正在组织发言...',
+                        node: 'speaker',
+                    },
+                }),
+            ],
+        }));
+
+        expect(live.speech).toBeNull();
+    });
+
+    it('restores a speaker status event as a placeholder before speech_start is emitted while running', () => {
+        const live = buildLiveTranscriptViewModel(baseArgs({
+            isDebating: true,
             runtimeEvents: [
                 makeRuntimeEvent({
                     event_id: 'evt_status_speaker',

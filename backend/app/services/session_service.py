@@ -38,6 +38,18 @@ async def create_session(body: SessionCreate) -> dict[str, Any]:
             "updated_at": _utcnow(),
         }
     )
+    await _ledger.upsert_recent_debate_config(
+        {
+            "source_session_id": record.id,
+            "debate_mode": debate_mode,
+            "participants": list(body.participants),
+            "max_turns": body.max_turns,
+            "mode_config": mode_config,
+            "agent_configs": agent_configs,
+            "reasoning_config": reasoning_config,
+            "speech_config": body.speech_config.model_dump(),
+        }
+    )
     return await get_session(record.id) or {}
 
 
@@ -51,6 +63,10 @@ async def count_sessions() -> int:
 
 async def get_session(session_id: str) -> dict[str, Any] | None:
     return await _ledger.get_session(session_id)
+
+
+async def get_recent_debate_config() -> dict[str, Any] | None:
+    return await _ledger.get_recent_debate_config()
 
 
 async def get_session_record(session_id: str):

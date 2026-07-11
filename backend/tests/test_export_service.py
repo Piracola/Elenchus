@@ -40,6 +40,15 @@ def build_markdown_session_payload() -> dict:
                 "turn": 0,
             },
             {
+                "role": "group_discussion",
+                "agent_name": "组内讨论",
+                "content": "赛前简报：先厘清教育公平的边界。",
+                "citations": [],
+                "timestamp": "2026-03-18T10:03:00Z",
+                "turn": 1,
+                "discussion_kind": "group_discussion",
+            },
+            {
                 "role": "consensus_summary",
                 "agent_name": "共识协调员",
                 "content": "双方都承认 AI 会重塑教学流程，但分歧在风险治理。",
@@ -104,6 +113,19 @@ def test_export_markdown_supports_category_filtered_sections():
     assert "双方都承认 AI 会重塑教学流程" in markdown
 
 
+def test_export_markdown_can_select_group_discussion_separately():
+    debater_only = export.export_markdown(build_markdown_session_payload(), ["debater_speeches"])
+    with_group_discussion = export.export_markdown(
+        build_markdown_session_payload(),
+        ["debater_speeches", "group_discussion"],
+    )
+
+    assert "赛前简报：先厘清教育公平的边界。" not in debater_only
+    assert "## 组内讨论" in with_group_discussion
+    assert "### [组内讨论] 第 2 轮" in with_group_discussion
+    assert "赛前简报：先厘清教育公平的边界。" in with_group_discussion
+
+
 def test_normalize_markdown_export_categories_preserves_stable_order_and_fallback():
     assert export.normalize_markdown_export_categories(None) is None
     assert export.normalize_markdown_export_categories(["consensus_summary", "judge_messages", "consensus_summary"]) == [
@@ -112,6 +134,10 @@ def test_normalize_markdown_export_categories_preserves_stable_order_and_fallbac
     ]
     assert export.normalize_markdown_export_categories(["thinking_content", "judge_messages"]) == [
         "thinking_content",
+        "judge_messages",
+    ]
+    assert export.normalize_markdown_export_categories(["group_discussion", "judge_messages"]) == [
+        "group_discussion",
         "judge_messages",
     ]
     assert export.normalize_markdown_export_categories(["invalid"]) == ["debater_speeches"]
@@ -293,6 +319,19 @@ def test_export_html_supports_category_filtered_sections():
     assert "共识收敛消息" in html
     assert "双方都承认 AI 会重塑教学流程" in html
     assert "AI 可以显著提升个性化教学效果。" not in html
+
+
+def test_export_html_can_select_group_discussion_separately():
+    debater_only = export.export_html(build_markdown_session_payload(), ["debater_speeches"])
+    with_group_discussion = export.export_html(
+        build_markdown_session_payload(),
+        ["debater_speeches", "group_discussion"],
+    )
+
+    assert "赛前简报：先厘清教育公平的边界。" not in debater_only
+    assert "组内讨论" in with_group_discussion
+    assert 'href="#group_discussion"' in with_group_discussion
+    assert "赛前简报：先厘清教育公平的边界。" in with_group_discussion
 
 
 def test_export_html_escapes_agent_content():

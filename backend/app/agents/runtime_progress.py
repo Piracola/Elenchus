@@ -12,7 +12,10 @@ _NODE_PHASES = {
     "manage_context": "context",
     "speaker": "speaking",
     "judge": "judging",
-    "consensus": "complete",
+    "consensus": "processing",
+    "sophistry_speaker": "speaking",
+    "sophistry_observer": "processing",
+    "sophistry_postmortem": "processing",
 }
 
 

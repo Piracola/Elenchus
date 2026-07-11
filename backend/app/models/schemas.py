@@ -369,6 +369,22 @@ class SessionListResponse(BaseModel):
     total: int
 
 
+class RecentDebateConfigResponse(BaseModel):
+    """Most recently used debate setup, excluding topic and documents."""
+
+    id: str
+    source_session_id: str | None = None
+    debate_mode: DebateMode = DebateMode.STANDARD
+    participants: list[str] = Field(default_factory=lambda: ["proposer", "opposer"])
+    max_turns: int = 5
+    mode_config: dict[str, Any] = Field(default_factory=dict)
+    agent_configs: dict[str, dict[str, Any]] | None = Field(default=None)
+    reasoning_config: ReasoningConfig = Field(default_factory=ReasoningConfig)
+    speech_config: SpeechConfig = Field(default_factory=SpeechConfig)
+    created_at: datetime
+    updated_at: datetime
+
+
 class RunCreate(BaseModel):
     topic: str | None = None
     participants: list[str] | None = None

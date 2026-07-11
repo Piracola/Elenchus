@@ -7,6 +7,7 @@ import type {
     SessionAgentConfigsUpdatePayload,
     SessionListItem,
     SessionCreatePayload,
+    RecentDebateConfig,
     ModelConfig,
     ModelConfigCreatePayload,
     ModelProviderModelsResult,
@@ -165,6 +166,12 @@ export const api = {
             request('/sessions', {
                 method: 'POST',
                 body: JSON.stringify(payload),
+            }),
+
+        recentConfig: (): Promise<RecentDebateConfig | null> =>
+            requestWithParser('/sessions/recent-config', async (res) => {
+                if (res.status === 204) return null;
+                return res.json() as Promise<RecentDebateConfig>;
             }),
 
         get: (id: string): Promise<Session> =>

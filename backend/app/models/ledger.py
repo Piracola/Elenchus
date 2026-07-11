@@ -38,6 +38,22 @@ class SessionRecord(Base):
     )
 
 
+class RecentDebateConfigRecord(Base):
+    __tablename__ = "recent_debate_configs"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    source_session_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    debate_mode: Mapped[str] = mapped_column(String(64), nullable=False, default="standard")
+    participants: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    max_turns: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    mode_config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    agent_configs: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    reasoning_config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    speech_config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class RunRecord(Base):
     __tablename__ = "runs"
 

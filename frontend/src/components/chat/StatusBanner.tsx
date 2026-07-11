@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { AlertCircle, CheckCircle2, CircleDashed, Loader2, PauseCircle } from 'lucide-react';
 import type { DebatePhase, RunStatus } from '../../types';
-import { isRunStatusInProgress, useRuntimeViewState } from '../../hooks/useDebateViewState';
+import { useRuntimeViewState } from '../../hooks/useDebateViewState';
 
 const NODE_LABELS: Record<string, string> = {
     manage_context: '整理上下文',
@@ -104,7 +104,7 @@ function buildStatusViewModel({
     currentNode: string;
 }): StatusViewModel {
     const resumableSession = !isDebating && (
-        isRunStatusInProgress(runStatus) || (!runStatus && sessionStatus === 'in_progress')
+        runStatus === 'stalled' || (!runStatus && sessionStatus === 'in_progress')
     );
     const tone = getTone({ phase, isDebating, resumableSession });
     const message = currentStatus || getFallbackMessage({ phase, isDebating, resumableSession });

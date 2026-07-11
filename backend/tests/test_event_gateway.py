@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import pytest
 
 from app.runtime.bus import RuntimeBus
@@ -93,7 +94,9 @@ async def test_event_gateway_resumes_sequence_from_repository():
             return 0
 
         async def persist_runtime_event(self, event: dict) -> None:
-            self.persisted.append(event)
+            persisted = dict(event)
+            self.persisted.append(persisted)
+            return persisted
 
     repository = _Repository()
     gateway = RuntimeBus(sink, repository=repository)
@@ -110,3 +113,34 @@ async def test_event_gateway_resumes_sequence_from_repository():
     assert len(repository.persisted) == 1
     assert repository.persisted[0]["event_id"] == event["event_id"]
     assert delivered[0][1]["seq"] == 8
+
+
+@pytest.mark.asyncio
+async def test_event_gateway_persists_concurrent_events_in_sequence_order():
+    class _Repository:
+        def __init__(self) -> None:
+            self.persisted: list[int] = []
+
+        async def get_latest_runtime_event_seq(self, _run_id: str) -> int:
+            return 0
+
+        async def persist_runtime_event(self, event: dict) -> dict:
+            if event["seq"] == 1:
+                await asyncio.sleep(0.02)
+            self.persisted.append(event["seq"])
+            return event
+
+    repository = _Repository()
+    gateway = RuntimeBus(repository=repository)
+    await asyncio.gather(*[
+        gateway.emit(
+            run_id="concurrent123",
+            session_id="concurrent123",
+            event_type="status",
+            payload={"content": f"event-{index}"},
+            source="test",
+        )
+        for index in range(2)
+    ])
+
+    assert repository.persisted == [1, 2]

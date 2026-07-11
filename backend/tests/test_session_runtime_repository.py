@@ -158,15 +158,15 @@ async def test_build_initial_state_rolls_back_incomplete_speaker_turn():
     )
 
     assert state is not None
-    assert [entry["turn"] for entry in state["dialogue_history"]] == [0]
-    assert state["shared_knowledge"] == [{"type": "memo", "content": "turn 0 summary", "source_turn": 0}]
-    assert state["current_speaker"] == ""
-    assert state["current_speaker_index"] == -1
-    assert state["messages"] == []
-    assert state["current_scores"] == {}
-    assert state["cumulative_scores"] == {}
-    assert state["last_executed_node"] == "manage_context"
-    assert state["last_status_message"] == ""
+    assert [entry["turn"] for entry in state["dialogue_history"]] == [0, 1]
+    assert state["shared_knowledge"] == [
+        {"type": "memo", "content": "turn 0 summary", "source_turn": 0},
+        {"type": "fact", "content": "turn 1 fact", "source_turn": 1},
+    ]
+    assert state["current_speaker"] == "opposer"
+    assert state["current_speaker_index"] == 1
+    assert state["resume_next_node"] == "set_speaker"
+    assert state["resume_origin_turn"] == 1
 
 
 @pytest.mark.asyncio
@@ -230,11 +230,11 @@ async def test_build_initial_state_clears_partial_judge_outputs_for_current_turn
     )
 
     assert state is not None
-    assert len(state["judge_history"]) == 1
-    assert state["judge_history"][0]["turn"] == 0
-    assert state["current_scores"] == {}
-    assert state["cumulative_scores"] == {"proposer": {"logical_rigor": [7]}}
-    assert state["last_executed_node"] == "manage_context"
+    assert len(state["judge_history"]) == 2
+    assert state["judge_history"][1]["turn"] == 1
+    assert state["current_scores"] == {"proposer": {"overall_comment": "turn 1 partial"}}
+    assert state["cumulative_scores"] == {"proposer": {"logical_rigor": [7, 9]}}
+    assert state["resume_next_node"] == "advance_turn"
 
 
 @pytest.mark.asyncio
@@ -334,7 +334,59 @@ async def test_build_initial_state_preserves_pre_round_group_discussion_boundary
     assert state is not None
     assert len(state["dialogue_history"]) == 1
     assert state["dialogue_history"][0]["role"] == "group_discussion"
-    assert state["last_executed_node"] == "group_discussion"
+    assert state["resume_next_node"] == "set_speaker"
+
+
+@pytest.mark.asyncio
+async def test_build_initial_state_preserves_group_discussion_when_resuming_after_speaker():
+    created, run_id = await _create_session_with_snapshot(
+        current_turn=0,
+        snapshot={
+            "dialogue_history": [
+                {
+                    "role": "group_discussion",
+                    "agent_name": "组内讨论",
+                    "content": "已完成赛前讨论",
+                    "citations": [],
+                    "timestamp": "2026-03-20T00:00:00Z",
+                    "turn": 0,
+                    "discussion_kind": "group_discussion",
+                    "discussion_round": 1,
+                },
+                {
+                    "role": "proposer",
+                    "agent_name": "Proposer",
+                    "content": "开场发言",
+                    "citations": [],
+                    "timestamp": "2026-03-20T00:00:10Z",
+                    "turn": 0,
+                },
+            ],
+            "judge_history": [],
+            "shared_knowledge": [],
+            "current_scores": {},
+            "cumulative_scores": {},
+            "agent_configs": {},
+            "current_speaker": "proposer",
+            "current_speaker_index": 0,
+            "last_executed_node": "speaker",
+        },
+    )
+
+    state = await SessionRuntimeRepository().build_initial_state(
+        run_id,
+        created["id"],
+        topic=created["topic"],
+        participants=created["participants"],
+        max_turns=created["max_turns"],
+        agent_configs=created.get("agent_configs", {}),
+    )
+
+    assert state is not None
+    discussion_entries = [entry for entry in state["dialogue_history"] if entry["role"] == "group_discussion"]
+    assert len(discussion_entries) == 1
+    assert discussion_entries[0]["discussion_round"] == 1
+    assert state["resume_next_node"] == "set_speaker"
 
 
 @pytest.mark.asyncio

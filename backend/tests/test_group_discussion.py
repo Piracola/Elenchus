@@ -109,6 +109,48 @@ async def test_group_discussion_generates_only_missing_rounds_after_resume(monke
 
 
 @pytest.mark.asyncio
+async def test_group_discussion_skips_when_required_rounds_already_exist(monkeypatch):
+    calls = 0
+
+    async def fake_refresh_agent_configs(state):
+        return state.get("agent_configs", {})
+
+    async def fake_invoke_text_model(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return "不应再次生成"
+
+    monkeypatch.setattr(group_discussion, "refresh_agent_configs_for_session", fake_refresh_agent_configs)
+    monkeypatch.setattr(group_discussion, "invoke_text_model", fake_invoke_text_model)
+    monkeypatch.setattr(group_discussion, "get_group_discussion_prompt", lambda: "系统提示")
+
+    result = await group_discussion.run_group_discussion(
+        {
+            "topic": "AI 是否应被严格监管",
+            "current_turn": 0,
+            "max_turns": 3,
+            "dialogue_history": [
+                {
+                    "role": "group_discussion",
+                    "agent_name": "组内讨论",
+                    "content": "已完成讨论 1",
+                    "turn": 0,
+                    "discussion_round": 1,
+                }
+            ],
+            "shared_knowledge": [],
+            "judge_history": [],
+            "reasoning_config": {"group_discussion_rounds": 1},
+            "speech_config": {},
+            "agent_configs": {},
+        }
+    )
+
+    assert calls == 0
+    assert result == {}
+
+
+@pytest.mark.asyncio
 async def test_group_discussion_retries_with_retry_after_then_writes_error_entry(monkeypatch):
     attempts = 0
     sleep_calls: list[float] = []

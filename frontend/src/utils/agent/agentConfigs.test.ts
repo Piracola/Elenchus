@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    buildAgentConfigFormState,
     buildSelectedConfigKey,
     buildAgentConfigsPayload,
     DEFAULT_AGENT_TEMPERATURE,
@@ -101,6 +102,20 @@ describe('agentConfigs utils', () => {
             providerId: 'provider-openai',
             model: null,
         })).toBe('provider-openai::gpt-4o');
+    });
+
+    it('restores form state from persisted agent configs', () => {
+        const result = buildAgentConfigFormState([baseProvider], {
+            proposer: {
+                provider_id: 'provider-openai',
+                model: 'gpt-4.1-mini',
+                temperature: 0.35,
+            },
+        });
+
+        expect(result.selectedConfigIds.proposer).toBe('provider-openai::gpt-4.1-mini');
+        expect(result.temperatureInputs.proposer).toBe('0.35');
+        expect(result.selectedConfigIds.opposer).toBe('');
     });
 
 });

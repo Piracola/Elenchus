@@ -11,6 +11,7 @@ export interface DisplaySettings {
 export const MARKDOWN_EXPORT_CATEGORY_IDS = [
     'debater_speeches',
     'thinking_content',
+    'group_discussion',
     'judge_messages',
     'consensus_summary',
 ] as const;

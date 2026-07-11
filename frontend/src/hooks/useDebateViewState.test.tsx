@@ -113,7 +113,7 @@ describe('useDebateViewState', () => {
 
         expect(result.current.currentTurn).toBe(5);
         expect(result.current.displayTurn).toBe(5);
-        expect(result.current.sessionStatus).toBe('error');
+        expect(result.current.sessionStatus).toBe('pending');
         expect(result.current.runStatus).toBe('stalled');
     });
 
@@ -147,7 +147,7 @@ describe('useDebateViewState', () => {
         const runtime = renderHook(() => useRuntimeViewState());
 
         expect(runtime.result.current.runtimeEventCount).toBe(0);
-        expect(runtime.result.current.currentStatus).toBe('');
+        expect(runtime.result.current.currentStatus).toBe('等待恢复');
     });
 
     it('keeps group discussion entries available in the transcript view', () => {
@@ -180,6 +180,7 @@ describe('useDebateViewState', () => {
         }));
         useDebateStore.getState().applyRuntimeEvent(makeRuntimeEvent({
             event_id: 'evt_run_status',
+            seq: 9,
             type: 'run_status_changed',
             payload: {
                 status: 'failed',
@@ -194,5 +195,23 @@ describe('useDebateViewState', () => {
         expect(runtime.result.current.phase).toBe('error');
         expect(runtime.result.current.currentStatus).toBe('上游模型调用失败');
         expect(session.result.current.sessionStatus).toBe('error');
+    });
+
+    it('treats stalled runs as resumable instead of active failures', () => {
+        useDebateStore.getState().setCurrentSession(makeSession({
+            status: 'pending',
+        }));
+        useDebateStore.getState().setActiveRun(makeRun({
+            status: 'stalled',
+            last_status_message: '等待恢复',
+        }));
+
+        const runtime = renderHook(() => useRuntimeViewState());
+        const session = renderHook(() => useSessionViewState());
+
+        expect(runtime.result.current.isDebating).toBe(false);
+        expect(runtime.result.current.phase).toBe('idle');
+        expect(session.result.current.sessionStatus).toBe('pending');
+        expect(session.result.current.runStatus).toBe('stalled');
     });
 });

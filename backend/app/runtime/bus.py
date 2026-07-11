@@ -13,7 +13,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from app.runtime.event_schema import RuntimeEvent, build_runtime_event
-from app.runtime.event_persistence import should_persist_runtime_event
+from app.runtime.event_persistence import compact_runtime_event_payload, should_persist_runtime_event
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ class RuntimeBus:
         self._seq_by_run: dict[str, int] = {}
         self._active: dict[str, list[WebSocket]] = {}
         self._run_locks: dict[str, asyncio.Lock] = {}
+        self._emit_locks: dict[str, asyncio.Lock] = {}
         self._pending_connections: dict[str, dict[WebSocket, deque[dict[str, Any]]]] = {}
 
     async def connect(self, run_id: str, websocket: WebSocket) -> None:
@@ -100,6 +101,9 @@ class RuntimeBus:
                 self._pending_connections.pop(run_id, None)
         if not self._active.get(run_id) and not self._pending_connections.get(run_id):
             self._run_locks.pop(run_id, None)
+            emit_lock = self._emit_locks.get(run_id)
+            if emit_lock is not None and not emit_lock.locked():
+                self._emit_locks.pop(run_id, None)
         if removed:
             logger.info("WS disconnected: run=%s", run_id)
 
@@ -189,30 +193,32 @@ class RuntimeBus:
         source: str = "runtime",
         phase: str | None = None,
     ) -> RuntimeEvent:
+        payload = compact_runtime_event_payload(payload)
         persisted = should_persist_runtime_event(
             event_type,
             payload,
             source=source,
         )
-        event = await self.create_event(
-            run_id=run_id,
-            session_id=session_id,
-            event_type=event_type,
-            payload=payload,
-            source=source,
-            phase=phase,
-            persisted=persisted,
-        )
-        if self._repository is not None and persisted:
-            persisted_event = await self._repository.persist_runtime_event(event)
-            if isinstance(persisted_event, dict):
-                event = persisted_event
-                self._seq_by_run[run_id] = max(
-                    self._seq_by_run.get(run_id, 0),
-                    int(event.get("seq", 0) or 0),
-                )
-        await self._deliver(run_id, event)
-        return event
+        async with self._get_emit_lock(run_id):
+            event = await self.create_event(
+                run_id=run_id,
+                session_id=session_id,
+                event_type=event_type,
+                payload=payload,
+                source=source,
+                phase=phase,
+                persisted=persisted,
+            )
+            if self._repository is not None and persisted:
+                persisted_event = await self._repository.persist_runtime_event(event)
+                if isinstance(persisted_event, dict):
+                    event = persisted_event
+                    self._seq_by_run[run_id] = max(
+                        self._seq_by_run.get(run_id, 0),
+                        int(event.get("seq", 0) or 0),
+                    )
+            await self._deliver(run_id, event)
+            return event
 
     async def _deliver(self, run_id: str, event: RuntimeEvent) -> None:
         async with self._get_run_lock(run_id):
@@ -230,6 +236,11 @@ class RuntimeBus:
         if run_id not in self._run_locks:
             self._run_locks[run_id] = asyncio.Lock()
         return self._run_locks[run_id]
+
+    def _get_emit_lock(self, run_id: str) -> asyncio.Lock:
+        if run_id not in self._emit_locks:
+            self._emit_locks[run_id] = asyncio.Lock()
+        return self._emit_locks[run_id]
 
     async def _next_sequence(self, run_id: str) -> int:
         async with self._get_run_lock(run_id):

@@ -1,4 +1,4 @@
-import type { AgentConfigResult, ModelConfig } from '../../types';
+import type { AgentConfig, AgentConfigResult, ModelConfig } from '../../types';
 
 export const AGENT_ROLES = ['proposer', 'opposer', 'judge', 'fact_checker', 'group_discussion'] as const;
 export type AgentRole = (typeof AGENT_ROLES)[number];
@@ -143,4 +143,30 @@ export function buildAgentConfigsPayload(
     }
 
     return Object.keys(result).length > 0 ? result : undefined;
+}
+
+export function buildAgentConfigFormState(
+    savedConfigs: ModelConfig[],
+    agentConfigs: Record<string, AgentConfig> | undefined | null,
+): {
+    selectedConfigIds: Record<AgentRole, string>;
+    temperatureInputs: Record<AgentRole, string>;
+} {
+    const selectedConfigIds = createEmptyAgentFieldMap();
+    const temperatureInputs = createEmptyAgentFieldMap();
+
+    for (const role of AGENT_ROLES) {
+        const config = agentConfigs?.[role];
+        if (!config) continue;
+
+        selectedConfigIds[role] = buildSelectedConfigKey(savedConfigs, {
+            providerId: config.provider_id,
+            model: config.model,
+        });
+        if (typeof config.temperature === 'number' && Number.isFinite(config.temperature)) {
+            temperatureInputs[role] = String(config.temperature);
+        }
+    }
+
+    return { selectedConfigIds, temperatureInputs };
 }

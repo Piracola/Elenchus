@@ -1,7 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
-import type { ModelConfig } from '../types';
-import { buildAgentConfigsPayload, createEmptyAgentFieldMap, type AgentRole } from '../utils/agent/agentConfigs';
+import type { AgentConfig, ModelConfig } from '../types';
+import {
+    buildAgentConfigFormState,
+    buildAgentConfigsPayload,
+    createEmptyAgentFieldMap,
+    type AgentRole,
+} from '../utils/agent/agentConfigs';
 import { subscribeModelConfigsChanged } from '../utils/agent/modelConfigEvents';
 
 function getErrorMessage(error: unknown): string {
@@ -88,6 +93,15 @@ export function useAgentConfigs() {
         );
     }, [savedConfigs, selectedConfigIds, temperatureInputs]);
 
+    const applyAgentConfigSnapshot = useCallback((
+        agentConfigs: Record<string, AgentConfig> | undefined | null,
+    ) => {
+        if (!agentConfigs) return;
+        const nextState = buildAgentConfigFormState(savedConfigs, agentConfigs);
+        setSelectedConfigIds(nextState.selectedConfigIds);
+        setTemperatureInputs(nextState.temperatureInputs);
+    }, [savedConfigs]);
+
     return {
         savedConfigs,
         selectedConfigIds,
@@ -102,5 +116,6 @@ export function useAgentConfigs() {
         handleConfigSelect,
         handleTemperatureChange,
         buildAgentConfigs,
+        applyAgentConfigSnapshot,
     };
 }

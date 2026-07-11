@@ -41,7 +41,7 @@ def session_status_from_run(run_status: str | None) -> str:
         RunStatus.RETRYING.value: SessionStatus.IN_PROGRESS.value,
         RunStatus.RECOVERING.value: SessionStatus.IN_PROGRESS.value,
         RunStatus.STOPPING.value: SessionStatus.IN_PROGRESS.value,
-        RunStatus.STALLED.value: SessionStatus.ERROR.value,
+        RunStatus.STALLED.value: SessionStatus.PENDING.value,
         RunStatus.COMPLETED.value: SessionStatus.COMPLETED.value,
         RunStatus.FAILED.value: SessionStatus.ERROR.value,
         RunStatus.CANCELLED.value: SessionStatus.PENDING.value,

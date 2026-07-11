@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any
 from app.runtime.engines import DebateEngine, LangGraphDebateEngine
 from app.runtime.event_emitter import EventEmitter, RuntimeEventEmitter, noop_emit_event
 from app.runtime.session_repository import SessionRuntimeRepository
+from app.models.schemas import RunStatus
+from app.services import run_service
 from app.text_repair import format_runtime_error_message
 
 if TYPE_CHECKING:
@@ -249,6 +251,12 @@ class DebateOrchestrator:
                 },
                 source="runtime.orchestrator",
             )
+            await run_service.transition_run_to_status(
+                run_id,
+                status=RunStatus.COMPLETED,
+                reason="辩论已完成",
+                source="runtime.orchestrator",
+            )
 
             logger.info(
                 "Debate completed: session=%s turns=%d",
@@ -264,6 +272,12 @@ class DebateOrchestrator:
                 final_state["last_executed_node"] = last_node
             final_state["last_status_message"] = "辩论已停止。"
             await self._repository.persist_state(run_id, session_id, final_state)
+            await run_service.transition_run_to_status(
+                run_id,
+                status=RunStatus.CANCELLED,
+                reason="辩论已停止。",
+                source="runtime.orchestrator",
+            )
             raise
         except Exception as exc:
             final_state = await self._handle_debate_error(
@@ -317,6 +331,13 @@ class DebateOrchestrator:
             payload={"content": f"辩论出错：{user_facing_error}"},
             source="runtime.orchestrator",
             phase="error",
+        )
+        await run_service.transition_run_to_status(
+            run_id,
+            status=RunStatus.FAILED,
+            reason=user_facing_error,
+            source="runtime.orchestrator",
+            error_message=user_facing_error,
         )
         return state
 

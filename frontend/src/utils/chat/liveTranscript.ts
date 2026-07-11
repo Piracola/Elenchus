@@ -141,6 +141,7 @@ function buildSpeechPlaceholder(args: LiveTranscriptArgs): LiveSpeechViewModel |
 
 function buildLiveSpeech(args: LiveTranscriptArgs): LiveSpeechViewModel | null {
     if (!args.currentSessionId) return null;
+    if (!args.isDebating) return null;
 
     const streamingEntry = args.streamingEntry;
     if (streamingEntry && isSpeech(streamingEntry, args.participants)) {

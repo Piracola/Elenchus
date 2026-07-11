@@ -8,6 +8,7 @@ from app.api.session_documents import router as session_documents_router
 from app.api.session_runtime import router as session_runtime_router
 from app.models.schemas import (
     ExportFormat,
+    RecentDebateConfigResponse,
     SessionAgentConfigsUpdate,
     SessionCreate,
     SessionListResponse,
@@ -37,6 +38,15 @@ async def list_sessions(
     items = await session_service.list_sessions(offset=offset, limit=limit)
     total = await session_service.count_sessions()
     return SessionListResponse(sessions=items, total=total)
+
+
+@router.get("/sessions/recent-config", response_model=RecentDebateConfigResponse | None)
+async def get_recent_debate_config():
+    """Return the most recently used debate setup for quick reuse."""
+    data = await session_service.get_recent_debate_config()
+    if data is None:
+        return Response(status_code=204)
+    return RecentDebateConfigResponse(**data)
 
 
 @router.get("/sessions/{session_id}", response_model=SessionResponse)

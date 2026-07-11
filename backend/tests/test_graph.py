@@ -124,6 +124,21 @@ def test_debate_graph_routes_to_pre_round_group_discussion_when_enabled():
         }
     ) == "group_discussion"
 
+
+def test_debate_graph_honors_resume_next_node_before_repeating_group_discussion():
+    from app.agents.graph import should_route_after_manage_context
+
+    assert should_route_after_manage_context(
+        {
+            "current_turn": 0,
+            "max_turns": 5,
+            "reasoning_config": {"group_discussion_rounds": 1},
+            "dialogue_history": [],
+            "resume_next_node": "set_speaker",
+            "resume_origin_turn": 0,
+        }
+    ) == "set_speaker"
+
     assert should_route_after_manage_context(
         {
             "current_turn": 0,

@@ -143,6 +143,7 @@ vi.mock('../api/client', () => ({
     api: {
         sessions: {
             uploadDocument: vi.fn(),
+            recentConfig: vi.fn().mockResolvedValue(null),
         },
     },
 }));
@@ -213,6 +214,7 @@ vi.mock('./home/HomeComposerCard', () => ({
 
 describe('HomeView auto scroll', () => {
     beforeEach(() => {
+        vi.mocked(api.sessions.recentConfig).mockResolvedValue(null);
         cleanup();
         animationFrameQueue = [];
         nextAnimationFrameId = 1;

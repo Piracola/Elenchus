@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.runtime.event_persistence import should_persist_runtime_event
+from app.runtime.event_persistence import compact_runtime_event_payload, should_persist_runtime_event
 from app.services import run_service
 from app.text_repair import repair_text_tree
 
@@ -28,6 +28,7 @@ def _record_to_dict(record: dict[str, Any]) -> dict[str, Any]:
 async def create_runtime_event(event: dict[str, Any]) -> dict[str, Any]:
     """Persist one runtime event in the authoritative run ledger."""
     record = _record_to_dict(event)
+    record["payload"] = compact_runtime_event_payload(record["payload"])
     run_id = record["run_id"]
     session_id = record["session_id"]
     if not run_id or not session_id:

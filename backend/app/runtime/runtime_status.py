@@ -15,8 +15,8 @@ NODE_STATUS = {
     "judge": ("裁判正在评估本轮表现...", "judging"),
     "sophistry_observer": ("诡辩观察员正在整理本轮报告...", "processing"),
     "advance_turn": ("准备进入下一回合...", "context"),
-    "consensus": ("正在生成最终共识总结...", "complete"),
-    "sophistry_postmortem": ("诡辩实验总览正在生成...", "complete"),
+    "consensus": ("正在生成最终共识总结...", "processing"),
+    "sophistry_postmortem": ("诡辩实验总览正在生成...", "processing"),
 }
 
 
@@ -163,5 +163,60 @@ def predict_next_status_node(
         if bool(reasoning_config.get("consensus_enabled", True)):
             return "consensus"
         return None
+
+    return None
+
+
+def predict_resume_next_node(
+    node_name: str,
+    state: dict[str, Any],
+) -> str | None:
+    debate_mode = str(state.get("debate_mode", "") or "")
+
+    if node_name == "group_discussion":
+        return "set_speaker"
+
+    if node_name == "set_speaker":
+        current_speaker = state.get("current_speaker")
+        if isinstance(current_speaker, str) and current_speaker:
+            return "sophistry_speaker" if debate_mode == "sophistry_experiment" else "speaker"
+        return "sophistry_observer" if debate_mode == "sophistry_experiment" else "judge"
+
+    if node_name == "speaker":
+        if has_pending_tool_calls(state):
+            return "tool_executor"
+        participants = state.get("participants", ["proposer", "opposer"])
+        current_turn = _coerce_turn(state.get("current_turn", 0), 0)
+        if isinstance(participants, list):
+            spoken_roles = {
+                str(entry.get("role", "") or "")
+                for entry in state.get("dialogue_history", [])
+                if isinstance(entry, dict)
+                and _coerce_turn(entry.get("turn", -1), -1) == current_turn
+                and str(entry.get("role", "") or "") in participants
+            }
+            remaining_participants = [
+                role for role in participants
+                if isinstance(role, str) and role not in spoken_roles
+            ]
+            if not remaining_participants:
+                return "judge"
+        return "set_speaker"
+
+    if node_name == "tool_executor":
+        return "speaker"
+
+    if node_name == "judge":
+        return "advance_turn"
+
+    if node_name == "sophistry_speaker":
+        participants = state.get("participants", ["proposer", "opposer"])
+        current_idx = _coerce_turn(state.get("current_speaker_index", 0), 0)
+        if isinstance(participants, list) and current_idx + 1 >= len(participants):
+            return "sophistry_observer"
+        return "set_speaker"
+
+    if node_name == "sophistry_observer":
+        return "advance_turn"
 
     return None

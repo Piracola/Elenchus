@@ -20,6 +20,7 @@ ROLE_LABELS = {
     "opposer": "反方 (Opposer)",
     "system": "系统",
     "fact_checker": "事实核查",
+    "group_discussion": "组内讨论",
     "judge": "裁判",
     "audience": "观众",
     "error": "系统错误",
@@ -28,6 +29,7 @@ ROLE_LABELS = {
 MARKDOWN_EXPORT_CATEGORY_ORDER = (
     "debater_speeches",
     "thinking_content",
+    "group_discussion",
     "judge_messages",
     "consensus_summary",
 )
@@ -36,6 +38,7 @@ NON_DEBATER_DIALOGUE_ROLES = {
     "judge",
     "system",
     "fact_checker",
+    "group_discussion",
     "audience",
     "error",
     "sophistry_round_report",
@@ -228,6 +231,11 @@ def append_markdown_transcript_sections(
         "judge_messages": [
             entry for entry in history if isinstance(entry, dict) and str(entry.get("role", "")) == "judge"
         ],
+        "group_discussion": [
+            entry
+            for entry in history
+            if isinstance(entry, dict) and str(entry.get("role", "")) == "group_discussion"
+        ],
         "consensus_summary": [
             entry
             for entry in history
@@ -237,6 +245,7 @@ def append_markdown_transcript_sections(
     category_titles = {
         "debater_speeches": "## 辩手发言",
         "thinking_content": "",
+        "group_discussion": "## 组内讨论",
         "judge_messages": "## 裁判消息",
         "consensus_summary": "## 共识收敛消息",
     }

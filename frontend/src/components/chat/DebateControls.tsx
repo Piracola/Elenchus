@@ -2,12 +2,13 @@
  * DebateControls - compact input bar to create, start, and stop debates.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentConfigs } from '../../hooks/useAgentConfigs';
 import { isRunStatusInProgress, useConnectionViewState, useSessionViewState } from '../../hooks/useDebateViewState';
 import { useDebateWebSocket } from '../../hooks/useDebateWebSocket';
 import { useSessionCreate } from '../../hooks/useSessionCreate';
+import { api } from '../../api/client';
 import {
     DEFAULT_MAX_TURNS,
     DEFAULT_GROUP_DISCUSSION_ROUNDS,
@@ -17,9 +18,10 @@ import {
     parseSpeechMaxCharsInput,
 } from '../../utils/agent/debateSession';
 import AgentConfigPanel from '../shared/AgentConfigPanel';
+import type { RecentDebateConfig } from '../../types';
 
 function ActiveSessionControls() {
-    const { isDebating, isConnected, currentSession, activeRun, activeRunId } = useConnectionViewState();
+    const { isConnected, currentSession, activeRun, activeRunId } = useConnectionViewState();
     const { startRun, resumeRun, stopRun, sendIntervention } = useDebateWebSocket(activeRunId);
     const [interventionText, setInterventionText] = useState('');
     const [maxTurnsInput, setMaxTurnsInput] = useState(
@@ -37,7 +39,7 @@ function ActiveSessionControls() {
     const runStatus = activeRun?.status ?? null;
     const canStopRun = Boolean(activeRunId && runStatus && isRunStatusInProgress(runStatus));
     const runIsLive = canStopRun;
-    const canResumeRun = !runIsLive && Boolean(activeRunId && runStatus && isRunStatusInProgress(runStatus));
+    const canResumeRun = !runIsLive && Boolean(activeRunId && runStatus && runStatus === 'stalled');
     const canSendIntervention = Boolean(activeRunId && isConnected);
 
     const handleSendIntervention = () => {
@@ -225,12 +227,14 @@ function ActiveSessionControls() {
 }
 
 function SessionCreator() {
+    const recentConfigAppliedRef = useRef(false);
     const [topic, setTopic] = useState('');
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
     const [groupDiscussionRoundsInput, setGroupDiscussionRoundsInput] = useState('');
     const [proposerSpeechLimitInput, setProposerSpeechLimitInput] = useState('');
     const [opposerSpeechLimitInput, setOpposerSpeechLimitInput] = useState('');
     const [groupDiscussionSpeechLimitInput, setGroupDiscussionSpeechLimitInput] = useState('');
+    const [recentConfigSnapshot, setRecentConfigSnapshot] = useState<RecentDebateConfig | null>(null);
     const { isCreating, createSession } = useSessionCreate();
     const {
         showAdvanced,
@@ -243,12 +247,42 @@ function SessionCreator() {
         handleConfigSelect,
         handleTemperatureChange,
         buildAgentConfigs,
+        applyAgentConfigSnapshot,
     } = useAgentConfigs();
     const maxTurns = parseMaxTurnsInput(maxTurnsInput);
     const groupDiscussionRounds = parseGroupDiscussionRoundsInput(groupDiscussionRoundsInput);
     const proposerSpeechLimit = parseSpeechMaxCharsInput(proposerSpeechLimitInput);
     const opposerSpeechLimit = parseSpeechMaxCharsInput(opposerSpeechLimitInput);
     const groupDiscussionSpeechLimit = parseSpeechMaxCharsInput(groupDiscussionSpeechLimitInput);
+
+    useEffect(() => {
+        let cancelled = false;
+        void api.sessions.recentConfig().then((recentConfig) => {
+            if (cancelled || !recentConfig) return;
+            setRecentConfigSnapshot(recentConfig);
+        }).catch((error) => {
+            console.warn('Failed to load recent debate config:', error);
+            recentConfigAppliedRef.current = true;
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!recentConfigSnapshot || recentConfigAppliedRef.current) return;
+        const hasAgentConfigs = Object.keys(recentConfigSnapshot.agent_configs ?? {}).length > 0;
+        if (hasAgentConfigs && savedConfigs.length === 0) return;
+
+        setMaxTurnsInput(String(recentConfigSnapshot.max_turns));
+        setGroupDiscussionRoundsInput(String(recentConfigSnapshot.reasoning_config.group_discussion_rounds));
+        setProposerSpeechLimitInput(String(recentConfigSnapshot.speech_config.proposer_max_chars));
+        setOpposerSpeechLimitInput(String(recentConfigSnapshot.speech_config.opposer_max_chars));
+        setGroupDiscussionSpeechLimitInput(String(recentConfigSnapshot.speech_config.group_discussion_max_chars));
+        applyAgentConfigSnapshot(recentConfigSnapshot.agent_configs);
+        recentConfigAppliedRef.current = true;
+    }, [applyAgentConfigSnapshot, recentConfigSnapshot, savedConfigs.length]);
 
     const handleStart = async () => {
         if (!topic.trim()) return;
@@ -370,7 +404,7 @@ function SessionCreator() {
                                     fontWeight: 600,
                                 }}
                             >
-                                每轮赛前讨论
+                                二轮起讨论
                                 <input
                                     type="number"
                                     value={groupDiscussionRoundsInput}

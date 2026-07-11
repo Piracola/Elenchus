@@ -46,7 +46,12 @@ class DebateRuntimeService:
         task = self._tasks.get(run_id)
         return task is not None and not task.done()
 
-    async def reconcile_run_liveness(self, run_id: str) -> dict[str, Any] | None:
+    async def reconcile_run_liveness(
+        self,
+        run_id: str,
+        *,
+        allow_initializing_stall: bool = True,
+    ) -> dict[str, Any] | None:
         run_record = await run_service.get_run(run_id)
         if run_record is None:
             return None
@@ -62,12 +67,15 @@ class DebateRuntimeService:
                 source="runtime.reconcile",
             )
 
-        if status in {
-            RunStatus.INITIALIZING.value,
+        stallable_statuses = {
             RunStatus.RUNNING.value,
             RunStatus.RETRYING.value,
             RunStatus.RECOVERING.value,
-        }:
+        }
+        if allow_initializing_stall:
+            stallable_statuses.add(RunStatus.INITIALIZING.value)
+
+        if status in stallable_statuses:
             return await run_service.transition_run_to_stalled(
                 run_id,
                 reason="运行任务已经结束，但未写回终态，已自动标记为 stalled。",
@@ -89,7 +97,6 @@ class DebateRuntimeService:
         return repaired
 
     async def start_run(self, run_id: str) -> RunStartResult:
-        await self.reconcile_run_liveness(run_id)
         async with self._task_lock:
             if self.is_running(run_id):
                 return RunStartResult(
@@ -97,6 +104,7 @@ class DebateRuntimeService:
                     message="This run is already running.",
                 )
 
+            await self.reconcile_run_liveness(run_id, allow_initializing_stall=False)
             run_record = await run_service.get_run(run_id)
             if run_record is None:
                 return RunStartResult(
@@ -118,6 +126,24 @@ class DebateRuntimeService:
                     message=f"Session {run_record.session_id} was not found.",
                 )
 
+            if run_record.status == RunStatus.COMPLETED.value:
+                return RunStartResult(
+                    started=False,
+                    message="Run is already completed.",
+                )
+
+            if run_record.status in {RunStatus.FAILED.value, RunStatus.CANCELLED.value}:
+                return RunStartResult(
+                    started=False,
+                    message=f"Run {run_id} is {run_record.status} and cannot be resumed.",
+                )
+
+            run_summary = await run_service.transition_run_to_status(
+                run_id,
+                status=RunStatus.RUNNING,
+                reason="辩论正在运行。",
+                source="runtime.service",
+            )
             task = asyncio.create_task(
                 self._orchestrator.run_debate(
                     run_id=run_id,
@@ -134,7 +160,7 @@ class DebateRuntimeService:
             self._tasks[run_id] = task
             task.add_done_callback(lambda done_task, rid=run_id: self._cleanup_task(rid, done_task))
 
-        return RunStartResult(started=True, run={"id": run_id}, session=session_data)
+        return RunStartResult(started=True, run=run_summary or {"id": run_id}, session=session_data)
 
     async def stop_run(self, run_id: str) -> bool:
         await self.reconcile_run_liveness(run_id)

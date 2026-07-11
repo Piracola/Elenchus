@@ -19,6 +19,7 @@ const child = spawn(
     '0.0.0.0',
     '--port',
     backendPort,
+    '--no-access-log',
     '--reload',
   ],
   {

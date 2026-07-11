@@ -43,7 +43,7 @@ async def emit_discussion_entry(
         event_type=event_type,
         payload=_discussion_payload({**entry, "discussion_kind": discussion_kind}),
         source=f"runtime.node.{source_node}",
-        phase="processing" if role == "group_discussion" else "complete",
+        phase="processing",
     )
 
 

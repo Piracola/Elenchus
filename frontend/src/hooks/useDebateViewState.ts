@@ -20,7 +20,7 @@ function latestRunStatusToSessionStatus(runStatus: RunStatus | null | undefined)
     if (!runStatus) return null;
     if (isRunStatusInProgress(runStatus)) return 'in_progress';
     if (runStatus === 'completed') return 'completed';
-    if (runStatus === 'failed' || runStatus === 'stalled') return 'error';
+    if (runStatus === 'failed') return 'error';
     return 'pending';
 }
 

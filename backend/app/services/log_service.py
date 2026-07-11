@@ -42,6 +42,37 @@ class LogLevel(IntEnum):
 
 LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+CONSOLE_LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(message)s"
+_CONSOLE_INFO_ALLOWLIST = (
+    "app.main",
+    "app.runtime.service",
+)
+_NOISY_LIBRARY_LOGGERS = (
+    "aiosqlite",
+    "httpcore",
+    "httpx",
+    "openai",
+    "sqlalchemy",
+    "sqlalchemy.engine",
+    "uvicorn.access",
+)
+
+
+class ConsoleNoiseFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: D401
+        if record.levelno >= logging.WARNING:
+            return True
+        if record.levelno <= logging.DEBUG:
+            return False
+        return any(
+            record.name == logger_name or record.name.startswith(f"{logger_name}.")
+            for logger_name in _CONSOLE_INFO_ALLOWLIST
+        )
+
+
+def _quiet_noisy_library_loggers() -> None:
+    for logger_name in _NOISY_LIBRARY_LOGGERS:
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 
 class LogManager:
@@ -104,6 +135,7 @@ class LogManager:
 
         root_logger = logging.getLogger()
         root_logger.setLevel(self._current_level.value)
+        _quiet_noisy_library_loggers()
 
         for handler in root_logger.handlers[:]:
             root_logger.removeHandler(handler)
@@ -112,8 +144,9 @@ class LogManager:
         if console_stream is not None:
             self._console_handler = logging.StreamHandler(console_stream)
             self._console_handler.setLevel(self._current_level.value)
+            self._console_handler.addFilter(ConsoleNoiseFilter())
             self._console_handler.setFormatter(
-                logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT)
+                logging.Formatter(CONSOLE_LOG_FORMAT, datefmt=DATE_FORMAT)
             )
             root_logger.addHandler(self._console_handler)
         else:
@@ -148,6 +181,7 @@ class LogManager:
 
         root_logger = logging.getLogger()
         root_logger.setLevel(level.value)
+        _quiet_noisy_library_loggers()
 
         if self._console_handler:
             self._console_handler.setLevel(level.value)

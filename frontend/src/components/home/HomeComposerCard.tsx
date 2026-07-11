@@ -630,7 +630,7 @@ export function HomeComposerCard({
                                     />
                                     {!isSophistryMode && (
                                         <NumberField
-                                            label="每轮赛前讨论"
+                                            label="二轮起赛前讨论"
                                             value={groupDiscussionRoundsInput}
                                             placeholder={DEFAULT_GROUP_DISCUSSION_ROUNDS}
                                             min={0}
@@ -693,7 +693,7 @@ export function HomeComposerCard({
                                         lineHeight: 1.5,
                                     }}
                                 >
-                                    填 0 或留空表示不限；赛前讨论会在每轮正式发言前生成，并通过独立提示词生效。
+                                    填 0 或留空表示不限；赛前讨论会从第二轮起在正式发言前生成，并通过独立提示词生效。
                                 </div>
                             </section>
 

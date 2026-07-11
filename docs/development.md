@@ -27,7 +27,7 @@
 ```bash
 cd backend
 uv sync --frozen --group dev
-uv run --frozen --no-dev python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+uv run --frozen --no-dev python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload --no-access-log
 uv run --frozen --group dev pytest
 uv run --frozen --group dev pytest tests/test_graph.py
 ```
@@ -181,6 +181,18 @@ VITE_BACKEND_PORT=8001
 - `/api/runs/{run_id}/events?after_seq=0` 返回的事件流。
 - SQLite 中 `runs / run_events / run_checkpoints / run_projections` 对应记录。
 - `runtime/logs/` 中的异常堆栈。
+
+### 终端日志太多
+
+控制台默认只用于现场提醒：启动、关闭、少量关键生命周期和 `WARNING` 以上问题。逐条 SQL、事务 `ROLLBACK`、HTTP access log 和第三方库 INFO 不应出现在控制台。
+
+如果终端又开始刷屏，优先检查：
+
+- 是否用了不带 `--no-access-log` 的 uvicorn 命令。
+- 是否有人重新打开了 SQLAlchemy `echo`。
+- 是否有第三方 logger 绕过了 `app.services.log_service`。
+
+完整排障信息看 `runtime/logs/`；运行事实看 SQLite ledger 或 JSON / Markdown / HTML 导出。
 
 ### 参考资料异常
 

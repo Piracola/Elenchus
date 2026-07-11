@@ -57,7 +57,7 @@ async def emit_sophistry_reports(
                 if role == "sophistry_final_report"
                 else "runtime.node.sophistry_observer"
             ),
-            phase="complete" if role == "sophistry_final_report" else "processing",
+            phase="processing",
         )
 
     return curr_history_len

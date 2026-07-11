@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
-TRANSIENT_EVENT_TYPES = {"speech_token", "speech_start"}
+TRANSIENT_EVENT_TYPES = {"speech_token", "speech_start", "projection_snapshot", "progress"}
+
+
+def compact_runtime_event_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
+    compacted = dict(payload) if isinstance(payload, dict) else {}
+    for key in ("dialogue_history", "judge_history"):
+        if compacted.get(key) == []:
+            compacted.pop(key, None)
+    return compacted
 
 
 def should_persist_runtime_event(
@@ -26,6 +34,8 @@ def should_persist_runtime_event(
         if payload_dict.get("heartbeat") is True:
             return False
         if str(source or "").endswith(".heartbeat"):
+            return False
+        if any(key in payload_dict for key in ("elapsed_seconds", "waiting_seconds", "progress")):
             return False
 
     return True

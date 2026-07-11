@@ -15,6 +15,7 @@ from app.models.ledger import (
     RunEventRecord,
     RunProjectionRecord,
     RunRecord,
+    RecentDebateConfigRecord,
     SessionDocumentRecord,
     SessionRecord,
 )
@@ -54,7 +55,7 @@ def _session_status_from_run(run_status: str | None) -> str:
         RunStatus.RETRYING.value: SessionStatus.IN_PROGRESS.value,
         RunStatus.RECOVERING.value: SessionStatus.IN_PROGRESS.value,
         RunStatus.STOPPING.value: SessionStatus.IN_PROGRESS.value,
-        RunStatus.STALLED.value: SessionStatus.ERROR.value,
+        RunStatus.STALLED.value: SessionStatus.PENDING.value,
         RunStatus.COMPLETED.value: SessionStatus.COMPLETED.value,
         RunStatus.FAILED.value: SessionStatus.ERROR.value,
         RunStatus.CANCELLED.value: SessionStatus.PENDING.value,
@@ -203,12 +204,88 @@ class RunLedgerService:
             await db.commit()
             return self._session_base_payload(aggregate)
 
+    async def upsert_recent_debate_config(self, payload: dict[str, Any]) -> dict[str, Any]:
+        now = _utcnow()
+        async with self._session_factory() as db:
+            result = await db.execute(
+                select(RecentDebateConfigRecord)
+                .order_by(desc(RecentDebateConfigRecord.updated_at))
+                .limit(1)
+            )
+            record = result.scalar_one_or_none()
+            if record is None:
+                record = RecentDebateConfigRecord(
+                    id=f"cfg_{_gen_id()}",
+                    source_session_id=payload.get("source_session_id"),
+                    debate_mode=str(payload.get("debate_mode", "standard")),
+                    participants=list(payload.get("participants", [])),
+                    max_turns=int(payload.get("max_turns", 5) or 5),
+                    mode_config=dict(payload.get("mode_config", {}) or {}),
+                    agent_configs=dict(payload.get("agent_configs", {}) or {}),
+                    reasoning_config=dict(payload.get("reasoning_config", {}) or {}),
+                    speech_config=dict(payload.get("speech_config", {}) or {}),
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(record)
+            else:
+                record.source_session_id = payload.get("source_session_id")
+                record.debate_mode = str(payload.get("debate_mode", record.debate_mode))
+                record.participants = list(payload.get("participants", record.participants or []))
+                record.max_turns = int(payload.get("max_turns", record.max_turns) or record.max_turns)
+                record.mode_config = dict(payload.get("mode_config", record.mode_config or {}) or {})
+                record.agent_configs = dict(payload.get("agent_configs", record.agent_configs or {}) or {})
+                record.reasoning_config = dict(payload.get("reasoning_config", record.reasoning_config or {}) or {})
+                record.speech_config = dict(payload.get("speech_config", record.speech_config or {}) or {})
+                record.updated_at = now
+            await db.commit()
+            await db.refresh(record)
+            return {
+                "id": record.id,
+                "source_session_id": record.source_session_id,
+                "debate_mode": record.debate_mode,
+                "participants": record.participants,
+                "max_turns": record.max_turns,
+                "mode_config": record.mode_config,
+                "agent_configs": record.agent_configs,
+                "reasoning_config": record.reasoning_config,
+                "speech_config": record.speech_config,
+                "created_at": record.created_at,
+                "updated_at": record.updated_at,
+            }
+
+    async def get_recent_debate_config(self) -> dict[str, Any] | None:
+        async with self._session_factory() as db:
+            result = await db.execute(
+                select(RecentDebateConfigRecord)
+                .order_by(desc(RecentDebateConfigRecord.updated_at))
+                .limit(1)
+            )
+            record = result.scalar_one_or_none()
+            if record is None:
+                return None
+            return {
+                "id": record.id,
+                "source_session_id": record.source_session_id,
+                "debate_mode": record.debate_mode,
+                "participants": record.participants,
+                "max_turns": record.max_turns,
+                "mode_config": record.mode_config,
+                "agent_configs": record.agent_configs,
+                "reasoning_config": record.reasoning_config,
+                "speech_config": record.speech_config,
+                "created_at": record.created_at,
+                "updated_at": record.updated_at,
+            }
+
     async def update_run_metadata(
         self,
         run_id: str,
         *,
         current_turn: int | None = None,
         status: str | None = None,
+        status_message: str | None = None,
+        error_message: str | None = None,
     ) -> dict[str, Any] | None:
         async with self._session_factory() as db:
             run = await db.get(RunRecord, run_id)
@@ -221,12 +298,34 @@ class RunLedgerService:
             if status is not None:
                 mapped_status = self._map_legacy_status(status)
                 run.status = mapped_status
-                if mapped_status == RunStatus.RUNNING.value and run.started_at is None:
+                if mapped_status in {
+                    RunStatus.INITIALIZING.value,
+                    RunStatus.RUNNING.value,
+                    RunStatus.RETRYING.value,
+                    RunStatus.RECOVERING.value,
+                } and run.started_at is None:
                     run.started_at = now
                 elif mapped_status == RunStatus.COMPLETED.value:
                     run.completed_at = now
+                    run.interrupted_at = None
+                    run.last_error_message = None
                 elif mapped_status in {RunStatus.FAILED.value, RunStatus.CANCELLED.value, RunStatus.STALLED.value}:
                     run.interrupted_at = now
+                if mapped_status in {
+                    RunStatus.PENDING.value,
+                    RunStatus.INITIALIZING.value,
+                    RunStatus.RUNNING.value,
+                    RunStatus.RETRYING.value,
+                    RunStatus.RECOVERING.value,
+                    RunStatus.STOPPING.value,
+                }:
+                    run.completed_at = None
+                    run.interrupted_at = None
+                    run.last_error_message = None
+            if status_message is not None:
+                run.last_status_message = status_message
+            if error_message is not None:
+                run.last_error_message = error_message or None
             run.updated_at = now
             await db.commit()
             return _run_summary(run)
@@ -296,6 +395,18 @@ class RunLedgerService:
             db.add(event)
             await db.commit()
             await db.refresh(run)
+            await self.upsert_recent_debate_config(
+                {
+                    "source_session_id": session_id,
+                    "debate_mode": session.debate_mode,
+                    "participants": list(participants),
+                    "max_turns": max_turns,
+                    "mode_config": session.mode_config or {},
+                    "agent_configs": agent_configs or session.agent_configs or {},
+                    "reasoning_config": session.reasoning_config or {},
+                    "speech_config": session.speech_config or {},
+                }
+            )
             return {
                 "run": _run_summary(run),
                 "session_id": session_id,

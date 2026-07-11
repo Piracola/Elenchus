@@ -132,6 +132,20 @@ export interface SessionCreatePayload {
     speech_config?: SpeechConfig;
 }
 
+export interface RecentDebateConfig {
+    id: string;
+    source_session_id?: string | null;
+    debate_mode: DebateMode;
+    participants: string[];
+    max_turns: number;
+    mode_config: Record<string, unknown>;
+    agent_configs?: Record<string, AgentConfig>;
+    reasoning_config: ReasoningConfig;
+    speech_config: SpeechConfig;
+    created_at: string;
+    updated_at: string;
+}
+
 export interface RunSummary {
     id: string;
     session_id: string;

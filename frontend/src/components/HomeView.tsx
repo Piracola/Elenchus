@@ -4,7 +4,7 @@ import { useAgentConfigs } from '../hooks/useAgentConfigs';
 import { useSessionCreate } from '../hooks/useSessionCreate';
 import { useSettingsStore } from '../stores/settingsStore';
 import { getMessageFontTokens } from '../config/display';
-import type { DebateMode } from '../types';
+import type { DebateMode, RecentDebateConfig } from '../types';
 import {
     parseMaxTurnsInput,
     parseGroupDiscussionRoundsInput,
@@ -42,6 +42,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
     const scrollAnimationFrameRef = useRef<number | null>(null);
     const hasAutoScrolledAdvancedRef = useRef(false);
     const recentUserInteractionAtRef = useRef(0);
+    const recentConfigAppliedRef = useRef(false);
     const [topic, setTopic] = useState('');
     const [debateMode, setDebateMode] = useState<DebateMode>('standard');
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
@@ -50,6 +51,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
     const [opposerSpeechLimitInput, setOpposerSpeechLimitInput] = useState('');
     const [groupDiscussionSpeechLimitInput, setGroupDiscussionSpeechLimitInput] = useState('');
     const [pendingDocuments, setPendingDocuments] = useState<PendingReferenceDocument[]>([]);
+    const [recentConfigSnapshot, setRecentConfigSnapshot] = useState<RecentDebateConfig | null>(null);
     const { isCreating, error: createError, createSession, clearError } = useSessionCreate();
     const {
         showAdvanced,
@@ -63,6 +65,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
         handleConfigSelect,
         handleTemperatureChange,
         buildAgentConfigs,
+        applyAgentConfigSnapshot,
     } = useAgentConfigs();
     const advancedPanelVisible = showAdvanced;
 
@@ -75,6 +78,36 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
     const proposerSpeechLimit = parseSpeechMaxCharsInput(proposerSpeechLimitInput);
     const opposerSpeechLimit = parseSpeechMaxCharsInput(opposerSpeechLimitInput);
     const groupDiscussionSpeechLimit = parseSpeechMaxCharsInput(groupDiscussionSpeechLimitInput);
+
+    useEffect(() => {
+        let cancelled = false;
+        void api.sessions.recentConfig().then((recentConfig) => {
+            if (cancelled || !recentConfig) return;
+            setRecentConfigSnapshot(recentConfig);
+        }).catch((error) => {
+            console.warn('Failed to load recent debate config:', error);
+            recentConfigAppliedRef.current = true;
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!recentConfigSnapshot || recentConfigAppliedRef.current) return;
+        const hasAgentConfigs = Object.keys(recentConfigSnapshot.agent_configs ?? {}).length > 0;
+        if (hasAgentConfigs && savedConfigs.length === 0) return;
+
+        setDebateMode(recentConfigSnapshot.debate_mode);
+        setMaxTurnsInput(String(recentConfigSnapshot.max_turns));
+        setGroupDiscussionRoundsInput(String(recentConfigSnapshot.reasoning_config.group_discussion_rounds));
+        setProposerSpeechLimitInput(String(recentConfigSnapshot.speech_config.proposer_max_chars));
+        setOpposerSpeechLimitInput(String(recentConfigSnapshot.speech_config.opposer_max_chars));
+        setGroupDiscussionSpeechLimitInput(String(recentConfigSnapshot.speech_config.group_discussion_max_chars));
+        applyAgentConfigSnapshot(recentConfigSnapshot.agent_configs);
+        recentConfigAppliedRef.current = true;
+    }, [applyAgentConfigSnapshot, recentConfigSnapshot, savedConfigs.length]);
 
     useEffect(() => {
         const scrollContainer = homeScrollRef.current;

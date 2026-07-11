@@ -25,7 +25,7 @@ def _get_engine():
         settings = get_settings()
         _engine = create_async_engine(
             settings.env.database_url,
-            echo=settings.env.debug,
+            echo=False,
         )
     return _engine
 

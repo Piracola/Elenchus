@@ -6,6 +6,7 @@ from copy import deepcopy
 from typing import Any
 
 from app.text_repair import repair_text_tree
+from .runtime_status import predict_resume_next_node
 
 from .session_dialogue_helpers import (
     coerce_int,
@@ -18,10 +19,18 @@ from .session_dialogue_helpers import (
 SAFE_RESUME_NODES = {
     "",
     "manage_context",
-    "group_discussion",
     "advance_turn",
     "consensus",
     "sophistry_postmortem",
+}
+
+RESUME_STRATEGY_KEEP_CURRENT_TURN = {
+    "group_discussion",
+    "set_speaker",
+    "speaker",
+    "tool_executor",
+    "judge",
+    "sophistry_speaker",
 }
 
 
@@ -33,6 +42,20 @@ def normalize_resumable_snapshot(
     snapshot = repair_text_tree(deepcopy(session_snapshot))
     last_node = str(snapshot.get("last_executed_node", "") or "")
     if last_node in SAFE_RESUME_NODES:
+        return snapshot
+
+    resume_next_node = predict_resume_next_node(last_node, snapshot)
+    if resume_next_node and last_node in RESUME_STRATEGY_KEEP_CURRENT_TURN:
+        snapshot["resume_next_node"] = resume_next_node
+        snapshot["resume_origin_turn"] = current_turn
+        if resume_next_node not in {"tool_executor", "speaker"}:
+            snapshot["messages"] = []
+        if last_node == "group_discussion":
+            snapshot["current_speaker"] = ""
+            snapshot["current_speaker_index"] = -1
+        elif last_node in {"judge", "sophistry_observer"}:
+            snapshot["current_speaker"] = ""
+            snapshot["current_speaker_index"] = -1
         return snapshot
 
     snapshot["dialogue_history"] = [

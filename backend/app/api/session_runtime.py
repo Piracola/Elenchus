@@ -17,7 +17,8 @@ from app.services.run_service import (
     get_session_for_run,
     list_run_events,
     record_command,
-    update_run_state,
+    transition_run_to_cancelled,
+    transition_run_to_status,
 )
 from app.dependencies import get_debate_runtime_service
 
@@ -53,14 +54,22 @@ async def start_run(
         agent_configs=session_record.agent_configs or {},
     )
     run = created["run"]
-    updated = await update_run_state(run["id"], status="initializing")
-    if updated is not None:
-        run = updated
     runtime_service = get_debate_runtime_service()
     result = await runtime_service.start_run(run["id"])
     if not result.started:
-        await update_run_state(run["id"], status="failed")
+        failed = await transition_run_to_status(
+            run["id"],
+            status=RunStatus.FAILED,
+            reason=result.message or "运行无法启动。",
+            source="api.runs.start",
+            error_message=result.message or "运行无法启动。",
+        )
+        if failed is not None:
+            run = failed
         raise HTTPException(status_code=409, detail=result.message or "Run could not be started.")
+    result_run = getattr(result, "run", None)
+    if result_run is not None:
+        run = result_run
     return RunSummary(**run)
 
 
@@ -124,12 +133,21 @@ async def post_run_command(run_id: str, body: RunCommandRequest):
         if run_record.status in _TERMINAL_NON_RESUMABLE_RUN_STATUSES | {RunStatus.FAILED.value, RunStatus.CANCELLED.value}:
             message = "Run is already stopped."
         elif run_record.status == RunStatus.STALLED.value:
-            await update_run_state(run_id, status=RunStatus.CANCELLED.value)
+            await transition_run_to_cancelled(
+                run_id,
+                reason="已取消等待恢复的运行。",
+                source="api.runs.stop",
+            )
             message = "Stalled run was marked as cancelled."
         elif run_record.status in _STOPPABLE_RUN_STATUSES:
             stopped = await runtime_service.stop_run(run_id)
             if stopped:
-                await update_run_state(run_id, status="stopping")
+                await transition_run_to_status(
+                    run_id,
+                    status=RunStatus.STOPPING,
+                    reason="正在停止辩论...",
+                    source="api.runs.stop",
+                )
                 message = "Stop requested."
             else:
                 await runtime_service.reconcile_run_liveness(run_id)
@@ -142,13 +160,16 @@ async def post_run_command(run_id: str, body: RunCommandRequest):
     elif body.command_type.value == "resume":
         if run_record.status in _TERMINAL_NON_RESUMABLE_RUN_STATUSES:
             raise HTTPException(status_code=409, detail="Run is already completed and cannot be resumed.")
-        await update_run_state(run_id, status="initializing")
         result = await runtime_service.start_run(run_id)
         if not result.started and result.message != "This run is already running.":
-            await update_run_state(run_id, status="failed")
+            await transition_run_to_status(
+                run_id,
+                status=RunStatus.FAILED,
+                reason=result.message or "运行无法恢复。",
+                source="api.runs.resume",
+                error_message=result.message or "运行无法恢复。",
+            )
             raise HTTPException(status_code=409, detail=result.message or "Run could not be resumed.")
-        if not result.started:
-            await update_run_state(run_id, status="running")
         message = result.message or "Resume requested."
     elif body.command_type.value == "intervene":
         if not body.content or not body.content.strip():

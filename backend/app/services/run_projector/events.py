@@ -79,7 +79,6 @@ def apply_event_to_projection(projection: dict[str, Any], event: RunEventRecord)
         return
 
     if event_type == "debate_complete":
-        projection["status"] = RunStatus.COMPLETED.value
         projection["last_status_message"] = "辩论已完成"
         projection["cumulative_scores"] = payload.get("final_scores", projection.get("cumulative_scores", {}))
         if isinstance(payload.get("final_report"), dict):
@@ -88,8 +87,6 @@ def apply_event_to_projection(projection: dict[str, Any], event: RunEventRecord)
 
     if event_type == "run_status_changed":
         status = str(payload.get("status", "") or "")
-        if status:
-            projection["status"] = status
         projection["last_status_message"] = str(
             payload.get("content", "") or projection.get("last_status_message", "") or ""
         )
@@ -98,7 +95,6 @@ def apply_event_to_projection(projection: dict[str, Any], event: RunEventRecord)
         return
 
     if event_type == "error":
-        projection["status"] = RunStatus.FAILED.value
         projection["error"] = str(payload.get("content", "") or "")
         return
 

@@ -70,24 +70,30 @@ function handleSystem(): Partial<DebateState> {
     return {};
 }
 
+function isLifecycleRunning(status: string | undefined): boolean {
+    return Boolean(status && ['pending', 'initializing', 'running', 'retrying', 'recovering', 'stopping'].includes(status));
+}
+
+function shouldApplyLiveProgress(state: DebateState): boolean {
+    return !state.activeRun || isLifecycleRunning(state.activeRun.status);
+}
+
 function handleStatus(
     state: DebateState,
     payload: Record<string, unknown>,
+    event: RuntimeEvent,
 ): Partial<DebateState> {
+    if (!shouldApplyLiveProgress(state)) {
+        return {};
+    }
     const patch: Partial<DebateState> = {};
-    patch.phase = (payload.phase as DebateState['phase']) ?? getPayloadString(payload, 'phase') ?? 'processing';
+    patch.phase = event.phase ?? (payload.phase as DebateState['phase']) ?? getPayloadString(payload, 'phase') ?? 'processing';
     patch.isDebating =
         patch.phase !== 'idle' &&
         patch.phase !== 'complete' &&
         patch.phase !== 'error';
     patch.currentStatus = sanitizeIncomingContent(getPayloadString(payload, 'content')) || '';
     patch.currentNode = getPayloadString(payload, 'node') ?? '';
-    if (state.currentSession && state.currentSession.status !== 'in_progress') {
-        patch.currentSession = {
-            ...state.currentSession,
-            status: 'in_progress',
-        };
-    }
     return patch;
 }
 
@@ -105,9 +111,11 @@ function handleRunStatusChanged(
             status: nextStatus as typeof state.activeRun.status,
             last_status_message: currentStatus || state.activeRun.last_status_message,
             last_error_message:
-                nextStatus === 'failed' || nextStatus === 'stalled'
+                nextStatus === 'failed'
                     ? (currentStatus || state.activeRun.last_error_message || null)
-                    : state.activeRun.last_error_message,
+                    : nextStatus === 'stalled'
+                        ? null
+                        : state.activeRun.last_error_message,
         };
     }
 
@@ -115,10 +123,14 @@ function handleRunStatusChanged(
         patch.isDebating = false;
         patch.phase = 'complete';
         patch.currentStatus = currentStatus || '辩论已完成';
-    } else if (nextStatus === 'failed' || nextStatus === 'stalled') {
+    } else if (nextStatus === 'failed') {
         patch.isDebating = false;
         patch.phase = 'error';
         patch.currentStatus = currentStatus || '运行中断，请查看最新消息';
+    } else if (nextStatus === 'stalled') {
+        patch.isDebating = false;
+        patch.phase = 'idle';
+        patch.currentStatus = currentStatus || '历史进度已恢复，可以继续辩论';
     } else if (nextStatus === 'cancelled') {
         patch.isDebating = false;
         patch.phase = 'idle';
@@ -136,10 +148,10 @@ function handleRunStatusChanged(
                 nextStatus === 'completed'
                     ? 'completed'
                     : nextStatus === 'failed' || nextStatus === 'stalled'
-                        ? 'error'
+                        ? (nextStatus === 'stalled' ? 'pending' : 'error')
                         : nextStatus === 'cancelled'
                             ? 'pending'
-                            : state.currentSession.status,
+                            : 'in_progress',
         };
     }
 
@@ -178,9 +190,12 @@ function handleConsensusSummary(
 }
 
 function handleSpeechStart(
-    _state: DebateState,
+    state: DebateState,
     payload: Record<string, unknown>,
 ): Partial<DebateState> {
+    if (!shouldApplyLiveProgress(state)) {
+        return {};
+    }
     const role = getPayloadString(payload, 'role') ?? '';
     return {
         isDebating: true,
@@ -233,11 +248,17 @@ function handleSpeechToken(
     state: DebateState,
     payload: Record<string, unknown>,
 ): Partial<DebateState> {
+    if (!shouldApplyLiveProgress(state)) {
+        return {};
+    }
     const token = sanitizeIncomingContent(getPayloadString(payload, 'token')) ?? '';
     return token ? { streamingContent: state.streamingContent + token } : {};
 }
 
-function handleSpeechCancel(): Partial<DebateState> {
+function handleSpeechCancel(state: DebateState): Partial<DebateState> {
+    if (!shouldApplyLiveProgress(state)) {
+        return {};
+    }
     return { streamingRole: '', streamingContent: '', streamingEntry: null };
 }
 
@@ -316,7 +337,10 @@ function handleSophistryReport(
     return patch;
 }
 
-function handleFactCheckStart(): Partial<DebateState> {
+function handleFactCheckStart(state: DebateState): Partial<DebateState> {
+    if (!shouldApplyLiveProgress(state)) {
+        return {};
+    }
     return {
         isDebating: true,
         phase: 'fact_checking',
@@ -335,7 +359,10 @@ function handleFactCheckResult(
     };
 }
 
-function handleJudgeStart(): Partial<DebateState> {
+function handleJudgeStart(state: DebateState): Partial<DebateState> {
+    if (!shouldApplyLiveProgress(state)) {
+        return {};
+    }
     return {
         isDebating: true,
         phase: 'judging',
@@ -388,11 +415,12 @@ function handleTurnComplete(
     state: DebateState,
     payload: Record<string, unknown>,
 ): Partial<DebateState> {
-    if (!state.currentSession) return { isDebating: true };
+    const livePatch = shouldApplyLiveProgress(state) ? { isDebating: true } : {};
+    if (!state.currentSession) return livePatch;
     const turn = getPayloadNumber(payload, 'turn');
     const cumulativeRaw = payload.cumulative_scores;
     return {
-        isDebating: true,
+        ...livePatch,
         currentSession: {
             ...state.currentSession,
             current_turn: turn ?? state.currentSession.current_turn,
@@ -418,6 +446,14 @@ function handleDebateComplete(
         isDebating: false,
         phase: 'complete',
         currentStatus: '辩论已完成',
+        activeRun: state.activeRun
+            ? {
+                ...state.activeRun,
+                status: 'completed',
+                current_turn: totalTurns,
+                last_status_message: '辩论已完成',
+            }
+            : state.activeRun,
         currentSession: {
             ...state.currentSession,
             status: 'completed',
@@ -445,6 +481,14 @@ function handleError(
         currentStatus,
         isDebating: false,
     };
+    if (state.activeRun) {
+        patch.activeRun = {
+            ...state.activeRun,
+            status: 'failed',
+            last_status_message: currentStatus,
+            last_error_message: currentStatus,
+        };
+    }
     if (!state.currentSession) return patch;
 
     const errorEntry: DialogueEntry = {

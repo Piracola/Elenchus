@@ -182,7 +182,7 @@ async def test_emit_consensus_summary_uses_dedicated_event_type():
     assert count == 2
     assert [event["type"] for event in bus.events] == ["consensus_summary"]
     assert bus.events[0]["source"] == "runtime.node.consensus"
-    assert bus.events[0]["phase"] == "complete"
+    assert bus.events[0]["phase"] == "processing"
 
 
 @pytest.mark.asyncio
@@ -203,7 +203,7 @@ async def test_emit_discussion_entry_routes_consensus_event_shape():
 
     assert [event["type"] for event in bus.events] == ["consensus_summary"]
     assert bus.events[0]["source"] == "runtime.node.consensus"
-    assert bus.events[0]["phase"] == "complete"
+    assert bus.events[0]["phase"] == "processing"
 
 
 @pytest.mark.asyncio

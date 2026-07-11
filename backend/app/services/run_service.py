@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+import asyncio
 
 from app.models.schemas import RunCommandType, RunStatus
 from app.services.run_ledger_service import RunLedgerService
@@ -10,6 +11,15 @@ from app.services.run_projector_service import RunProjectorService
 _ledger = RunLedgerService()
 _projector = RunProjectorService()
 _INTERNAL_EVENT_TYPES = {"run_created", "projection_snapshot"}
+_event_locks: dict[str, asyncio.Lock] = {}
+
+
+def _get_event_lock(run_id: str) -> asyncio.Lock:
+    lock = _event_locks.get(run_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _event_locks[run_id] = lock
+    return lock
 
 
 async def create_run(
@@ -104,18 +114,19 @@ async def append_run_event(
     seq: int | None = None,
     timestamp: datetime | str | None = None,
 ) -> dict[str, Any]:
-    event = await _ledger.append_run_event(
-        run_id=run_id,
-        session_id=session_id,
-        event_type=event_type,
-        payload=payload,
-        source=source,
-        phase=phase,
-        schema_version=schema_version,
-        event_id=event_id,
-        seq=seq,
-        timestamp=timestamp,
-    )
+    async with _get_event_lock(run_id):
+        event = await _ledger.append_run_event(
+            run_id=run_id,
+            session_id=session_id,
+            event_type=event_type,
+            payload=payload,
+            source=source,
+            phase=phase,
+            schema_version=schema_version,
+            event_id=event_id,
+            seq=seq,
+            timestamp=timestamp,
+        )
     await _projector.apply_event(run_id)
     return event
 
@@ -133,12 +144,16 @@ async def update_run_state(
     *,
     current_turn: int | None = None,
     status: str | None = None,
+    status_message: str | None = None,
+    error_message: str | None = None,
     state_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     summary = await _ledger.update_run_metadata(
         run_id,
         current_turn=current_turn,
         status=status,
+        status_message=status_message,
+        error_message=error_message,
     )
     if summary is None:
         return None
@@ -157,7 +172,15 @@ async def emit_run_status_changed(
     message: str,
     source: str,
 ) -> dict[str, Any]:
-    event = await _ledger.append_run_event(
+    phase = "processing"
+    if status in {RunStatus.FAILED.value, RunStatus.STALLED.value}:
+        phase = "error"
+    elif status in {RunStatus.COMPLETED.value}:
+        phase = "complete"
+    elif status in {RunStatus.CANCELLED.value, RunStatus.PENDING.value}:
+        phase = "idle"
+
+    event = await append_run_event(
         run_id=run_id,
         session_id=session_id,
         event_type="run_status_changed",
@@ -166,20 +189,25 @@ async def emit_run_status_changed(
             "content": message,
         },
         source=source,
-        phase="error" if status in {RunStatus.FAILED.value, RunStatus.STALLED.value} else "processing",
+        phase=phase,
     )
-    await _projector.apply_event(run_id)
     return event
 
 
-async def transition_run_to_terminal_status(
+async def transition_run_to_status(
     run_id: str,
     *,
     status: RunStatus,
     reason: str,
     source: str,
+    error_message: str | None = None,
 ) -> dict[str, Any] | None:
-    summary = await update_run_state(run_id, status=status.value)
+    summary = await update_run_state(
+        run_id,
+        status=status.value,
+        status_message=reason,
+        error_message=error_message,
+    )
     if summary is None:
         return None
     await emit_run_status_changed(
@@ -189,7 +217,25 @@ async def transition_run_to_terminal_status(
         message=reason,
         source=source,
     )
-    return summary
+    refreshed = await _ledger.get_run(run_id)
+    return serialize_run_summary(refreshed) if refreshed is not None else summary
+
+
+async def transition_run_to_terminal_status(
+    run_id: str,
+    *,
+    status: RunStatus,
+    reason: str,
+    source: str,
+    error_message: str | None = None,
+) -> dict[str, Any] | None:
+    return await transition_run_to_status(
+        run_id,
+        status=status,
+        reason=reason,
+        source=source,
+        error_message=error_message,
+    )
 
 
 async def transition_run_to_stalled(

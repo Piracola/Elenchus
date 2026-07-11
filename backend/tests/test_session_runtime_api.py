@@ -81,6 +81,36 @@ def test_resume_run_command_starts_existing_run(monkeypatch):
     assert runtime_service.started == [run_id]
 
 
+def test_recent_config_api_returns_last_created_session_setup():
+    client = TestClient(app)
+
+    session_response = client.post(
+        "/api/sessions",
+        json={
+            "topic": "Recent config API",
+            "max_turns": 4,
+            "reasoning_config": {
+                "consensus_enabled": True,
+                "group_discussion_rounds": 2,
+            },
+            "speech_config": {
+                "proposer_max_chars": 900,
+                "opposer_max_chars": 800,
+                "group_discussion_max_chars": 500,
+            },
+        },
+    )
+    assert session_response.status_code == 201
+
+    recent_response = client.get("/api/sessions/recent-config")
+
+    assert recent_response.status_code == 200
+    payload = recent_response.json()
+    assert payload["max_turns"] == 4
+    assert payload["reasoning_config"]["group_discussion_rounds"] == 2
+    assert payload["speech_config"]["opposer_max_chars"] == 800
+
+
 def test_start_run_reports_runtime_start_failure(monkeypatch):
     runtime_service = _FakeRuntimeService(
         start_result=SimpleNamespace(started=False, message="Run start payload missing."),
@@ -162,7 +192,7 @@ def test_completed_run_cannot_be_stopped(monkeypatch):
 
 def test_stalled_run_stop_becomes_cancelled(monkeypatch):
     runtime_service = _FakeRuntimeService()
-    updates: list[tuple[str, str]] = []
+    cancellations: list[tuple[str, str, str]] = []
 
     async def fake_get_run(run_id: str):
         return SimpleNamespace(
@@ -171,12 +201,12 @@ def test_stalled_run_stop_becomes_cancelled(monkeypatch):
             status=RunStatus.STALLED.value,
         )
 
-    async def fake_update_run_state(run_id: str, *, status: str | None = None, **_: object):
-        updates.append((run_id, status or ""))
+    async def fake_transition_run_to_cancelled(run_id: str, *, reason: str, source: str):
+        cancellations.append((run_id, reason, source))
         return {
             "id": run_id,
             "session_id": "session_stalled",
-            "status": status,
+            "status": RunStatus.CANCELLED.value,
             "current_turn": 1,
             "latest_seq": 0,
             "last_status_message": "",
@@ -195,7 +225,7 @@ def test_stalled_run_stop_becomes_cancelled(monkeypatch):
         lambda: runtime_service,
     )
     monkeypatch.setattr(session_runtime_api, "get_run", fake_get_run)
-    monkeypatch.setattr(session_runtime_api, "update_run_state", fake_update_run_state)
+    monkeypatch.setattr(session_runtime_api, "transition_run_to_cancelled", fake_transition_run_to_cancelled)
     monkeypatch.setattr(session_runtime_api, "record_command", _fake_record_command)
     client = TestClient(app)
 
@@ -205,5 +235,5 @@ def test_stalled_run_stop_becomes_cancelled(monkeypatch):
     )
 
     assert stop_response.status_code == 200
-    assert updates == [("run_stalled", RunStatus.CANCELLED.value)]
+    assert cancellations == [("run_stalled", "已取消等待恢复的运行。", "api.runs.stop")]
     assert runtime_service.stopped == []

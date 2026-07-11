@@ -171,6 +171,65 @@ export function getCollapsedAgentMessagesForSession(
 
 const storeInitialState = createInitialState();
 
+function deriveConnectionStateFromRun(run: RunSummary | null): Pick<DebateState, 'isDebating' | 'phase' | 'currentStatus' | 'currentNode'> {
+    const status = run?.status ?? null;
+    if (!status) {
+        return {
+            isDebating: false,
+            phase: 'idle',
+            currentStatus: '',
+            currentNode: '',
+        };
+    }
+
+    if (status === 'completed') {
+        return {
+            isDebating: false,
+            phase: 'complete',
+            currentStatus: run?.last_status_message || '辩论已完成',
+            currentNode: '',
+        };
+    }
+
+    if (status === 'failed') {
+        return {
+            isDebating: false,
+            phase: 'error',
+            currentStatus: run?.last_error_message || run?.last_status_message || '运行中断',
+            currentNode: '',
+        };
+    }
+
+    if (status === 'stalled') {
+        return {
+            isDebating: false,
+            phase: 'idle',
+            currentStatus: run?.last_error_message || run?.last_status_message || '',
+            currentNode: '',
+        };
+    }
+
+    if (status === 'cancelled') {
+        return {
+            isDebating: false,
+            phase: 'idle',
+            currentStatus: run?.last_status_message || '',
+            currentNode: '',
+        };
+    }
+
+    return {
+        isDebating: true,
+        phase: status === 'stopping'
+            ? 'processing'
+            : status === 'running'
+                ? 'processing'
+                : 'initializing',
+        currentStatus: run?.last_status_message || '',
+        currentNode: '',
+    };
+}
+
 function resetStoreState() {
     return createInitialState();
 }
@@ -227,14 +286,26 @@ export const useDebateStore = create<DebateState>((set) => ({
     setActiveRun: (run) =>
         set((state) => {
             const changedRun = state.activeRunId !== run?.id;
+            const connectionState = deriveConnectionStateFromRun(run);
+            const runLatestSeq = run?.id ? Math.max(state.lastEventSeqByRun[run.id] ?? -1, run.latest_seq ?? -1) : -1;
             return {
                 activeRun: run,
                 activeRunId: run?.id ?? null,
                 runtimeEvents: changedRun ? [] : state.runtimeEvents,
-                lastEventSeq: run?.id ? (state.lastEventSeqByRun[run.id] ?? -1) : -1,
+                lastEventSeq: runLatestSeq,
+                lastEventSeqByRun: run?.id
+                    ? {
+                        ...state.lastEventSeqByRun,
+                        [run.id]: runLatestSeq,
+                    }
+                    : state.lastEventSeqByRun,
                 streamingRole: changedRun ? '' : state.streamingRole,
                 streamingContent: changedRun ? '' : state.streamingContent,
                 streamingEntry: changedRun ? null : state.streamingEntry,
+                isDebating: connectionState.isDebating,
+                phase: connectionState.phase,
+                currentStatus: connectionState.currentStatus,
+                currentNode: connectionState.currentNode,
             };
         }),
 

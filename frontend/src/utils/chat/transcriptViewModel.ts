@@ -81,6 +81,10 @@ export interface TranscriptViewModel {
     groupingState: DialogueGroupingState;
 }
 
+function isConsensusEntry(entry: DialogueEntry): boolean {
+    return entry.role === 'consensus_summary' || entry.discussion_kind === 'consensus';
+}
+
 export function buildTranscriptViewModel({
     dialogueHistory,
     participants,
@@ -92,13 +96,14 @@ export function buildTranscriptViewModel({
     liveTranscript?: LiveTranscriptViewModel;
     previousGroupingState?: DialogueGroupingState | null;
 }): TranscriptViewModel {
+    const timelineEntries = dialogueHistory.filter((entry) => !isConsensusEntry(entry));
     const groupingState = buildDialogueGroupingState(
-        dialogueHistory,
+        timelineEntries,
         participants,
         previousGroupingState,
     );
     const rows = groupingState.rows;
-    const consensusEntries = dialogueHistory.filter((entry) => entry.role === 'consensus_summary');
+    const consensusEntries = dialogueHistory.filter(isConsensusEntry);
 
     const focusedRowIndex = -1;
     const rowViewModels = rows.map((row, index) => {
