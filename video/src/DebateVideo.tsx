@@ -363,7 +363,7 @@ const SpeakerColumn: React.FC<{ view: SceneViewModel }> = ({ view }) => {
           <EmptyState text="本轮没有辩手发言。" />
         ) : (
           <div style={{ position: "absolute", inset: 0, padding: "18px 22px" }}>
-            {view.speakerLines.map(({ cue: line, displayText, state, style }) => {
+            {view.speakerLines.map(({ cue: line, displayLines, state, style }) => {
               const { accent } = roleAccent(line.role);
               const isActive = state === "active";
               return (
@@ -397,12 +397,11 @@ const SpeakerColumn: React.FC<{ view: SceneViewModel }> = ({ view }) => {
                       fontSize: style.fontSize,
                       lineHeight: style.lineHeight,
                       fontWeight: style.fontWeight,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
+                      whiteSpace: "normal",
+                      overflowWrap: "anywhere",
                     }}
                   >
-                    {displayText}
+                    {displayLines.map((text, index) => <div key={`${line.id}-${index}`}>{text}</div>)}
                   </div>
                 </div>
               );

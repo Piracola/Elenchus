@@ -193,20 +193,23 @@ const drawSpeechColumn = (ctx, scene, view) => {
     let cursor = y + 88;
     for (const item of lines) {
       const line = item.cue;
-      const { displayText, state, style } = item;
+      const { displayLines, state, style } = item;
       const accent = roleColor(line.role);
       ctx.save();
       ctx.globalAlpha = style.opacity;
       ctx.fillStyle = accent;
-      ctx.fillRect(x + 30, cursor, state === "active" ? 5 : 3, style.headerHeight + style.fontSize * style.lineHeight + 6);
+      const textHeight = displayLines.length * style.fontSize * style.lineHeight;
+      ctx.fillRect(x + 30, cursor, state === "active" ? 5 : 3, style.headerHeight + style.headerMargin + textHeight);
       ctx.font = font(state === "active" ? 16 : 13, 800);
       ctx.fillStyle = accent;
       ctx.fillText(`${line.label} · ${line.agentName}`, x + 48, cursor + 1);
       cursor += style.headerHeight + style.headerMargin;
       ctx.font = font(style.fontSize, style.fontWeight);
       ctx.fillStyle = colors.ink;
-      ctx.fillText(displayText, x + 48, cursor);
-      cursor += style.fontSize * style.lineHeight + style.marginBottom;
+      displayLines.forEach((text, index) => {
+        ctx.fillText(text, x + 48, cursor + index * style.fontSize * style.lineHeight);
+      });
+      cursor += textHeight + style.marginBottom;
       ctx.restore();
     }
   });

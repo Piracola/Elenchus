@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { activeLineIndexAtFrame, buildSceneSlices, computeSpeakerLayout, fitTextLine } from "../scenePresentation";
-import type { LineCue } from "../types";
+import {
+  activeLineIndexAtFrame,
+  buildSceneSlices,
+  buildSceneViewModel,
+  computeSpeakerLayout,
+  fitTextLine,
+  SCENE_LAYOUT,
+  wrapTextLinesToWidth,
+} from "../scenePresentation";
+import type { DebateScene, LineCue } from "../types";
 
 const line = (id: string, startFrame: number, endFrame: number): LineCue => ({
   id,
@@ -58,5 +66,39 @@ describe("scene presentation", () => {
     expect(fitted.endsWith("…")).toBe(true);
     expect(fitted.length).toBeLessThan("中英文 mixed content that is too long".length);
     expect(fitTextLine("短文本", 10)).toBe("短文本");
+  });
+
+  it("gives roughly 80 percent of the content width to the speaker", () => {
+    const contentWidth = SCENE_LAYOUT.speaker.width + SCENE_LAYOUT.judge.width;
+    expect(SCENE_LAYOUT.speaker.width / contentWidth).toBeCloseTo(0.8, 2);
+  });
+
+  it("wraps active speech without dropping text", () => {
+    const text = "这是一段需要换行展示但不能被省略的当前辩手发言";
+    const wrapped = wrapTextLinesToWidth(text, 10);
+    expect(wrapped.length).toBeGreaterThan(1);
+    expect(wrapped.join("")).toBe(text);
+
+    const activeLine = { ...line("active", 0, 60), text, charCount: text.length };
+    const futureLine = { ...line("future", 60, 90), text, charCount: text.length };
+    const scene: DebateScene = {
+      id: "scene-1",
+      turnIndex: 0,
+      turnLabel: "第 1 轮",
+      durationInFrames: 90,
+      totalChars: text.length,
+      speakerItems: [],
+      speakerLines: [activeLine, futureLine],
+      segmentCues: [],
+      judgeItems: [],
+      contextItems: [],
+      scoreItems: [],
+      winner: null,
+    };
+    const view = buildSceneViewModel(scene, 30);
+    expect(view.speakerLines[0].displayLines.join(" ").replace(/\s/g, "")).toBe(text);
+    expect(view.speakerLines[0].displayText).not.toContain("…");
+    expect(view.speakerLines[1].displayLines.join(" ").replace(/\s/g, "")).toBe(text);
+    expect(view.speakerLines[1].displayText).not.toContain("…");
   });
 });

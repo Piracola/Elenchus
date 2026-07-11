@@ -23,9 +23,9 @@ export const SCENE_LAYOUT = {
   width: 1920,
   height: 1080,
   header: { x: 72, y: 42, width: 1776, height: 104 },
-  speaker: { x: 72, y: 170, width: 1040, height: 830 },
-  judge: { x: 1140, y: 170, width: 708, height: 382 },
-  score: { x: 1140, y: 582, width: 708, height: 418 },
+  speaker: { x: 72, y: 170, width: 1400, height: 830 },
+  judge: { x: 1500, y: 170, width: 348, height: 382 },
+  score: { x: 1500, y: 582, width: 348, height: 418 },
 } as const;
 
 export type SpeakerLineState = "active" | "past" | "future";
@@ -42,6 +42,23 @@ export const fitTextLine = (value: unknown, maxWidth: number): string => {
     result += char;
   }
   return `${result.trimEnd()}…`;
+};
+
+export const wrapTextLinesToWidth = (value: unknown, maxWidth: number): string[] => {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return [];
+  const lines: string[] = [];
+  let current = "";
+  for (const char of text) {
+    if (current && visualTextWidth(`${current}${char}`) > maxWidth) {
+      lines.push(current.trimEnd());
+      current = char.trimStart();
+    } else {
+      current += char;
+    }
+  }
+  if (current) lines.push(current.trimEnd());
+  return lines;
 };
 
 export const SPEAKER_LINE_STYLES = {
@@ -160,6 +177,7 @@ export type SceneViewModel = {
   speakerLines: Array<{
     cue: LineCue;
     displayText: string;
+    displayLines: string[];
     index: number;
     state: SpeakerLineState;
     style: (typeof SPEAKER_LINE_STYLES)[SpeakerLineState];
@@ -179,7 +197,8 @@ export const buildSceneViewModel = (scene: DebateScene, frame: number): SceneVie
     const style = SPEAKER_LINE_STYLES[state];
     const availablePixels = SCENE_LAYOUT.speaker.width - 98;
     const maxVisualWidth = availablePixels / style.fontSize;
-    return { cue, displayText: fitTextLine(cue.text, maxVisualWidth), index, state, style };
+    const displayLines = wrapTextLinesToWidth(cue.text, maxVisualWidth);
+    return { cue, displayText: displayLines.join("\n"), displayLines, index, state, style };
   });
   const winnerLabel = scene.winner === "proposer" ? "正方" : scene.winner === "opposer" ? "反方" : scene.winner;
   return {
@@ -192,12 +211,12 @@ export const buildSceneViewModel = (scene: DebateScene, frame: number): SceneVie
     speakerLines,
     judgeLines: layoutTextLines(
       [winnerLabel ? `胜方：${winnerLabel}。` : "", ...scene.judgeItems.map((item) => item.text)].filter(Boolean).join(" "),
-      27,
+      13,
       8,
     ),
     scoreCards: scene.scoreItems.slice(0, 2).map((score) => ({
       ...score,
-      commentLines: layoutTextLines(score.overallComment, 30, 4),
+      commentLines: layoutTextLines(score.overallComment, 21, 4),
       displayDimensions: score.dimensions.slice(0, 3),
     })),
   };
