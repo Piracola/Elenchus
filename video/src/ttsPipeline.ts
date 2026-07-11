@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 
 import { cleanTextForTts } from "./videoScript";
 
-export const EDGE_TTS_TARGET_CHARS = 120;
-export const EDGE_TTS_MAX_CHARS = 180;
+export const EDGE_TTS_TARGET_CHARS = 260;
+export const EDGE_TTS_MAX_CHARS = 320;
 export const EDGE_TTS_MIN_SPLIT_CHARS = 48;
 export const EDGE_TTS_VERSION = "7.2.8";
 export const EDGE_TTS_RETRY_DELAYS_MS = [2_000, 5_000, 10_000] as const;

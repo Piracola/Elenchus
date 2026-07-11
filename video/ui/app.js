@@ -230,9 +230,9 @@ const audioModeSettings = {
 };
 
 const scriptPresetSettings = {
-  standard: "标准切分：约 200 字一段，阅读节奏和 TTS 成功率比较均衡。",
-  compact: "紧凑切分：约 260 字一段，视频更短，但单屏文字会更多。",
-  detailed: "细致切分：约 140 字一段，高亮更细，TTS 请求次数会更多。",
+  standard: "标准同步：约 200 字一个时间校准点，不会截断发言或切换画面。",
+  compact: "宽松同步：约 260 字一个时间校准点，缓存文件更少。",
+  detailed: "精细同步：约 140 字一个时间校准点，长发言的字幕校准更频繁。",
 };
 
 let edgeVoiceOptions = [
@@ -685,7 +685,7 @@ const scriptStatsText = (stats) => {
   if (!stats) {
     return "";
   }
-  return `文案切分：${stats.preset}，辩手 ${stats.speakerSegments} 段，裁判 ${stats.judgeSegments} 段，评分 ${stats.scoreSegments} 段`;
+  return `字幕同步：${stats.preset}，辩手 ${stats.speakerSegments} 个校准点，裁判 ${stats.judgeSegments} 个，评分 ${stats.scoreSegments} 个`;
 };
 
 const renderSummary = () => {
@@ -1136,10 +1136,11 @@ const boot = async () => {
     setLog(error.message);
   }));
   $("generateTtsButton").addEventListener("click", async () => {
-    setStatus("生成配音中", "running");
-    setLogHint("TTS");
-    setLog(`正在调用 ${readValue("ttsProviderInput") === "edge" ? "Edge TTS" : "TTS"} 生成每轮配音，请稍候...`);
     try {
+      await saveConfig();
+      setStatus("生成配音中", "running");
+      setLogHint("TTS");
+      setLog(`当前配置已保存，正在调用 ${readValue("ttsProviderInput") === "edge" ? "Edge TTS" : "TTS"} 生成每轮配音，请稍候...`);
       const data = await postJson("/api/generate-tts");
       if (data.task?.id) {
         setLog([data.message, data.task.output].filter(Boolean).join("\n\n"));

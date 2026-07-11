@@ -20,6 +20,11 @@ describe("splitTextForTts", () => {
     expect(splitTextForTts("这是一段短文本。")) .toEqual(["这是一段短文本。"]);
   });
 
+  it("keeps a compact video segment in one Edge TTS request", () => {
+    const text = "第一句说明观点。第二句补充理由。第三句给出结论。".repeat(10).slice(0, 250);
+    expect(splitTextForTts(text)).toEqual([text]);
+  });
+
   it("preserves normalized text exactly", () => {
     const text = "第一句说明观点。第二句补充理由；第三句给出结论！".repeat(8);
     const chunks = splitTextForTts(text);

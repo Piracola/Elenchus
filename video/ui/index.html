@@ -146,7 +146,7 @@
               <span class="tab-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"></path></svg>
               </span>
-              文案
+              同步
             </button>
           </div>
 
@@ -350,15 +350,15 @@
           <div class="config-section" id="scriptConfigSection" hidden>
             <div class="simple-video-grid">
               <label class="wide-field">
-                文案切分
+                字幕同步粒度
                 <select id="scriptPresetInput">
-                  <option value="standard">标准：约 200 字一段</option>
-                  <option value="compact">紧凑：约 260 字一段</option>
-                  <option value="detailed">细致：约 140 字一段</option>
+                  <option value="standard">标准：约 200 字一个校准点</option>
+                  <option value="compact">宽松：约 260 字一个校准点</option>
+                  <option value="detailed">精细：约 140 字一个校准点</option>
                 </select>
               </label>
             </div>
-            <div class="preset-summary" id="scriptPresetSummary">标准切分会平衡阅读节奏和 TTS 成功率。</div>
+            <div class="preset-summary" id="scriptPresetSummary">只影响字幕时间轴校准和缓存粒度，不会截断发言或切换画面。</div>
           </div>
 
           <div class="config-actions">
