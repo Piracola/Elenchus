@@ -63,7 +63,7 @@ $existing = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction Sil
 if ($existing) {
     $Healthy = $false
     try {
-        $healthResponse = Invoke-WebRequest -Uri "$Url/api/health" -UseBasicParsing -TimeoutSec 3 -SkipHttpErrorCheck
+        $healthResponse = Invoke-WebRequest -Uri "$Url/api/health" -UseBasicParsing -TimeoutSec 3
         if ($healthResponse.StatusCode -eq 200) {
             $healthPayload = $healthResponse.Content | ConvertFrom-Json
             $Healthy = $healthPayload.ok -eq $true
@@ -124,7 +124,7 @@ try {
         throw "The video service did not become ready within 30 seconds."
     }
 
-    $HealthResponse = Invoke-WebRequest -Uri "$Url/api/health" -UseBasicParsing -TimeoutSec 5 -SkipHttpErrorCheck
+    $HealthResponse = Invoke-WebRequest -Uri "$Url/api/health" -UseBasicParsing -TimeoutSec 5
     $HealthPayload = $HealthResponse.Content | ConvertFrom-Json
     if ($HealthResponse.StatusCode -ne 200 -or $HealthPayload.ok -ne $true) {
         $FailedChecks = @($HealthPayload.checks | Where-Object { $_.ok -ne $true } | ForEach-Object { "$($_.name): $($_.detail)" }) -join "; "
