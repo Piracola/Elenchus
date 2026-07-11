@@ -105,6 +105,12 @@
               </span>
               快速渲染
             </button>
+            <button id="cancelTaskButton" type="button" class="action-render" hidden>
+              <span class="btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>
+              </span>
+              停止当前任务
+            </button>
             <button id="openOutButton" type="button" class="action-folder">
               <span class="btn-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
@@ -266,7 +272,6 @@
                 <select id="ttsProviderInput">
                   <option value="edge">Edge TTS（推荐）</option>
                   <option value="mimo">MiMo</option>
-                  <option value="custom">自定义</option>
                 </select>
               </label>
               <label id="ttsFormatField">
@@ -307,6 +312,14 @@
                     反方
                     <select id="ttsOpposerVoiceInput"></select>
                   </label>
+                  <label>
+                    裁判
+                    <select id="ttsJudgeVoiceInput"></select>
+                  </label>
+                  <label>
+                    旁白
+                    <select id="ttsNarratorVoiceInput"></select>
+                  </label>
                 </div>
               </div>
               <label id="ttsSampleRateField">
@@ -316,10 +329,6 @@
               <label>
                 语速
                 <input id="ttsSpeedInput" type="number" min="0.5" max="2" step="0.05" />
-              </label>
-              <label>
-                TTS 并发
-                <input id="ttsConcurrencyInput" type="number" min="1" max="8" step="1" />
               </label>
             </div>
             <div class="preset-summary" id="ttsProviderSummary">Edge TTS 不需要 API Key，适合先生成自然中文配音。</div>

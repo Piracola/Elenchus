@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildVideoScript,
   charCount,
+  cleanTextForSpeech,
   distributeFramesByWeight,
   estimateSegmentDurationFrames,
   markdownToReadableText,
@@ -161,6 +162,19 @@ describe("segmentTextForVideo", () => {
     const result = segmentTextForVideo("短。短。短。短。短。", resolveSegmentationOptions("standard"));
     expect(result.length).toBeLessThanOrEqual(2);
   });
+
+  it.each(["standard", "compact", "detailed"])("losslessly restores normalized text in %s mode", (mode) => {
+    const source = [
+      "第一部分：语言是思想的边界。",
+      "",
+      "第二部分保留 English words and spaces，也保留段落之间的换行；".repeat(12),
+      "最后是一段没有标点的长文本".repeat(35),
+    ].join("\n");
+    const normalized = cleanTextForSpeech(source);
+    const result = segmentTextForVideo(source, resolveSegmentationOptions(mode));
+    expect(result.join("")).toBe(normalized);
+    expect(result.every((segment) => charCount(segment) <= resolveSegmentationOptions(mode).maxChars)).toBe(true);
+  });
 });
 
 describe("segmentTextToLines", () => {
@@ -271,6 +285,15 @@ describe("distributeFramesByWeight", () => {
 });
 
 describe("buildVideoScript", () => {
+  it("keeps the full source content while segments restore display content", () => {
+    const source = "## 标题\n\n**语言** is a tool。\n\n第二段保留 English spaces。".repeat(20);
+    const script = buildVideoScript(makeExport([makeEntry({ content: source })]));
+    const speech = script.rounds[0].speeches[0];
+    expect(speech.content).toBe(source);
+    expect(speech.displayContent).toBe(cleanTextForSpeech(source));
+    expect(speech.segments.map((segment) => segment.text).join("")).toBe(speech.displayContent);
+  });
+
   it("builds a script with correct version and topic", () => {
     const exportData = makeExport([makeEntry()]);
     const script = buildVideoScript(exportData);

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { TtsRole } from "./ttsPipeline";
 
 export const FPS = 30;
 export const VIDEO_WIDTH = 1920;
@@ -103,7 +104,10 @@ export type VideoScriptSpeech = {
   role: string;
   label: string;
   agentName: string;
+  /** Complete source content from the exported dialogue entry. */
   content: string;
+  /** Readable text used by layout and segmentation. */
+  displayContent?: string;
   charCount: number;
   order: number;
   kind: ScriptSegmentKind;
@@ -147,6 +151,8 @@ export type VideoScript = {
 export type SegmentCue = VideoScriptSegment & {
   startFrame: number;
   endFrame: number;
+  startMs?: number;
+  endMs?: number;
 };
 
 export type LineCue = {
@@ -164,15 +170,34 @@ export type LineCue = {
 };
 
 export type AudioManifest = {
+  schemaVersion: 2;
+  provider: "edge" | "mimo";
   scriptFile?: string;
   scriptHash?: string;
+  ttsSignature?: string;
+  durationMs: number;
+  sessionAudioFile: string;
   scenes: Array<{
     id: string;
+    roundIndex: number;
     audioFile: string;
-    durationFrames: number;
+    durationFrames?: number;
+    durationMs: number;
+    startMs: number;
+    endMs: number;
+    cues: AudioCue[];
     segmentCues?: SegmentCue[];
     lineCues?: LineCue[];
   }>;
+};
+
+export type AudioCue = {
+  segmentId: string;
+  chunkId: string;
+  role?: TtsRole;
+  startMs: number;
+  endMs: number;
+  audioFile: string;
 };
 
 export type DebateScene = {
@@ -184,8 +209,10 @@ export type DebateScene = {
   judgeItems: TextItem[];
   contextItems: TextItem[];
   scoreItems: ScoreItem[];
+  winner: string | null;
   totalChars: number;
   speakerLines: LineCue[];
+  segmentCues: SegmentCue[];
   audioFile?: string;
   audioDurationFrames?: number;
 };
@@ -199,6 +226,7 @@ export type DebateVideoModel = {
   introFrames: number;
   outroFrames: number;
   durationInFrames: number;
+  timelineKind: "audio" | "estimated";
   scenes: DebateScene[];
 };
 

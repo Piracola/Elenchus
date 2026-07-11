@@ -150,8 +150,10 @@ const defaultConfig = {
     model: "",
     voice: "zh-CN-XiaoxiaoNeural",
     roleVoices: {
-      proposer: "zh-CN-XiaoxiaoNeural",
-      opposer: "zh-CN-YunxiNeural",
+      affirmative: "zh-CN-XiaoxiaoNeural",
+      negative: "zh-CN-YunxiNeural",
+      judge: "zh-CN-YunyangNeural",
+      narrator: "zh-CN-XiaoyiNeural",
     },
     format: "mp3",
     sampleRate: "24000",
@@ -231,7 +233,7 @@ const scriptPresetSettings = {
   detailed: "细致切分：约 140 字一段，高亮更细，TTS 请求次数会更多。",
 };
 
-const edgeVoiceOptions = [
+let edgeVoiceOptions = [
   { value: "zh-CN-XiaoxiaoNeural", label: "晓晓（女，普通话，温暖）" },
   { value: "zh-CN-XiaoyiNeural", label: "晓伊（女，普通话，活泼）" },
   { value: "zh-CN-YunjianNeural", label: "云健（男，普通话，激情）" },
@@ -249,9 +251,31 @@ const edgeVoiceOptions = [
 ];
 
 const roleVoiceFields = [
-  { role: "proposer", id: "ttsProposerVoiceInput", label: "正方" },
-  { role: "opposer", id: "ttsOpposerVoiceInput", label: "反方" },
+  { role: "affirmative", id: "ttsProposerVoiceInput", label: "正方" },
+  { role: "negative", id: "ttsOpposerVoiceInput", label: "反方" },
+  { role: "judge", id: "ttsJudgeVoiceInput", label: "裁判" },
+  { role: "narrator", id: "ttsNarratorVoiceInput", label: "旁白" },
 ];
+
+const knownChineseVoiceLabels = new Map(edgeVoiceOptions.map((option) => [option.value, option.label]));
+
+const refreshEdgeVoiceOptions = async () => {
+  const response = await fetch("/api/voices");
+  const data = await response.json();
+  if (!response.ok || !data.ok || !Array.isArray(data.voices)) {
+    throw new Error(data.message || "读取 Edge TTS 音色列表失败。");
+  }
+  edgeVoiceOptions = data.voices
+    .map((voice) => {
+      const value = String(voice.ShortName || "").trim();
+      const reliableChinese = knownChineseVoiceLabels.get(value);
+      const originalName = String(voice.LocalName || voice.FriendlyName || value).trim();
+      const displayName = reliableChinese || originalName;
+      return { value, label: displayName.includes(value) ? displayName : `${displayName} · ${value}` };
+    })
+    .filter((option) => option.value)
+    .sort((a, b) => a.value.localeCompare(b.value));
+};
 
 const voiceOptionLabel = (option) => `${option.label} - ${option.value}`;
 
@@ -299,29 +323,32 @@ const ttsProviderSettings = {
     summary: "Edge TTS 不需要 API Key，中文音色自然。输出会固定为 MP3，适合当前视频流程。",
     defaultVoice: "zh-CN-XiaoxiaoNeural",
     defaultFormat: "mp3",
-    defaultConcurrency: "1",
   },
   mimo: {
     summary: "MiMo 作为备用接口保留。需要填写 API 地址、API Key、模型和音色。",
     defaultVoice: "mimo_default",
     defaultFormat: "wav",
-    defaultConcurrency: "2",
   },
   custom: {
     summary: "自定义接口会按 OpenAI 兼容格式请求。需要填写 API 地址、API Key、模型和音色。",
     defaultVoice: "",
     defaultFormat: "wav",
-    defaultConcurrency: "2",
   },
 };
 
 const mergeConfig = (config) => {
   const tts = { ...defaultConfig.tts, ...(config?.tts || {}) };
+  const configuredRoleVoices = config?.tts?.roleVoices || {};
   return {
     video: { ...defaultConfig.video, ...(config?.video || {}) },
     tts: {
       ...tts,
-      roleVoices: { ...defaultConfig.tts.roleVoices, ...(config?.tts?.roleVoices || {}) },
+      roleVoices: {
+        ...defaultConfig.tts.roleVoices,
+        ...configuredRoleVoices,
+        affirmative: configuredRoleVoices.affirmative || configuredRoleVoices.proposer || defaultConfig.tts.roleVoices.affirmative,
+        negative: configuredRoleVoices.negative || configuredRoleVoices.opposer || defaultConfig.tts.roleVoices.negative,
+      },
     },
     script: { ...defaultConfig.script, ...(config?.script || {}) },
   };
@@ -393,9 +420,6 @@ const renderTtsProviderFields = () => {
         setValue(id, defaultConfig.tts.roleVoices[role]);
       }
     });
-    if (!readValue("ttsConcurrencyInput") || Number(readValue("ttsConcurrencyInput")) > 2) {
-      setValue("ttsConcurrencyInput", settings.defaultConcurrency);
-    }
   }
 
   $("ttsProviderSummary").textContent = settings.summary;
@@ -414,9 +438,6 @@ const applyTtsProviderDefaults = () => {
     roleVoiceFields.forEach(({ role, id }) => {
       setValue(id, defaultConfig.tts.roleVoices[role]);
     });
-  }
-  if (!readValue("ttsConcurrencyInput") || provider === "edge") {
-    setValue("ttsConcurrencyInput", settings.defaultConcurrency);
   }
   renderTtsProviderFields();
 };
@@ -496,7 +517,6 @@ const renderConfig = () => {
   setValue("ttsFormatInput", tts.format);
   setValue("ttsSampleRateInput", tts.sampleRate);
   setValue("ttsSpeedInput", tts.speed);
-  setValue("ttsConcurrencyInput", tts.concurrency);
   renderTtsProviderFields();
   setValue("scriptPresetInput", script.textPreset);
   renderScriptPresetSummary();
@@ -537,7 +557,6 @@ const readConfigForm = () => ({
     format: readValue("ttsFormatInput"),
     sampleRate: readValue("ttsSampleRateInput"),
     speed: readValue("ttsSpeedInput"),
-    concurrency: readValue("ttsConcurrencyInput"),
   },
   script: {
     textPreset: readValue("scriptPresetInput"),
@@ -853,6 +872,22 @@ const setRenderBusy = (busy) => {
   $("stillButton").disabled = busy;
   $("renderButton").disabled = busy;
   $("fastRenderButton").disabled = busy;
+  $("cancelTaskButton").hidden = !busy;
+};
+
+const setTtsBusy = (busy) => {
+  $("generateTtsButton").disabled = busy;
+  $("cancelTaskButton").hidden = !busy;
+};
+
+const cancelActiveTask = async () => {
+  if (!state.activeTaskId) {
+    return;
+  }
+  const data = await postJson(`/api/tasks/${encodeURIComponent(state.activeTaskId)}/cancel`);
+  setStatus("正在停止", "running");
+  setLogHint("停止任务");
+  setLog(data.message || "已发送停止请求。");
 };
 
 const readTask = async (taskId) => {
@@ -866,15 +901,30 @@ const readTask = async (taskId) => {
 
 const pollTask = async (taskId, command) => {
   state.activeTaskId = taskId;
-  setRenderBusy(true);
+  if (command === "generate-tts") {
+    setTtsBusy(true);
+  } else {
+    setRenderBusy(true);
+  }
 
   try {
     while (state.activeTaskId === taskId) {
       const task = await readTask(taskId);
-      const running = task.status === "running";
-      setStatus(running ? "执行中" : task.status === "finished" ? "完成" : "失败", running ? "running" : task.status === "finished" ? "success" : "error");
+      const running = task.status === "queued" || task.status === "running";
+      setStatus(
+        task.status === "queued" ? "排队中" : running ? "执行中" : task.status === "succeeded" ? "完成" : task.status === "cancelled" ? "已停止" : "失败",
+        running ? "running" : task.status === "succeeded" ? "success" : "error",
+      );
       setLogHint(`${command} · ${running ? "运行中" : "已结束"}`);
-      setLog([task.message, task.output].filter(Boolean).join("\n\n"));
+      const progress = task.progress?.total
+        ? `进度：${Math.min(task.progress.current || 0, task.progress.total)}/${task.progress.total}` +
+          (task.progress.reused ? `，复用缓存 ${task.progress.reused}` : "") +
+          (task.progress.roundIndex != null ? `\n当前轮次：${task.progress.roundIndex + 1}` : "") +
+          (task.progress.segmentId ? `\n当前片段：${task.progress.segmentId}` : "") +
+          (task.progress.chunkId ? `\n当前请求块：${task.progress.chunkId}` : "") +
+          (task.lastOutputAt ? `\n最后活动：${formatTime(task.lastOutputAt)}` : "")
+        : "";
+      setLog([task.message, progress, task.output].filter(Boolean).join("\n\n"));
 
       if (!running) {
         if (command === "still" || command === "render" || command === "fast-render") {
@@ -891,7 +941,11 @@ const pollTask = async (taskId, command) => {
     if (state.activeTaskId === taskId) {
       state.activeTaskId = null;
     }
-    setRenderBusy(false);
+    if (command === "generate-tts") {
+      setTtsBusy(false);
+    } else {
+      setRenderBusy(false);
+    }
   }
 };
 
@@ -938,6 +992,11 @@ const openOut = async () => {
 };
 
 const boot = async () => {
+  try {
+    await refreshEdgeVoiceOptions();
+  } catch (error) {
+    setLog(`读取实时音色列表失败，将使用缓存选项：${error.message}`);
+  }
   try {
     const current = await fetch("/api/current").then((response) => response.json());
     if (current.session) {
@@ -1013,6 +1072,10 @@ const boot = async () => {
     setStatus("失败", "error");
     setLog(error.message);
   }));
+  $("cancelTaskButton").addEventListener("click", () => cancelActiveTask().catch((error) => {
+    setStatus("停止失败", "error");
+    setLog(error.message);
+  }));
   $("refreshAssetsButton").addEventListener("click", () => refreshAssets().then(() => {
     setStatus("已刷新", "success");
     setLogHint("预览刷新");
@@ -1068,8 +1131,13 @@ const boot = async () => {
     setLog(`正在调用 ${readValue("ttsProviderInput") === "edge" ? "Edge TTS" : "TTS"} 生成每轮配音，请稍候...`);
     try {
       const data = await postJson("/api/generate-tts");
-      setStatus(data.ok ? "配音已生成" : "失败", data.ok ? "success" : "error");
-      setLog([data.message, data.failed?.length ? `失败：${data.failed.map((s) => `${s.id}: ${s.error}`).join("；")}` : ""].filter(Boolean).join("\n\n"));
+      if (data.task?.id) {
+        setLog([data.message, data.task.output].filter(Boolean).join("\n\n"));
+        await pollTask(data.task.id, "generate-tts");
+      } else {
+        setStatus(data.ok ? "配音已生成" : "失败", data.ok ? "success" : "error");
+        setLog(data.message || "配音任务已结束。");
+      }
     } catch (error) {
       setStatus("失败", "error");
       setLog(error.message);

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
 import { buildVideoModel } from "../src/normalizeElenchusExport.ts";
+import { buildSceneSlices, buildSceneViewModel, layoutTextLines, SCENE_COLORS, SCENE_LAYOUT, VIDEO_FONT_FAMILY } from "../src/scenePresentation.ts";
 
 const rootDir = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const publicDir = join(rootDir, "public");
@@ -13,7 +14,6 @@ const outDir = join(rootDir, "out");
 const fastDir = join(outDir, "fast");
 const frameDir = join(fastDir, "frames");
 const segmentDir = join(fastDir, "segments");
-const audioListPath = join(fastDir, "audio-list.txt");
 const segmentListPath = join(fastDir, "segments-list.txt");
 const silentVideoPath = join(fastDir, "silent.mp4");
 const concatAudioPath = join(fastDir, "audio.wav");
@@ -21,30 +21,26 @@ const outputPath = join(outDir, "debate-fast.mp4");
 const ffmpegPath = join(rootDir, "node_modules", "@remotion", "compositor-win32-x64-msvc", "ffmpeg.exe");
 
 const colors = {
-  ink: "#1d2a33",
-  muted: "#617180",
-  faint: "#d9e2ea",
-  panel: "#ffffff",
-  page: "#f4f7f9",
-  proposer: "#2f7d68",
-  opposer: "#a04a5b",
-  judge: "#405f8f",
-  gold: "#b8842f",
+  ink: SCENE_COLORS.ink,
+  muted: SCENE_COLORS.muted,
+  faint: SCENE_COLORS.faint,
+  panel: SCENE_COLORS.panel,
+  page: SCENE_COLORS.background,
+  proposer: SCENE_COLORS.affirmative,
+  opposer: SCENE_COLORS.negative,
+  judge: SCENE_COLORS.judge,
+  gold: SCENE_COLORS.score,
 };
 
 const WIDTH = 1920;
 const HEIGHT = 1080;
 const FPS = 30;
 
-const fontCandidates = [
-  "C:/Windows/Fonts/msyh.ttc",
-  "C:/Windows/Fonts/simhei.ttf",
-  "C:/Windows/Fonts/simsun.ttc",
-];
-
-for (const fontPath of fontCandidates) {
-  if (existsSync(fontPath)) {
-    GlobalFonts.registerFromPath(fontPath, "Elenchus CJK");
+const bundledFontDir = join(publicDir, "fonts");
+for (const fileName of ["NotoSansHans-Regular.otf", "NotoSansHans-Bold.otf"]) {
+  const fontPath = join(bundledFontDir, fileName);
+  if (!existsSync(fontPath) || !GlobalFonts.registerFromPath(fontPath, "Noto Sans Hans")) {
+    throw new Error(`项目中文字体不可用：${fontPath}。请先运行 npm install。`);
   }
 }
 
@@ -59,12 +55,14 @@ const normalizeFontWeight = (weight = 400) => {
 };
 
 const font = (size, weight = 400) =>
-  `${normalizeFontWeight(weight)} ${Math.max(1, Math.round(size))}px "Elenchus CJK", "Microsoft YaHei", "SimHei", sans-serif`;
+  `${normalizeFontWeight(weight)} ${Math.max(1, Math.round(size))}px ${VIDEO_FONT_FAMILY}`;
 
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 
 const loadProps = () => {
-  const propsPath = join(publicDataDir, "render-props.json");
+  const propsPath = process.env.ELENCHUS_RENDER_PROPS
+    ? resolve(rootDir, process.env.ELENCHUS_RENDER_PROPS)
+    : join(publicDataDir, "render-props.json");
   return existsSync(propsPath) ? readJson(propsPath) : { dataFile: "data/session-export.json" };
 };
 
@@ -132,47 +130,14 @@ const withRectClip = (ctx, x, y, width, height, draw) => {
   ctx.restore();
 };
 
-const wrapText = (ctx, text, maxWidth) => {
-  const clean = String(text || "")
-    .replace(/\r\n/g, "\n")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n+/g, "\n")
-    .trim();
-  const lines = [];
-
-  for (const paragraph of clean.split("\n")) {
-    let line = "";
-    for (const char of paragraph) {
-      const candidate = `${line}${char}`;
-      if (line && ctx.measureText(candidate).width > maxWidth) {
-        lines.push(line);
-        line = char;
-      } else {
-        line = candidate;
-      }
-    }
-    if (line) {
-      lines.push(line);
-    }
-  }
-  return lines;
-};
-
-const drawTextBlock = (ctx, text, x, y, width, options = {}) => {
+const drawTextBlock = (ctx, lines, x, y, options = {}) => {
   const size = options.size || 28;
   const lineHeight = options.lineHeight || Math.round(size * 1.55);
-  const maxLines = options.maxLines || 10;
   ctx.font = font(size, options.weight || 400);
   ctx.fillStyle = options.color || colors.ink;
   ctx.textBaseline = "top";
-  const wrappedLines = wrapText(ctx, text, width);
-  const lines = wrappedLines.slice(0, maxLines);
   lines.forEach((line, index) => {
-    let display = line;
-    if (index === maxLines - 1 && wrappedLines.length > maxLines) {
-      display = `${line.slice(0, Math.max(0, line.length - 1))}…`;
-    }
-    ctx.fillText(display, x, y + index * lineHeight);
+    ctx.fillText(line, x, y + index * lineHeight);
   });
   return lines.length * lineHeight;
 };
@@ -185,12 +150,14 @@ const roleColor = (role) => {
 };
 
 const drawHeader = (ctx, video, scene) => {
+  ctx.save();
+  try {
   ctx.fillStyle = colors.page;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
   ctx.fillStyle = colors.ink;
   ctx.font = font(46, 800);
   ctx.textBaseline = "top";
-  ctx.fillText(wrapText(ctx, video.topic, 1180)[0] || "辩论视频", 72, 44);
+  ctx.fillText(layoutTextLines(video.topic, 30, 1)[0] || "辩论视频", SCENE_LAYOUT.header.x, 44);
 
   ctx.font = font(24, 700);
   ctx.fillStyle = colors.muted;
@@ -200,69 +167,83 @@ const drawHeader = (ctx, video, scene) => {
   ctx.font = font(24, 800);
   ctx.fillStyle = colors.muted;
   ctx.fillText("快速 Canvas 渲染", 1582, 68);
+  } finally {
+    ctx.restore();
+  }
 };
 
-const drawSpeechColumn = (ctx, scene) => {
-  const x = 72;
-  const y = 170;
-  const w = 1040;
-  const h = 830;
+const drawSpeechColumn = (ctx, scene, view) => {
+  const { x, y, width: w, height: h } = view.layout.speaker;
+  ctx.save();
+  try {
+  ctx.textBaseline = "top";
   fillRound(ctx, x, y, w, h, 10, colors.panel, colors.faint);
   ctx.font = font(30, 850);
   ctx.fillStyle = colors.ink;
   ctx.fillText("辩手发言", x + 30, y + 26);
 
   withRectClip(ctx, x + 30, y + 80, w - 60, h - 110, () => {
-    const items = scene.speakerItems.slice(0, 2);
-    let cursor = y + 88;
-    for (const item of items) {
-      const accent = roleColor(item.role);
-      fillRound(ctx, x + 30, cursor, 156, 42, 8, `${accent}22`, null);
-      ctx.font = font(22, 800);
-      ctx.fillStyle = accent;
-      ctx.fillText(item.label, x + 48, cursor + 8);
-      ctx.font = font(18, 700);
+    const lines = view.speakerLines;
+    if (!lines.length) {
+      ctx.font = font(25, 700);
       ctx.fillStyle = colors.muted;
-      ctx.fillText(`${item.charCount.toLocaleString()} 字`, x + 212, cursor + 11);
-      cursor += 58;
-      cursor += drawTextBlock(ctx, item.text, x + 30, cursor, w - 60, {
-        size: 25,
-        lineHeight: 40,
-        maxLines: items.length === 1 ? 15 : 8,
-      });
-      cursor += 28;
+      ctx.fillText("本轮没有辩手发言。", x + 30, y + 96);
+      return;
+    }
+    let cursor = y + 88;
+    for (const item of lines) {
+      const line = item.cue;
+      const { displayText, state, style } = item;
+      const accent = roleColor(line.role);
+      ctx.save();
+      ctx.globalAlpha = style.opacity;
+      ctx.fillStyle = accent;
+      ctx.fillRect(x + 30, cursor, state === "active" ? 5 : 3, style.headerHeight + style.fontSize * style.lineHeight + 6);
+      ctx.font = font(state === "active" ? 16 : 13, 800);
+      ctx.fillStyle = accent;
+      ctx.fillText(`${line.label} · ${line.agentName}`, x + 48, cursor + 1);
+      cursor += style.headerHeight + style.headerMargin;
+      ctx.font = font(style.fontSize, style.fontWeight);
+      ctx.fillStyle = colors.ink;
+      ctx.fillText(displayText, x + 48, cursor);
+      cursor += style.fontSize * style.lineHeight + style.marginBottom;
+      ctx.restore();
     }
   });
+  } finally {
+    ctx.restore();
+  }
 };
 
-const drawJudgeColumn = (ctx, scene) => {
-  const x = 1140;
-  const y = 170;
-  const w = 708;
-  const judgeH = 382;
-  const scoreH = 418;
-  fillRound(ctx, x, y, w, judgeH, 10, colors.panel, colors.faint);
+const drawJudgeColumn = (ctx, scene, view) => {
+  const { x, y, width: w, height: judgeH } = view.layout.judge;
+  const scoreH = view.layout.score.height;
+  ctx.save();
+  try {
+  ctx.textBaseline = "top";
+  const judgeActive = view.activeRole === "judge" || view.activeSegmentKind === "judge_summary";
+  const scoreActive = view.activeSegmentKind === "score_comment";
+  fillRound(ctx, x, y, w, judgeH, 10, judgeActive ? SCENE_COLORS.judgeSoft : colors.panel, judgeActive ? SCENE_COLORS.judge : colors.faint);
   ctx.font = font(30, 850);
   ctx.fillStyle = colors.ink;
   ctx.fillText("裁判消息", x + 28, y + 24);
 
   withRectClip(ctx, x + 28, y + 74, w - 56, judgeH - 96, () => {
-    const judgeText = scene.judgeItems.map((item) => item.text).join("\n");
-    drawTextBlock(ctx, judgeText || "本轮暂无裁判消息。", x + 28, y + 82, w - 56, {
+    const judgeLines = view.judgeLines.length ? view.judgeLines : ["本轮暂无裁判消息。"];
+    drawTextBlock(ctx, judgeLines, x + 28, y + 82, {
       size: 22,
       lineHeight: 35,
-      maxLines: 8,
-      color: judgeText ? colors.ink : colors.muted,
+      color: view.judgeLines.length ? colors.ink : colors.muted,
     });
   });
 
-  fillRound(ctx, x, y + judgeH + 30, w, scoreH, 10, colors.panel, colors.faint);
+  fillRound(ctx, x, y + judgeH + 30, w, scoreH, 10, scoreActive ? SCENE_COLORS.scoreSoft : colors.panel, scoreActive ? SCENE_COLORS.score : colors.faint);
   ctx.font = font(30, 850);
   ctx.fillStyle = colors.ink;
   ctx.fillText("评分", x + 28, y + judgeH + 54);
 
-  let cursor = y + judgeH + 110;
-  const scores = scene.scoreItems.slice(0, 2);
+  let cursor = y + judgeH + 106;
+  const scores = view.scoreCards;
   if (!scores.length) {
     ctx.font = font(22, 700);
     ctx.fillStyle = colors.muted;
@@ -272,46 +253,102 @@ const drawJudgeColumn = (ctx, scene) => {
 
   withRectClip(ctx, x + 28, y + judgeH + 96, w - 56, scoreH - 118, () => {
     for (const score of scores) {
-      ctx.font = font(24, 800);
+      ctx.font = font(16, 800);
       ctx.fillStyle = roleColor(score.role);
       ctx.fillText(score.label, x + 28, cursor);
       ctx.fillStyle = colors.gold;
-      ctx.font = font(34, 800);
-      ctx.fillText(score.comprehensiveScore == null ? "-" : String(score.comprehensiveScore), x + w - 110, cursor - 7);
-      cursor += 42;
-      cursor += drawTextBlock(ctx, score.overallComment || "暂无总评。", x + 28, cursor, w - 56, {
-        size: 20,
-        lineHeight: 31,
-        maxLines: 4,
+      ctx.font = font(28, 800);
+      ctx.fillText(score.comprehensiveScore == null ? "-" : String(score.comprehensiveScore), x + w - 94, cursor - 5);
+      cursor += 28;
+      cursor += drawTextBlock(ctx, score.commentLines.length ? score.commentLines : ["暂无总评。"], x + 28, cursor, {
+        size: 13,
+        lineHeight: 20,
         color: colors.muted,
       });
-      cursor += 20;
+      cursor += 4;
+      for (const dimension of score.displayDimensions) {
+        ctx.font = font(12, 700);
+        ctx.fillStyle = colors.ink;
+        ctx.fillText(dimension.label, x + 28, cursor);
+        ctx.fillStyle = colors.faint;
+        ctx.fillRect(x + 112, cursor + 6, w - 190, 5);
+        ctx.fillStyle = roleColor(score.role);
+        ctx.fillRect(x + 112, cursor + 6, (w - 190) * Math.max(0, Math.min(10, dimension.score || 0)) / 10, 5);
+        ctx.fillText(dimension.score == null ? "-" : String(dimension.score), x + w - 48, cursor);
+        cursor += 18;
+      }
+      cursor += 10;
     }
   });
+  } finally {
+    ctx.restore();
+  }
 };
 
-const drawScene = (video, scene, filePath) => {
+const drawScene = (video, scene, filePath, frame) => {
   const canvas = createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext("2d");
+  ctx.resetTransform();
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, WIDTH, HEIGHT);
+  ctx.clip();
+  const view = buildSceneViewModel(scene, frame);
   drawHeader(ctx, video, scene);
-  drawSpeechColumn(ctx, scene);
-  drawJudgeColumn(ctx, scene);
+  drawSpeechColumn(ctx, scene, view);
+  drawJudgeColumn(ctx, scene, view);
+  ctx.restore();
+  writeFileSync(filePath, canvas.toBuffer("image/png"));
+};
+
+const drawBookend = (video, filePath, outro = false) => {
+  const canvas = createCanvas(WIDTH, HEIGHT);
+  const ctx = canvas.getContext("2d");
+  ctx.resetTransform();
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+  ctx.fillStyle = colors.page;
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = colors.gold;
+  ctx.font = font(28, 800);
+  ctx.fillText(outro ? "复盘结束" : "Elenchus 视频辩论记录", WIDTH / 2, 390);
+  ctx.fillStyle = colors.ink;
+  ctx.font = font(54, 800);
+  const titleLines = layoutTextLines(video.topic, 28, 2);
+  titleLines.forEach((line, index) => ctx.fillText(line, WIDTH / 2, 500 + index * 72));
+  ctx.fillStyle = colors.muted;
+  ctx.font = font(24, 500);
+  ctx.fillText(outro ? `共 ${video.scenes.length} 轮辩论，感谢观看。` : `${video.scenes.length} 轮 · ${video.participants.join(" vs ")}`, WIDTH / 2, 700);
   writeFileSync(filePath, canvas.toBuffer("image/png"));
 };
 
 const writeFrameImages = (video) => {
-  video.scenes.forEach((scene, index) => {
-    const framePath = join(frameDir, `scene-${String(index + 1).padStart(3, "0")}.png`);
-    drawScene(video, scene, framePath);
+  const slices = [];
+  const introPath = join(frameDir, "scene-000-intro.png");
+  drawBookend(video, introPath, false);
+  slices.push({ startFrame: 0, endFrame: video.introFrames, framePath: introPath, segmentPath: join(segmentDir, "scene-000-intro.mp4") });
+  video.scenes.forEach((scene, sceneIndex) => {
+    buildSceneSlices(scene.segmentCues, scene.durationInFrames).forEach((slice, sliceIndex) => {
+      const token = `scene-${String(sceneIndex + 1).padStart(3, "0")}-segment-${String(sliceIndex + 1).padStart(3, "0")}`;
+      const framePath = join(frameDir, `${token}.png`);
+      drawScene(video, scene, framePath, slice.startFrame);
+      slices.push({ ...slice, scene, framePath, segmentPath: join(segmentDir, `${token}.mp4`) });
+    });
   });
+  const outroPath = join(frameDir, "scene-999-outro.png");
+  drawBookend(video, outroPath, true);
+  slices.push({ startFrame: 0, endFrame: video.outroFrames, framePath: outroPath, segmentPath: join(segmentDir, "scene-999-outro.mp4") });
+  return slices;
 };
 
-const encodeVideoSegments = async (video) => {
+const encodeVideoSegments = async (slices) => {
   const listLines = [];
-  for (const [index, scene] of video.scenes.entries()) {
-    const id = String(index + 1).padStart(3, "0");
-    const framePath = join(frameDir, `scene-${id}.png`);
-    const segmentPath = join(segmentDir, `scene-${id}.mp4`);
+  for (const slice of slices) {
+    const durationInFrames = Math.max(1, slice.endFrame - slice.startFrame);
     await run([
       "-hide_banner",
       "-y",
@@ -320,9 +357,9 @@ const encodeVideoSegments = async (video) => {
       "-framerate",
       String(FPS),
       "-i",
-      framePath,
+      slice.framePath,
       "-t",
-      (scene.durationInFrames / FPS).toFixed(3),
+      (durationInFrames / FPS).toFixed(3),
       "-c:v",
       "libx264",
       "-preset",
@@ -333,26 +370,56 @@ const encodeVideoSegments = async (video) => {
       "yuv420p",
       "-r",
       String(FPS),
-      segmentPath,
+      slice.segmentPath,
     ]);
-    listLines.push(`file '${segmentPath.replace(/\\/g, "/").replace(/'/g, "'\\''")}'`);
+    listLines.push(`file '${slice.segmentPath.replace(/\\/g, "/").replace(/'/g, "'\\''")}'`);
   }
 
   writeFileSync(segmentListPath, `${listLines.join("\n")}\n`, "utf8");
   await run(["-hide_banner", "-y", "-f", "concat", "-safe", "0", "-i", segmentListPath, "-c", "copy", silentVideoPath]);
 };
 
-const writeAudioList = (video) => {
-  const files = video.scenes
-    .map((scene) => scene.audioFile)
-    .filter(Boolean)
-    .map((file) => join(publicDir, file));
-  const existing = files.filter((file) => existsSync(file));
-  if (!existing.length) {
+const buildConcatenatedAudio = async (video) => {
+  const sceneAudio = video.scenes.map((scene) => {
+    const filePath = scene.audioFile ? join(publicDir, scene.audioFile) : null;
+    return { scene, filePath: filePath && existsSync(filePath) ? filePath : null };
+  });
+  if (!sceneAudio.some((item) => item.filePath)) {
     return false;
   }
-  const lines = existing.map((file) => `file '${file.replace(/\\/g, "/").replace(/'/g, "'\\''")}'`);
-  writeFileSync(audioListPath, `${lines.join("\n")}\n`, "utf8");
+
+  const audioItems = [
+    { scene: { durationInFrames: video.introFrames }, filePath: null },
+    ...sceneAudio,
+    { scene: { durationInFrames: video.outroFrames }, filePath: null },
+  ];
+
+  const args = ["-hide_banner", "-y"];
+  for (const { scene, filePath } of audioItems) {
+    if (filePath) {
+      args.push("-i", filePath);
+    } else {
+      args.push(
+        "-f",
+        "lavfi",
+        "-t",
+        (scene.durationInFrames / FPS).toFixed(3),
+        "-i",
+        "anullsrc=r=24000:cl=mono",
+      );
+    }
+  }
+  const inputs = audioItems.map((_, index) => `[${index}:a]`).join("");
+  args.push(
+    "-filter_complex",
+    `${inputs}concat=n=${audioItems.length}:v=0:a=1[outa]`,
+    "-map",
+    "[outa]",
+    "-c:a",
+    "pcm_s16le",
+    concatAudioPath,
+  );
+  await run(args);
   return true;
 };
 
@@ -370,27 +437,14 @@ const main = async () => {
   const video = buildVideoModel(raw, props, audioManifest, videoScript);
 
   console.log(`Canvas 快速渲染：${video.scenes.length} 个场景，${(video.durationInFrames / FPS / 60).toFixed(1)} 分钟`);
-  writeFrameImages(video);
+  const slices = writeFrameImages(video);
   if (process.argv.includes("--frames-only")) {
     console.log(`帧检查已输出：${frameDir}`);
     return;
   }
-  await encodeVideoSegments(video);
+  await encodeVideoSegments(slices);
 
-  if (writeAudioList(video)) {
-    await run([
-      "-hide_banner",
-      "-y",
-      "-f",
-      "concat",
-      "-safe",
-      "0",
-      "-i",
-      audioListPath,
-      "-c:a",
-      "pcm_s16le",
-      concatAudioPath,
-    ]);
+  if (await buildConcatenatedAudio(video)) {
     await run([
       "-hide_banner",
       "-y",

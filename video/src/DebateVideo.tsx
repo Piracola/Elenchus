@@ -2,6 +2,9 @@ import React from "react";
 import {
   AbsoluteFill,
   Audio,
+  cancelRender,
+  continueRender,
+  delayRender,
   Easing,
   interpolate,
   Series,
@@ -13,29 +16,41 @@ import {
   DebateScene,
   DebateVideoModel,
   DebateVideoProps,
-  LineCue,
   ScoreItem,
-  TextItem,
 } from "./types";
+import {
+  buildSceneViewModel,
+  SCENE_COLORS,
+  SCENE_LAYOUT,
+  type SceneViewModel,
+  VIDEO_FONT_FAMILY,
+} from "./scenePresentation";
 
-const fontFamily =
-  '"Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC", Arial, sans-serif';
+const fontFamily = VIDEO_FONT_FAMILY;
 
 const colors = {
-  background: "#f5f7f8",
-  ink: "#1f2933",
-  muted: "#6b7280",
-  faint: "#d8dee5",
-  panel: "#ffffff",
-  panelSoft: "#eef3f4",
-  proposer: "#2f7d68",
-  proposerSoft: "#e5f2ee",
-  opposer: "#a04a5b",
-  opposerSoft: "#f7e8eb",
-  judge: "#8a6a2f",
-  judgeSoft: "#f4eddd",
-  score: "#405f8f",
-  scoreSoft: "#e8eef8",
+  ...SCENE_COLORS,
+  proposer: SCENE_COLORS.affirmative,
+  proposerSoft: SCENE_COLORS.affirmativeSoft,
+  opposer: SCENE_COLORS.negative,
+  opposerSoft: SCENE_COLORS.negativeSoft,
+};
+
+const BundledFontLoader: React.FC = () => {
+  const [handle] = React.useState(() => delayRender("加载项目中文字体"));
+  React.useEffect(() => {
+    const load = async () => {
+      const faces = [
+        new FontFace("Noto Sans Hans", `url(${staticFile("fonts/NotoSansHans-Regular.otf")})`, { weight: "400" }),
+        new FontFace("Noto Sans Hans", `url(${staticFile("fonts/NotoSansHans-Bold.otf")})`, { weight: "700" }),
+      ];
+      for (const face of faces) {
+        document.fonts.add(await face.load());
+      }
+    };
+    load().then(() => continueRender(handle)).catch((error) => cancelRender(error));
+  }, [handle]);
+  return null;
 };
 
 const clampText = (value: string, maxLength: number): string => {
@@ -63,6 +78,13 @@ const formatScore = (score: number | null): string => {
     return "-";
   }
   return Number.isInteger(score) ? `${score}` : score.toFixed(1);
+};
+
+const participantLabel = (role: string): string => {
+  if (role === "proposer") return "正方";
+  if (role === "opposer") return "反方";
+  if (role === "judge") return "裁判";
+  return role;
 };
 
 const useEntrance = () => {
@@ -143,9 +165,9 @@ const IntroFrame: React.FC<{ video: DebateVideoModel }> = ({ video }) => {
           >
             <span>{video.scenes.length} 轮</span>
             <span>·</span>
-            <span>歌词式发言高亮</span>
+            <span>{video.participants.map(participantLabel).join(" vs ")}</span>
             <span>·</span>
-            <span>裁判与评分侧边摘要</span>
+            <span>裁判评议</span>
           </div>
         </div>
         <div
@@ -156,13 +178,13 @@ const IntroFrame: React.FC<{ video: DebateVideoModel }> = ({ video }) => {
           }}
         >
           <IntroCard
-            title="辩手发言"
-            text="当前发言行高亮放大，已读与未读行淡化缩小，按句 snap 切换，便于跟随阅读。"
+            title="参与方"
+            text={video.participants.map(participantLabel).join(" · ") || "正方 · 反方"}
             accent={colors.proposer}
           />
           <IntroCard
-            title="裁判与评分"
-            text="右侧窄边栏只保留评语摘要和核心分数，避免喧宾夺主。"
+            title="视频时长"
+            text={`约 ${Math.max(1, Math.ceil(video.durationInFrames / video.fps / 60))} 分钟`}
             accent={colors.score}
           />
         </div>
@@ -192,6 +214,7 @@ const IntroCard: React.FC<{ title: string; text: string; accent: string }> = ({ 
 const RoundSceneView: React.FC<{ scene: DebateScene; video: DebateVideoModel }> = ({ scene, video }) => {
   const frame = useCurrentFrame();
   const enter = useEntrance();
+  const view = React.useMemo(() => buildSceneViewModel(scene, frame), [scene, frame]);
   const progress = interpolate(frame, [0, scene.durationInFrames], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
@@ -199,19 +222,14 @@ const RoundSceneView: React.FC<{ scene: DebateScene; video: DebateVideoModel }> 
 
   return (
     <PageShell>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateRows: "104px 1fr 42px",
-          gap: 18,
-          height: "100%",
-          padding: "42px 48px 34px",
-          opacity: enter,
-          transform: `translateY(${interpolate(enter, [0, 1], [18, 0])}px)`,
-        }}
-      >
+      <div style={{ position: "absolute", inset: 0, opacity: enter }}>
         <header
           style={{
+            position: "absolute",
+            left: SCENE_LAYOUT.header.x,
+            top: SCENE_LAYOUT.header.y,
+            width: SCENE_LAYOUT.header.width,
+            height: SCENE_LAYOUT.header.height,
             display: "grid",
             gridTemplateColumns: "1fr auto",
             gap: 24,
@@ -246,28 +264,32 @@ const RoundSceneView: React.FC<{ scene: DebateScene; video: DebateVideoModel }> 
               textAlign: "right",
             }}
           >
-            <div style={{ color: colors.muted, fontSize: 18, fontWeight: 750 }}>本轮文本量</div>
+            <div style={{ color: colors.muted, fontSize: 18, fontWeight: 750 }}>
+              {video.timelineKind === "estimated" ? "预估时间轴" : "真实音频时间轴"}
+            </div>
             <div style={{ fontSize: 30, fontWeight: 860 }}>{scene.totalChars.toLocaleString()} 字</div>
           </div>
         </header>
 
-        <main
-          style={{
-            display: "grid",
-            gridTemplateColumns: "4fr 1fr",
-            gap: 22,
-            minHeight: 0,
-          }}
-        >
-          <SpeakerColumn scene={scene} frame={frame} />
-          <InfoColumn scene={scene} />
-        </main>
+        <div style={{ position: "absolute", ...rectStyle(SCENE_LAYOUT.speaker) }}>
+          <SpeakerColumn view={view} />
+        </div>
+        <div style={{ position: "absolute", ...rectStyle(SCENE_LAYOUT.judge) }}>
+          <JudgePanel view={view} />
+        </div>
+        <div style={{ position: "absolute", ...rectStyle(SCENE_LAYOUT.score) }}>
+          <ScorePanel view={view} />
+        </div>
 
         {scene.audioFile ? <Audio src={staticFile(scene.audioFile)} /> : null}
 
         <footer
           style={{
-            position: "relative",
+            position: "absolute",
+            left: 72,
+            right: 72,
+            bottom: 34,
+            height: 16,
             overflow: "hidden",
             borderRadius: 999,
             background: "#e4e9ee",
@@ -286,13 +308,21 @@ const RoundSceneView: React.FC<{ scene: DebateScene; video: DebateVideoModel }> 
   );
 };
 
+const rectStyle = (rect: { x: number; y: number; width: number; height: number }) => ({
+  left: rect.x,
+  top: rect.y,
+  width: rect.width,
+  height: rect.height,
+});
+
 const ColumnShell: React.FC<{
   title: string;
   subtitle: string;
   accent: string;
   children: React.ReactNode;
   compact?: boolean;
-}> = ({ title, subtitle, accent, children, compact = false }) => {
+  active?: boolean;
+}> = ({ title, subtitle, accent, children, compact = false, active = false }) => {
   return (
     <section
       style={{
@@ -300,8 +330,9 @@ const ColumnShell: React.FC<{
         display: "grid",
         gridTemplateRows: compact ? "52px 1fr" : "68px 1fr",
         borderRadius: 8,
-        background: colors.panel,
-        border: `2px solid ${colors.faint}`,
+        height: "100%",
+        background: active ? `${accent}12` : colors.panel,
+        border: `2px solid ${active ? accent : colors.faint}`,
         boxShadow: "0 18px 45px rgba(31,41,51,0.08)",
         overflow: "hidden",
       }}
@@ -324,135 +355,15 @@ const ColumnShell: React.FC<{
   );
 };
 
-const activeLineStyle = {
-  headerHeight: 20,
-  headerMargin: 6,
-  fontSize: 38,
-  lineHeight: 1.45,
-  marginBottom: 26,
-  opacity: 1,
-  fontWeight: 820,
-};
-
-const pastLineStyle = {
-  headerHeight: 14,
-  headerMargin: 4,
-  fontSize: 21,
-  lineHeight: 1.45,
-  marginBottom: 14,
-  opacity: 0.45,
-  fontWeight: 600,
-};
-
-const futureLineStyle = {
-  headerHeight: 14,
-  headerMargin: 4,
-  fontSize: 19,
-  lineHeight: 1.45,
-  marginBottom: 12,
-  opacity: 0.22,
-  fontWeight: 520,
-};
-
-const lineStyleForState = (state: "active" | "past" | "future") => {
-  if (state === "active") return activeLineStyle;
-  if (state === "past") return pastLineStyle;
-  return futureLineStyle;
-};
-
-const computeLyricLayout = (lines: LineCue[], activeIndex: number) => {
-  const items: Array<{ top: number; textCenter: number; state: "active" | "past" | "future" }> = [];
-  let top = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const state: "active" | "past" | "future" =
-      i === activeIndex ? "active" : i < activeIndex ? "past" : "future";
-    const style = lineStyleForState(state);
-    const headerTop = top;
-    const textTop = headerTop + style.headerHeight + style.headerMargin;
-    const textCenter = textTop + (style.fontSize * style.lineHeight) / 2;
-    const blockHeight = textTop + style.fontSize * style.lineHeight + style.marginBottom - top;
-    items.push({ top, textCenter, state });
-    top += blockHeight;
-  }
-  return { items, totalHeight: top };
-};
-
-const SpeakerColumn: React.FC<{ scene: DebateScene; frame: number }> = ({
-  scene,
-  frame,
-}) => {
-  const lines = scene.speakerLines;
-  // VIDEO_HEIGHT(1080) - top/bottom padding(42+34) - header row(104) - footer row(42) - grid gaps(18*2) - ColumnShell header(68)
-  const viewportHeight = 754;
-  const transitionFrames = 10;
-
-  const activeIndex = React.useMemo(() => {
-    if (lines.length === 0) return -1;
-    for (let i = 0; i < lines.length; i++) {
-      if (frame >= lines[i].startFrame && frame < lines[i].endFrame) {
-        return i;
-      }
-    }
-    if (frame < lines[0].startFrame) return 0;
-    return lines.length - 1;
-  }, [lines, frame]);
-
-  const previousIndex = React.useMemo(() => {
-    if (activeIndex <= 0) return activeIndex;
-    const cue = lines[activeIndex];
-    const transitionEnd = cue.startFrame + transitionFrames;
-    return frame < transitionEnd ? activeIndex - 1 : activeIndex;
-  }, [activeIndex, frame, lines]);
-
-  const currentLayout = computeLyricLayout(lines, activeIndex);
-  const previousLayout = computeLyricLayout(lines, previousIndex);
-
-  const targetCenter = viewportHeight / 2;
-  const currentOffset =
-    activeIndex >= 0 ? targetCenter - currentLayout.items[activeIndex].textCenter : 0;
-  const previousOffset =
-    previousIndex >= 0 ? targetCenter - previousLayout.items[previousIndex].textCenter : currentOffset;
-
-  const isTransitioning = previousIndex !== activeIndex;
-  const cue = lines[activeIndex];
-  const transitionProgress = isTransitioning
-    ? interpolate(
-        frame,
-        [cue.startFrame, cue.startFrame + transitionFrames],
-        [0, 1],
-        {
-          easing: Easing.bezier(0.22, 1, 0.36, 1),
-          extrapolateLeft: "clamp",
-          extrapolateRight: "clamp",
-        },
-      )
-    : 1;
-
-  const rawOffset = previousOffset + (currentOffset - previousOffset) * transitionProgress;
-  const maxOffset = 0;
-  const minOffset = viewportHeight - currentLayout.totalHeight;
-  const clampedOffset =
-    currentLayout.totalHeight <= viewportHeight ? 0 : Math.max(minOffset, Math.min(maxOffset, rawOffset));
-
+const SpeakerColumn: React.FC<{ view: SceneViewModel }> = ({ view }) => {
   return (
     <ColumnShell title="辩手发言" subtitle="歌词式高亮" accent={colors.proposer}>
       <div style={{ position: "relative", minHeight: 0, height: "100%", overflow: "hidden" }}>
-        {lines.length === 0 ? (
+        {view.speakerLines.length === 0 ? (
           <EmptyState text="本轮没有辩手发言。" />
         ) : (
-          <div
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              transform: `translateY(${clampedOffset}px)`,
-              padding: "18px 22px",
-            }}
-          >
-            {lines.map((line, index) => {
-              const state = currentLayout.items[index].state;
-              const style = lineStyleForState(state);
+          <div style={{ position: "absolute", inset: 0, padding: "18px 22px" }}>
+            {view.speakerLines.map(({ cue: line, displayText, state, style }) => {
               const { accent } = roleAccent(line.role);
               const isActive = state === "active";
               return (
@@ -491,7 +402,7 @@ const SpeakerColumn: React.FC<{ scene: DebateScene; frame: number }> = ({
                       textOverflow: "ellipsis",
                     }}
                   >
-                    {line.text}
+                    {displayText}
                   </div>
                 </div>
               );
@@ -503,34 +414,16 @@ const SpeakerColumn: React.FC<{ scene: DebateScene; frame: number }> = ({
   );
 };
 
-const InfoColumn: React.FC<{ scene: DebateScene }> = ({ scene }) => {
+const JudgePanel: React.FC<{ view: SceneViewModel }> = ({ view }) => {
+  const active = view.activeRole === "judge" || view.activeSegmentKind === "judge_summary";
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 14,
-        minHeight: 0,
-      }}
-    >
-      <JudgePanel scene={scene} />
-      <ScorePanel scene={scene} />
-    </div>
-  );
-};
-
-const JudgePanel: React.FC<{ scene: DebateScene }> = ({ scene }) => {
-  const items = [...scene.judgeItems, ...scene.contextItems];
-  return (
-    <ColumnShell title="裁判消息" subtitle="评语摘要" accent={colors.judge} compact>
+    <ColumnShell title="裁判消息" subtitle="评语摘要" accent={colors.judge} compact active={active}>
       <div style={{ position: "relative", minHeight: 0, height: "100%", overflow: "hidden" }}>
-        {items.length === 0 ? (
+        {view.judgeLines.length === 0 ? (
           <EmptyState text="本轮暂无裁判消息。" compact />
         ) : (
-          <div style={{ padding: "12px 14px" }}>
-            {items.map((item) => (
-              <CompactTextCard key={item.id} item={item} />
-            ))}
+          <div style={{ padding: "14px 18px", color: colors.ink, fontSize: 22, lineHeight: "35px" }}>
+            {view.judgeLines.map((line, index) => <div key={`${index}-${line}`}>{line}</div>)}
           </div>
         )}
       </div>
@@ -538,57 +431,16 @@ const JudgePanel: React.FC<{ scene: DebateScene }> = ({ scene }) => {
   );
 };
 
-const CompactTextCard: React.FC<{ item: TextItem }> = ({ item }) => {
-  const { accent, soft } = roleAccent(item.role);
+const ScorePanel: React.FC<{ view: SceneViewModel }> = ({ view }) => {
+  const active = view.activeSegmentKind === "score_comment";
   return (
-    <article
-      style={{
-        marginBottom: 10,
-        padding: "10px 12px",
-        borderRadius: 6,
-        background: soft,
-        border: `1px solid ${accent}33`,
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 8,
-          marginBottom: 6,
-        }}
-      >
-        <div style={{ color: accent, fontSize: 15, fontWeight: 800 }}>{item.label}</div>
-        <div style={{ color: colors.muted, fontSize: 12, fontWeight: 700 }}>{item.charCount} 字</div>
-      </div>
-      <div
-        style={{
-          color: colors.ink,
-          fontSize: 15,
-          lineHeight: 1.55,
-          whiteSpace: "pre-wrap",
-          display: "-webkit-box",
-          WebkitBoxOrient: "vertical",
-          WebkitLineClamp: 3,
-          overflow: "hidden",
-        }}
-      >
-        {item.text}
-      </div>
-    </article>
-  );
-};
-
-const ScorePanel: React.FC<{ scene: DebateScene }> = ({ scene }) => {
-  return (
-    <ColumnShell title="评分" subtitle="综合分" accent={colors.score} compact>
+    <ColumnShell title="评分" subtitle="综合分" accent={colors.score} compact active={active}>
       <div style={{ position: "relative", minHeight: 0, height: "100%", overflow: "hidden" }}>
-        {scene.scoreItems.length === 0 ? (
+        {view.scoreCards.length === 0 ? (
           <EmptyState text="本轮暂未记录评分。" compact />
         ) : (
           <div style={{ padding: "12px 14px" }}>
-            {scene.scoreItems.map((item) => (
+            {view.scoreCards.map((item) => (
               <CompactScoreCard key={item.role} item={item} />
             ))}
           </div>
@@ -598,7 +450,7 @@ const ScorePanel: React.FC<{ scene: DebateScene }> = ({ scene }) => {
   );
 };
 
-const CompactScoreCard: React.FC<{ item: ScoreItem }> = ({ item }) => {
+const CompactScoreCard: React.FC<{ item: ScoreItem & { commentLines: string[]; displayDimensions: ScoreItem["dimensions"] } }> = ({ item }) => {
   const { accent } = roleAccent(item.role);
   return (
     <article style={{ marginBottom: 12 }}>
@@ -617,7 +469,7 @@ const CompactScoreCard: React.FC<{ item: ScoreItem }> = ({ item }) => {
           <span style={{ color: colors.muted, fontSize: 13, fontWeight: 800 }}>/10</span>
         </div>
       </div>
-      {item.overallComment ? (
+      {item.commentLines.length ? (
         <div
           style={{
             color: colors.muted,
@@ -631,11 +483,11 @@ const CompactScoreCard: React.FC<{ item: ScoreItem }> = ({ item }) => {
             marginBottom: 8,
           }}
         >
-          {item.overallComment}
+          {item.commentLines.map((line, index) => <div key={`${index}-${line}`}>{line}</div>)}
         </div>
       ) : null}
       <div style={{ display: "grid", gap: 5 }}>
-        {item.dimensions.map((dimension) => (
+        {item.displayDimensions.map((dimension) => (
           <div key={dimension.key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ color: colors.ink, fontSize: 12, fontWeight: 740, width: 56, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {dimension.label.slice(0, 4)}
@@ -708,7 +560,7 @@ const OutroFrame: React.FC<{ video: DebateVideoModel }> = ({ video }) => {
             {video.topic}
           </div>
           <div style={{ color: colors.muted, fontSize: 25, lineHeight: 1.55 }}>
-            本视频由 Elenchus 导出 JSON 生成，采用歌词式发言高亮与侧边裁判评分摘要。
+            共 {video.scenes.length} 轮辩论，感谢观看。
           </div>
         </div>
       </div>
@@ -719,27 +571,33 @@ const OutroFrame: React.FC<{ video: DebateVideoModel }> = ({ video }) => {
 export const DebateVideo: React.FC<DebateVideoProps> = ({ video }) => {
   if (!video) {
     return (
-      <PageShell>
-        <AbsoluteFill style={{ display: "grid", placeItems: "center", fontSize: 34, fontWeight: 820 }}>
-          正在读取 Elenchus 导出 JSON...
-        </AbsoluteFill>
-      </PageShell>
+      <>
+        <BundledFontLoader />
+        <PageShell>
+          <AbsoluteFill style={{ display: "grid", placeItems: "center", fontSize: 34, fontWeight: 820 }}>
+            正在读取 Elenchus 导出 JSON...
+          </AbsoluteFill>
+        </PageShell>
+      </>
     );
   }
 
   return (
-    <Series>
-      <Series.Sequence durationInFrames={video.introFrames}>
-        <IntroFrame video={video} />
-      </Series.Sequence>
-      {video.scenes.map((scene) => (
-        <Series.Sequence key={scene.id} durationInFrames={scene.durationInFrames}>
-          <RoundSceneView scene={scene} video={video} />
+    <>
+      <BundledFontLoader />
+      <Series>
+        <Series.Sequence durationInFrames={video.introFrames}>
+          <IntroFrame video={video} />
         </Series.Sequence>
-      ))}
-      <Series.Sequence durationInFrames={video.outroFrames}>
-        <OutroFrame video={video} />
-      </Series.Sequence>
-    </Series>
+        {video.scenes.map((scene) => (
+          <Series.Sequence key={scene.id} durationInFrames={scene.durationInFrames}>
+            <RoundSceneView scene={scene} video={video} />
+          </Series.Sequence>
+        ))}
+        <Series.Sequence durationInFrames={video.outroFrames}>
+          <OutroFrame video={video} />
+        </Series.Sequence>
+      </Series>
+    </>
   );
 };

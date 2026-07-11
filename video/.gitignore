@@ -1,7 +1,10 @@
 node_modules/
+.venv/
+.video-ui*.pid
 out/
 config.local.json
 public/audio/
+public/fonts/
 public/data/*.json
 npm-debug.log*
 yarn-debug.log*

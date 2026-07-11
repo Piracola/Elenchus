@@ -19,6 +19,7 @@ import {
 import {
   buildVideoScript,
   charCount,
+  cleanTextForSpeech,
   DIMENSION_LABELS,
   distributeFramesByWeight,
   estimateSegmentDurationFrames,
@@ -44,7 +45,7 @@ const toTextItem = (speech: VideoScriptSpeech): TextItem => ({
   role: speech.role,
   label: speech.label,
   agentName: speech.agentName,
-  text: speech.content || "（无内容）",
+  text: speech.displayContent || cleanTextForSpeech(speech.content) || "（无内容）",
   charCount: speech.charCount,
 });
 
@@ -135,6 +136,37 @@ const timedSegmentsFromWeights = (segments: VideoScriptSegment[], contentFrames:
   });
 };
 
+const segmentCuesFromManifest = (
+  round: VideoScript["rounds"][number],
+  manifestScene: AudioManifest["scenes"][number],
+): SegmentCue[] => {
+  const allSegments = [
+    ...round.speakerSegments,
+    ...round.judgeSegments,
+    ...round.contextSegments,
+    ...round.scoreSegments,
+  ];
+  const byId = new Map(allSegments.map((segment) => [segment.id, segment]));
+  const bounds = new Map<string, { startMs: number; endMs: number }>();
+  for (const cue of manifestScene.cues || []) {
+    const startMs = cue.startMs - manifestScene.startMs;
+    const endMs = cue.endMs - manifestScene.startMs;
+    const current = bounds.get(cue.segmentId);
+    bounds.set(cue.segmentId, {
+      startMs: current ? Math.min(current.startMs, startMs) : startMs,
+      endMs: current ? Math.max(current.endMs, endMs) : endMs,
+    });
+  }
+  return allSegments.flatMap((segment) => {
+    const bound = bounds.get(segment.id);
+    const source = byId.get(segment.id);
+    if (!bound || !source) return [];
+    const startFrame = Math.round((bound.startMs / 1000) * FPS);
+    const endFrame = Math.max(Math.round((bound.endMs / 1000) * FPS), startFrame + 1);
+    return [{ ...source, startMs: bound.startMs, endMs: bound.endMs, startFrame, endFrame }];
+  });
+};
+
 const sceneFromScriptRound = (
   script: VideoScript,
   raw: ElenchusExport,
@@ -164,17 +196,12 @@ const sceneFromScriptRound = (
   let audioDurationFrames: number | undefined;
 
   if (manifestScene) {
-    durationInFrames = manifestScene.durationFrames;
+    durationInFrames = Math.max(1, Math.ceil((manifestScene.durationMs / 1000) * FPS));
     audioFile = manifestScene.audioFile;
-    audioDurationFrames = manifestScene.durationFrames;
-    segmentCues =
-      manifestScene.segmentCues && manifestScene.segmentCues.length > 0
-        ? manifestScene.segmentCues
-        : timedSegmentsFromWeights(round.speakerSegments, Math.max(0, durationInFrames - PRE_ROLL_FRAMES - POST_ROLL_FRAMES));
-    speakerLines =
-      manifestScene.lineCues && manifestScene.lineCues.length > 0
-        ? manifestScene.lineCues
-        : segmentCuesToLineCues(segmentCues);
+    audioDurationFrames = durationInFrames;
+    segmentCues = segmentCuesFromManifest(round, manifestScene);
+    const speakerIds = new Set(round.speakerSegments.map((segment) => segment.id));
+    speakerLines = segmentCuesToLineCues(segmentCues.filter((segment) => speakerIds.has(segment.id)));
   } else {
     durationInFrames = durationFallback(fallbackFrames);
     segmentCues = timedSegmentsFromWeights(round.speakerSegments, durationInFrames - PRE_ROLL_FRAMES - POST_ROLL_FRAMES);
@@ -190,6 +217,7 @@ const sceneFromScriptRound = (
     judgeItems,
     contextItems,
     scoreItems,
+    winner: round.judge.winner,
     totalChars:
       round.totalChars ||
       [...round.speakerSegments, ...round.judgeSegments, ...round.contextSegments, ...round.scoreSegments].reduce(
@@ -197,6 +225,7 @@ const sceneFromScriptRound = (
         0,
       ),
     speakerLines,
+    segmentCues,
     audioFile,
     audioDurationFrames,
   };
@@ -229,6 +258,7 @@ export const buildVideoModel = (
     introFrames,
     outroFrames,
     durationInFrames: introFrames + scenesDuration + outroFrames,
+    timelineKind: matchedAudioManifest ? "audio" : "estimated",
     scenes,
   };
 };

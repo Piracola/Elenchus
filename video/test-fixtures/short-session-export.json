@@ -1,0 +1,58 @@
+{
+  "topic": "短视频链路验收",
+  "participants": ["proposer", "opposer"],
+  "dialogue_history": [
+    {
+      "role": "proposer",
+      "agent_name": "正方辩手",
+      "turn": 0,
+      "content": "正方认为，可靠的视频链路必须让声音、文字和时间轴保持一致。"
+    },
+    {
+      "role": "opposer",
+      "agent_name": "反方辩手",
+      "turn": 0,
+      "content": "反方补充，失败后的重试、缓存复用和错误提示同样需要验证。"
+    },
+    {
+      "role": "fact_checker",
+      "agent_name": "事实核查",
+      "turn": 0,
+      "content": "核查结果：本次验收使用真实音频时长，不使用字数估算。"
+    },
+    {
+      "role": "judge",
+      "target_role": "proposer",
+      "agent_name": "裁判",
+      "turn": 0,
+      "content": "裁判总结：双方都指出了稳定生成带声音视频的必要条件，正方论证更完整。",
+      "scores": {
+        "comprehensive_score": 8.6,
+        "overall_comment": "结构完整，时间轴标准明确。",
+        "logical_rigor": {"score": 9, "rationale": "逻辑清楚"},
+        "evidence_quality": {"score": 8, "rationale": "证据充分"},
+        "topic_focus": {"score": 9, "rationale": "紧扣主题"},
+        "rebuttal_strength": {"score": 8, "rationale": "回应有效"},
+        "consistency": {"score": 9, "rationale": "前后一致"},
+        "persuasiveness": {"score": 8, "rationale": "表达有力"}
+      }
+    },
+    {
+      "role": "judge",
+      "target_role": "opposer",
+      "agent_name": "裁判",
+      "turn": 0,
+      "content": "裁判评价：反方对恢复机制的提醒具有价值。",
+      "scores": {
+        "comprehensive_score": 8.1,
+        "overall_comment": "风险意识明确，但展开稍少。",
+        "logical_rigor": {"score": 8, "rationale": "逻辑清楚"},
+        "evidence_quality": {"score": 8, "rationale": "证据充分"},
+        "topic_focus": {"score": 8, "rationale": "紧扣主题"},
+        "rebuttal_strength": {"score": 8, "rationale": "回应有效"},
+        "consistency": {"score": 8, "rationale": "前后一致"},
+        "persuasiveness": {"score": 8, "rationale": "表达稳定"}
+      }
+    }
+  ]
+}

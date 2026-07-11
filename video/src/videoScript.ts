@@ -13,7 +13,7 @@ import {
   VideoScriptSpeech,
 } from "./types";
 
-export const VIDEO_SCRIPT_VERSION = "2026-07-09.segmented-script.v1";
+export const VIDEO_SCRIPT_VERSION = "2026-07-11.lossless-segmented-script.v2";
 
 export const NON_SPEAKER_ROLES = new Set([
   "judge",
@@ -59,7 +59,7 @@ const MIN_SEGMENT_FRAMES = Math.ceil(2.6 * FPS);
 const MS_PER_CHAR = 145;
 const MS_PER_SENTENCE_PAUSE = 380;
 const MS_PER_CLAUSE_PAUSE = 150;
-const MAX_LINE_CHARS = 28;
+const MAX_LINE_CHARS = 22;
 
 export const roleLabel = (role: string): string => ROLE_LABELS[role] ?? role;
 
@@ -78,21 +78,33 @@ const splitByDelimiter = (text: string, delimiterPattern: RegExp): string[] => {
   for (const token of tokens) {
     buffer += token;
     if (delimiterPattern.test(token)) {
-      parts.push(buffer.trim());
+      parts.push(buffer);
       buffer = "";
     }
+    delimiterPattern.lastIndex = 0;
   }
-  if (buffer.trim()) {
-    parts.push(buffer.trim());
+  if (buffer) {
+    parts.push(buffer);
   }
-  return parts.filter(Boolean);
+  return parts;
 };
 
 const splitHard = (text: string, maxChars: number): string[] => {
   const result: string[] = [];
-  for (let index = 0; index < text.length; index += maxChars) {
-    result.push(text.slice(index, index + maxChars));
+  let current = "";
+  let visibleChars = 0;
+  for (const char of text) {
+    current += char;
+    if (!/\s/u.test(char)) {
+      visibleChars += 1;
+    }
+    if (visibleChars >= maxChars) {
+      result.push(current);
+      current = "";
+      visibleChars = 0;
+    }
   }
+  if (current) result.push(current);
   return result;
 };
 
@@ -183,20 +195,12 @@ export const segmentTextForVideo = (
     return [];
   }
 
-  const paragraphParts = normalized
-    .split(/\n{2,}/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  const sentenceParts = paragraphParts.flatMap((part) => splitByDelimiter(part, /([。！？；!?;]+)/));
+  const sentenceParts = splitByDelimiter(normalized, /([。！？；!?;]+)/);
   const atomicParts = sentenceParts.flatMap((part) => splitOversizedPart(part, options));
   const segments: string[] = [];
   let current = "";
 
-  for (const rawPart of atomicParts) {
-    const part = rawPart.trim();
-    if (!part) {
-      continue;
-    }
+  for (const part of atomicParts) {
 
     if (!current) {
       current = part;
@@ -222,10 +226,11 @@ export const segmentTextForVideo = (
     segments.push(current);
   }
 
-  return segments
-    .flatMap((part) => splitOversizedPart(part, options))
-    .map((part) => part.trim())
-    .filter(Boolean);
+  const result = segments.flatMap((part) => splitOversizedPart(part, options)).filter(Boolean);
+  if (result.join("") !== normalized) {
+    throw new Error("画面文本切分校验失败：segment 无法还原标准化发言文本。");
+  }
+  return result;
 };
 
 const splitLongLine = (clause: string, maxChars: number): string[] => {
@@ -236,7 +241,7 @@ const splitLongLine = (clause: string, maxChars: number): string[] => {
 };
 
 export const segmentTextToLines = (text: string, maxChars = MAX_LINE_CHARS): string[] => {
-  const trimmed = String(text || "").trim();
+  const trimmed = cleanTextForTts(text);
   if (!trimmed) {
     return [];
   }
@@ -245,7 +250,7 @@ export const segmentTextToLines = (text: string, maxChars = MAX_LINE_CHARS): str
   const lines: string[] = [];
 
   for (const sentence of sentences) {
-    const compact = sentence.replace(/\s+/g, "");
+    const compact = sentence.replace(/\s+/g, " ").trim();
     if (!compact) {
       continue;
     }
@@ -378,15 +383,19 @@ const createSpeech = (
 ): VideoScriptSpeech | null => {
   const role = String(entry.role ?? "unknown");
   const kind = roleKind(role);
-  const content = cleanTextForSpeech(entry.content);
-  if (!content) {
+  const content = String(entry.content ?? "");
+  const displayContent = cleanTextForSpeech(content);
+  if (!displayContent) {
     return null;
   }
 
   const speechId = `${role}-${roundIndex + 1}-${sourceIndex}`;
   const label = roleLabel(role);
   const agentName = String(entry.agent_name ?? "").trim() || label;
-  const segmentTexts = segmentTextForVideo(content, options);
+  const segmentTexts = segmentTextForVideo(displayContent, options);
+  if (segmentTexts.join("") !== displayContent) {
+    throw new Error(`${speechId} 的 segment 无法还原标准化发言文本。`);
+  }
   const segments: VideoScriptSegment[] = segmentTexts.map((text, index) => ({
     id: `${speechId}-seg-${String(index + 1).padStart(3, "0")}`,
     roundIndex,
@@ -408,7 +417,8 @@ const createSpeech = (
     label,
     agentName,
     content,
-    charCount: charCount(content),
+    displayContent,
+    charCount: charCount(displayContent),
     order: speechOrder,
     kind,
     segments,

@@ -1,11 +1,20 @@
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { extname, join, normalize, resolve, sep } from "node:path";
+import { basename, dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseFile } from "music-metadata";
 import { buildVideoScript, cleanTextForTts as cleanSegmentTextForTts, segmentCuesToLineCues } from "../src/videoScript.ts";
+import {
+  createTtsCacheKey,
+  EDGE_TTS_RETRY_DELAYS_MS,
+  EDGE_TTS_VERSION,
+  MAX_TTS_REQUESTS_PER_SEGMENT,
+  normalizeTtsRole,
+  runRecoverableTtsChunk,
+  splitFailedTtsChunk,
+  splitTextForTts as splitEdgeTextForTts,
+} from "../src/ttsPipeline.ts";
 
 const rootDir = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const uiDir = join(rootDir, "ui");
@@ -13,9 +22,12 @@ const publicDir = join(rootDir, "public");
 const publicDataDir = join(rootDir, "public", "data");
 const outDir = join(rootDir, "out");
 const localConfigPath = join(rootDir, "config.local.json");
+const logDir = join(rootDir, "logs");
+const edgeTtsErrorLogPath = join(logDir, "edge-tts-errors.log");
 const remotionCli = join(rootDir, "node_modules", "@remotion", "cli", "remotion-cli.js");
 const tsxCli = join(rootDir, "node_modules", "tsx", "dist", "cli.mjs");
 const ffmpegPath = join(rootDir, "node_modules", "@remotion", "compositor-win32-x64-msvc", "ffmpeg.exe");
+const ffprobePath = join(rootDir, "node_modules", "@remotion", "compositor-win32-x64-msvc", "ffprobe.exe");
 const edgeTtsBridgePath = join(rootDir, "scripts", "edge_tts_bridge.py");
 const host = "127.0.0.1";
 const port = Number(process.env.PORT || 4317);
@@ -57,8 +69,10 @@ const defaultConfig = {
     model: "",
     voice: "zh-CN-XiaoxiaoNeural",
     roleVoices: {
-      proposer: "zh-CN-XiaoxiaoNeural",
-      opposer: "zh-CN-YunxiNeural",
+      affirmative: "zh-CN-XiaoxiaoNeural",
+      negative: "zh-CN-YunxiNeural",
+      judge: "zh-CN-YunyangNeural",
+      narrator: "zh-CN-XiaoyiNeural",
     },
     format: "mp3",
     sampleRate: "24000",
@@ -72,11 +86,17 @@ const defaultConfig = {
 
 const mergeConfig = (config) => {
   const tts = { ...defaultConfig.tts, ...(config?.tts || {}) };
+  const configuredRoleVoices = config?.tts?.roleVoices || {};
   return {
     video: { ...defaultConfig.video, ...(config?.video || {}) },
     tts: {
       ...tts,
-      roleVoices: { ...defaultConfig.tts.roleVoices, ...(config?.tts?.roleVoices || {}) },
+      roleVoices: {
+        ...defaultConfig.tts.roleVoices,
+        ...configuredRoleVoices,
+        affirmative: configuredRoleVoices.affirmative || configuredRoleVoices.proposer || defaultConfig.tts.roleVoices.affirmative,
+        negative: configuredRoleVoices.negative || configuredRoleVoices.opposer || defaultConfig.tts.roleVoices.negative,
+      },
     },
     script: { ...defaultConfig.script, ...(config?.script || {}) },
   };
@@ -84,12 +104,17 @@ const mergeConfig = (config) => {
 
 const FPS = 30;
 const audioDir = join(rootDir, "public", "audio");
+const audioChunkDir = join(audioDir, "chunks");
+const ttsStatePath = join(publicDataDir, "tts-state.json");
+const edgeVoicesCachePath = join(publicDataDir, "edge-voices-cache.json");
+const serverPidPath = process.env.ELENCHUS_VIDEO_PID_FILE || join(rootDir, ".video-ui.pid");
+const isTestMode = process.env.ELENCHUS_VIDEO_TEST_MODE === "1";
 const tasks = new Map();
+const managedChildren = new Set();
+let studioChild = null;
+let runtimeHealth = { ok: false, checks: [], message: "正在检查运行环境。" };
 const MAX_TASK_OUTPUT = 240000;
 const TTS_CHUNK_TARGET_CHARS = 680;
-const EDGE_TTS_CHUNK_TARGET_CHARS = 320;
-const TTS_RETRY_MIN_CHARS = 180;
-const EDGE_TTS_RETRY_MIN_CHARS = 90;
 const EDGE_TTS_CHILD_TIMEOUT_MS = 60000;
 const TTS_ERROR_PREVIEW_CHARS = 200;
 
@@ -100,27 +125,30 @@ const appendTaskOutput = (task, chunk) => {
   if (task.output.length > MAX_TASK_OUTPUT) {
     task.output = `...前面的日志已省略...\n${task.output.slice(-MAX_TASK_OUTPUT)}`;
   }
-  task.updatedAt = new Date().toISOString();
+  task.lastOutputAt = new Date().toISOString();
+  task.updatedAt = task.lastOutputAt;
 };
 
 const publicTask = (task) => ({
   id: task.id,
   name: task.name,
   status: task.status,
-  ok: task.status === "finished",
+  ok: task.status === "succeeded",
   message: task.message,
   command: task.command,
   output: task.output,
   startedAt: task.startedAt,
   updatedAt: task.updatedAt,
   finishedAt: task.finishedAt,
+  lastOutputAt: task.lastOutputAt,
   exitCode: task.exitCode,
   pid: task.pid,
+  progress: task.progress || null,
 });
 
 const findRunningTask = (name) => {
   for (const task of tasks.values()) {
-    if (task.name === name && task.status === "running") {
+    if (task.name === name && ["queued", "running"].includes(task.status)) {
       return task;
     }
   }
@@ -130,10 +158,13 @@ const findRunningTask = (name) => {
 const findConflictingTask = (name) => {
   const renderCommands = new Set(["render", "fast-render"]);
   for (const task of tasks.values()) {
-    if (task.status !== "running") {
+    if (!["queued", "running"].includes(task.status)) {
       continue;
     }
-    if (task.name === name || (renderCommands.has(name) && renderCommands.has(task.name))) {
+    if (
+      task.name === name ||
+      (renderCommands.has(name) && renderCommands.has(task.name))
+    ) {
       return task;
     }
   }
@@ -142,10 +173,18 @@ const findConflictingTask = (name) => {
 
 const cleanupOldTasks = () => {
   const finished = [...tasks.values()]
-    .filter((task) => task.status !== "running")
+    .filter((task) => !["queued", "running"].includes(task.status))
     .sort((a, b) => String(b.finishedAt || "").localeCompare(String(a.finishedAt || "")));
 
   finished.slice(20).forEach((task) => tasks.delete(task.id));
+};
+
+const trackManagedChild = (child) => {
+  managedChildren.add(child);
+  const release = () => managedChildren.delete(child);
+  child.once("close", release);
+  child.once("error", release);
+  return child;
 };
 
 const splitLongTtsPart = (text, maxChars) => {
@@ -238,20 +277,6 @@ const splitTextForTts = (text, maxChars = TTS_CHUNK_TARGET_CHARS) => {
   return chunks;
 };
 
-const sleep = (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
-
-const mapLimit = async (array, limit, fn) => {
-  const results = [];
-  const iterator = array.entries();
-  const workers = Array.from({ length: limit }, async () => {
-    for (const [index, item] of iterator) {
-      results[index] = await fn(item, index);
-    }
-  });
-  await Promise.all(workers);
-  return results;
-};
-
 const configLocalExists = () => existsSync(localConfigPath);
 
 const loadConfig = () => {
@@ -271,6 +296,26 @@ const saveConfig = (config) => {
   writeFileSync(localConfigPath, `${JSON.stringify(merged, null, 2)}\n`, "utf8");
   return merged;
 };
+
+const writeJsonAtomic = (filePath, value) => {
+  mkdirSync(dirname(filePath), { recursive: true });
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(tempPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  rmSync(filePath, { force: true });
+  renameSync(tempPath, filePath);
+};
+
+const ttsSignature = (tts) =>
+  createTtsCacheKey({
+    provider: ttsProvider(tts),
+    engineVersion: ttsProvider(tts) === "edge" ? EDGE_TTS_VERSION : String(tts?.model || "custom"),
+    voice: JSON.stringify({ default: edgeVoice(tts), roles: tts?.roleVoices || {} }),
+    speed: tts?.speed || "1",
+    volume: tts?.volume || "+0%",
+    pitch: tts?.pitch || "+0Hz",
+    format: effectiveTtsFormat(tts),
+    text: "",
+  });
 
 const nonEmpty = (value) => String(value ?? "").trim();
 
@@ -326,7 +371,7 @@ const commandMap = {
       "src/index.ts",
       "DebateTranscript",
       "out/frame.png",
-      "--frame=120",
+      "--frame=180",
       "--props=public/data/render-props.json",
     ],
     wait: true,
@@ -459,6 +504,53 @@ const loadCurrentData = () => {
   return { session, props, script };
 };
 
+const createRenderSnapshot = () => {
+  const { session, props, script } = loadCurrentData();
+  if (!props || !script) throw new Error("缺少可渲染的视频脚本。");
+  const token = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const dataRelativeDir = `data/render-snapshots/${token}`;
+  const audioRelativeDir = `audio/render-snapshots/${token}`;
+  const dataSnapshotDir = join(publicDir, dataRelativeDir);
+  const audioSnapshotDir = join(publicDir, audioRelativeDir);
+  mkdirSync(dataSnapshotDir, { recursive: true });
+  mkdirSync(audioSnapshotDir, { recursive: true });
+
+  const snapshotProps = { ...props, scriptFile: `${dataRelativeDir}/video-script.json` };
+  writeJsonAtomic(join(dataSnapshotDir, "video-script.json"), script);
+  if (session) {
+    snapshotProps.dataFile = `${dataRelativeDir}/session-export.json`;
+    writeJsonAtomic(join(dataSnapshotDir, "session-export.json"), session);
+  }
+  const manifest = loadAudioManifestForProps(props);
+  if (manifest) {
+    const snapshotManifest = {
+      ...manifest,
+      scenes: manifest.scenes.map((scene, index) => {
+        const relative = `${audioRelativeDir}/${String(index + 1).padStart(3, "0")}-${basename(scene.audioFile)}`;
+        copyFileSync(join(publicDir, scene.audioFile), join(publicDir, relative));
+        return { ...scene, audioFile: relative };
+      }),
+    };
+    if (manifest.sessionAudioFile && existsSync(join(publicDir, manifest.sessionAudioFile))) {
+      const relative = `${audioRelativeDir}/session-${basename(manifest.sessionAudioFile)}`;
+      copyFileSync(join(publicDir, manifest.sessionAudioFile), join(publicDir, relative));
+      snapshotManifest.sessionAudioFile = relative;
+    }
+    snapshotProps.audioManifest = `${dataRelativeDir}/session-audio.json`;
+    writeJsonAtomic(join(dataSnapshotDir, "session-audio.json"), snapshotManifest);
+  }
+  const propsPath = join(dataSnapshotDir, "render-props.json");
+  writeJsonAtomic(propsPath, snapshotProps);
+  return {
+    propsPath,
+    propsArgument: `${dataRelativeDir}/render-props.json`,
+    cleanup: () => {
+      rmSync(dataSnapshotDir, { recursive: true, force: true });
+      rmSync(audioSnapshotDir, { recursive: true, force: true });
+    },
+  };
+};
+
 const scriptStats = (script) => {
   const rounds = Array.isArray(script?.rounds) ? script.rounds : [];
   const speakerSegments = rounds.reduce((sum, round) => sum + (round.speakerSegments?.length || 0), 0);
@@ -485,15 +577,71 @@ const loadAudioManifestForProps = (props) => {
   return JSON.parse(readFileSync(manifestPath, "utf8"));
 };
 
-const audioManifestMatchesScript = (props, script) => {
+const audioManifestProblems = (props, script, config = loadConfig()) => {
   const manifest = loadAudioManifestForProps(props);
-  return Boolean(
-    manifest &&
-      script?.scriptHash &&
-      manifest.scriptHash === script.scriptHash &&
-      Array.isArray(manifest.scenes) &&
-      manifest.scenes.some((scene) => scene.audioFile),
-  );
+  const problems = [];
+  if (!manifest) return ["缺少 session-audio.json"];
+  if (manifest.schemaVersion !== 2) problems.push("音频清单不是 schemaVersion 2");
+  if (!["edge", "mimo"].includes(manifest.provider)) problems.push("音频清单使用了不支持的配音供应商");
+  if (!script?.scriptHash || manifest.scriptHash !== script.scriptHash) problems.push("音频清单与当前视频脚本不匹配");
+  if (manifest.ttsSignature !== ttsSignature(config.tts)) problems.push("音频清单与当前音色或语速配置不匹配");
+  if (!manifest.sessionAudioFile || !existsSync(join(publicDir, manifest.sessionAudioFile))) problems.push("缺少整场音频文件");
+  if (!Number.isFinite(Number(manifest.durationMs)) || Number(manifest.durationMs) <= 0) problems.push("整场音频时长无效");
+  if (!Array.isArray(manifest.scenes)) return [...problems, "音频清单缺少 scenes"];
+
+  for (const round of script?.rounds || []) {
+    const expectedSegments = roundTtsSegments(round);
+    if (expectedSegments.length === 0) continue;
+    const scene = manifest.scenes.find((candidate) => candidate.id === round.id || candidate.roundIndex === round.roundIndex);
+    if (!scene) {
+      problems.push(`${round.turnLabel || round.id} 缺少整轮音频`);
+      continue;
+    }
+    if (!scene.audioFile || !existsSync(join(publicDir, scene.audioFile))) problems.push(`${round.turnLabel || round.id} 缺少音频文件`);
+    if (!Number.isFinite(Number(scene.startMs)) || !Number.isFinite(Number(scene.endMs)) || scene.endMs <= scene.startMs) {
+      problems.push(`${round.turnLabel || round.id} 时间范围无效`);
+    }
+    if (!Array.isArray(scene.cues)) {
+      problems.push(`${round.turnLabel || round.id} 缺少 cues`);
+      continue;
+    }
+    const cueSegmentIds = new Set(scene.cues.map((cue) => cue.segmentId));
+    for (const segment of expectedSegments) {
+      if (!cueSegmentIds.has(segment.id)) problems.push(`${round.turnLabel || round.id} 缺少片段 ${segment.id}`);
+    }
+    for (const cue of scene.cues) {
+      if (!cue.audioFile || !existsSync(join(publicDir, cue.audioFile))) problems.push(`${round.turnLabel || round.id} 缺少请求块 ${cue.chunkId || "unknown"} 的音频`);
+      if (!Number.isFinite(Number(cue.startMs)) || !Number.isFinite(Number(cue.endMs)) || cue.endMs <= cue.startMs) {
+        problems.push(`${round.turnLabel || round.id} 请求块 ${cue.chunkId || "unknown"} 时间范围无效`);
+      }
+    }
+  }
+  return [...new Set(problems)];
+};
+
+const audioManifestMatchesScript = (props, script, config = loadConfig()) =>
+  audioManifestProblems(props, script, config).length === 0;
+
+const validateAudioManifestForRender = async (props, script, config = loadConfig()) => {
+  const problems = audioManifestProblems(props, script, config);
+  const manifest = loadAudioManifestForProps(props);
+  if (problems.length === 0 && manifest) {
+    const files = new Set([
+      manifest.sessionAudioFile,
+      ...manifest.scenes.flatMap((scene) => [scene.audioFile, ...(scene.cues || []).map((cue) => cue.audioFile)]),
+    ]);
+    for (const audioFile of files) {
+      try {
+        await readMediaDurationMs(join(publicDir, audioFile));
+      } catch (error) {
+        problems.push(`${audioFile} 无法通过 FFprobe：${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+  if (problems.length > 0) {
+    throw new Error(`配音不完整，不能生成带配音视频：${problems.join("；")}`);
+  }
+  return manifest;
 };
 
 const writeVideoScriptForSession = (session, props = {}, options = {}) => {
@@ -516,7 +664,7 @@ const writeVideoScriptForSession = (session, props = {}, options = {}) => {
     textPreset,
   };
 
-  if (nextProps.audioManifest && !audioManifestMatchesScript(nextProps, script)) {
+  if (nextProps.audioManifest && !audioManifestMatchesScript(nextProps, script, config)) {
     delete nextProps.audioManifest;
   }
 
@@ -643,14 +791,18 @@ const openOutputDir = (response) => {
   }
 };
 
-const runFfmpeg = (args) =>
+const runFfmpeg = (args, task = null) =>
   new Promise((resolveRun, reject) => {
     let stderr = "";
-    const child = spawn(ffmpegPath, args, {
+    const child = trackManagedChild(spawn(ffmpegPath, args, {
       cwd: rootDir,
       stdio: ["ignore", "ignore", "pipe"],
       windowsHide: true,
-    });
+    }));
+    if (task) {
+      task.child = child;
+      task.pid = child.pid;
+    }
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
       if (stderr.length > 16000) {
@@ -659,6 +811,10 @@ const runFfmpeg = (args) =>
     });
     child.on("error", reject);
     child.on("close", (code) => {
+      if (task?.child === child) {
+        task.child = null;
+        task.pid = process.pid;
+      }
       if (code === 0) {
         resolveRun();
         return;
@@ -667,12 +823,87 @@ const runFfmpeg = (args) =>
     });
   });
 
+const readMediaDurationMs = async (filePath, { expectAudio = true } = {}) => {
+  if (!existsSync(filePath) || statSync(filePath).size <= 0) {
+    throw new Error(`媒体文件为空或不存在：${filePath}`);
+  }
+  const info = await inspectMediaStreams(filePath);
+  const streams = Array.isArray(info?.streams) ? info.streams : [];
+  const audioStream = streams.find((stream) => stream.codec_type === "audio");
+  if (expectAudio && !audioStream) {
+    throw new Error(`FFprobe 未检测到音频流：${filePath}`);
+  }
+  const durationSeconds = Number(audioStream?.duration || info?.format?.duration || 0);
+  const durationMs = Math.round(durationSeconds * 1000);
+  if (!Number.isFinite(durationMs) || durationMs <= 0) {
+    throw new Error(`FFprobe 无法读取媒体时长：${filePath}`);
+  }
+  return durationMs;
+};
+
+const inspectMediaStreams = (filePath) =>
+  new Promise((resolveInspect, reject) => {
+    let stdout = "";
+    let stderr = "";
+    const child = trackManagedChild(spawn(ffprobePath, ["-v", "error", "-show_entries", "stream=codec_type,duration", "-show_entries", "format=duration", "-of", "json", filePath], {
+      cwd: rootDir,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    }));
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(`ffprobe 校验失败：${stderr.trim() || `退出码 ${code}`}`));
+        return;
+      }
+      try {
+        resolveInspect(JSON.parse(stdout));
+      } catch {
+        reject(new Error("ffprobe 返回了无法解析的结果。"));
+      }
+    });
+  });
+
+const validateRenderedVideo = async (filePath, expectAudio) => {
+  const info = await inspectMediaStreams(filePath);
+  const streams = Array.isArray(info?.streams) ? info.streams : [];
+  const videoStream = streams.find((stream) => stream.codec_type === "video");
+  const audioStream = streams.find((stream) => stream.codec_type === "audio");
+  const hasVideo = Boolean(videoStream);
+  const hasAudio = Boolean(audioStream);
+  if (!hasVideo) {
+    throw new Error("渲染结果没有视频流。");
+  }
+  if (expectAudio && !hasAudio) {
+    throw new Error("渲染结果没有音频流，请检查配音清单和渲染参数。");
+  }
+  const videoDuration = Number(videoStream?.duration || info?.format?.duration || 0);
+  const audioDuration = Number(audioStream?.duration || info?.format?.duration || 0);
+  if (expectAudio && videoDuration > 0 && audioDuration > 0 && Math.abs(videoDuration - audioDuration) > 0.5) {
+    throw new Error(`音视频时长不一致：视频 ${videoDuration.toFixed(2)} 秒，音频 ${audioDuration.toFixed(2)} 秒。`);
+  }
+  return { hasVideo, hasAudio };
+};
+
 const killChildProcess = (child) => {
   if (!child || child.killed) {
     return;
   }
   try {
-    child.kill("SIGKILL");
+    if (process.platform === "win32" && child.pid) {
+      spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
+        stdio: "ignore",
+        windowsHide: true,
+      });
+    } else {
+      child.kill("SIGKILL");
+    }
   } catch {
     // The process may have exited between timeout and cleanup.
   }
@@ -710,7 +941,8 @@ const roleVoiceForTts = (tts, role) => {
   if (ttsProvider(tts) !== "edge") {
     return String(tts?.voice || "").trim();
   }
-  const roleVoice = String(tts?.roleVoices?.[role] || "").trim();
+  const normalizedRole = normalizeTtsRole(role);
+  const roleVoice = String(tts?.roleVoices?.[normalizedRole] || "").trim();
   return roleVoice || edgeVoice(tts);
 };
 
@@ -734,8 +966,12 @@ const edgeProsodyValue = (value, fallback) => {
 };
 
 const findPythonCommand = () => {
+  const localPython = process.platform === "win32"
+    ? join(rootDir, ".venv", "Scripts", "python.exe")
+    : join(rootDir, ".venv", "bin", "python");
   const candidates = [
     process.env.PYTHON ? { command: process.env.PYTHON, args: [] } : null,
+    existsSync(localPython) ? { command: localPython, args: [] } : null,
     { command: "python", args: [] },
     { command: "py", args: ["-3"] },
   ].filter(Boolean);
@@ -754,7 +990,98 @@ const findPythonCommand = () => {
   return null;
 };
 
-const synthesizeEdgeAudioFile = async (tts, text, outputPath) => {
+const runEdgeBridgeJson = async (bridgeArgs, timeoutMs = EDGE_TTS_CHILD_TIMEOUT_MS) => {
+  const python = findPythonCommand();
+  if (!python) {
+    throw new Error("未找到 Python。Edge TTS 需要项目本地 Python 环境。");
+  }
+  mkdirSync(logDir, { recursive: true });
+  const args = [...python.args, edgeTtsBridgePath, ...bridgeArgs, "--log-file", edgeTtsErrorLogPath];
+  return new Promise((resolveRun, reject) => {
+    let stdout = "";
+    let stderr = "";
+    const child = trackManagedChild(spawn(python.command, args, {
+      cwd: rootDir,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    }));
+    const timeout = setTimeout(() => killChildProcess(child), timeoutMs);
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      const jsonLine = stdout.trim().split(/\r?\n/).filter(Boolean).at(-1);
+      let result;
+      try {
+        result = jsonLine ? JSON.parse(jsonLine) : null;
+      } catch {
+        reject(new Error("Edge TTS Bridge 返回了无法解析的结果。"));
+        return;
+      }
+      if (code === 0 && result?.ok) {
+        resolveRun(result);
+        return;
+      }
+      reject(new Error(result?.message || stderr.trim().slice(-240) || `Edge TTS Bridge 退出码 ${code}`));
+    });
+  });
+};
+
+const loadEdgeVoices = async ({ refresh = false } = {}) => {
+  if (!refresh && existsSync(edgeVoicesCachePath)) {
+    try {
+      const cached = JSON.parse(readFileSync(edgeVoicesCachePath, "utf8"));
+      if (cached?.version === EDGE_TTS_VERSION && Array.isArray(cached.voices) && cached.voices.length > 0) {
+        return cached;
+      }
+    } catch {
+      // Refresh a damaged or outdated cache from Edge.
+    }
+  }
+  const result = await runEdgeBridgeJson(["--list-voices", "--timeout", "45"]);
+  const cache = {
+    schemaVersion: 1,
+    version: result.version,
+    fetchedAt: new Date().toISOString(),
+    voices: result.voices,
+  };
+  writeJsonAtomic(edgeVoicesCachePath, cache);
+  return cache;
+};
+
+const checkRuntimeDependencies = async () => {
+  const checks = [];
+  const add = (name, ok, detail) => checks.push({ name, ok, detail });
+  const python = findPythonCommand();
+  add("python", Boolean(python), python?.command || "未找到 Python");
+  add("ffmpeg", existsSync(ffmpegPath), ffmpegPath);
+  add("ffprobe", existsSync(ffprobePath), ffprobePath);
+  add("edgeBridge", existsSync(edgeTtsBridgePath), edgeTtsBridgePath);
+  let voices = null;
+  if (python && existsSync(edgeTtsBridgePath)) {
+    try {
+      const check = await runEdgeBridgeJson(["--check"]);
+      add("edgeTtsVersion", check.version === EDGE_TTS_VERSION, `需要 ${EDGE_TTS_VERSION}，实际 ${check.version}`);
+      voices = await loadEdgeVoices();
+      const ids = new Set(voices.voices.map((voice) => voice.ShortName));
+      const configured = Object.values(loadConfig().tts.roleVoices || {}).filter(Boolean);
+      const missing = configured.filter((voice) => !ids.has(voice));
+      add("voices", voices.voices.length > 0 && missing.length === 0, missing.length ? `不可用音色：${missing.join("、")}` : `${voices.voices.length} 个音色可用`);
+    } catch (error) {
+      add("edgeTts", false, error instanceof Error ? error.message : String(error));
+    }
+  }
+  const ok = checks.every((check) => check.ok);
+  runtimeHealth = { ok, checks, message: ok ? "运行环境检查通过。" : "运行环境检查失败，请查看 checks。" };
+  return runtimeHealth;
+};
+
+const synthesizeEdgeAudioFile = async (tts, text, outputPath, task = null) => {
   const python = findPythonCommand();
   if (!python) {
     throw new Error("未找到 Python。Edge TTS 需要 Python 运行环境，请先安装 Python 3。");
@@ -781,18 +1108,25 @@ const synthesizeEdgeAudioFile = async (tts, text, outputPath) => {
     edgeProsodyValue(tts.pitch, "+0Hz"),
     "--timeout",
     "45",
+    "--log-file",
+    edgeTtsErrorLogPath,
   ];
 
   try {
     await new Promise((resolveRun, reject) => {
       let stderr = "";
+      let stdout = "";
       let timedOut = false;
       let settled = false;
-      const child = spawn(python.command, args, {
+      const child = trackManagedChild(spawn(python.command, args, {
         cwd: rootDir,
-        stdio: ["ignore", "ignore", "pipe"],
+        stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true,
-      });
+      }));
+      if (task) {
+        task.child = child;
+        task.pid = child.pid;
+      }
       const timeout = setTimeout(() => {
         timedOut = true;
         killChildProcess(child);
@@ -806,6 +1140,12 @@ const synthesizeEdgeAudioFile = async (tts, text, outputPath) => {
         callback(value);
       };
 
+      child.stdout.on("data", (chunk) => {
+        stdout += chunk.toString();
+        if (stdout.length > 16000) {
+          stdout = stdout.slice(-16000);
+        }
+      });
       child.stderr.on("data", (chunk) => {
         stderr += chunk.toString();
         if (stderr.length > 16000) {
@@ -814,6 +1154,10 @@ const synthesizeEdgeAudioFile = async (tts, text, outputPath) => {
       });
       child.on("error", (error) => settle(reject, error));
       child.on("close", (code) => {
+        if (task?.child === child) {
+          task.child = null;
+          task.pid = process.pid;
+        }
         if (timedOut) {
           settle(reject, new Error(`Edge TTS 请求超时（${Math.round(EDGE_TTS_CHILD_TIMEOUT_MS / 1000)} 秒）。`));
           return;
@@ -823,8 +1167,16 @@ const synthesizeEdgeAudioFile = async (tts, text, outputPath) => {
           return;
         }
 
-        const detail = stderr.trim().slice(-800);
-        settle(reject, new Error(detail || `Edge TTS 退出码 ${code}`));
+        const jsonLine = stdout.trim().split(/\r?\n/).filter(Boolean).at(-1);
+        let result = null;
+        try {
+          result = jsonLine ? JSON.parse(jsonLine) : null;
+        } catch {
+          result = null;
+        }
+        const detail = result?.message || stderr.trim().slice(-240) || `Edge TTS 退出码 ${code}`;
+        const errorCode = result?.code ? `（${result.code}）` : "";
+        settle(reject, new Error(`${detail}${errorCode}`));
       });
     });
   } finally {
@@ -965,51 +1317,13 @@ const isRetryableTtsError = (error) => {
   );
 };
 
-const synthesizeChunkFiles = async (tts, text, workDir, prefix, maxChars = TTS_CHUNK_TARGET_CHARS) => {
-  const isEdge = ttsProvider(tts) === "edge";
-  const chunkMaxChars = isEdge ? Math.min(maxChars, EDGE_TTS_CHUNK_TARGET_CHARS) : maxChars;
-  const chunks = splitTextForTts(text, chunkMaxChars);
-  const files = [];
-  const format = effectiveTtsFormat(tts);
-  const retryMinChars = isEdge ? EDGE_TTS_RETRY_MIN_CHARS : TTS_RETRY_MIN_CHARS;
-
-  for (const [index, chunk] of chunks.entries()) {
-    const chunkText = cleanSegmentTextForTts(chunk);
-    if (!chunkText) {
-      continue;
-    }
-
-    const filePath = join(workDir, `${prefix}-${String(index + 1).padStart(3, "0")}.${format}`);
-    try {
-      if (isEdge) {
-        await synthesizeEdgeAudioFile(tts, chunkText, filePath);
-      } else {
-        const buffer = await fetchAudioBuffer(tts, chunkText);
-        writeFileSync(filePath, buffer);
-      }
-      files.push(filePath);
-    } catch (error) {
-      if (!isRetryableTtsError(error) || chunkText.length <= retryMinChars) {
-        throw new Error(`片段 ${index + 1} 生成失败（约 ${chunkText.length} 字）：${error instanceof Error ? error.message : String(error)}`);
-      }
-
-      await sleep(isEdge ? 900 : 300);
-      const smallerMaxChars = Math.max(retryMinChars, Math.floor(chunkText.length / 2));
-      const retryFiles = await synthesizeChunkFiles(
-        tts,
-        chunkText,
-        workDir,
-        `${prefix}-${String(index + 1).padStart(3, "0")}`,
-        smallerMaxChars,
-      );
-      files.push(...retryFiles);
-    }
-  }
-
-  return files;
+const isNoAudioReceivedError = (error) => {
+  const message = error instanceof Error ? error.message : String(error);
+  return /NoAudioReceived|没有返回音频|No audio was received|empty audio/i.test(message);
 };
 
-const concatAudioFiles = async (inputPaths, outputPath, format) => {
+const concatAudioFiles = async (inputPaths, outputPath, format, task = null) => {
+  if (task?.cancelRequested) throw new Error("配音任务已取消。");
   if (inputPaths.length === 0) {
     throw new Error("没有可拼接的音频片段。");
   }
@@ -1034,7 +1348,8 @@ const concatAudioFiles = async (inputPaths, outputPath, format) => {
   args.push(outputPath);
 
   try {
-    await runFfmpeg(args);
+    await runFfmpeg(args, task);
+    if (task?.cancelRequested) throw new Error("配音任务已取消。");
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1046,7 +1361,198 @@ const safeFileToken = (value) =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 96) || "segment";
 
-const generateTts = async (request, response) => {
+const chunkPlanForText = (tts, segment, text, id, order) => {
+  const scopedTts = ttsForSegment(tts, segment);
+  const voice = String(scopedTts.voice || "").trim();
+  const format = effectiveTtsFormat(scopedTts);
+  const cacheKey = createTtsCacheKey({
+    provider: ttsProvider(scopedTts),
+    engineVersion: ttsProvider(scopedTts) === "edge" ? EDGE_TTS_VERSION : String(scopedTts.model || "custom"),
+    voice,
+    speed: scopedTts.speed || "1",
+    volume: scopedTts.volume || "+0%",
+    pitch: scopedTts.pitch || "+0Hz",
+    format,
+    text,
+  });
+  return {
+    id,
+    roundIndex: segment.roundIndex,
+    segmentId: segment.id,
+    role: normalizeTtsRole(segment.role),
+    text,
+    order,
+    voice,
+    cacheKey,
+    format,
+    scopedTts,
+  };
+};
+
+const roundTtsSegments = (round) => {
+  const skippedRoles = new Set(["system", "error", "sophistry_round_report", "sophistry_final_report"]);
+  const ordered = (round.speeches || [])
+    .slice()
+    .sort((a, b) => a.order - b.order)
+    .filter((speech) => !skippedRoles.has(speech.role))
+    .flatMap((speech) => (speech.segments || []).slice().sort((a, b) => a.order - b.order));
+  const seen = new Set(ordered.map((segment) => segment.id));
+  for (const segment of round.scoreSegments || []) {
+    if (!seen.has(segment.id)) {
+      ordered.push(segment);
+      seen.add(segment.id);
+    }
+  }
+  return ordered.filter((segment) => cleanSegmentTextForTts(segment.text));
+};
+
+const buildChunkPlansForSegment = (tts, segment) => {
+  const text = cleanSegmentTextForTts(segment.text);
+  const pieces = ttsProvider(tts) === "edge" ? splitEdgeTextForTts(text) : splitTextForTts(text);
+  return pieces.map((piece, index) =>
+    chunkPlanForText(tts, segment, piece, `${segment.id}-tts-${String(index + 1).padStart(3, "0")}`, index),
+  );
+};
+
+const createTtsState = (script, tts) => {
+  const signature = ttsSignature(tts);
+  if (existsSync(ttsStatePath)) {
+    try {
+      const previous = JSON.parse(readFileSync(ttsStatePath, "utf8"));
+      if (previous.scriptHash === script.scriptHash && previous.ttsSignature === signature) {
+        return { ...previous, status: "running", updatedAt: new Date().toISOString() };
+      }
+    } catch {
+      // A damaged progress file is replaced; cached audio files remain reusable.
+    }
+  }
+  return {
+    schemaVersion: 1,
+    scriptHash: script.scriptHash,
+    ttsSignature: signature,
+    provider: ttsProvider(tts),
+    status: "running",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    chunks: {},
+  };
+};
+
+const persistTtsState = (state) => {
+  state.updatedAt = new Date().toISOString();
+  writeJsonAtomic(ttsStatePath, state);
+};
+
+const updateChunkState = (state, plan, patch) => {
+  state.chunks[plan.cacheKey] = {
+    id: plan.id,
+    roundIndex: plan.roundIndex,
+    segmentId: plan.segmentId,
+    role: plan.role,
+    voice: plan.voice,
+    text: plan.text,
+    order: plan.order,
+    cacheKey: plan.cacheKey,
+    ...(state.chunks[plan.cacheKey] || {}),
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  };
+  persistTtsState(state);
+};
+
+const synthesizeOneCachedChunk = async (plan, task, state) => {
+  mkdirSync(audioChunkDir, { recursive: true });
+  const cachePathFor = (candidate) => join(audioChunkDir, `${candidate.cacheKey}.${candidate.format}`);
+  const publicFileFor = (candidate) => `audio/chunks/${candidate.cacheKey}.${candidate.format}`;
+  try {
+    return await runRecoverableTtsChunk(plan, {
+      retryDelaysMs: EDGE_TTS_RETRY_DELAYS_MS,
+      tryReuse: async (candidate) => {
+        if (task.cancelRequested) throw new Error("配音任务已取消。");
+        const cachePath = cachePathFor(candidate);
+        if (!existsSync(cachePath)) return null;
+        try {
+          const durationMs = await readMediaDurationMs(cachePath);
+          const audioFile = publicFileFor(candidate);
+          updateChunkState(state, candidate, { status: "completed", attempts: 0, reused: true, audioFile, durationMs });
+          appendTaskOutput(task, `复用缓存：${candidate.id}（${durationMs}ms）\n`);
+          return { ...candidate, audioPath: cachePath, audioFile, durationMs, reused: true };
+        } catch {
+          rmSync(cachePath, { force: true });
+          return null;
+        }
+      },
+      consumeRequest: (segmentId) => {
+        if (task.cancelRequested) throw new Error("配音任务已取消。");
+        const requestCount = (task.segmentRequestCounts.get(segmentId) || 0) + 1;
+        if (requestCount > MAX_TTS_REQUESTS_PER_SEGMENT) {
+          throw new Error(`${segmentId} 已达到 ${MAX_TTS_REQUESTS_PER_SEGMENT} 次请求上限，请检查网络或音色配置。`);
+        }
+        task.segmentRequestCounts.set(segmentId, requestCount);
+      },
+      runAttempt: async (candidate, attempt, totalAttempts) => {
+        const cachePath = cachePathFor(candidate);
+        const audioFile = publicFileFor(candidate);
+        const tempPath = `${cachePath}.${process.pid}.${Date.now()}.tmp.${candidate.format}`;
+        updateChunkState(state, candidate, { status: "running", attempts: attempt, reused: false, error: null });
+        task.progress = { ...(task.progress || {}), phase: "tts", roundIndex: candidate.roundIndex, segmentId: candidate.segmentId, chunkId: candidate.id };
+        appendTaskOutput(task, `生成 ${candidate.id}：第 ${attempt}/${totalAttempts} 次，约 ${candidate.text.length} 字\n`);
+        try {
+          if (ttsProvider(candidate.scopedTts) === "edge") {
+            await synthesizeEdgeAudioFile(candidate.scopedTts, candidate.text, tempPath, task);
+          } else {
+            writeFileSync(tempPath, await fetchAudioBuffer(candidate.scopedTts, candidate.text));
+          }
+          const durationMs = await readMediaDurationMs(tempPath);
+          rmSync(cachePath, { force: true });
+          renameSync(tempPath, cachePath);
+          updateChunkState(state, candidate, { status: "completed", attempts: attempt, reused: false, audioFile, durationMs, error: null });
+          return { ...candidate, audioPath: cachePath, audioFile, durationMs, reused: false };
+        } catch (error) {
+          rmSync(tempPath, { force: true });
+          updateChunkState(state, candidate, { status: "failed", attempts: attempt, error: error instanceof Error ? error.message : String(error) });
+          throw error;
+        }
+      },
+      classifyError: (error) => {
+        if (isNoAudioReceivedError(error)) return "no-audio";
+        const message = error instanceof Error ? error.message : String(error);
+        if (isRetryableTtsError(error) || /媒体文件为空|FFprobe|损坏|corrupt|empty audio/i.test(message)) return "retryable";
+        return "fatal";
+      },
+      splitPlan: (candidate) => {
+        const smallerTexts = splitFailedTtsChunk(candidate.text);
+        if (smallerTexts.length <= 1) return [candidate];
+        if (task.progress?.total) task.progress.total += smallerTexts.length - 1;
+        appendTaskOutput(task, `${candidate.id} 连续未收到音频，拆为 ${smallerTexts.length} 个更小请求。\n`);
+        return smallerTexts.map((text, index) => chunkPlanForText(
+          candidate.scopedTts,
+          { id: candidate.segmentId, roundIndex: candidate.roundIndex, role: candidate.role },
+          text,
+          `${candidate.id}-${index + 1}`,
+          candidate.order + index / 10,
+        ));
+      },
+    });
+  } catch (error) {
+    throw new Error(`${plan.id} 生成失败（约 ${plan.text.length} 字）：${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+const scaleDurations = (items, targetDurationMs) => {
+  let cursorMs = 0;
+  return items.map((item, index) => {
+    const remainingMs = Math.max(1, targetDurationMs - cursorMs);
+    const durationMs = index === items.length - 1
+      ? remainingMs
+      : Math.max(1, Math.min(remainingMs - (items.length - index - 1), Math.round(item.durationMs)));
+    const result = { ...item, startMs: cursorMs, endMs: cursorMs + durationMs };
+    cursorMs += durationMs;
+    return result;
+  });
+};
+
+const generateTtsResult = async (task) => {
   const config = loadConfig();
   const tts = config.tts;
   const provider = ttsProvider(tts);
@@ -1054,38 +1560,72 @@ const generateTts = async (request, response) => {
   const format = effectiveTtsFormat(tts);
 
   if (provider !== "edge" && (!tts.baseUrl || !tts.apiKey)) {
-    jsonResponse(response, 400, { ok: false, message: "请先配置 TTS 地址和 API Key。" });
-    return;
+    throw new Error("请先配置 TTS 地址和 API Key。");
   }
 
   const { session, props } = loadCurrentData();
   if (!session) {
-    jsonResponse(response, 400, { ok: false, message: "请先导入 Elenchus 导出 JSON。" });
-    return;
+    throw new Error("请先导入 Elenchus 导出 JSON。");
   }
 
   const { props: refreshedProps, script } = writeVideoScriptForSession(session, props || {}, { config });
+  const outputVersion = `${String(script?.scriptHash || "script").slice(0, 12)}-${ttsSignature(tts).slice(0, 12)}`;
   const requiredTurns = (script?.rounds || [])
     .map((round) => ({
       round,
-      segments: (round.speakerSegments || []).filter((segment) => cleanSegmentTextForTts(segment.text)),
+      segments: roundTtsSegments(round),
     }))
-    .filter(({ segments }) => segments.length > 0);
+    .filter(({ segments }) => segments.length > 0)
+    .map(({ round, segments }) => ({
+      round,
+      segments,
+      plansBySegment: new Map(segments.map((segment) => [segment.id, buildChunkPlansForSegment(tts, segment)])),
+    }));
 
   mkdirSync(audioDir, { recursive: true });
+  mkdirSync(audioChunkDir, { recursive: true });
+  const state = createTtsState(script, tts);
+  for (const { plansBySegment } of requiredTurns) {
+    for (const plan of [...plansBySegment.values()].flat()) {
+      const previous = state.chunks[plan.cacheKey] || {};
+      const cachedFile = join(audioChunkDir, `${plan.cacheKey}.${plan.format}`);
+      state.chunks[plan.cacheKey] = {
+        id: plan.id,
+        roundIndex: plan.roundIndex,
+        segmentId: plan.segmentId,
+        role: plan.role,
+        text: plan.text,
+        order: plan.order,
+        voice: plan.voice,
+        cacheKey: plan.cacheKey,
+        ...previous,
+        status: previous.status === "completed" && existsSync(cachedFile) ? "completed" : "pending",
+        attempts: Number(previous.attempts || 0),
+      };
+    }
+  }
+  persistTtsState(state);
+  const initialTotal = requiredTurns.reduce(
+    (sum, { plansBySegment }) => sum + [...plansBySegment.values()].reduce((segmentSum, plans) => segmentSum + plans.length, 0),
+    0,
+  );
+  task.progress = { phase: "tts", current: 0, total: initialTotal, reused: 0 };
+  appendTaskOutput(task, `${providerLabel}：共 ${requiredTurns.length} 轮、${initialTotal} 个请求块。\n`);
 
-  const concurrency = clamp(Math.round(Number(tts.concurrency) || (provider === "edge" ? 1 : 2)), 1, provider === "edge" ? 2 : 8);
-  const scenes = await mapLimit(requiredTurns, concurrency, async ({ round, segments }) => {
+  const scenes = [];
+  for (const { round, segments, plansBySegment } of requiredTurns) {
+    if (task.cancelRequested) {
+      throw new Error("配音任务已取消。");
+    }
     const id = round.id;
-    const fileName = `${id}.${format}`;
+    const fileName = `${id}-${outputVersion}.${format}`;
     const audioPath = join(audioDir, fileName);
     const audioFile = `audio/${fileName}`;
     const tempDir = mkdtempSync(join(tmpdir(), `elenchus-${id}-`));
 
     try {
       const segmentAudioFiles = [];
-      const segmentCues = [];
-      let cursorFrame = 0;
+      const rawSegmentCues = [];
 
       for (const [index, segment] of segments.entries()) {
         const text = cleanSegmentTextForTts(segment.text);
@@ -1095,88 +1635,212 @@ const generateTts = async (request, response) => {
 
         const token = `${safeFileToken(segment.id)}-${String(index + 1).padStart(3, "0")}`;
         const segmentPath = join(tempDir, `${token}.${format}`);
-        const chunkFiles = await synthesizeChunkFiles(ttsForSegment(tts, segment), text, tempDir, token);
-        await concatAudioFiles(chunkFiles, segmentPath, format);
-        const metadata = await parseFile(segmentPath);
-        const segmentFrames = Math.ceil((metadata.format.duration || 0) * FPS);
-        if (segmentFrames <= 0) {
-          throw new Error(`无法解析 ${segment.id} 的音频时长。`);
+        const chunkResults = [];
+        for (const plan of plansBySegment.get(segment.id) || []) {
+          const results = await synthesizeOneCachedChunk(plan, task, state);
+          chunkResults.push(...results);
+          task.progress.current += results.length;
+          task.progress.reused += results.filter((result) => result.reused).length;
         }
-
+        await concatAudioFiles(chunkResults.map((chunk) => chunk.audioPath), segmentPath, format, task);
+        const segmentDurationMs = await readMediaDurationMs(segmentPath);
+        const chunkCues = scaleDurations(chunkResults, segmentDurationMs);
         segmentAudioFiles.push(segmentPath);
-        segmentCues.push({
+        rawSegmentCues.push({
           ...segment,
           text,
           charCount: text.replace(/\s+/g, "").length,
-          startFrame: cursorFrame,
-          endFrame: cursorFrame + segmentFrames,
+          durationMs: segmentDurationMs,
+          chunkCues,
         });
-        cursorFrame += segmentFrames;
       }
 
       if (segmentAudioFiles.length === 0) {
-        return null;
+        continue;
       }
-      await concatAudioFiles(segmentAudioFiles, audioPath, format);
-      const metadata = await parseFile(audioPath);
-      const durationFrames = Math.max(cursorFrame, Math.ceil((metadata.format.duration || 0) * FPS));
-      if (durationFrames <= 0) {
-        throw new Error("无法解析音频时长。");
-      }
-      return { id, audioFile, durationFrames, segmentCues, lineCues: segmentCuesToLineCues(segmentCues) };
-    } catch (error) {
-      rmSync(audioPath, { force: true });
-      return { id, audioFile, durationFrames: 0, error: error instanceof Error ? error.message : String(error) };
+      const pendingScenePath = join(tempDir, `scene.${format}`);
+      await concatAudioFiles(segmentAudioFiles, pendingScenePath, format, task);
+      if (task.cancelRequested) throw new Error("配音任务已取消。");
+      const durationMs = await readMediaDurationMs(pendingScenePath);
+      const scaledSegments = scaleDurations(rawSegmentCues, durationMs);
+      const segmentCues = scaledSegments.map((segment) => ({
+        ...segment,
+        startFrame: Math.round((segment.startMs / 1000) * FPS),
+        endFrame: Math.max(Math.round((segment.endMs / 1000) * FPS), Math.round((segment.startMs / 1000) * FPS) + 1),
+        chunkCues: undefined,
+      }));
+      const chunkCues = scaledSegments.flatMap((segment) =>
+        scaleDurations(segment.chunkCues, segment.endMs - segment.startMs).map((chunk) => ({
+          id: chunk.id,
+          segmentId: chunk.segmentId,
+          role: chunk.role,
+          voice: chunk.voice,
+          text: chunk.text,
+          audioFile: chunk.audioFile,
+          cacheKey: chunk.cacheKey,
+          durationMs: chunk.endMs - chunk.startMs,
+          startMs: segment.startMs + chunk.startMs,
+          endMs: segment.startMs + chunk.endMs,
+        })),
+      );
+      copyFileSync(pendingScenePath, audioPath);
+      await readMediaDurationMs(audioPath);
+      scenes.push({
+        id,
+        roundIndex: round.roundIndex,
+        audioFile,
+        durationMs,
+        durationFrames: Math.max(1, Math.ceil((durationMs / 1000) * FPS)),
+        segmentCues,
+        lineCues: segmentCuesToLineCues(segmentCues),
+        chunkCues,
+      });
+      appendTaskOutput(task, `${round.turnLabel || id} 配音完成：${durationMs}ms。\n`);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
-  });
-
-  const realizedScenes = scenes.filter(Boolean);
-  const okScenes = realizedScenes
-    .filter((s) => s.durationFrames > 0)
-    .sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true }));
-  const failedScenes = realizedScenes.filter((s) => s.error);
-
-  if (okScenes.length === 0 || failedScenes.length > 0) {
-    jsonResponse(response, 502, {
-      ok: false,
-      message:
-        okScenes.length === 0
-          ? `${providerLabel} 配音生成失败。${failedScenes.map((s) => `${s.id}: ${s.error}`).join("；")}`
-          : `${providerLabel} 配音未全部生成成功。已完成 ${okScenes.length} 轮，失败 ${failedScenes.length} 轮。${failedScenes.map((s) => `${s.id}: ${s.error}`).join("；")}`,
-      scenes: okScenes,
-      failed: failedScenes,
-    });
-    return;
   }
 
-  mkdirSync(publicDataDir, { recursive: true });
-  writeFileSync(
-    join(publicDataDir, "session-audio.json"),
-    `${JSON.stringify(
-      {
-        scriptFile: refreshedProps.scriptFile || "data/video-script.json",
-        scriptHash: script?.scriptHash,
-        scenes: okScenes,
-      },
-      null,
-      2,
-    )}\n`,
-    "utf8",
-  );
+  if (scenes.length !== requiredTurns.length) {
+    throw new Error(`${providerLabel} 配音不完整：应生成 ${requiredTurns.length} 轮，实际 ${scenes.length} 轮。`);
+  }
 
-  const propsPath = join(publicDataDir, "render-props.json");
-  const renderProps = existsSync(propsPath) ? JSON.parse(readFileSync(propsPath, "utf8")) : {};
-  renderProps.audioManifest = "data/session-audio.json";
-  writeFileSync(propsPath, `${JSON.stringify(renderProps, null, 2)}\n`, "utf8");
+  scenes.sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true }));
+  const sessionFileName = `session-${outputVersion}.${format}`;
+  const sessionAudioPath = join(audioDir, sessionFileName);
+  const pendingSessionPath = join(audioDir, `.session-${process.pid}-${Date.now()}.${format}`);
+  try {
+    await concatAudioFiles(scenes.map((scene) => join(publicDir, scene.audioFile)), pendingSessionPath, format, task);
+    if (task.cancelRequested) throw new Error("配音任务已取消。");
+    const durationMs = await readMediaDurationMs(pendingSessionPath);
+    rmSync(sessionAudioPath, { force: true });
+    renameSync(pendingSessionPath, sessionAudioPath);
+    let sceneCursorMs = 0;
+    const timedScenes = scenes.map((scene, index) => {
+      const endMs = index === scenes.length - 1 ? durationMs : sceneCursorMs + scene.durationMs;
+      const cues = scene.chunkCues.map((cue) => ({
+        segmentId: cue.segmentId,
+        chunkId: cue.id,
+        role: cue.role,
+        startMs: sceneCursorMs + cue.startMs,
+        endMs: sceneCursorMs + cue.endMs,
+        audioFile: cue.audioFile,
+      }));
+      const { chunkCues: _chunkCues, ...sceneWithoutLegacyChunks } = scene;
+      const result = { ...sceneWithoutLegacyChunks, startMs: sceneCursorMs, endMs, cues };
+      sceneCursorMs = endMs;
+      return result;
+    });
+    const manifest = {
+      schemaVersion: 2,
+      provider,
+      scriptFile: refreshedProps.scriptFile || "data/video-script.json",
+      scriptHash: script?.scriptHash,
+      ttsSignature: ttsSignature(tts),
+      durationMs,
+      sessionAudioFile: `audio/${sessionFileName}`,
+      scenes: timedScenes,
+    };
+    writeJsonAtomic(join(publicDataDir, "session-audio.json"), manifest);
 
-  jsonResponse(response, 200, {
-    ok: true,
-    message: `${providerLabel} 已为 ${okScenes.length} 个场景生成配音${failedScenes.length ? `，${failedScenes.length} 个失败` : ""}。`,
-    scenes: okScenes,
-    failed: failedScenes,
-  });
+    const propsPath = join(publicDataDir, "render-props.json");
+    const renderProps = existsSync(propsPath) ? JSON.parse(readFileSync(propsPath, "utf8")) : {};
+    renderProps.audioManifest = "data/session-audio.json";
+    writeJsonAtomic(propsPath, renderProps);
+    state.status = "completed";
+    state.manifest = "data/session-audio.json";
+    persistTtsState(state);
+    return { message: `${providerLabel} 已为 ${scenes.length} 个场景生成配音。`, scenes: timedScenes };
+  } finally {
+    rmSync(pendingSessionPath, { force: true });
+  }
+};
+
+const startInternalTask = (name, message, runner) => {
+  const now = new Date().toISOString();
+  const task = {
+    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    name,
+    status: "queued",
+    message,
+    command: name,
+    output: `${message}\n\n`,
+    startedAt: now,
+    updatedAt: now,
+    lastOutputAt: now,
+    finishedAt: null,
+    exitCode: null,
+    pid: process.pid,
+    child: null,
+    progress: null,
+    segmentRequestCounts: new Map(),
+  };
+  tasks.set(task.id, task);
+  Promise.resolve()
+    .then(() => {
+      task.status = "running";
+      task.startedAt = new Date().toISOString();
+      task.updatedAt = task.startedAt;
+      return runner(task);
+    })
+    .then((result) => {
+      if (task.cancelRequested) throw new Error("任务已取消。");
+      task.status = "succeeded";
+      task.exitCode = 0;
+      task.message = result?.message || "任务执行完成。";
+      appendTaskOutput(task, `\n${task.message}\n`);
+    })
+    .catch((error) => {
+      task.status = task.cancelRequested ? "cancelled" : "failed";
+      task.exitCode = task.cancelRequested ? null : 1;
+      task.message = task.cancelRequested ? "任务已取消。" : error instanceof Error ? error.message : String(error);
+      appendTaskOutput(task, `\n${task.cancelRequested ? "任务已取消" : `任务失败：${task.message}`}\n`);
+      if (name === "generate-tts" && !isTestMode && existsSync(ttsStatePath)) {
+        try {
+          const state = JSON.parse(readFileSync(ttsStatePath, "utf8"));
+          state.status = task.cancelRequested ? "cancelled" : "failed";
+          state.error = task.cancelRequested ? null : task.message;
+          persistTtsState(state);
+        } catch {
+          // Keep the original task error when the progress file is damaged.
+        }
+      }
+    })
+    .finally(() => {
+      task.finishedAt = new Date().toISOString();
+      task.updatedAt = task.finishedAt;
+      cleanupOldTasks();
+    });
+  return task;
+};
+
+const generateTts = async (_request, response) => {
+  const running = findConflictingTask("generate-tts");
+  if (running) {
+    jsonResponse(response, 200, { ok: true, message: "已有配音或渲染任务正在执行，已返回现有任务。", task: publicTask(running) });
+    return;
+  }
+  const task = startInternalTask("generate-tts", "配音任务已启动，成功片段会自动缓存。", generateTtsResult);
+  jsonResponse(response, 202, { ok: true, message: "配音任务已启动，日志会自动刷新。", task: publicTask(task) });
+};
+
+const cancelTask = (taskId, response) => {
+  const task = tasks.get(taskId);
+  if (!task) {
+    jsonResponse(response, 404, { ok: false, message: "任务不存在，可能是服务刚重启过。" });
+    return;
+  }
+  if (!["queued", "running"].includes(task.status)) {
+    jsonResponse(response, 200, { ok: true, message: "任务已经结束。", task: publicTask(task) });
+    return;
+  }
+  task.cancelRequested = true;
+  task.message = "正在停止任务...";
+  task.updatedAt = new Date().toISOString();
+  if (task.child) {
+    killChildProcess(task.child);
+  }
+  jsonResponse(response, 200, { ok: true, message: "已发送停止请求。", task: publicTask(task) });
 };
 
 const runCommand = async (request, response) => {
@@ -1197,25 +1861,40 @@ const runCommand = async (request, response) => {
     }
   }
 
-  const args = typeof command.args === "function" ? command.args() : command.args;
-  const commandText = [process.execPath, ...args].join(" ");
+  let args = typeof command.args === "function" ? command.args() : [...command.args];
+  const renderExpectAudio = (name === "render" || name === "fast-render") && !loadConfig().video.muted;
 
-  if ((name === "render" || name === "fast-render") && !loadConfig().video.muted && !hasGeneratedAudio()) {
-    jsonResponse(response, 400, {
-      ok: false,
-      message: "还没有生成配音。请先在 TTS 页点击“生成配音”，成功后再渲染视频。",
-    });
-    return;
+  if (renderExpectAudio) {
+    try {
+      const { props, script } = loadCurrentData();
+      await validateAudioManifestForRender(props, script);
+    } catch (error) {
+      jsonResponse(response, 400, { ok: false, message: error instanceof Error ? error.message : String(error) });
+      return;
+    }
   }
 
   if (!command.wait) {
+    if (studioChild && studioChild.exitCode === null && !studioChild.killed) {
+      jsonResponse(response, 200, {
+        ok: true,
+        message: "Remotion Studio 已经在运行。",
+        studioUrl: "http://localhost:3000",
+        pid: studioChild.pid,
+      });
+      return;
+    }
     const child = spawn(process.execPath, args, {
       cwd: rootDir,
-      detached: true,
       stdio: "ignore",
       windowsHide: true,
     });
-    child.unref();
+    studioChild = child;
+    child.on("close", () => {
+      if (studioChild === child) {
+        studioChild = null;
+      }
+    });
     jsonResponse(response, 200, {
       ok: true,
       message: "已在后台启动 Remotion Studio。",
@@ -1227,18 +1906,31 @@ const runCommand = async (request, response) => {
 
   const running = findConflictingTask(name);
   if (running) {
-    jsonResponse(response, 409, {
-      ok: false,
-      message: "已有渲染或抽帧任务在执行中，请等待当前任务完成。",
+    jsonResponse(response, 200, {
+      ok: true,
+      message: "已有渲染或抽帧任务在执行中，已返回现有任务。",
       task: publicTask(running),
     });
     return;
   }
 
+  let renderSnapshot = null;
+  if (name === "render" || name === "fast-render") {
+    renderSnapshot = createRenderSnapshot();
+    if (name === "render") {
+      args = args.map((arg) => arg.startsWith("--props=") ? `--props=public/${renderSnapshot.propsArgument}` : arg);
+    }
+  }
+  const commandText = [process.execPath, ...args].join(" ");
+
   const child = spawn(process.execPath, args, {
     cwd: rootDir,
     shell: false,
     windowsHide: true,
+    env: {
+      ...process.env,
+      ...(renderSnapshot ? { ELENCHUS_RENDER_PROPS: renderSnapshot.propsPath } : {}),
+    },
   });
 
   const now = new Date().toISOString();
@@ -1251,10 +1943,13 @@ const runCommand = async (request, response) => {
     output: `正在执行：${name}\n${commandText}\n\n`,
     startedAt: now,
     updatedAt: now,
+    lastOutputAt: now,
     finishedAt: null,
     exitCode: null,
     pid: child.pid,
     child,
+    renderSnapshot,
+    expectAudio: renderExpectAudio,
   };
   tasks.set(task.id, task);
 
@@ -1270,17 +1965,42 @@ const runCommand = async (request, response) => {
     task.finishedAt = new Date().toISOString();
     task.updatedAt = task.finishedAt;
     appendTaskOutput(task, `\n启动失败：${error.message}\n`);
+    task.renderSnapshot?.cleanup();
+    task.renderSnapshot = null;
     cleanupOldTasks();
   });
-  child.on("close", (code) => {
+  child.on("close", async (code) => {
     task.exitCode = code;
-    task.status = code === 0 ? "finished" : "failed";
-    task.message = code === 0 ? "命令执行完成。" : `命令失败，退出码 ${code}。`;
-    task.finishedAt = new Date().toISOString();
-    task.updatedAt = task.finishedAt;
     task.child = null;
-    appendTaskOutput(task, `\n${task.message}\n`);
-    cleanupOldTasks();
+    try {
+      if (task.cancelRequested) {
+        task.status = "cancelled";
+        task.message = "任务已取消。";
+        return;
+      }
+      if (code !== 0) {
+        throw new Error(`命令失败，退出码 ${code}。`);
+      }
+      if (name === "render" || name === "fast-render") {
+        const outputPath = join(outDir, name === "render" ? "debate.mp4" : "debate-fast.mp4");
+        const streams = await validateRenderedVideo(outputPath, task.expectAudio);
+        appendTaskOutput(task, `\n媒体校验通过：视频流正常，音频流${streams.hasAudio ? "正常" : "未启用"}。\n`);
+      }
+      task.status = "succeeded";
+      task.message = "命令执行完成。";
+    } catch (error) {
+      task.status = "failed";
+      task.message = error instanceof Error ? error.message : String(error);
+      appendTaskOutput(task, `\n结果校验失败：${task.message}\n`);
+    }
+    finally {
+      task.finishedAt = new Date().toISOString();
+      task.updatedAt = task.finishedAt;
+      appendTaskOutput(task, `\n${task.message}\n`);
+      task.renderSnapshot?.cleanup();
+      task.renderSnapshot = null;
+      cleanupOldTasks();
+    }
   });
 
   jsonResponse(response, 202, {
@@ -1292,7 +2012,56 @@ const runCommand = async (request, response) => {
 
 const router = async (request, response) => {
   try {
-    const { pathname } = new URL(request.url, `http://${host}:${port}`);
+    const requestUrl = new URL(request.url, `http://${host}:${port}`);
+    const { pathname } = requestUrl;
+
+    if (isTestMode && request.method === "POST" && pathname === "/api/test/hold-task") {
+      const taskName = requestUrl.searchParams.get("name") === "render" ? "render" : "generate-tts";
+      const running = findConflictingTask(taskName);
+      if (running) {
+        jsonResponse(response, 200, { ok: true, task: publicTask(running) });
+        return;
+      }
+      const task = startInternalTask(taskName, "测试任务已启动。", async (activeTask) => {
+        if (requestUrl.searchParams.get("ffmpeg") === "1") {
+          await runFfmpeg(["-re", "-f", "lavfi", "-i", "anullsrc=r=8000:cl=mono", "-t", "30", "-f", "null", "-"], activeTask);
+          return { message: "测试 FFmpeg 已结束。" };
+        }
+        while (!activeTask.cancelRequested) {
+          await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+        }
+        throw new Error("测试任务已取消。");
+      });
+      jsonResponse(response, 202, { ok: true, task: publicTask(task) });
+      return;
+    }
+
+    if (isTestMode && request.method === "POST" && pathname === "/api/test/spawn-child") {
+      const child = trackManagedChild(spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+        cwd: rootDir,
+        stdio: "ignore",
+        windowsHide: true,
+      }));
+      jsonResponse(response, 202, { ok: true, pid: child.pid });
+      return;
+    }
+
+    if (isTestMode && request.method === "POST" && pathname === "/api/test/shutdown") {
+      jsonResponse(response, 202, { ok: true, message: "测试关闭请求已接收。" });
+      setImmediate(() => shutdown("test-request"));
+      return;
+    }
+
+    if (request.method === "GET" && pathname === "/api/health") {
+      jsonResponse(response, runtimeHealth.ok ? 200 : 503, runtimeHealth);
+      return;
+    }
+
+    if (request.method === "GET" && pathname === "/api/voices") {
+      const cache = await loadEdgeVoices({ refresh: requestUrl.searchParams.get("refresh") === "1" });
+      jsonResponse(response, 200, { ok: true, ...cache });
+      return;
+    }
 
     if (request.method === "GET" && pathname === "/api/current") {
       jsonResponse(response, 200, { ok: true, ...loadCurrentData() });
@@ -1326,6 +2095,12 @@ const router = async (request, response) => {
         return;
       }
       jsonResponse(response, 200, { ok: true, task: publicTask(task) });
+      return;
+    }
+
+    if (request.method === "POST" && pathname.startsWith("/api/tasks/") && pathname.endsWith("/cancel")) {
+      const id = decodeURIComponent(pathname.slice("/api/tasks/".length, -"/cancel".length));
+      cancelTask(id, response);
       return;
     }
 
@@ -1370,6 +2145,77 @@ const router = async (request, response) => {
   }
 };
 
-createServer(router).listen(port, host, () => {
-  console.log(`Elenchus video UI: http://${host}:${port}`);
+const cleanupManagedProcesses = () => {
+  for (const child of managedChildren) {
+    killChildProcess(child);
+  }
+  managedChildren.clear();
+  for (const task of tasks.values()) {
+    if (task.child) {
+      killChildProcess(task.child);
+      task.child = null;
+    }
+  }
+  if (studioChild) {
+    killChildProcess(studioChild);
+    studioChild = null;
+  }
+};
+
+const removeOwnPidFile = () => {
+  try {
+    if (existsSync(serverPidPath) && Number(readFileSync(serverPidPath, "utf8").trim()) === process.pid) {
+      rmSync(serverPidPath, { force: true });
+    }
+  } catch {
+    // Shutdown must continue even if the PID file is locked.
+  }
+};
+
+let shuttingDown = false;
+const server = createServer(router);
+const shutdown = (signal) => {
+  if (shuttingDown) {
+    return;
+  }
+  shuttingDown = true;
+  console.log(`\n收到 ${signal}，正在停止视频服务和子进程...`);
+  cleanupManagedProcesses();
+  removeOwnPidFile();
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 3000).unref();
+};
+
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("exit", removeOwnPidFile);
+
+server.on("error", (error) => {
+  removeOwnPidFile();
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+});
+
+const startServer = async () => {
+  if (isTestMode) {
+    runtimeHealth = { ok: true, checks: [], message: "测试模式运行环境检查已跳过。" };
+  } else {
+    await checkRuntimeDependencies();
+  }
+  if (!runtimeHealth.ok) {
+    console.error(runtimeHealth.message);
+    for (const check of runtimeHealth.checks.filter((item) => !item.ok)) {
+      console.error(`- ${check.name}: ${check.detail}`);
+    }
+  }
+  server.listen(port, host, () => {
+    writeFileSync(serverPidPath, `${process.pid}\n`, "utf8");
+    console.log(`Elenchus video UI: http://${host}:${port}`);
+  });
+};
+
+startServer().catch((error) => {
+  removeOwnPidFile();
+  console.error(error instanceof Error ? error.stack || error.message : String(error));
+  process.exitCode = 1;
 });
