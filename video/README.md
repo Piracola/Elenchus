@@ -69,7 +69,7 @@ TTS chunk            仅用于限制单次语音请求长度，拼接后必须�
 
 ## TTS 配音
 
-网页控制台的「TTS」配置页默认使用 Edge TTS。Edge TTS 不需要 API Key；双击启动脚本会在 `video/.venv` 创建独立 Python 环境，并按 `requirements.txt` 安装固定版本，避免污染系统 Python。
+网页控制台的「TTS」配置页默认使用 Edge TTS。Edge TTS 不需要 API Key；双击启动脚本会在 `video/.venv` 创建独立 Python 环境，并按 `requirements.txt` 安装固定版本，避免污染系统 Python。默认只为正反方辩手生成并加入配音；裁判评分、旁白和背景内容可分别勾选启用。
 
 需要手动准备时可以执行：
 
@@ -80,7 +80,7 @@ python -m venv .venv
 
 点击「生成配音」后：
 
-1. 画面继续使用约 200 字的 segment；TTS 会在内部按句拆成目标约 120 字、最多 180 字的请求块，两种粒度互不影响。
+1. 画面继续使用约 200 字的 segment；TTS 会在内部按句拆成目标约 120 字、最多 180 字的请求块，两种粒度互不影响。请求块默认以 50 并发生成，可在控制台设置 1 到 100；生成完成后仍严格按原发言顺序拼接。
 2. 每个请求块按文本、音色、语速等参数生成缓存键。失败后会重试并继续拆小，再次点击只补缺失内容。
 3. 将同一轮音频拼接为 `public/audio/<scene-id>.<format>`，并生成整场音频。
 4. `session-audio.json` 记录真实毫秒时长、segment cue、chunk cue、脚本哈希和配音配置签名。

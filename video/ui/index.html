@@ -330,8 +330,20 @@
                 语速
                 <input id="ttsSpeedInput" type="number" min="0.5" max="2" step="0.05" />
               </label>
+              <label>
+                配音并发数
+                <input id="ttsConcurrencyInput" type="number" min="1" max="100" step="1" />
+              </label>
+              <label class="check-row">
+                <input id="ttsIncludeJudgeInput" type="checkbox" />
+                为裁判和评分生成配音
+              </label>
+              <label class="check-row">
+                <input id="ttsIncludeNarratorInput" type="checkbox" />
+                为旁白和背景内容生成配音
+              </label>
             </div>
-            <div class="preset-summary" id="ttsProviderSummary">Edge TTS 不需要 API Key，适合先生成自然中文配音。</div>
+            <div class="preset-summary" id="ttsProviderSummary">Edge TTS 不需要 API Key；默认只生成正反方辩手配音。</div>
             <button class="primary" id="generateTtsButton" type="button">生成配音</button>
           </div>
 

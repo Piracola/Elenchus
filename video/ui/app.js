@@ -158,7 +158,9 @@ const defaultConfig = {
     format: "mp3",
     sampleRate: "24000",
     speed: "1",
-    concurrency: "1",
+    concurrency: "50",
+    includeJudge: false,
+    includeNarrator: false,
   },
   script: {
     textPreset: "standard",
@@ -320,7 +322,7 @@ const populateRoleVoiceOptions = (provider, roleVoices = {}) => {
 
 const ttsProviderSettings = {
   edge: {
-    summary: "Edge TTS 不需要 API Key，中文音色自然。输出会固定为 MP3，适合当前视频流程。",
+    summary: "Edge TTS 不需要 API Key，中文音色自然；默认只生成正反方辩手配音。",
     defaultVoice: "zh-CN-XiaoxiaoNeural",
     defaultFormat: "mp3",
   },
@@ -517,6 +519,9 @@ const renderConfig = () => {
   setValue("ttsFormatInput", tts.format);
   setValue("ttsSampleRateInput", tts.sampleRate);
   setValue("ttsSpeedInput", tts.speed);
+  setValue("ttsConcurrencyInput", tts.concurrency);
+  setChecked("ttsIncludeJudgeInput", Boolean(tts.includeJudge));
+  setChecked("ttsIncludeNarratorInput", Boolean(tts.includeNarrator));
   renderTtsProviderFields();
   setValue("scriptPresetInput", script.textPreset);
   renderScriptPresetSummary();
@@ -525,8 +530,10 @@ const renderConfig = () => {
 };
 
 const readRoleVoiceForm = () => ({
-  proposer: readValue("ttsProposerVoiceInput"),
-  opposer: readValue("ttsOpposerVoiceInput"),
+  affirmative: readValue("ttsProposerVoiceInput"),
+  negative: readValue("ttsOpposerVoiceInput"),
+  judge: readValue("ttsJudgeVoiceInput"),
+  narrator: readValue("ttsNarratorVoiceInput"),
 });
 
 const readConfigForm = () => ({
@@ -557,6 +564,9 @@ const readConfigForm = () => ({
     format: readValue("ttsFormatInput"),
     sampleRate: readValue("ttsSampleRateInput"),
     speed: readValue("ttsSpeedInput"),
+    concurrency: readValue("ttsConcurrencyInput"),
+    includeJudge: $("ttsIncludeJudgeInput").checked,
+    includeNarrator: $("ttsIncludeNarratorInput").checked,
   },
   script: {
     textPreset: readValue("scriptPresetInput"),

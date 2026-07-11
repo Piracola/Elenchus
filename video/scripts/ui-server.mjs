@@ -10,6 +10,9 @@ import {
   EDGE_TTS_RETRY_DELAYS_MS,
   EDGE_TTS_VERSION,
   MAX_TTS_REQUESTS_PER_SEGMENT,
+  normalizeTtsConcurrency,
+  runWithConcurrency,
+  shouldGenerateTtsForSegment,
   normalizeTtsRole,
   runRecoverableTtsChunk,
   splitFailedTtsChunk,
@@ -77,7 +80,9 @@ const defaultConfig = {
     format: "mp3",
     sampleRate: "24000",
     speed: "1",
-    concurrency: "1",
+    concurrency: "50",
+    includeJudge: false,
+    includeNarrator: false,
   },
   script: {
     textPreset: "standard",
@@ -309,7 +314,12 @@ const ttsSignature = (tts) =>
   createTtsCacheKey({
     provider: ttsProvider(tts),
     engineVersion: ttsProvider(tts) === "edge" ? EDGE_TTS_VERSION : String(tts?.model || "custom"),
-    voice: JSON.stringify({ default: edgeVoice(tts), roles: tts?.roleVoices || {} }),
+    voice: JSON.stringify({
+      default: edgeVoice(tts),
+      roles: tts?.roleVoices || {},
+      includeJudge: Boolean(tts?.includeJudge),
+      includeNarrator: Boolean(tts?.includeNarrator),
+    }),
     speed: tts?.speed || "1",
     volume: tts?.volume || "+0%",
     pitch: tts?.pitch || "+0Hz",
@@ -590,7 +600,7 @@ const audioManifestProblems = (props, script, config = loadConfig()) => {
   if (!Array.isArray(manifest.scenes)) return [...problems, "音频清单缺少 scenes"];
 
   for (const round of script?.rounds || []) {
-    const expectedSegments = roundTtsSegments(round);
+    const expectedSegments = roundTtsSegments(round, config.tts);
     if (expectedSegments.length === 0) continue;
     const scene = manifest.scenes.find((candidate) => candidate.id === round.id || candidate.roundIndex === round.roundIndex);
     if (!scene) {
@@ -1389,7 +1399,7 @@ const chunkPlanForText = (tts, segment, text, id, order) => {
   };
 };
 
-const roundTtsSegments = (round) => {
+const roundTtsSegments = (round, tts) => {
   const skippedRoles = new Set(["system", "error", "sophistry_round_report", "sophistry_final_report"]);
   const ordered = (round.speeches || [])
     .slice()
@@ -1403,7 +1413,7 @@ const roundTtsSegments = (round) => {
       seen.add(segment.id);
     }
   }
-  return ordered.filter((segment) => cleanSegmentTextForTts(segment.text));
+  return ordered.filter((segment) => shouldGenerateTtsForSegment(segment, tts) && cleanSegmentTextForTts(segment.text));
 };
 
 const buildChunkPlansForSegment = (tts, segment) => {
@@ -1573,7 +1583,7 @@ const generateTtsResult = async (task) => {
   const requiredTurns = (script?.rounds || [])
     .map((round) => ({
       round,
-      segments: roundTtsSegments(round),
+      segments: roundTtsSegments(round, tts),
     }))
     .filter(({ segments }) => segments.length > 0)
     .map(({ round, segments }) => ({
@@ -1610,7 +1620,18 @@ const generateTtsResult = async (task) => {
     0,
   );
   task.progress = { phase: "tts", current: 0, total: initialTotal, reused: 0 };
-  appendTaskOutput(task, `${providerLabel}：共 ${requiredTurns.length} 轮、${initialTotal} 个请求块。\n`);
+  const ttsConcurrency = normalizeTtsConcurrency(tts.concurrency);
+  appendTaskOutput(task, `${providerLabel}：共 ${requiredTurns.length} 轮、${initialTotal} 个请求块，并发数 ${ttsConcurrency}。\n`);
+
+  const allPlans = requiredTurns.flatMap(({ plansBySegment }) => [...plansBySegment.values()].flat());
+  const generatedResults = await runWithConcurrency(allPlans, ttsConcurrency, async (plan) => {
+    if (task.cancelRequested) throw new Error("配音任务已取消。");
+    const results = await synthesizeOneCachedChunk(plan, task, state);
+    task.progress.current += results.length;
+    task.progress.reused += results.filter((result) => result.reused).length;
+    return results;
+  });
+  const generatedByPlan = new Map(allPlans.map((plan, index) => [plan.cacheKey, generatedResults[index]]));
 
   const scenes = [];
   for (const { round, segments, plansBySegment } of requiredTurns) {
@@ -1635,13 +1656,7 @@ const generateTtsResult = async (task) => {
 
         const token = `${safeFileToken(segment.id)}-${String(index + 1).padStart(3, "0")}`;
         const segmentPath = join(tempDir, `${token}.${format}`);
-        const chunkResults = [];
-        for (const plan of plansBySegment.get(segment.id) || []) {
-          const results = await synthesizeOneCachedChunk(plan, task, state);
-          chunkResults.push(...results);
-          task.progress.current += results.length;
-          task.progress.reused += results.filter((result) => result.reused).length;
-        }
+        const chunkResults = (plansBySegment.get(segment.id) || []).flatMap((plan) => generatedByPlan.get(plan.cacheKey) || []);
         await concatAudioFiles(chunkResults.map((chunk) => chunk.audioPath), segmentPath, format, task);
         const segmentDurationMs = await readMediaDurationMs(segmentPath);
         const chunkCues = scaleDurations(chunkResults, segmentDurationMs);

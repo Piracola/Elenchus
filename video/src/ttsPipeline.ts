@@ -8,6 +8,8 @@ export const EDGE_TTS_MIN_SPLIT_CHARS = 48;
 export const EDGE_TTS_VERSION = "7.2.8";
 export const EDGE_TTS_RETRY_DELAYS_MS = [2_000, 5_000, 10_000] as const;
 export const MAX_TTS_REQUESTS_PER_SEGMENT = 24;
+export const DEFAULT_TTS_CONCURRENCY = 50;
+export const MAX_TTS_CONCURRENCY = 100;
 
 export type TtsChunkStatus = "pending" | "running" | "completed" | "failed";
 export type TtsRole = "affirmative" | "negative" | "judge" | "narrator";
@@ -53,6 +55,20 @@ export const normalizeTtsRole = (role: unknown): TtsRole => {
     return "judge";
   }
   return "narrator";
+};
+
+export const shouldGenerateTtsForSegment = (
+  segment: { role?: unknown; kind?: unknown },
+  options: { includeJudge?: unknown; includeNarrator?: unknown } = {},
+): boolean => {
+  if (segment.kind === "judge_summary" || segment.kind === "score_comment" || segment.role === "judge") {
+    return Boolean(options.includeJudge);
+  }
+  if (segment.kind === "context") {
+    return Boolean(options.includeNarrator);
+  }
+  const role = normalizeTtsRole(segment.role);
+  return role === "affirmative" || role === "negative" || Boolean(options.includeNarrator);
 };
 
 const splitWithDelimiter = (text: string, delimiter: RegExp): string[] => {
@@ -170,6 +186,39 @@ export type TtsRecoveryOptions<Result> = {
   sleep?: (delayMs: number) => Promise<void>;
   retryDelaysMs?: readonly number[];
   maxSplitDepth?: number;
+};
+
+export const normalizeTtsConcurrency = (value: unknown): number => {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_TTS_CONCURRENCY;
+  return Math.min(MAX_TTS_CONCURRENCY, Math.max(1, parsed));
+};
+
+export const runWithConcurrency = async <Item, Result>(
+  items: readonly Item[],
+  concurrency: unknown,
+  worker: (item: Item, index: number) => Promise<Result>,
+): Promise<Result[]> => {
+  const results = new Array<Result>(items.length);
+  let nextIndex = 0;
+  let stopped = false;
+  const workerCount = Math.min(items.length, normalizeTtsConcurrency(concurrency));
+
+  const runWorker = async () => {
+    while (!stopped && nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      try {
+        results[index] = await worker(items[index], index);
+      } catch (error) {
+        stopped = true;
+        throw error;
+      }
+    }
+  };
+
+  await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+  return results;
 };
 
 export const runRecoverableTtsChunk = async <Result>(

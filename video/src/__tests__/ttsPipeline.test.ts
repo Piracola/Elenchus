@@ -3,8 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   createTtsCacheKey,
   EDGE_TTS_MAX_CHARS,
+  normalizeTtsConcurrency,
   normalizeTtsRole,
   runRecoverableTtsChunk,
+  runWithConcurrency,
+  shouldGenerateTtsForSegment,
   splitFailedTtsChunk,
   splitTextForTts,
 } from "../ttsPipeline";
@@ -165,5 +168,53 @@ describe("normalizeTtsRole", () => {
     expect(normalizeTtsRole("opposer")).toBe("negative");
     expect(normalizeTtsRole("judge")).toBe("judge");
     expect(normalizeTtsRole("fact_checker")).toBe("narrator");
+  });
+});
+
+describe("shouldGenerateTtsForSegment", () => {
+  it("voices only debaters by default", () => {
+    expect(shouldGenerateTtsForSegment({ role: "proposer", kind: "argument" })).toBe(true);
+    expect(shouldGenerateTtsForSegment({ role: "opposer", kind: "argument" })).toBe(true);
+    expect(shouldGenerateTtsForSegment({ role: "judge", kind: "judge_summary" })).toBe(false);
+    expect(shouldGenerateTtsForSegment({ role: "proposer", kind: "score_comment" })).toBe(false);
+    expect(shouldGenerateTtsForSegment({ role: "group_discussion", kind: "context" })).toBe(false);
+  });
+
+  it("allows judge and narrator voiceovers independently", () => {
+    expect(shouldGenerateTtsForSegment(
+      { role: "judge", kind: "judge_summary" },
+      { includeJudge: true },
+    )).toBe(true);
+    expect(shouldGenerateTtsForSegment(
+      { role: "group_discussion", kind: "context" },
+      { includeNarrator: true },
+    )).toBe(true);
+    expect(shouldGenerateTtsForSegment(
+      { role: "judge", kind: "judge_summary" },
+      { includeNarrator: true },
+    )).toBe(false);
+  });
+});
+
+describe("TTS concurrency", () => {
+  it("defaults to 50 and clamps the configured value to 1-100", () => {
+    expect(normalizeTtsConcurrency(undefined)).toBe(50);
+    expect(normalizeTtsConcurrency(0)).toBe(1);
+    expect(normalizeTtsConcurrency(75)).toBe(75);
+    expect(normalizeTtsConcurrency(500)).toBe(100);
+  });
+
+  it("runs requests concurrently while preserving result order", async () => {
+    let active = 0;
+    let peak = 0;
+    const results = await runWithConcurrency([30, 5, 15, 1], 3, async (delay) => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      active -= 1;
+      return delay;
+    });
+    expect(peak).toBe(3);
+    expect(results).toEqual([30, 5, 15, 1]);
   });
 });
