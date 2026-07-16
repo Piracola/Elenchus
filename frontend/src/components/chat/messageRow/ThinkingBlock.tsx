@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { MessageMarkdown } from './MarkdownRenderer';
 import { markdownBodyStyle } from './contentStyles';
 
@@ -108,35 +109,52 @@ export function ThinkingBlock({
                     <span aria-hidden="true" style={thinkingAccentDotStyle(accentColor)} />
                     <span>{THINKING_PANEL_LABEL}</span>
                 </span>
-                <button
+                <motion.button
                     type="button"
                     data-thinking-toggle="true"
                     aria-expanded={expanded}
                     aria-label={expanded ? THINKING_PANEL_HIDE_TITLE : THINKING_PANEL_SHOW_TITLE}
                     title={expanded ? THINKING_PANEL_HIDE_TITLE : THINKING_PANEL_SHOW_TITLE}
                     onClick={() => setExpanded((current) => !current)}
+                    whileTap={{ scale: 0.98 }}
                     style={thinkingToggleStyle(expanded)}
                 >
                     <span>{expanded ? THINKING_PANEL_HIDE : THINKING_PANEL_SHOW}</span>
-                </button>
+                </motion.button>
             </div>
-            {expanded ? (
-                <div
-                    className="markdown-body"
-                    data-thinking-content="visible"
-                    style={{
-                        ...markdownBodyStyle(fontSize, textColor),
-                        padding: '0 12px 10px',
-                        lineHeight: 1.62,
-                    }}
-                >
-                    <MessageMarkdown text={content} />
-                </div>
-            ) : (
-                <div data-thinking-content="collapsed" style={thinkingHintStyle()}>
-                    {THINKING_PANEL_HINT}
-                </div>
-            )}
+            <AnimatePresence initial={false}>
+                {expanded ? (
+                    <motion.div
+                        key="thinking-content"
+                        className="markdown-body"
+                        data-thinking-content="visible"
+                        initial={{ opacity: 0, height: 0, y: -6 }}
+                        animate={{ opacity: 1, height: 'auto', y: 0 }}
+                        exit={{ opacity: 0, height: 0, y: -4 }}
+                        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                        style={{
+                            ...markdownBodyStyle(fontSize, textColor),
+                            padding: '0 12px 10px',
+                            lineHeight: 1.62,
+                            overflow: 'hidden',
+                        }}
+                    >
+                        <MessageMarkdown text={content} />
+                    </motion.div>
+                ) : (
+                    <motion.div
+                        key="thinking-hint"
+                        data-thinking-content="collapsed"
+                        initial={{ opacity: 0, height: 0, y: -6 }}
+                        animate={{ opacity: 1, height: 'auto', y: 0 }}
+                        exit={{ opacity: 0, height: 0, y: -4 }}
+                        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                        style={{ ...thinkingHintStyle(), overflow: 'hidden' }}
+                    >
+                        {THINKING_PANEL_HINT}
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

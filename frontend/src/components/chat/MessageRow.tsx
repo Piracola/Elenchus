@@ -256,15 +256,16 @@ function MessageRow({
                         </span>
                     )}
                 </div>
-                <button
+                <motion.button
                     type="button"
                     onClick={onToggleAgentCollapsed}
+                    whileTap={{ scale: 0.98 }}
                     style={collapseButtonStyle(agentCollapsed)}
                     title={collapseButtonTitle(agentCollapsed)}
                 >
                     <span>{collapseButtonSymbol(agentCollapsed)}</span>
                     <span>{collapseButtonLabel(agentCollapsed)}</span>
-                </button>
+                </motion.button>
             </div>
 
             {/* 消息内容 */}

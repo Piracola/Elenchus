@@ -1,4 +1,5 @@
 import { memo, useState } from 'react';
+import { useReducedMotion } from 'framer-motion';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { DialogueEntry } from '../../types';
 import { MarkdownRenderer } from './messageRow/MarkdownRenderer';
@@ -46,6 +47,7 @@ function areSectionsEqual(previous: InsightSection[], next: InsightSection[]): b
 
 function RoundInsights({ sections }: RoundInsightsProps) {
     const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+    const reducedMotion = useReducedMotion();
 
     if (!sections.length) return null;
 
@@ -127,7 +129,7 @@ function RoundInsights({ sections }: RoundInsightsProps) {
                                                 height: '6px',
                                                 borderRadius: '50%',
                                                 background: 'var(--accent-emerald)',
-                                                animation: 'pulse 1s ease-in-out infinite',
+                                                animation: reducedMotion ? 'none' : 'pulse 1s ease-in-out infinite',
                                             }}
                                         />
                                         {section.loadingLabel}

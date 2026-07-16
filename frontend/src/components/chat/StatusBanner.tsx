@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { AlertCircle, CheckCircle2, CircleDashed, Loader2, PauseCircle } from 'lucide-react';
 import type { DebatePhase, RunStatus } from '../../types';
 import { useRuntimeViewState } from '../../hooks/useDebateViewState';
@@ -160,6 +160,7 @@ function getToneStyles(tone: StatusTone) {
 }
 
 function StatusIcon({ tone }: { tone: StatusTone }) {
+    const reducedMotion = useReducedMotion();
     if (tone === 'error') return <AlertCircle size={13} />;
     if (tone === 'complete') return <CheckCircle2 size={13} />;
     if (tone === 'paused') return <PauseCircle size={13} />;
@@ -168,7 +169,7 @@ function StatusIcon({ tone }: { tone: StatusTone }) {
             <Loader2
                 size={13}
                 style={{
-                    animation: 'status-spin 1s linear infinite',
+                    animation: reducedMotion ? 'none' : 'status-spin 1s linear infinite',
                 }}
             />
         );

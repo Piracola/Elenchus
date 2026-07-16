@@ -10,7 +10,7 @@ import {
     SlidersHorizontal,
     X,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
     useCallback,
     useRef,
@@ -531,6 +531,8 @@ export function HomeComposerCard({
                     type="button"
                     onClick={onCreateDebate}
                     disabled={!canCreate}
+                    whileHover={canCreate ? { scale: 1.02 } : {}}
+                    whileTap={canCreate ? { scale: 0.98 } : {}}
                     className="home-composer-card__primary"
                     style={{
                         minHeight: '40px',
@@ -731,15 +733,16 @@ export function HomeComposerCard({
                                         onChange={handleInputChange}
                                         style={{ display: 'none' }}
                                     />
-                                    <button
+                                    <motion.button
                                         type="button"
                                         onClick={() => setShowUploadPopover((current) => !current)}
+                                        whileTap={{ scale: 0.98 }}
                                         style={quietButtonStyle}
                                         title="上传参考资料（将在创建辩论时一起提交）"
                                     >
                                         <FileUp size={14} />
                                         管理
-                                    </button>
+                                    </motion.button>
 
                                     {showUploadPopover && (
                                         <>
@@ -754,11 +757,13 @@ export function HomeComposerCard({
                                             }}
                                             onClick={() => setShowUploadPopover(false)}
                                         />
+                                        <AnimatePresence>
                                         <motion.div
                                             className="home-reference-popover"
                                             initial={{ opacity: 0, y: -8, scale: 0.98 }}
                                             animate={{ opacity: 1, y: 0, scale: 1 }}
                                             exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                                            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                                             style={{
                                                 position: 'absolute',
                                                 top: 'calc(100% + 8px)',
@@ -775,6 +780,7 @@ export function HomeComposerCard({
                                                     : '1px solid var(--border-subtle)',
                                                 borderRadius: 'var(--radius-lg)',
                                                 boxShadow: 'var(--shadow-lg)',
+                                                transformOrigin: 'top right',
                                             }}
                                         >
                                             <div
@@ -877,9 +883,14 @@ export function HomeComposerCard({
                                                         overflowY: 'auto',
                                                     }}
                                                 >
+                                                    <AnimatePresence initial={false}>
                                                     {pendingDocuments.map((doc) => (
-                                                        <div
+                                                        <motion.div
                                                             key={doc.id}
+                                                            initial={{ opacity: 0, height: 0 }}
+                                                            animate={{ opacity: 1, height: 'auto' }}
+                                                            exit={{ opacity: 0, height: 0 }}
+                                                            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                                                             style={{
                                                                 display: 'flex',
                                                                 alignItems: 'center',
@@ -890,6 +901,7 @@ export function HomeComposerCard({
                                                                     : 'var(--bg-secondary)',
                                                                 border: '1px solid transparent',
                                                                 borderRadius: 'var(--radius-md)',
+                                                                overflow: 'hidden',
                                                             }}
                                                         >
                                                             <FileText
@@ -946,11 +958,13 @@ export function HomeComposerCard({
                                                             >
                                                                 <X size={14} />
                                                             </motion.button>
-                                                        </div>
+                                                        </motion.div>
                                                     ))}
+                                                    </AnimatePresence>
                                                 </div>
                                             )}
                                         </motion.div>
+                                        </AnimatePresence>
                                         </>
                                     )}
                                 </div>

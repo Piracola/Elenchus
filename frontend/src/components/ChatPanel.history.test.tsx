@@ -40,6 +40,7 @@ vi.mock('framer-motion', () => {
     };
 
     return {
+        useReducedMotion: () => false,
         AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
         motion: new Proxy({}, {
             get: (_target, property: string) => createPrimitive(property as keyof HTMLElementTagNameMap),

@@ -201,9 +201,9 @@ export default function DebaterSettingsModal({
             {isOpen && (
                 <motion.div
                     ref={popoverRef}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
+                    initial={{ opacity: 0, scale: 0.96 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.96 }}
                     transition={{ duration: 0.16, ease: 'easeOut' }}
                     style={{
                         ...popoverStyle,
@@ -213,6 +213,7 @@ export default function DebaterSettingsModal({
                         flexDirection: 'column',
                         gap: '12px',
                         overflow: 'hidden',
+                        transformOrigin: 'top left',
                     }}
                 >
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
@@ -224,9 +225,10 @@ export default function DebaterSettingsModal({
                                 保存后只影响后续 agent 调用，已完成的发言与评分不会改变。
                             </span>
                         </div>
-                        <button
+                        <motion.button
                             type="button"
                             onClick={onClose}
+                            whileTap={{ scale: 0.98 }}
                             style={{
                                 ...HEADER_TOOLBAR_SECONDARY_BUTTON_STYLE,
                                 width: '32px',
@@ -237,7 +239,7 @@ export default function DebaterSettingsModal({
                             title="关闭辩手设置"
                         >
                             <X size={14} />
-                        </button>
+                        </motion.button>
                     </div>
 
                     {(agentConfigsLoading || agentConfigsError || saveError) && (
@@ -270,12 +272,13 @@ export default function DebaterSettingsModal({
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                        <button
+                        <motion.button
                             type="button"
                             onClick={() => {
                                 void reload();
                             }}
                             disabled={agentConfigsLoading || isSaving}
+                            whileTap={agentConfigsLoading || isSaving ? {} : { scale: 0.98 }}
                             style={{
                                 ...HEADER_TOOLBAR_SECONDARY_BUTTON_STYLE,
                                 opacity: agentConfigsLoading || isSaving ? 0.65 : 1,
@@ -283,13 +286,15 @@ export default function DebaterSettingsModal({
                         >
                             <RefreshCw size={13} />
                             刷新配置
-                        </button>
-                        <button
+                        </motion.button>
+                        <motion.button
                             type="button"
                             onClick={() => {
                                 void handleSave();
                             }}
                             disabled={isSaving || agentConfigsLoading}
+                            whileHover={isSaving || agentConfigsLoading ? {} : { scale: 1.02 }}
+                            whileTap={isSaving || agentConfigsLoading ? {} : { scale: 0.98 }}
                             style={{
                                 ...HEADER_TOOLBAR_PRIMARY_BUTTON_STYLE,
                                 opacity: isSaving || agentConfigsLoading ? 0.65 : 1,
@@ -297,7 +302,7 @@ export default function DebaterSettingsModal({
                         >
                             <Save size={13} />
                             {isSaving ? '保存中...' : '保存设置'}
-                        </button>
+                        </motion.button>
                     </div>
                 </motion.div>
             )}

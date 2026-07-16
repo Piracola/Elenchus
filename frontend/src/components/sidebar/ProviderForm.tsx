@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useReducedMotion } from 'framer-motion';
 import {
     Check,
     CheckCircle2,
@@ -100,6 +101,7 @@ export function ProviderForm({
     onFetchRemoteModels,
     onSave,
 }: ProviderFormProps) {
+    const reducedMotion = useReducedMotion();
     const showConfiguredHint = !isCreatingNew && formData.apiKeyConfigured && !formData.clearApiKey && !formData.apiKey.trim();
     const hasUsableKey = Boolean(formData.apiKey.trim() || (formData.apiKeyConfigured && !formData.clearApiKey));
     const disableRemoteActions = !hasUsableKey || isProbing || isFetchingModels;
@@ -213,7 +215,7 @@ export function ProviderForm({
                                 disabled={disableRemoteActions}
                                 title="检测当前服务商连接"
                                 icon={isProbing
-                                    ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
+                                    ? <Loader2 size={15} style={{ animation: reducedMotion ? 'none' : 'spin 1s linear infinite' }} />
                                     : <Wifi size={15} />}
                             >
                                 检测连接
@@ -233,7 +235,7 @@ export function ProviderForm({
                                 disabled={disableRemoteActions}
                                 title="从服务商获取模型列表"
                                 icon={isFetchingModels
-                                    ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
+                                    ? <Loader2 size={15} style={{ animation: reducedMotion ? 'none' : 'spin 1s linear infinite' }} />
                                     : <Download size={15} />}
                             >
                                 获取模型列表

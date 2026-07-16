@@ -43,7 +43,7 @@ function App() {
   }, []);
 
   return (
-    <MotionConfig reducedMotion={previewSafeMotion ? 'always' : 'never'}>
+    <MotionConfig reducedMotion={previewSafeMotion ? 'always' : 'user'}>
     <ErrorBoundary>
       <BackendHealthCheck>
         <div

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, FileText, Users } from 'lucide-react';
 import { api } from '../../api/client';
 import type { MarkdownExportCategory } from '../../types';
@@ -317,9 +317,14 @@ export default function ChatHeaderOverlay({
                   />
                 </motion.button>
 
+                <AnimatePresence>
                 {showExportMenu && (
-                  <div
+                  <motion.div
                     ref={exportMenuRef}
+                    initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
                     style={{
                       position: 'absolute',
                       top: 'calc(100% + 8px)',
@@ -331,6 +336,7 @@ export default function ChatHeaderOverlay({
                       flexDirection: 'column',
                       gap: '12px',
                       zIndex: 1000,
+                      transformOrigin: 'top left',
                     }}
                   >
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -482,8 +488,9 @@ export default function ChatHeaderOverlay({
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)', paddingLeft: '4px' }}>
                     包含完整原始数据结构，适合程序处理。
                   </span>
-                  </div>
+                  </motion.div>
                 )}
+                </AnimatePresence>
               </div>
               <div style={{ marginLeft: 'auto' }} />
 

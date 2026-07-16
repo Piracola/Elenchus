@@ -9,7 +9,7 @@
  */
 
 import { useRef, useState, useEffect, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import type { DialogueEntry } from '../../types';
 import { getAgentVisual, STATIC_MOTION_PROPS } from './messageRow/shared';
 import { messageContentWrapperStyle, markdownBodyStyle } from './messageRow/contentStyles';
@@ -26,6 +26,7 @@ type StreamingMessageProps = {
 };
 
 export default function StreamingMessage({ entry, content, status }: StreamingMessageProps) {
+    const reducedMotion = useReducedMotion();
     const rafRef = useRef<number | null>(null);
     const isStreamingRef = useRef(false);
     const [renderedContent, setRenderedContent] = useState('');
@@ -203,7 +204,7 @@ export default function StreamingMessage({ entry, content, status }: StreamingMe
                                     height: '6px',
                                     borderRadius: '50%',
                                     background: 'var(--accent-emerald)',
-                                    animation: 'pulse 1s ease-in-out infinite',
+                                    animation: reducedMotion ? 'none' : 'pulse 1s ease-in-out infinite',
                                 }}
                             />
                             {streamingStatus}
