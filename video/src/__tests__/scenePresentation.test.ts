@@ -40,13 +40,34 @@ describe("scene presentation", () => {
     }
   });
 
-  it("uses one fast-render slice for all lines in the same segment", () => {
+  it("uses one fast-render slice for every line in the same segment", () => {
     const sameSegment = [
       { ...line("a", 0, 20), segmentId: "segment-1" },
       { ...line("b", 20, 40), segmentId: "segment-1" },
       { ...line("c", 40, 60), segmentId: "segment-2" },
     ];
-    expect(buildSceneSlices(sameSegment, 60)).toHaveLength(2);
+    expect(buildSceneSlices(sameSegment, 60)).toHaveLength(3);
+  });
+
+  it("preserves non-speaker visual boundaries", () => {
+    const segments = [
+      {
+        id: "judge-segment",
+        roundIndex: 0,
+        speechId: "judge-1",
+        role: "judge",
+        label: "裁判",
+        agentName: "裁判",
+        text: "裁判总结",
+        lines: ["裁判总结"],
+        charCount: 4,
+        order: 1,
+        kind: "judge_summary" as const,
+        startFrame: 45,
+        endFrame: 60,
+      },
+    ];
+    expect(buildSceneSlices([line("speech", 0, 60)], 60, segments).map((slice) => slice.startFrame)).toEqual([0, 45]);
   });
 
   it("uses one stable slice for scenes without speech", () => {
@@ -56,8 +77,19 @@ describe("scene presentation", () => {
   it("keeps the active line visually dominant", () => {
     const layout = computeSpeakerLayout(lines, 1);
     expect(layout.items[1].state).toBe("active");
-    expect(layout.items[0].state).toBe("past");
-    expect(layout.items[2].state).toBe("future");
+    expect(layout.items[0].state).toBe("near");
+    expect(layout.items[2].state).toBe("near");
+  });
+
+  it("keeps line geometry stable across focus states", () => {
+    const layout = computeSpeakerLayout([line("a", 0, 30), line("b", 30, 60), line("c", 60, 90)], 1);
+    expect(layout.items.map((item) => item.textCenter)).toEqual([
+      layout.items[0].textCenter,
+      layout.items[1].textCenter,
+      layout.items[2].textCenter,
+    ]);
+    expect(layout.items[1].textCenter - layout.items[0].textCenter)
+      .toBeCloseTo(layout.items[2].textCenter - layout.items[1].textCenter, 5);
   });
 
   it("uses one deterministic ellipsis for Canvas and Remotion", () => {

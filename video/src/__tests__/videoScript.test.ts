@@ -5,6 +5,7 @@ import {
   charCount,
   cleanTextForSpeech,
   distributeFramesByWeight,
+  estimateLineTimingWeight,
   estimateSegmentDurationFrames,
   markdownToReadableText,
   resolveSegmentationOptions,
@@ -234,6 +235,18 @@ describe("estimateSegmentDurationFrames", () => {
     const noPause = estimateSegmentDurationFrames("十个字符的文本啊");
     const withClausePause = estimateSegmentDurationFrames("十个字符，的文本啊");
     expect(withClausePause).toBeGreaterThanOrEqual(noPause);
+  });
+});
+
+describe("estimateLineTimingWeight", () => {
+  it("does not apply the segment minimum duration to every line", () => {
+    expect(estimateLineTimingWeight("这是明显更长的一行发言内容。"))
+      .toBeGreaterThan(estimateLineTimingWeight("短句。"));
+  });
+
+  it("adds weight for punctuation pauses", () => {
+    expect(estimateLineTimingWeight("观点一，观点二。"))
+      .toBeGreaterThan(estimateLineTimingWeight("观点一观点二"));
   });
 });
 
@@ -474,6 +487,18 @@ describe("segmentCuesToLineCues", () => {
     for (let i = 1; i < cues.length; i++) {
       expect(cues[i].startFrame).toBe(cues[i - 1].endFrame);
     }
+  });
+
+  it("gives longer lines more frames while preserving segment anchors", () => {
+    const segment = makeCue({
+      startFrame: 10,
+      endFrame: 110,
+      lines: ["短句。", "这是明显更长的一行发言内容，用于验证时间权重。"],
+    });
+    const cues = segmentCuesToLineCues([segment]);
+    expect(cues[0].startFrame).toBe(10);
+    expect(cues.at(-1)?.endFrame).toBe(110);
+    expect(cues[1].endFrame - cues[1].startFrame).toBeGreaterThan(cues[0].endFrame - cues[0].startFrame);
   });
 
   it("generates line IDs from segment ID", () => {

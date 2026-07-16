@@ -13,10 +13,12 @@ const ffprobePath = join(rootDir, "node_modules", "@remotion", "compositor-win32
 const readJson = (file) => JSON.parse(readFileSync(file, "utf8"));
 const session = readJson(join(dataDir, "session-export.json"));
 const script = readJson(join(dataDir, "video-script.json"));
+const renderProps = readJson(join(dataDir, "render-props.json"));
 const manifest = readJson(join(dataDir, "session-audio.json"));
 const ttsState = readJson(join(dataDir, "tts-state.json"));
 
 assert.equal(manifest.schemaVersion, 2);
+assert.equal(manifest.provider, "edge", "音频清单必须来自 Edge TTS");
 assert.equal(manifest.scriptHash, script.scriptHash, "音频清单与脚本哈希不一致");
 assert.equal(ttsState.scriptHash, script.scriptHash, "TTS 状态与脚本哈希不一致");
 assert.equal(ttsState.status, "completed", "TTS 顶层状态尚未完成");
@@ -58,6 +60,14 @@ const inspect = (file) => {
 };
 
 const statesById = new Map(Object.values(ttsState.chunks || {}).map((chunk) => [chunk.id, chunk]));
+assert.ok(manifest.intro, "缺少开场辩题配音");
+assert.equal(manifest.intro.title, renderProps.title || script.topic, "开场配音标题与实际展示标题不一致");
+assert.ok(manifest.intro.durationMs >= 5000, "开场配音不足 5 秒");
+inspect(join(publicDir, manifest.intro.audioFile));
+assert.ok(
+  Object.values(ttsState.chunks || {}).some((chunk) => chunk.segmentId === "intro-topic" && chunk.status === "completed"),
+  "开场辩题缺少完成的 TTS 缓存状态",
+);
 let cueCount = 0;
 for (const scene of manifest.scenes) {
   let cursor = scene.startMs;

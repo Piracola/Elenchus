@@ -171,12 +171,18 @@ export type LineCue = {
 
 export type AudioManifest = {
   schemaVersion: 2;
-  provider: "edge" | "mimo";
+  provider: "edge";
   scriptFile?: string;
   scriptHash?: string;
   ttsSignature?: string;
   durationMs: number;
   sessionAudioFile: string;
+  intro?: {
+    title: string;
+    spokenText: string;
+    audioFile: string;
+    durationMs: number;
+  };
   scenes: Array<{
     id: string;
     roundIndex: number;
@@ -224,6 +230,7 @@ export type DebateVideoModel = {
   width: number;
   height: number;
   introFrames: number;
+  introAudioFile?: string;
   outroFrames: number;
   durationInFrames: number;
   timelineKind: "audio" | "estimated";

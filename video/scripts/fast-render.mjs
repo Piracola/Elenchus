@@ -13,7 +13,6 @@ const publicDataDir = join(publicDir, "data");
 const outDir = join(rootDir, "out");
 const fastDir = join(outDir, "fast");
 const frameDir = join(fastDir, "frames");
-const segmentDir = join(fastDir, "segments");
 const segmentListPath = join(fastDir, "segments-list.txt");
 const silentVideoPath = join(fastDir, "silent.mp4");
 const concatAudioPath = join(fastDir, "audio.wav");
@@ -149,6 +148,12 @@ const roleColor = (role) => {
   return colors.muted;
 };
 
+const roleTextColor = (role) => {
+  if (role === "proposer") return SCENE_COLORS.affirmativeText;
+  if (role === "opposer") return SCENE_COLORS.negativeText;
+  return roleColor(role);
+};
+
 const drawHeader = (ctx, video, scene) => {
   ctx.save();
   try {
@@ -182,7 +187,7 @@ const drawSpeechColumn = (ctx, scene, view) => {
   ctx.fillStyle = colors.ink;
   ctx.fillText("辩手发言", x + 30, y + 26);
 
-  withRectClip(ctx, x + 30, y + 80, w - 60, h - 110, () => {
+  withRectClip(ctx, x + 24, y + 76, w - 48, h - 98, () => {
     const lines = view.speakerLines;
     if (!lines.length) {
       ctx.font = font(25, 700);
@@ -190,26 +195,26 @@ const drawSpeechColumn = (ctx, scene, view) => {
       ctx.fillText("本轮没有辩手发言。", x + 30, y + 96);
       return;
     }
-    let cursor = y + 88;
+    let cursor = y + 84;
     for (const item of lines) {
       const line = item.cue;
       const { displayLines, state, style } = item;
       const accent = roleColor(line.role);
+      const textColor = roleTextColor(line.role);
       ctx.save();
       ctx.globalAlpha = style.opacity;
-      ctx.fillStyle = accent;
       const textHeight = displayLines.length * style.fontSize * style.lineHeight;
-      ctx.fillRect(x + 30, cursor, state === "active" ? 5 : 3, style.headerHeight + style.headerMargin + textHeight);
-      ctx.font = font(state === "active" ? 16 : 13, 800);
-      ctx.fillStyle = accent;
-      ctx.fillText(`${line.label} · ${line.agentName}`, x + 48, cursor + 1);
-      cursor += style.headerHeight + style.headerMargin;
+      if (state === "active" || state === "near") {
+        ctx.globalAlpha = 1;
+        fillRound(ctx, x + 24, cursor, w - 48, textHeight + 6, 6, `${accent}${state === "active" ? "12" : "08"}`);
+        ctx.globalAlpha = style.opacity;
+      }
       ctx.font = font(style.fontSize, style.fontWeight);
-      ctx.fillStyle = colors.ink;
+      ctx.fillStyle = textColor;
       displayLines.forEach((text, index) => {
-        ctx.fillText(text, x + 48, cursor + index * style.fontSize * style.lineHeight);
+        ctx.fillText(text, x + 34, cursor + 3 + index * style.fontSize * style.lineHeight);
       });
-      cursor += textHeight + style.marginBottom;
+      cursor += textHeight + 6 + style.marginBottom;
       ctx.restore();
     }
   });
@@ -333,53 +338,61 @@ const writeFrameImages = (video) => {
   const slices = [];
   const introPath = join(frameDir, "scene-000-intro.png");
   drawBookend(video, introPath, false);
-  slices.push({ startFrame: 0, endFrame: video.introFrames, framePath: introPath, segmentPath: join(segmentDir, "scene-000-intro.mp4") });
+  slices.push({ startFrame: 0, endFrame: video.introFrames, framePath: introPath });
   video.scenes.forEach((scene, sceneIndex) => {
-    buildSceneSlices(scene.segmentCues, scene.durationInFrames).forEach((slice, sliceIndex) => {
+    buildSceneSlices(scene.speakerLines, scene.durationInFrames, scene.segmentCues).forEach((slice, sliceIndex) => {
       const token = `scene-${String(sceneIndex + 1).padStart(3, "0")}-segment-${String(sliceIndex + 1).padStart(3, "0")}`;
       const framePath = join(frameDir, `${token}.png`);
       drawScene(video, scene, framePath, slice.startFrame);
-      slices.push({ ...slice, scene, framePath, segmentPath: join(segmentDir, `${token}.mp4`) });
+      slices.push({ ...slice, scene, framePath });
     });
   });
   const outroPath = join(frameDir, "scene-999-outro.png");
   drawBookend(video, outroPath, true);
-  slices.push({ startFrame: 0, endFrame: video.outroFrames, framePath: outroPath, segmentPath: join(segmentDir, "scene-999-outro.mp4") });
+  slices.push({ startFrame: 0, endFrame: video.outroFrames, framePath: outroPath });
   return slices;
 };
 
 const encodeVideoSegments = async (slices) => {
-  const listLines = [];
+  const listLines = ["ffconcat version 1.0"];
+  let totalFrames = 0;
   for (const slice of slices) {
     const durationInFrames = Math.max(1, slice.endFrame - slice.startFrame);
-    await run([
-      "-hide_banner",
-      "-y",
-      "-loop",
-      "1",
-      "-framerate",
-      String(FPS),
-      "-i",
-      slice.framePath,
-      "-t",
-      (durationInFrames / FPS).toFixed(3),
-      "-c:v",
-      "libx264",
-      "-preset",
-      "veryfast",
-      "-crf",
-      "24",
-      "-pix_fmt",
-      "yuv420p",
-      "-r",
-      String(FPS),
-      slice.segmentPath,
-    ]);
-    listLines.push(`file '${slice.segmentPath.replace(/\\/g, "/").replace(/'/g, "'\\''")}'`);
+    totalFrames += durationInFrames;
+    listLines.push(`file '${slice.framePath.replace(/\\/g, "/").replace(/'/g, "'\\''")}'`);
+    listLines.push(`duration ${(durationInFrames / FPS).toFixed(6)}`);
+  }
+  const finalFrame = slices.at(-1)?.framePath;
+  if (finalFrame) {
+    listLines.push(`file '${finalFrame.replace(/\\/g, "/").replace(/'/g, "'\\''")}'`);
   }
 
   writeFileSync(segmentListPath, `${listLines.join("\n")}\n`, "utf8");
-  await run(["-hide_banner", "-y", "-f", "concat", "-safe", "0", "-i", segmentListPath, "-c", "copy", silentVideoPath]);
+  await run([
+    "-hide_banner",
+    "-y",
+    "-f",
+    "concat",
+    "-safe",
+    "0",
+    "-i",
+    segmentListPath,
+    "-frames:v",
+    String(totalFrames),
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-crf",
+    "24",
+    "-pix_fmt",
+    "yuv420p",
+    "-r",
+    String(FPS),
+    "-movflags",
+    "+faststart",
+    silentVideoPath,
+  ]);
 };
 
 const buildConcatenatedAudio = async (video) => {
@@ -392,7 +405,10 @@ const buildConcatenatedAudio = async (video) => {
   }
 
   const audioItems = [
-    { scene: { durationInFrames: video.introFrames }, filePath: null },
+    {
+      scene: { durationInFrames: video.introFrames },
+      filePath: video.introAudioFile ? join(publicDir, video.introAudioFile) : null,
+    },
     ...sceneAudio,
     { scene: { durationInFrames: video.outroFrames }, filePath: null },
   ];
@@ -430,7 +446,6 @@ const main = async () => {
   mkdirSync(outDir, { recursive: true });
   rmSync(fastDir, { recursive: true, force: true });
   mkdirSync(frameDir, { recursive: true });
-  mkdirSync(segmentDir, { recursive: true });
 
   const props = loadProps();
   const dataFile = props.dataFile || "data/session-export.json";
@@ -448,6 +463,7 @@ const main = async () => {
   await encodeVideoSegments(slices);
 
   if (await buildConcatenatedAudio(video)) {
+    const durationSeconds = video.durationInFrames / FPS;
     await run([
       "-hide_banner",
       "-y",
@@ -458,14 +474,17 @@ const main = async () => {
       "-map",
       "0:v:0",
       "-map",
-      "1:a:0",
+      "[outa]",
+      "-filter_complex",
+      `[1:a]apad,atrim=duration=${durationSeconds.toFixed(6)}[outa]`,
       "-c:v",
       "copy",
       "-c:a",
       "aac",
       "-b:a",
       "128k",
-      "-shortest",
+      "-t",
+      durationSeconds.toFixed(6),
       outputPath,
     ]);
   } else {

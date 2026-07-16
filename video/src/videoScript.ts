@@ -299,6 +299,13 @@ export const estimateSegmentDurationFrames = (text: string): number => {
   return Math.ceil((ms / 1000) * FPS);
 };
 
+export const estimateLineTimingWeight = (text: string): number => {
+  const chars = Math.max(1, charCount(text));
+  const sentencePauses = countPunctuation(text, /[。！？!?]/g);
+  const clausePauses = countPunctuation(text, /[，、：；,:;]/g);
+  return chars + sentencePauses * 4 + clausePauses * 2;
+};
+
 const hashString = (value: string): string => {
   let hash = 2166136261;
   for (let index = 0; index < value.length; index += 1) {
@@ -585,7 +592,7 @@ export const segmentCuesToLineCues = (segments: SegmentCue[]): LineCue[] => {
 
   for (const segment of segments) {
     const lines = segment.lines.length ? segment.lines : segmentTextToLines(segment.text);
-    const weights = lines.map((line) => estimateSegmentDurationFrames(line));
+    const weights = lines.map((line) => estimateLineTimingWeight(line));
     const timings = distributeFramesByWeight(Math.max(1, segment.endFrame - segment.startFrame), weights);
 
     lines.forEach((line, index) => {

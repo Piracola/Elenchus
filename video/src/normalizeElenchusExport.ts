@@ -245,7 +245,9 @@ export const buildVideoModel = (
   const scenes = script.rounds.map((round, sceneIndex) =>
     sceneFromScriptRound(script, raw, round.roundIndex, sceneIndex, matchedAudioManifest),
   );
-  const introFrames = 5 * FPS;
+  const introFrames = matchedAudioManifest?.intro
+    ? Math.max(5 * FPS, Math.ceil((matchedAudioManifest.intro.durationMs / 1000) * FPS))
+    : 5 * FPS;
   const outroFrames = 5 * FPS;
   const scenesDuration = scenes.reduce((sum, scene) => sum + scene.durationInFrames, 0);
 
@@ -256,6 +258,7 @@ export const buildVideoModel = (
     width: VIDEO_WIDTH,
     height: VIDEO_HEIGHT,
     introFrames,
+    introAudioFile: matchedAudioManifest?.intro?.audioFile,
     outroFrames,
     durationInFrames: introFrames + scenesDuration + outroFrames,
     timelineKind: matchedAudioManifest ? "audio" : "estimated",

@@ -60,17 +60,17 @@ const clampText = (value: string, maxLength: number): string => {
   return `${value.slice(0, maxLength).trim()}...`;
 };
 
-const roleAccent = (role: string): { accent: string; soft: string; label: string } => {
+const roleAccent = (role: string): { accent: string; soft: string; text: string; label: string } => {
   if (role === "proposer") {
-    return { accent: colors.proposer, soft: colors.proposerSoft, label: "正方" };
+    return { accent: colors.proposer, soft: colors.proposerSoft, text: colors.affirmativeText, label: "正方" };
   }
   if (role === "opposer") {
-    return { accent: colors.opposer, soft: colors.opposerSoft, label: "反方" };
+    return { accent: colors.opposer, soft: colors.opposerSoft, text: colors.negativeText, label: "反方" };
   }
   if (role === "judge") {
-    return { accent: colors.judge, soft: colors.judgeSoft, label: "裁判" };
+    return { accent: colors.judge, soft: colors.judgeSoft, text: colors.judge, label: "裁判" };
   }
-  return { accent: colors.score, soft: colors.scoreSoft, label: "评分" };
+  return { accent: colors.score, soft: colors.scoreSoft, text: colors.score, label: "评分" };
 };
 
 const formatScore = (score: number | null): string => {
@@ -123,6 +123,7 @@ const IntroFrame: React.FC<{ video: DebateVideoModel }> = ({ video }) => {
   const enter = useEntrance();
   return (
     <PageShell>
+      {video.introAudioFile ? <Audio src={staticFile(video.introAudioFile)} /> : null}
       <div
         style={{
           display: "grid",
@@ -272,7 +273,7 @@ const RoundSceneView: React.FC<{ scene: DebateScene; video: DebateVideoModel }> 
         </header>
 
         <div style={{ position: "absolute", ...rectStyle(SCENE_LAYOUT.speaker) }}>
-          <SpeakerColumn view={view} />
+          <SpeakerColumn view={view} frame={frame} />
         </div>
         <div style={{ position: "absolute", ...rectStyle(SCENE_LAYOUT.judge) }}>
           <JudgePanel view={view} />
@@ -355,16 +356,25 @@ const ColumnShell: React.FC<{
   );
 };
 
-const SpeakerColumn: React.FC<{ view: SceneViewModel }> = ({ view }) => {
+const SpeakerColumn: React.FC<{ view: SceneViewModel; frame: number }> = ({ view, frame }) => {
+  const firstVisibleIndex = view.speakerLines[0]?.index ?? 0;
+  const activeCue = view.speakerLines.find((line) => line.index === view.activeLineIndex)?.cue;
+  const rowShift = firstVisibleIndex > 0 && activeCue
+    ? interpolate(frame, [activeCue.startFrame, activeCue.startFrame + 9], [50.64, 0], {
+        easing: Easing.bezier(0.16, 1, 0.3, 1),
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp",
+      })
+    : 0;
   return (
-    <ColumnShell title="辩手发言" subtitle="歌词式高亮" accent={colors.proposer}>
+    <ColumnShell title="辩手发言" subtitle="三行柔焦" accent={colors.proposer}>
       <div style={{ position: "relative", minHeight: 0, height: "100%", overflow: "hidden" }}>
         {view.speakerLines.length === 0 ? (
           <EmptyState text="本轮没有辩手发言。" />
         ) : (
-          <div style={{ position: "absolute", inset: 0, padding: "18px 22px" }}>
+          <div style={{ position: "absolute", inset: 0, padding: "12px 18px", transform: `translateY(${rowShift}px)` }}>
             {view.speakerLines.map(({ cue: line, displayLines, state, style }) => {
-              const { accent } = roleAccent(line.role);
+              const { accent, text } = roleAccent(line.role);
               const isActive = state === "active";
               return (
                 <div
@@ -372,28 +382,14 @@ const SpeakerColumn: React.FC<{ view: SceneViewModel }> = ({ view }) => {
                   style={{
                     marginBottom: style.marginBottom,
                     opacity: style.opacity,
-                    borderLeft: isActive ? `4px solid ${accent}` : `3px solid ${accent}44`,
-                    paddingLeft: isActive ? 14 : 11,
+                    padding: "3px 10px",
+                    borderRadius: 6,
+                    background: isActive ? `${accent}12` : state === "near" ? `${accent}08` : "transparent",
                   }}
                 >
                   <div
                     style={{
-                      height: style.headerHeight,
-                      marginBottom: style.headerMargin,
-                      color: colors.muted,
-                      fontSize: isActive ? 15 : 12,
-                      fontWeight: 760,
-                      lineHeight: 1,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {line.label} · {line.agentName}
-                  </div>
-                  <div
-                    style={{
-                      color: colors.ink,
+                      color: text,
                       fontSize: style.fontSize,
                       lineHeight: style.lineHeight,
                       fontWeight: style.fontWeight,

@@ -1,4 +1,4 @@
-import type { DebateScene, LineCue, ScoreItem } from "./types";
+import type { DebateScene, LineCue, ScoreItem, SegmentCue } from "./types";
 
 export const VIDEO_FONT_FAMILY = '"Noto Sans Hans"';
 
@@ -11,8 +11,10 @@ export const SCENE_COLORS = {
   panelSoft: "#eef3f4",
   affirmative: "#2f7d68",
   affirmativeSoft: "#e5f2ee",
+  affirmativeText: "#3f7568",
   negative: "#a04a5b",
   negativeSoft: "#f7e8eb",
+  negativeText: "#94616b",
   judge: "#8a6a2f",
   judgeSoft: "#f4eddd",
   score: "#405f8f",
@@ -28,7 +30,7 @@ export const SCENE_LAYOUT = {
   score: { x: 1500, y: 582, width: 348, height: 418 },
 } as const;
 
-export type SpeakerLineState = "active" | "past" | "future";
+export type SpeakerLineState = "active" | "near" | "past" | "future";
 
 const visualTextWidth = (text: string): number =>
   Array.from(text).reduce((width, char) => width + (/^[\u0000-\u00ff]$/u.test(char) ? 0.56 : 1), 0);
@@ -63,31 +65,40 @@ export const wrapTextLinesToWidth = (value: unknown, maxWidth: number): string[]
 
 export const SPEAKER_LINE_STYLES = {
   active: {
-    headerHeight: 20,
-    headerMargin: 6,
-    fontSize: 38,
-    lineHeight: 1.45,
-    marginBottom: 26,
+    headerHeight: 0,
+    headerMargin: 0,
+    fontSize: 28,
+    lineHeight: 1.38,
+    marginBottom: 6,
     opacity: 1,
-    fontWeight: 820,
+    fontWeight: 760,
+  },
+  near: {
+    headerHeight: 0,
+    headerMargin: 0,
+    fontSize: 28,
+    lineHeight: 1.38,
+    marginBottom: 6,
+    opacity: 0.82,
+    fontWeight: 650,
   },
   past: {
-    headerHeight: 14,
-    headerMargin: 4,
-    fontSize: 21,
-    lineHeight: 1.45,
-    marginBottom: 14,
-    opacity: 0.45,
-    fontWeight: 600,
+    headerHeight: 0,
+    headerMargin: 0,
+    fontSize: 28,
+    lineHeight: 1.38,
+    marginBottom: 6,
+    opacity: 0.55,
+    fontWeight: 560,
   },
   future: {
-    headerHeight: 14,
-    headerMargin: 4,
-    fontSize: 19,
-    lineHeight: 1.45,
-    marginBottom: 12,
-    opacity: 0.22,
-    fontWeight: 520,
+    headerHeight: 0,
+    headerMargin: 0,
+    fontSize: 28,
+    lineHeight: 1.38,
+    marginBottom: 6,
+    opacity: 0.55,
+    fontWeight: 560,
   },
 } as const;
 
@@ -103,7 +114,13 @@ export const activeLineIndexAtFrame = (lines: LineCue[], frame: number): number 
 };
 
 export const speakerLineState = (index: number, activeIndex: number): SpeakerLineState =>
-  index === activeIndex ? "active" : index < activeIndex ? "past" : "future";
+  index === activeIndex
+    ? "active"
+    : Math.abs(index - activeIndex) === 1
+      ? "near"
+      : index < activeIndex
+        ? "past"
+        : "future";
 
 export const computeSpeakerLayout = (lines: LineCue[], activeIndex: number) => {
   const items: Array<{ top: number; textCenter: number; state: SpeakerLineState }> = [];
@@ -119,30 +136,26 @@ export const computeSpeakerLayout = (lines: LineCue[], activeIndex: number) => {
   return { items, totalHeight: top };
 };
 
-export const buildSceneSlices = (lines: LineCue[], durationInFrames: number) => {
+export const buildSceneSlices = (lines: LineCue[], durationInFrames: number, segments: SegmentCue[] = []) => {
   if (durationInFrames <= 0) {
     return [];
   }
-  if (lines.length === 0) {
+  if (lines.length === 0 && segments.length === 0) {
     return [{ activeIndex: -1, startFrame: 0, endFrame: durationInFrames }];
   }
-  const segmentStarts = lines.reduce<Array<{ activeIndex: number; startFrame: number; segmentKey: string }>>(
-    (items, line, index) => {
-      const segmentKey = line.segmentId || line.id;
-      if (items.at(-1)?.segmentKey !== segmentKey) {
-        items.push({ activeIndex: index, startFrame: line.startFrame, segmentKey });
-      }
-      return items;
-    },
-    [],
-  );
-  return segmentStarts.map((segment, index) => ({
-    activeIndex: segment.activeIndex,
-    startFrame: index === 0 ? 0 : Math.max(0, segment.startFrame),
+  const starts = [...new Set([
+    0,
+    ...lines.map((line) => line.startFrame),
+    ...segments.map((segment) => segment.startFrame),
+  ].map((frame) => Math.max(0, Math.min(durationInFrames - 1, Math.round(frame)))))]
+    .sort((a, b) => a - b);
+  return starts.map((startFrame, index) => ({
+    activeIndex: activeLineIndexAtFrame(lines, startFrame),
+    startFrame,
     endFrame:
-      index === segmentStarts.length - 1
+      index === starts.length - 1
         ? durationInFrames
-        : Math.max(segment.startFrame + 1, Math.min(durationInFrames, segmentStarts[index + 1].startFrame)),
+        : starts[index + 1],
   }));
 };
 
@@ -189,8 +202,8 @@ export type SceneViewModel = {
 export const buildSceneViewModel = (scene: DebateScene, frame: number): SceneViewModel => {
   const activeLineIndex = activeLineIndexAtFrame(scene.speakerLines, frame);
   const activeSegment = scene.segmentCues.find((cue) => frame >= cue.startFrame && frame < cue.endFrame);
-  const firstIndex = Math.max(0, activeLineIndex - 4);
-  const lastIndex = Math.min(scene.speakerLines.length, activeLineIndex + 7);
+  const firstIndex = Math.max(0, activeLineIndex - 6);
+  const lastIndex = Math.min(scene.speakerLines.length, activeLineIndex + 10);
   const speakerLines = scene.speakerLines.slice(firstIndex, lastIndex).map((cue, offset) => {
     const index = firstIndex + offset;
     const state = speakerLineState(index, activeLineIndex);

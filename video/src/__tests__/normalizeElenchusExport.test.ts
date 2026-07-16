@@ -68,4 +68,25 @@ describe("buildVideoModel audio manifest v2", () => {
     const model = buildVideoModel(raw, {}, manifest, script);
     expect(model.scenes[0].audioFile).toBeUndefined();
   });
+
+  it("uses the padded intro audio duration when title voiceover exists", () => {
+    const script = buildVideoScript(raw);
+    const manifest: AudioManifest = {
+      schemaVersion: 2,
+      provider: "edge",
+      scriptHash: script.scriptHash,
+      durationMs: 7000,
+      sessionAudioFile: "audio/session.mp3",
+      intro: {
+        title: script.topic,
+        spokenText: `本场辩题：${script.topic}`,
+        audioFile: "audio/intro.mp3",
+        durationMs: 6200,
+      },
+      scenes: [],
+    };
+    const model = buildVideoModel(raw, {}, manifest, script);
+    expect(model.introFrames).toBe(Math.ceil(6.2 * 30));
+    expect(model.introAudioFile).toBe("audio/intro.mp3");
+  });
 });

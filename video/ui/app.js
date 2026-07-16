@@ -144,10 +144,6 @@ const defaultConfig = {
     muted: false,
   },
   tts: {
-    provider: "edge",
-    baseUrl: "",
-    apiKey: "",
-    model: "",
     voice: "zh-CN-XiaoxiaoNeural",
     roleVoices: {
       affirmative: "zh-CN-XiaoxiaoNeural",
@@ -155,10 +151,9 @@ const defaultConfig = {
       judge: "zh-CN-YunyangNeural",
       narrator: "zh-CN-XiaoyiNeural",
     },
-    format: "mp3",
-    sampleRate: "24000",
     speed: "1",
     concurrency: "50",
+    includeTitle: true,
     includeJudge: false,
     includeNarrator: false,
   },
@@ -281,23 +276,12 @@ const refreshEdgeVoiceOptions = async () => {
 
 const voiceOptionLabel = (option) => `${option.label} - ${option.value}`;
 
-const voiceOptionsForProvider = (provider, currentVoice = "") => {
-  if (provider === "edge") {
-    return edgeVoiceOptions;
-  }
-  if (provider === "mimo") {
-    return [{ value: "mimo_default", label: "MiMo 默认音色" }];
-  }
-  const value = currentVoice || "";
-  return value ? [{ value, label: "当前自定义音色" }] : [{ value: "", label: "请先选择服务商默认音色" }];
-};
-
-const populateVoiceOptions = (provider, currentVoice = "", selectId = "ttsVoiceInput") => {
+const populateVoiceOptions = (currentVoice = "", selectId = "ttsVoiceInput") => {
   const select = $(selectId);
   if (!select) {
     return;
   }
-  const options = voiceOptionsForProvider(provider, currentVoice);
+  const options = edgeVoiceOptions;
   const hasCurrent = options.some((option) => option.value === currentVoice);
   const finalOptions =
     currentVoice && !hasCurrent
@@ -308,34 +292,16 @@ const populateVoiceOptions = (provider, currentVoice = "", selectId = "ttsVoiceI
   finalOptions.forEach((option) => {
     const element = document.createElement("option");
     element.value = option.value;
-    element.textContent = provider === "edge" ? voiceOptionLabel(option) : `${option.label}${option.value ? ` - ${option.value}` : ""}`;
+    element.textContent = voiceOptionLabel(option);
     select.appendChild(element);
   });
   select.value = currentVoice && finalOptions.some((option) => option.value === currentVoice) ? currentVoice : finalOptions[0]?.value || "";
 };
 
-const populateRoleVoiceOptions = (provider, roleVoices = {}) => {
+const populateRoleVoiceOptions = (roleVoices = {}) => {
   roleVoiceFields.forEach(({ role, id }) => {
-    populateVoiceOptions(provider, roleVoices?.[role] || defaultConfig.tts.roleVoices[role], id);
+    populateVoiceOptions(roleVoices?.[role] || defaultConfig.tts.roleVoices[role], id);
   });
-};
-
-const ttsProviderSettings = {
-  edge: {
-    summary: "Edge TTS 不需要 API Key，中文音色自然；默认只生成正反方辩手配音。",
-    defaultVoice: "zh-CN-XiaoxiaoNeural",
-    defaultFormat: "mp3",
-  },
-  mimo: {
-    summary: "MiMo 作为备用接口保留。需要填写 API 地址、API Key、模型和音色。",
-    defaultVoice: "mimo_default",
-    defaultFormat: "wav",
-  },
-  custom: {
-    summary: "自定义接口会按 OpenAI 兼容格式请求。需要填写 API 地址、API Key、模型和音色。",
-    defaultVoice: "",
-    defaultFormat: "wav",
-  },
 };
 
 const mergeConfig = (config) => {
@@ -393,56 +359,6 @@ const renderScriptPresetSummary = () => {
   $("scriptPresetSummary").textContent = scriptPresetSettings[preset] || scriptPresetSettings.standard;
 };
 
-const renderTtsProviderFields = () => {
-  const provider = readValue("ttsProviderInput") || "edge";
-  const isEdge = provider === "edge";
-  const settings = ttsProviderSettings[provider] || ttsProviderSettings.edge;
-  const currentVoice = readValue("ttsVoiceInput") || settings.defaultVoice;
-  const roleVoices = readRoleVoiceForm();
-
-  populateVoiceOptions(provider, currentVoice);
-  populateRoleVoiceOptions(provider, roleVoices);
-
-  ["ttsBaseUrlField", "ttsApiKeyField", "ttsModelField", "ttsSampleRateField"].forEach((id) => {
-    const element = $(id);
-    if (element) {
-      element.hidden = isEdge;
-    }
-  });
-
-  $("ttsFormatInput").disabled = isEdge;
-  $("ttsRoleVoicesField").hidden = !isEdge;
-  if (isEdge) {
-    setValue("ttsFormatInput", "mp3");
-    if (!readValue("ttsVoiceInput") || readValue("ttsVoiceInput") === "mimo_default") {
-      setValue("ttsVoiceInput", settings.defaultVoice);
-    }
-    roleVoiceFields.forEach(({ role, id }) => {
-      if (!readValue(id) || readValue(id) === "mimo_default") {
-        setValue(id, defaultConfig.tts.roleVoices[role]);
-      }
-    });
-  }
-
-  $("ttsProviderSummary").textContent = settings.summary;
-};
-
-const applyTtsProviderDefaults = () => {
-  const provider = readValue("ttsProviderInput") || "edge";
-  const settings = ttsProviderSettings[provider] || ttsProviderSettings.edge;
-  setValue("ttsFormatInput", settings.defaultFormat);
-  populateVoiceOptions(provider, settings.defaultVoice);
-  populateRoleVoiceOptions(provider, defaultConfig.tts.roleVoices);
-  if (!readValue("ttsVoiceInput") || readValue("ttsVoiceInput") === "mimo_default" || provider === "edge") {
-    setValue("ttsVoiceInput", settings.defaultVoice);
-  }
-  if (provider === "edge") {
-    roleVoiceFields.forEach(({ role, id }) => {
-      setValue(id, defaultConfig.tts.roleVoices[role]);
-    });
-  }
-  renderTtsProviderFields();
-};
 
 const applySimpleVideoSelections = () => {
   const preset = readValue("videoPresetInput") || "recommended";
@@ -508,21 +424,15 @@ const renderConfig = () => {
   $("mutedInput").checked = Boolean(video.muted);
   applySimpleVideoSelections();
 
-  setValue("ttsProviderInput", tts.provider);
-  setValue("ttsBaseUrlInput", tts.baseUrl);
-  setValue("ttsApiKeyInput", tts.apiKey);
-  setValue("ttsModelInput", tts.model);
-  populateVoiceOptions(tts.provider, tts.voice);
+  populateVoiceOptions(tts.voice);
   setValue("ttsVoiceInput", tts.voice);
-  populateRoleVoiceOptions(tts.provider, tts.roleVoices);
+  populateRoleVoiceOptions(tts.roleVoices);
   roleVoiceFields.forEach(({ role, id }) => setValue(id, tts.roleVoices?.[role] || defaultConfig.tts.roleVoices[role]));
-  setValue("ttsFormatInput", tts.format);
-  setValue("ttsSampleRateInput", tts.sampleRate);
   setValue("ttsSpeedInput", tts.speed);
   setValue("ttsConcurrencyInput", tts.concurrency);
+  setChecked("ttsIncludeTitleInput", tts.includeTitle !== false);
   setChecked("ttsIncludeJudgeInput", Boolean(tts.includeJudge));
   setChecked("ttsIncludeNarratorInput", Boolean(tts.includeNarrator));
-  renderTtsProviderFields();
   setValue("scriptPresetInput", script.textPreset);
   renderScriptPresetSummary();
 
@@ -555,16 +465,11 @@ const readConfigForm = () => ({
     muted: $("mutedInput").checked,
   },
   tts: {
-    provider: readValue("ttsProviderInput"),
-    baseUrl: readValue("ttsBaseUrlInput"),
-    apiKey: readValue("ttsApiKeyInput"),
-    model: readValue("ttsModelInput"),
     voice: readValue("ttsVoiceInput"),
     roleVoices: readRoleVoiceForm(),
-    format: readValue("ttsFormatInput"),
-    sampleRate: readValue("ttsSampleRateInput"),
     speed: readValue("ttsSpeedInput"),
     concurrency: readValue("ttsConcurrencyInput"),
+    includeTitle: $("ttsIncludeTitleInput").checked,
     includeJudge: $("ttsIncludeJudgeInput").checked,
     includeNarrator: $("ttsIncludeNarratorInput").checked,
   },
@@ -1099,7 +1004,6 @@ const boot = async () => {
   $("ttsConfigTab").addEventListener("click", () => setConfigTab("tts"));
   $("scriptConfigTab").addEventListener("click", () => setConfigTab("script"));
   $("scriptPresetInput").addEventListener("change", renderScriptPresetSummary);
-  $("ttsProviderInput").addEventListener("change", applyTtsProviderDefaults);
   ["videoPresetInput", "codecProfileInput", "audioModeInput", "scaleInput"].forEach((id) => {
     $(id).addEventListener("change", applySimpleVideoSelections);
   });
@@ -1137,10 +1041,11 @@ const boot = async () => {
   }));
   $("generateTtsButton").addEventListener("click", async () => {
     try {
+      await saveCurrent();
       await saveConfig();
       setStatus("生成配音中", "running");
       setLogHint("TTS");
-      setLog(`当前配置已保存，正在调用 ${readValue("ttsProviderInput") === "edge" ? "Edge TTS" : "TTS"} 生成每轮配音，请稍候...`);
+      setLog("当前标题和配置已保存，正在调用 Edge TTS 生成配音，请稍候...");
       const data = await postJson("/api/generate-tts");
       if (data.task?.id) {
         setLog([data.message, data.task.output].filter(Boolean).join("\n\n"));

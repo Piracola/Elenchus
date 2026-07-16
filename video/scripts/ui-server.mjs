@@ -66,10 +66,6 @@ const defaultConfig = {
     muted: false,
   },
   tts: {
-    provider: "edge",
-    baseUrl: "",
-    apiKey: "",
-    model: "",
     voice: "zh-CN-XiaoxiaoNeural",
     roleVoices: {
       affirmative: "zh-CN-XiaoxiaoNeural",
@@ -77,10 +73,9 @@ const defaultConfig = {
       judge: "zh-CN-YunyangNeural",
       narrator: "zh-CN-XiaoyiNeural",
     },
-    format: "mp3",
-    sampleRate: "24000",
     speed: "1",
     concurrency: "50",
+    includeTitle: true,
     includeJudge: false,
     includeNarrator: false,
   },
@@ -90,18 +85,30 @@ const defaultConfig = {
 };
 
 const mergeConfig = (config) => {
-  const tts = { ...defaultConfig.tts, ...(config?.tts || {}) };
-  const configuredRoleVoices = config?.tts?.roleVoices || {};
+  const inputTts = config?.tts || {};
+  const preserveVoices = !inputTts.provider || String(inputTts.provider).toLowerCase() === "edge";
+  const configuredRoleVoices = preserveVoices ? inputTts.roleVoices || {} : {};
+  const validVoice = (value, fallback) => {
+    const voice = String(value || "").trim();
+    return voice || fallback;
+  };
   return {
     video: { ...defaultConfig.video, ...(config?.video || {}) },
     tts: {
-      ...tts,
+      voice: preserveVoices
+        ? validVoice(inputTts.voice, defaultConfig.tts.voice)
+        : defaultConfig.tts.voice,
       roleVoices: {
-        ...defaultConfig.tts.roleVoices,
-        ...configuredRoleVoices,
-        affirmative: configuredRoleVoices.affirmative || configuredRoleVoices.proposer || defaultConfig.tts.roleVoices.affirmative,
-        negative: configuredRoleVoices.negative || configuredRoleVoices.opposer || defaultConfig.tts.roleVoices.negative,
+        affirmative: validVoice(configuredRoleVoices.affirmative || configuredRoleVoices.proposer, defaultConfig.tts.roleVoices.affirmative),
+        negative: validVoice(configuredRoleVoices.negative || configuredRoleVoices.opposer, defaultConfig.tts.roleVoices.negative),
+        judge: validVoice(configuredRoleVoices.judge, defaultConfig.tts.roleVoices.judge),
+        narrator: validVoice(configuredRoleVoices.narrator, defaultConfig.tts.roleVoices.narrator),
       },
+      speed: String(inputTts.speed || defaultConfig.tts.speed),
+      concurrency: String(inputTts.concurrency || defaultConfig.tts.concurrency),
+      includeTitle: inputTts.includeTitle !== false,
+      includeJudge: Boolean(inputTts.includeJudge),
+      includeNarrator: Boolean(inputTts.includeNarrator),
     },
     script: { ...defaultConfig.script, ...(config?.script || {}) },
   };
@@ -119,9 +126,7 @@ const managedChildren = new Set();
 let studioChild = null;
 let runtimeHealth = { ok: false, checks: [], message: "正在检查运行环境。" };
 const MAX_TASK_OUTPUT = 240000;
-const TTS_CHUNK_TARGET_CHARS = 680;
 const EDGE_TTS_CHILD_TIMEOUT_MS = 60000;
-const TTS_ERROR_PREVIEW_CHARS = 200;
 
 const stripAnsi = (text) => String(text || "").replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "");
 
@@ -192,96 +197,6 @@ const trackManagedChild = (child) => {
   return child;
 };
 
-const splitLongTtsPart = (text, maxChars) => {
-  if (text.length <= maxChars) {
-    return [text];
-  }
-
-  const clauseTokens = text.split(/([，、：,:])/).filter(Boolean);
-  const chunks = [];
-  let current = "";
-
-  for (const token of clauseTokens) {
-    if (token.length > maxChars) {
-      if (current) {
-        chunks.push(current);
-        current = "";
-      }
-      for (let index = 0; index < token.length; index += maxChars) {
-        chunks.push(token.slice(index, index + maxChars));
-      }
-      continue;
-    }
-
-    if (!current) {
-      current = token;
-      continue;
-    }
-
-    if (current.length + token.length <= maxChars) {
-      current += token;
-    } else {
-      chunks.push(current);
-      current = token;
-    }
-  }
-
-  if (current) {
-    chunks.push(current);
-  }
-
-  return chunks;
-};
-
-const splitTextForTts = (text, maxChars = TTS_CHUNK_TARGET_CHARS) => {
-  const normalized = cleanSegmentTextForTts(text);
-  if (!normalized) {
-    return [];
-  }
-
-  const sentenceTokens = normalized.split(/([。！？；!?;\n]+)/).filter(Boolean);
-  const sentences = [];
-  let buffer = "";
-
-  for (const token of sentenceTokens) {
-    buffer += token;
-    if (/[。！？；!?;\n]/.test(token)) {
-      sentences.push(buffer.trim());
-      buffer = "";
-    }
-  }
-  if (buffer.trim()) {
-    sentences.push(buffer.trim());
-  }
-
-  const parts = sentences.flatMap((sentence) => splitLongTtsPart(sentence, maxChars));
-  const chunks = [];
-  let current = "";
-
-  for (const part of parts) {
-    const value = part.trim();
-    if (!value) {
-      continue;
-    }
-    if (!current) {
-      current = value;
-      continue;
-    }
-    if (current.length + value.length <= maxChars) {
-      current += value;
-    } else {
-      chunks.push(current);
-      current = value;
-    }
-  }
-
-  if (current) {
-    chunks.push(current);
-  }
-
-  return chunks;
-};
-
 const configLocalExists = () => existsSync(localConfigPath);
 
 const loadConfig = () => {
@@ -290,7 +205,12 @@ const loadConfig = () => {
   }
 
   try {
-    return mergeConfig(JSON.parse(readFileSync(localConfigPath, "utf8")));
+    const raw = JSON.parse(readFileSync(localConfigPath, "utf8"));
+    const merged = mergeConfig(raw);
+    if (JSON.stringify(raw) !== JSON.stringify(merged)) {
+      writeFileSync(localConfigPath, `${JSON.stringify(merged, null, 2)}\n`, "utf8");
+    }
+    return merged;
   } catch {
     return defaultConfig;
   }
@@ -312,18 +232,19 @@ const writeJsonAtomic = (filePath, value) => {
 
 const ttsSignature = (tts) =>
   createTtsCacheKey({
-    provider: ttsProvider(tts),
-    engineVersion: ttsProvider(tts) === "edge" ? EDGE_TTS_VERSION : String(tts?.model || "custom"),
+    provider: "edge",
+    engineVersion: EDGE_TTS_VERSION,
     voice: JSON.stringify({
       default: edgeVoice(tts),
       roles: tts?.roleVoices || {},
+      includeTitle: tts?.includeTitle !== false,
       includeJudge: Boolean(tts?.includeJudge),
       includeNarrator: Boolean(tts?.includeNarrator),
     }),
     speed: tts?.speed || "1",
-    volume: tts?.volume || "+0%",
-    pitch: tts?.pitch || "+0Hz",
-    format: effectiveTtsFormat(tts),
+    volume: "+0%",
+    pitch: "+0Hz",
+    format: "mp3",
     text: "",
   });
 
@@ -541,6 +462,11 @@ const createRenderSnapshot = () => {
         return { ...scene, audioFile: relative };
       }),
     };
+    if (manifest.intro?.audioFile && existsSync(join(publicDir, manifest.intro.audioFile))) {
+      const relative = `${audioRelativeDir}/intro-${basename(manifest.intro.audioFile)}`;
+      copyFileSync(join(publicDir, manifest.intro.audioFile), join(publicDir, relative));
+      snapshotManifest.intro = { ...manifest.intro, audioFile: relative };
+    }
     if (manifest.sessionAudioFile && existsSync(join(publicDir, manifest.sessionAudioFile))) {
       const relative = `${audioRelativeDir}/session-${basename(manifest.sessionAudioFile)}`;
       copyFileSync(join(publicDir, manifest.sessionAudioFile), join(publicDir, relative));
@@ -592,12 +518,22 @@ const audioManifestProblems = (props, script, config = loadConfig()) => {
   const problems = [];
   if (!manifest) return ["缺少 session-audio.json"];
   if (manifest.schemaVersion !== 2) problems.push("音频清单不是 schemaVersion 2");
-  if (!["edge", "mimo"].includes(manifest.provider)) problems.push("音频清单使用了不支持的配音供应商");
+  if (manifest.provider !== "edge") problems.push("音频清单不是由 Edge TTS 生成");
   if (!script?.scriptHash || manifest.scriptHash !== script.scriptHash) problems.push("音频清单与当前视频脚本不匹配");
   if (manifest.ttsSignature !== ttsSignature(config.tts)) problems.push("音频清单与当前音色或语速配置不匹配");
   if (!manifest.sessionAudioFile || !existsSync(join(publicDir, manifest.sessionAudioFile))) problems.push("缺少整场音频文件");
   if (!Number.isFinite(Number(manifest.durationMs)) || Number(manifest.durationMs) <= 0) problems.push("整场音频时长无效");
   if (!Array.isArray(manifest.scenes)) return [...problems, "音频清单缺少 scenes"];
+  if (config.tts.includeTitle !== false) {
+    const expectedTitle = String(props?.title || script?.topic || "").trim();
+    if (!manifest.intro) {
+      problems.push("缺少开场辩题配音");
+    } else {
+      if (manifest.intro.title !== expectedTitle) problems.push("开场辩题配音与当前标题不匹配");
+      if (!manifest.intro.audioFile || !existsSync(join(publicDir, manifest.intro.audioFile))) problems.push("缺少开场辩题音频文件");
+      if (!Number.isFinite(Number(manifest.intro.durationMs)) || Number(manifest.intro.durationMs) < 5000) problems.push("开场辩题音频时长无效");
+    }
+  }
 
   for (const round of script?.rounds || []) {
     const expectedSegments = roundTtsSegments(round, config.tts);
@@ -638,6 +574,7 @@ const validateAudioManifestForRender = async (props, script, config = loadConfig
   if (problems.length === 0 && manifest) {
     const files = new Set([
       manifest.sessionAudioFile,
+      ...(manifest.intro?.audioFile ? [manifest.intro.audioFile] : []),
       ...manifest.scenes.flatMap((scene) => [scene.audioFile, ...(scene.cues || []).map((cue) => cue.audioFile)]),
     ]);
     for (const audioFile of files) {
@@ -919,38 +856,15 @@ const killChildProcess = (child) => {
   }
 };
 
-const ttsEndpoint = (baseUrl) => {
-  const normalized = String(baseUrl || "").trim().replace(/\/+$/, "");
-  if (!normalized) {
-    return "";
-  }
-  if (/\/chat\/completions$/i.test(normalized)) {
-    return normalized;
-  }
-  return `${normalized}/chat/completions`;
-};
-
-const safeTtsFormat = (format) => {
-  const value = String(format || "wav").trim().toLowerCase();
-  return ["wav", "mp3", "aac"].includes(value) ? value : "wav";
-};
-
-const ttsProvider = (tts) => String(tts?.provider || "edge").trim().toLowerCase();
-
-const effectiveTtsFormat = (tts) => (ttsProvider(tts) === "edge" ? "mp3" : safeTtsFormat(tts?.format));
-
 const edgeVoice = (tts) => {
   const voice = String(tts?.voice || "").trim();
-  if (!voice || voice === "mimo_default") {
+  if (!voice) {
     return "zh-CN-XiaoxiaoNeural";
   }
   return voice;
 };
 
 const roleVoiceForTts = (tts, role) => {
-  if (ttsProvider(tts) !== "edge") {
-    return String(tts?.voice || "").trim();
-  }
   const normalizedRole = normalizeTtsRole(role);
   const roleVoice = String(tts?.roleVoices?.[normalizedRole] || "").trim();
   return roleVoice || edgeVoice(tts);
@@ -1186,7 +1100,9 @@ const synthesizeEdgeAudioFile = async (tts, text, outputPath, task = null) => {
         }
         const detail = result?.message || stderr.trim().slice(-240) || `Edge TTS 退出码 ${code}`;
         const errorCode = result?.code ? `（${result.code}）` : "";
-        settle(reject, new Error(`${detail}${errorCode}`));
+        const errorType = result?.errorType ? ` [${result.errorType}]` : "";
+        const retryable = result?.retryable === true ? " [retryable]" : "";
+        settle(reject, new Error(`${detail}${errorCode}${errorType}${retryable}`));
       });
     });
   } finally {
@@ -1194,135 +1110,9 @@ const synthesizeEdgeAudioFile = async (tts, text, outputPath, task = null) => {
   }
 };
 
-const parseTtsResponse = async (response) => {
-  if (!response.ok) {
-    const contentType = response.headers.get("content-type") || "";
-    const errorText = await response.text().catch(() => "");
-    if (/text\/html/i.test(contentType) && response.status >= 500) {
-      throw new Error(`TTS 中转服务超时或网关错误（${response.status}，返回了 HTML 错页）。通常是单次文本过长或上游生成超时。`);
-    }
-    throw new Error(`TTS 请求失败：${response.status} ${errorText.slice(0, TTS_ERROR_PREVIEW_CHARS)}`);
-  }
-
-  const contentType = response.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) {
-    return parseTtsJson(await response.json());
-  }
-
-  return Buffer.from(await response.arrayBuffer());
-};
-
-const parseTtsJson = async (data) => {
-  const messageAudio = data.choices?.[0]?.message?.audio;
-  if (messageAudio?.data) {
-    return Buffer.from(messageAudio.data, "base64");
-  }
-
-  const audioUrl = data.audio_url || data.url || data.audio;
-  if (audioUrl) {
-    const audioResponse = await fetch(audioUrl);
-    if (!audioResponse.ok) {
-      throw new Error(`无法下载 TTS 音频：${audioResponse.status}`);
-    }
-    return Buffer.from(await audioResponse.arrayBuffer());
-  }
-
-  const base64 = data.audio_base64 || data.data;
-  if (base64) {
-    return Buffer.from(base64, "base64");
-  }
-
-  throw new Error("TTS 返回了 JSON，但未找到 message.audio.data / audio_url / audio_base64 字段。");
-};
-
-const fetchAudioBufferWithCurl = async (endpoint, apiKey, body) => {
-  const tempDir = mkdtempSync(join(tmpdir(), "elenchus-tts-"));
-  const bodyPath = join(tempDir, "body.json");
-  writeFileSync(bodyPath, JSON.stringify(body), "utf8");
-
-  const escapeCurlValue = (value) => String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  const curlConfig = [
-    `url = "${escapeCurlValue(endpoint)}"`,
-    'request = "POST"',
-    'header = "content-type: application/json"',
-    `header = "authorization: Bearer ${escapeCurlValue(apiKey)}"`,
-    `data-binary = "@${escapeCurlValue(bodyPath)}"`,
-    "location",
-    "silent",
-    "show-error",
-    "max-time = 180",
-  ].join("\n");
-
-  const result = spawnSync("curl.exe", ["--config", "-"], {
-    cwd: rootDir,
-    input: Buffer.from(curlConfig, "utf8"),
-    encoding: "buffer",
-    maxBuffer: 256 * 1024 * 1024,
-    windowsHide: true,
-  });
-
-  rmSync(tempDir, { recursive: true, force: true });
-
-  if (result.status !== 0) {
-    const stderr = result.stderr?.toString("utf8") || "";
-    throw new Error(`TTS 网络请求失败：curl 退出码 ${result.status} ${stderr.slice(0, 200)}`);
-  }
-
-  const text = result.stdout.toString("utf8");
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    if (/^\s*(<!DOCTYPE html>|<html\b)/i.test(text)) {
-      throw new Error("TTS 中转服务超时或网关错误（返回了 HTML 错页）。通常是单次文本过长或上游生成超时。");
-    }
-    return result.stdout;
-  }
-
-  if (data.error) {
-    throw new Error(`TTS 请求失败：${JSON.stringify(data.error).slice(0, 240)}`);
-  }
-  return parseTtsJson(data);
-};
-
-const fetchAudioBuffer = async (tts, text) => {
-  const format = safeTtsFormat(tts.format);
-  const voice = String(tts.voice || "").trim() || "mimo_default";
-  const endpoint = ttsEndpoint(tts.baseUrl);
-  const body = {
-    model: tts.model || "mimo-v2.5-tts",
-    messages: [{ role: "assistant", content: text }],
-    audio: {
-      voice,
-      format,
-      sample_rate: Number(tts.sampleRate) || 24000,
-      speed: Number(tts.speed) || 1,
-    },
-    stream: false,
-  };
-
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${tts.apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
-    return await parseTtsResponse(response);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!/fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|ECONNREFUSED/i.test(message)) {
-      throw error;
-    }
-    return fetchAudioBufferWithCurl(endpoint, tts.apiKey, body);
-  }
-};
-
 const isRetryableTtsError = (error) => {
   const message = error instanceof Error ? error.message : String(error);
-  return /504|网关错误|超时|timed out|gateway|html 错页|text\/html|<!doctype html|NoAudioReceived|没有返回音频|No audio was received/i.test(
+  return /\[retryable\]|504|网关错误|超时|timed out|gateway|html 错页|text\/html|<!doctype html|NoAudioReceived|没有返回音频|No audio was received/i.test(
     message,
   );
 };
@@ -1365,6 +1155,24 @@ const concatAudioFiles = async (inputPaths, outputPath, format, task = null) => 
   }
 };
 
+const createSilenceAudioFile = async (outputPath, durationMs, task = null) => {
+  await runFfmpeg([
+    "-hide_banner",
+    "-y",
+    "-f",
+    "lavfi",
+    "-t",
+    (Math.max(1, durationMs) / 1000).toFixed(3),
+    "-i",
+    "anullsrc=r=24000:cl=mono",
+    "-c:a",
+    "libmp3lame",
+    "-b:a",
+    "128k",
+    outputPath,
+  ], task);
+};
+
 const safeFileToken = (value) =>
   String(value || "segment")
     .replace(/[^a-zA-Z0-9_-]+/g, "-")
@@ -1374,10 +1182,10 @@ const safeFileToken = (value) =>
 const chunkPlanForText = (tts, segment, text, id, order) => {
   const scopedTts = ttsForSegment(tts, segment);
   const voice = String(scopedTts.voice || "").trim();
-  const format = effectiveTtsFormat(scopedTts);
+  const format = "mp3";
   const cacheKey = createTtsCacheKey({
-    provider: ttsProvider(scopedTts),
-    engineVersion: ttsProvider(scopedTts) === "edge" ? EDGE_TTS_VERSION : String(scopedTts.model || "custom"),
+    provider: "edge",
+    engineVersion: EDGE_TTS_VERSION,
     voice,
     speed: scopedTts.speed || "1",
     volume: scopedTts.volume || "+0%",
@@ -1418,7 +1226,7 @@ const roundTtsSegments = (round, tts) => {
 
 const buildChunkPlansForSegment = (tts, segment) => {
   const text = cleanSegmentTextForTts(segment.text);
-  const pieces = ttsProvider(tts) === "edge" ? splitEdgeTextForTts(text) : splitTextForTts(text);
+  const pieces = splitEdgeTextForTts(text);
   return pieces.map((piece, index) =>
     chunkPlanForText(tts, segment, piece, `${segment.id}-tts-${String(index + 1).padStart(3, "0")}`, index),
   );
@@ -1440,7 +1248,7 @@ const createTtsState = (script, tts) => {
     schemaVersion: 1,
     scriptHash: script.scriptHash,
     ttsSignature: signature,
-    provider: ttsProvider(tts),
+    provider: "edge",
     status: "running",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -1508,11 +1316,7 @@ const synthesizeOneCachedChunk = async (plan, task, state) => {
         task.progress = { ...(task.progress || {}), phase: "tts", roundIndex: candidate.roundIndex, segmentId: candidate.segmentId, chunkId: candidate.id };
         appendTaskOutput(task, `生成 ${candidate.id}：第 ${attempt}/${totalAttempts} 次，约 ${candidate.text.length} 字\n`);
         try {
-          if (ttsProvider(candidate.scopedTts) === "edge") {
-            await synthesizeEdgeAudioFile(candidate.scopedTts, candidate.text, tempPath, task);
-          } else {
-            writeFileSync(tempPath, await fetchAudioBuffer(candidate.scopedTts, candidate.text));
-          }
+          await synthesizeEdgeAudioFile(candidate.scopedTts, candidate.text, tempPath, task);
           const durationMs = await readMediaDurationMs(tempPath);
           rmSync(cachePath, { force: true });
           renameSync(tempPath, cachePath);
@@ -1565,13 +1369,9 @@ const scaleDurations = (items, targetDurationMs) => {
 const generateTtsResult = async (task) => {
   const config = loadConfig();
   const tts = config.tts;
-  const provider = ttsProvider(tts);
-  const providerLabel = provider === "edge" ? "Edge TTS" : provider === "mimo" ? "MiMo TTS" : "自定义 TTS";
-  const format = effectiveTtsFormat(tts);
-
-  if (provider !== "edge" && (!tts.baseUrl || !tts.apiKey)) {
-    throw new Error("请先配置 TTS 地址和 API Key。");
-  }
+  const provider = "edge";
+  const providerLabel = "Edge TTS";
+  const format = "mp3";
 
   const { session, props } = loadCurrentData();
   if (!session) {
@@ -1579,6 +1379,16 @@ const generateTtsResult = async (task) => {
   }
 
   const { props: refreshedProps, script } = writeVideoScriptForSession(session, props || {}, { config });
+  const displayTitle = String(refreshedProps.title || script?.topic || session.topic || "未命名辩题").trim();
+  const introSpokenText = `本场辩题：${displayTitle}`;
+  const introSegment = {
+    id: "intro-topic",
+    roundIndex: -1,
+    role: "narrator",
+    kind: "context",
+    text: introSpokenText,
+  };
+  const introPlans = tts.includeTitle === false ? [] : buildChunkPlansForSegment(tts, introSegment);
   const outputVersion = `${String(script?.scriptHash || "script").slice(0, 12)}-${ttsSignature(tts).slice(0, 12)}`;
   const requiredTurns = (script?.rounds || [])
     .map((round) => ({
@@ -1595,8 +1405,9 @@ const generateTtsResult = async (task) => {
   mkdirSync(audioDir, { recursive: true });
   mkdirSync(audioChunkDir, { recursive: true });
   const state = createTtsState(script, tts);
-  for (const { plansBySegment } of requiredTurns) {
-    for (const plan of [...plansBySegment.values()].flat()) {
+  const turnPlans = requiredTurns.flatMap(({ plansBySegment }) => [...plansBySegment.values()].flat());
+  const allPlans = [...introPlans, ...turnPlans];
+  for (const plan of allPlans) {
       const previous = state.chunks[plan.cacheKey] || {};
       const cachedFile = join(audioChunkDir, `${plan.cacheKey}.${plan.format}`);
       state.chunks[plan.cacheKey] = {
@@ -1612,18 +1423,13 @@ const generateTtsResult = async (task) => {
         status: previous.status === "completed" && existsSync(cachedFile) ? "completed" : "pending",
         attempts: Number(previous.attempts || 0),
       };
-    }
   }
   persistTtsState(state);
-  const initialTotal = requiredTurns.reduce(
-    (sum, { plansBySegment }) => sum + [...plansBySegment.values()].reduce((segmentSum, plans) => segmentSum + plans.length, 0),
-    0,
-  );
+  const initialTotal = allPlans.length;
   task.progress = { phase: "tts", current: 0, total: initialTotal, reused: 0 };
   const ttsConcurrency = normalizeTtsConcurrency(tts.concurrency);
   appendTaskOutput(task, `${providerLabel}：共 ${requiredTurns.length} 轮、${initialTotal} 个请求块，并发数 ${ttsConcurrency}。\n`);
 
-  const allPlans = requiredTurns.flatMap(({ plansBySegment }) => [...plansBySegment.values()].flat());
   const generatedResults = await runWithConcurrency(allPlans, ttsConcurrency, async (plan) => {
     if (task.cancelRequested) throw new Error("配音任务已取消。");
     const results = await synthesizeOneCachedChunk(plan, task, state);
@@ -1632,6 +1438,35 @@ const generateTtsResult = async (task) => {
     return results;
   });
   const generatedByPlan = new Map(allPlans.map((plan, index) => [plan.cacheKey, generatedResults[index]]));
+
+  let intro = null;
+  if (introPlans.length > 0) {
+    const introTempDir = mkdtempSync(join(tmpdir(), "elenchus-intro-"));
+    const introFileName = `intro-${outputVersion}.mp3`;
+    const introPath = join(audioDir, introFileName);
+    try {
+      const rawIntroPath = join(introTempDir, "raw.mp3");
+      const leadSilencePath = join(introTempDir, "lead.mp3");
+      const tailSilencePath = join(introTempDir, "tail.mp3");
+      const introChunks = introPlans.flatMap((plan) => generatedByPlan.get(plan.cacheKey) || []);
+      await concatAudioFiles(introChunks.map((chunk) => chunk.audioPath), rawIntroPath, "mp3", task);
+      const rawDurationMs = await readMediaDurationMs(rawIntroPath);
+      const durationMs = Math.max(5000, Math.ceil(rawDurationMs + 1600));
+      await createSilenceAudioFile(leadSilencePath, 800, task);
+      await createSilenceAudioFile(tailSilencePath, Math.max(800, durationMs - rawDurationMs - 800), task);
+      await concatAudioFiles([leadSilencePath, rawIntroPath, tailSilencePath], introPath, "mp3", task);
+      const actualDurationMs = await readMediaDurationMs(introPath);
+      intro = {
+        title: displayTitle,
+        spokenText: introSpokenText,
+        audioFile: `audio/${introFileName}`,
+        durationMs: actualDurationMs,
+      };
+      appendTaskOutput(task, `开场辩题配音完成：${actualDurationMs}ms。\n`);
+    } finally {
+      rmSync(introTempDir, { recursive: true, force: true });
+    }
+  }
 
   const scenes = [];
   for (const { round, segments, plansBySegment } of requiredTurns) {
@@ -1725,15 +1560,20 @@ const generateTtsResult = async (task) => {
   const sessionAudioPath = join(audioDir, sessionFileName);
   const pendingSessionPath = join(audioDir, `.session-${process.pid}-${Date.now()}.${format}`);
   try {
-    await concatAudioFiles(scenes.map((scene) => join(publicDir, scene.audioFile)), pendingSessionPath, format, task);
+    const sessionInputs = [
+      ...(intro ? [join(publicDir, intro.audioFile)] : []),
+      ...scenes.map((scene) => join(publicDir, scene.audioFile)),
+    ];
+    await concatAudioFiles(sessionInputs, pendingSessionPath, format, task);
     if (task.cancelRequested) throw new Error("配音任务已取消。");
     const durationMs = await readMediaDurationMs(pendingSessionPath);
     rmSync(sessionAudioPath, { force: true });
     renameSync(pendingSessionPath, sessionAudioPath);
-    let sceneCursorMs = 0;
+    let sceneCursorMs = intro?.durationMs || 0;
     const timedScenes = scenes.map((scene, index) => {
       const endMs = index === scenes.length - 1 ? durationMs : sceneCursorMs + scene.durationMs;
-      const cues = scene.chunkCues.map((cue) => ({
+      const scaledCues = scaleDurations(scene.chunkCues, endMs - sceneCursorMs);
+      const cues = scaledCues.map((cue) => ({
         segmentId: cue.segmentId,
         chunkId: cue.id,
         role: cue.role,
@@ -1754,6 +1594,7 @@ const generateTtsResult = async (task) => {
       ttsSignature: ttsSignature(tts),
       durationMs,
       sessionAudioFile: `audio/${sessionFileName}`,
+      ...(intro ? { intro } : {}),
       scenes: timedScenes,
     };
     writeJsonAtomic(join(publicDataDir, "session-audio.json"), manifest);

@@ -268,33 +268,6 @@
           <div class="config-section" id="ttsConfigSection" hidden>
             <div class="config-grid">
               <label>
-                服务商
-                <select id="ttsProviderInput">
-                  <option value="edge">Edge TTS（推荐）</option>
-                  <option value="mimo">MiMo</option>
-                </select>
-              </label>
-              <label id="ttsFormatField">
-                输出格式
-                <select id="ttsFormatInput">
-                  <option value="mp3">MP3</option>
-                  <option value="wav">WAV</option>
-                  <option value="aac">AAC</option>
-                </select>
-              </label>
-              <label class="wide-field" id="ttsBaseUrlField">
-                API 地址
-                <input id="ttsBaseUrlInput" type="url" placeholder="https://..." />
-              </label>
-              <label class="wide-field" id="ttsApiKeyField">
-                API Key
-                <input id="ttsApiKeyInput" type="password" autocomplete="off" />
-              </label>
-              <label id="ttsModelField">
-                模型
-                <input id="ttsModelInput" type="text" placeholder="例如 tts-..." />
-              </label>
-              <label>
                 默认音色
                 <select id="ttsVoiceInput"></select>
               </label>
@@ -322,10 +295,6 @@
                   </label>
                 </div>
               </div>
-              <label id="ttsSampleRateField">
-                采样率
-                <input id="ttsSampleRateInput" type="number" min="8000" step="1000" />
-              </label>
               <label>
                 语速
                 <input id="ttsSpeedInput" type="number" min="0.5" max="2" step="0.05" />
@@ -333,6 +302,10 @@
               <label>
                 配音并发数
                 <input id="ttsConcurrencyInput" type="number" min="1" max="100" step="1" />
+              </label>
+              <label class="check-row">
+                <input id="ttsIncludeTitleInput" type="checkbox" />
+                朗读开场辩题
               </label>
               <label class="check-row">
                 <input id="ttsIncludeJudgeInput" type="checkbox" />
@@ -343,7 +316,7 @@
                 为旁白和背景内容生成配音
               </label>
             </div>
-            <div class="preset-summary" id="ttsProviderSummary">Edge TTS 不需要 API Key；默认只生成正反方辩手配音。</div>
+            <div class="preset-summary" id="ttsProviderSummary">固定使用 Edge TTS；默认朗读辩题并生成正反方辩手配音。</div>
             <button class="primary" id="generateTtsButton" type="button">生成配音</button>
           </div>
 
