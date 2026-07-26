@@ -9,7 +9,7 @@
 
 | # | 标题 | 严重度 | 状态 |
 | --- | --- | --- | --- |
-| 001 | 锚定弹层与下拉菜单的入场/出场动画 | HIGH | 部分完成 |
+| 001 | 锚定弹层与下拉菜单的入场/出场动画 | HIGH | 已完成 |
 | 002 | ThinkingBlock 展开/折叠动画 | HIGH | 已完成 |
 | 003 | 待上传参考资料列表的增删动画 | MEDIUM | 已完成 |
 | 004 | 按钮按压反馈(whileTap) | MEDIUM | 已完成 |
@@ -17,10 +17,16 @@
 
 ## 剩余工作
 
-只有 001 还有尾巴：导出菜单（`ChatHeaderOverlay.tsx`）、辩手设置弹层
-（`DebaterSettingsModal.tsx`）与首页上传弹层（`HomeComposerCard.tsx`）都已接入
-`AnimatePresence`，但 `chat/referenceLibrary/ReferenceLibraryPopover.tsx` 目前
-只有按钮按压反馈，仍缺入场/出场过渡。
+无。001 的最后一项（`chat/referenceLibrary/ReferenceLibraryPopover.tsx` 缺入场/
+出场过渡）已在「动效统一重构」中补齐。
+
+该次重构同时把 001-005 各自留下的字面量收敛到唯一词汇表
+`frontend/src/config/motion.ts`：`TRANSITION.press/fast/normal/slow`、
+`PRESSABLE` / `PRESSABLE_ICON` / `PRESSABLE_TEXT`、`POPOVER_MOTION` /
+`MODAL_MOTION` / `BACKDROP_MOTION` / `COLLAPSE_MOTION` / `ENTER_UP`。
+后续任何新动效都应从该文件取值，不要再在组件里手写 `duration` / `ease` /
+`scale`；也不要在文字承载的元素上写 `whileHover={{ scale }}`（中文字形会因
+子像素重采样发虚）。
 
 ## 推荐执行顺序
 

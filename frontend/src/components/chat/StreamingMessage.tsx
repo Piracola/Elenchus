@@ -113,6 +113,8 @@ export default function StreamingMessage({
     }, [entry]);
 
     const badgeBg = agentVisual?.color ?? 'var(--accent-indigo)';
+    // Same spatial rule as MessageRow so a speech keeps its side when it settles.
+    const speaksOnRight = (entry.role ?? '').startsWith('opposer');
     const streamingStatus = status || '正在发言...';
 
     const splitContent = useMemo(
@@ -147,22 +149,26 @@ export default function StreamingMessage({
             ref={scrollRef}
             style={{
                 display: 'flex',
-                flexDirection: 'row',
+                flexDirection: 'column',
                 width: '100%',
-                gap: '20px',
-                marginBottom: '24px',
+                maxWidth: 'min(100%, var(--measure-reading))',
+                marginLeft: speaksOnRight ? 'auto' : 0,
+                marginRight: speaksOnRight ? 0 : 'auto',
+                marginBottom: 'var(--space-8)',
             }}
         >
-            <div style={{ flex: '6 1 0', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <motion.div
                     {...STATIC_MOTION_PROPS}
                     style={{
                         position: 'relative',
-                        background: 'var(--bg-card)',
-                        padding: '16px 24px 24px',
-                        borderRadius: 'var(--radius-xl)',
-                        border: '1px solid var(--border-subtle)',
-                        boxShadow: 'var(--shadow-sm)',
+                        background: 'var(--surface)',
+                        padding: 'var(--space-4) var(--space-6) var(--space-5)',
+                        borderRadius: 'var(--radius-lg)',
+                        border: '1px solid var(--border-hairline)',
+                        boxShadow: 'none',
+                        [speaksOnRight ? 'borderRight' : 'borderLeft']:
+                            `var(--marker-width) solid ${badgeBg}`,
                     }}
                 >
                     <div
@@ -181,14 +187,13 @@ export default function StreamingMessage({
                                 width: '32px',
                                 height: '32px',
                                 background: badgeBg,
-                                borderRadius: 'var(--radius-md)',
+                                borderRadius: 'var(--radius-sm)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 color: '#fff',
                                 fontWeight: 700,
-                                fontSize: '14px',
-                                boxShadow: 'var(--shadow-xs)',
+                                fontSize: 'var(--text-sm)',
                                 flexShrink: 0,
                             }}
                         >
@@ -258,7 +263,6 @@ export default function StreamingMessage({
                     </div>
                 </motion.div>
             </div>
-            <div style={{ flex: '4 1 0' }} />
         </div>
     );
 }

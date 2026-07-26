@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import type { DebateMode } from '../../types';
 import { HOME_MODE_OPTIONS, type HomeFontSizes } from './shared';
+import { PRESSABLE_TEXT } from '../../config/motion';
 
 type HomeModeSelectorProps = {
     debateMode: DebateMode;
@@ -29,8 +30,11 @@ export function HomeModeSelector({
                 return (
                     <motion.button
                         key={item.mode}
+                        {...PRESSABLE_TEXT}
+                        /* These cards carry a paragraph of Chinese copy, so the press
+                           feedback is opacity only; the 1px lift is kept because a
+                           whole-card translation does not resample glyphs. */
                         whileHover={{ y: -1 }}
-                        whileTap={{ scale: 0.99 }}
                         onClick={() => onModeChange(item.mode)}
                         style={{
                             textAlign: 'left',

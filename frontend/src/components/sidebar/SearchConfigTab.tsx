@@ -13,6 +13,7 @@ import {
     SettingsPage,
     SettingsSection,
 } from './settings/SettingsPrimitives';
+import { EASE_IN_OUT, TRANSITION } from '../../config/motion';
 
 const MIN_RESULTS_PER_QUERY = 1;
 const MAX_RESULTS_PER_QUERY = 10;
@@ -26,9 +27,11 @@ function SearchConfigSkeleton() {
                     className="settings-skeleton-block"
                     animate={{ opacity: [0.58, 0.92, 0.58] }}
                     transition={{
+                        // Looping breath: keeps its own long duration, but adopts the
+                        // shared on-screen curve so it pulses like the rest of the app.
                         duration: 1.1,
                         repeat: Number.POSITIVE_INFINITY,
-                        ease: 'easeInOut',
+                        ease: EASE_IN_OUT,
                         delay: index * 0.08,
                     }}
                 >
@@ -76,7 +79,7 @@ export function SearchConfigTab() {
                         initial={{ opacity: 0, y: -4 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -4 }}
-                        transition={{ duration: 0.16 }}
+                        transition={TRANSITION.fast}
                     >
                         <SettingsNotice tone="info" icon={<RefreshCw size={15} />}>
                             正在同步最新搜索配置...

@@ -27,6 +27,14 @@ import {
     DEFAULT_SPEECH_MAX_CHARS,
 } from '../../utils/agent/debateSession';
 import { HOME_MODE_OPTIONS, type HomeFontSizes } from './shared';
+import {
+    COLLAPSE_MOTION,
+    POPOVER_MOTION,
+    PRESSABLE,
+    PRESSABLE_ICON,
+    PRESSABLE_TEXT,
+    TRANSITION,
+} from '../../config/motion';
 
 export type PendingReferenceDocument = {
     file: File;
@@ -313,10 +321,12 @@ export function HomeComposerCard({
         : [`${maxTurnsLabel} 轮`, discussionLimitLabel, speechLimitLabel, `资料 ${documentCount}`];
 
     return (
-        <motion.div
-            initial={false}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.22 }}
+        /* Static shell. It was a `motion.div` with `initial={false}` animating to
+           `opacity: 1, y: 0` — values it already held, so nothing ever played. The
+           home entrance now lives in a single wrapper in HomeView; keeping a motion
+           component here would also re-subscribe the whole card on every keystroke
+           in the textarea. */
+        <div
             style={{
                 width: '100%',
                 background: isSophistryMode ? 'var(--mode-sophistry-card)' : 'var(--bg-card)',
@@ -406,6 +416,7 @@ export function HomeComposerCard({
                                 type="button"
                                 onClick={() => onDebateModeChange(item.mode)}
                                 aria-pressed={active}
+                                {...PRESSABLE_TEXT}
                                 className="home-composer-card__mode-button"
                                 style={{
                                     minHeight: '32px',
@@ -507,6 +518,7 @@ export function HomeComposerCard({
                         type="button"
                         onClick={() => onShowAdvancedChange(!showAdvanced)}
                         aria-expanded={showAdvanced}
+                        {...PRESSABLE}
                         style={{
                             ...quietButtonStyle,
                             borderColor: 'transparent',
@@ -519,7 +531,7 @@ export function HomeComposerCard({
                         调整配置
                         <motion.span
                             animate={{ rotate: showAdvanced ? 180 : 0 }}
-                            transition={{ duration: 0.18 }}
+                            transition={TRANSITION.normal}
                             style={{ display: 'inline-flex' }}
                         >
                             <ChevronDown size={14} />
@@ -531,8 +543,8 @@ export function HomeComposerCard({
                     type="button"
                     onClick={onCreateDebate}
                     disabled={!canCreate}
-                    whileHover={canCreate ? { scale: 1.02 } : {}}
-                    whileTap={canCreate ? { scale: 0.98 } : {}}
+                    {...PRESSABLE}
+                    whileTap={canCreate ? PRESSABLE.whileTap : {}}
                     className="home-composer-card__primary"
                     style={{
                         minHeight: '40px',
@@ -559,12 +571,11 @@ export function HomeComposerCard({
                 </motion.button>
             </div>
 
+            <AnimatePresence initial={false}>
             {showAdvanced && (
                 <motion.div
-                    initial={{ opacity: 0, height: 0, y: -6 }}
-                    animate={{ opacity: 1, height: 'auto', y: 0 }}
-                    exit={{ opacity: 0, height: 0, y: -4 }}
-                    transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                    key="home-advanced-panel"
+                    {...COLLAPSE_MOTION}
                     style={{
                         overflow: 'visible',
                         padding: '0 18px 18px',
@@ -736,7 +747,7 @@ export function HomeComposerCard({
                                     <motion.button
                                         type="button"
                                         onClick={() => setShowUploadPopover((current) => !current)}
-                                        whileTap={{ scale: 0.98 }}
+                                        {...PRESSABLE}
                                         style={quietButtonStyle}
                                         title="上传参考资料（将在创建辩论时一起提交）"
                                     >
@@ -744,8 +755,10 @@ export function HomeComposerCard({
                                         管理
                                     </motion.button>
 
+                                    {/* The invisible click-catcher stays outside AnimatePresence:
+                                        it has nothing to animate, and keeping the presence tree to
+                                        a single keyed child is what makes the exit below run. */}
                                     {showUploadPopover && (
-                                        <>
                                         <div
                                             style={{
                                                 position: 'fixed',
@@ -757,13 +770,13 @@ export function HomeComposerCard({
                                             }}
                                             onClick={() => setShowUploadPopover(false)}
                                         />
-                                        <AnimatePresence>
+                                    )}
+                                    <AnimatePresence>
+                                    {showUploadPopover && (
                                         <motion.div
+                                            key="home-upload-popover"
                                             className="home-reference-popover"
-                                            initial={{ opacity: 0, y: -8, scale: 0.98 }}
-                                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                                            exit={{ opacity: 0, y: -8, scale: 0.98 }}
-                                            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                                            {...POPOVER_MOTION}
                                             style={{
                                                 position: 'absolute',
                                                 top: 'calc(100% + 8px)',
@@ -804,6 +817,7 @@ export function HomeComposerCard({
                                                 <motion.button
                                                     type="button"
                                                     onClick={() => setShowUploadPopover(false)}
+                                                    {...PRESSABLE_ICON}
                                                     style={{
                                                         background: 'transparent',
                                                         border: 'none',
@@ -887,10 +901,7 @@ export function HomeComposerCard({
                                                     {pendingDocuments.map((doc) => (
                                                         <motion.div
                                                             key={doc.id}
-                                                            initial={{ opacity: 0, height: 0 }}
-                                                            animate={{ opacity: 1, height: 'auto' }}
-                                                            exit={{ opacity: 0, height: 0 }}
-                                                            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                                                            {...COLLAPSE_MOTION}
                                                             style={{
                                                                 display: 'flex',
                                                                 alignItems: 'center',
@@ -943,6 +954,7 @@ export function HomeComposerCard({
                                                             <motion.button
                                                                 type="button"
                                                                 onClick={() => removeDocument(doc.id)}
+                                                                {...PRESSABLE_ICON}
                                                                 style={{
                                                                     background: 'transparent',
                                                                     border: 'none',
@@ -964,15 +976,15 @@ export function HomeComposerCard({
                                                 </div>
                                             )}
                                         </motion.div>
-                                        </AnimatePresence>
-                                        </>
                                     )}
+                                    </AnimatePresence>
                                 </div>
                             </section>
                         </div>
                     </div>
                 </motion.div>
             )}
-        </motion.div>
+            </AnimatePresence>
+        </div>
     );
 }

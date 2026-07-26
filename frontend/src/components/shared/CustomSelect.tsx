@@ -7,6 +7,7 @@ import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Check } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import { POPOVER_MOTION, PRESSABLE, PRESSABLE_TEXT, TRANSITION } from '../../config/motion';
 
 interface Option {
     value: string;
@@ -141,8 +142,9 @@ export default function CustomSelect({
             <motion.button
                 type="button"
                 onClick={() => !disabled && setIsOpen(!isOpen)}
+                {...PRESSABLE}
                 whileHover={disabled ? {} : { backgroundColor: 'var(--bg-hover)' }}
-                whileTap={disabled ? {} : { scale: 0.98 }}
+                whileTap={disabled ? {} : PRESSABLE.whileTap}
                 style={{
                     width: '100%',
                     height: styles.height,
@@ -158,7 +160,9 @@ export default function CustomSelect({
                     justifyContent: 'space-between',
                     gap: '8px',
                     outline: 'none',
-                    transition: 'all 0.15s ease',
+                    // `background-color` is deliberately absent: framer owns it via
+                    // whileHover, and a CSS transition on the same property fights it.
+                    transition: 'border-color var(--transition-fast), box-shadow var(--transition-fast), opacity var(--transition-fast)',
                     boxShadow: isOpen ? '0 0 0 2px var(--accent-indigo-alpha, rgba(99, 102, 241, 0.2))' : 'var(--shadow-xs)',
                     opacity: disabled ? 0.6 : 1,
                 }}
@@ -177,7 +181,7 @@ export default function CustomSelect({
                 </span>
                 <motion.div
                     animate={{ rotate: isOpen ? 180 : 0 }}
-                    transition={{ duration: 0.2 }}
+                    transition={TRANSITION.normal}
                     style={{ flexShrink: 0 }}
                 >
                     <ChevronDown size={styles.iconSize} style={{ opacity: 0.6 }} />
@@ -190,10 +194,17 @@ export default function CustomSelect({
                         <motion.div
                             ref={menuRef}
                             data-floating-select-menu="true"
-                            initial={{ opacity: 0, y: menuStyle.placement === 'above' ? 8 : -8, scale: 0.96 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: menuStyle.placement === 'above' ? 8 : -8, scale: 0.96 }}
-                            transition={{ duration: 0.15, ease: 'easeOut' }}
+                            {...POPOVER_MOTION}
+                            // Placement-aware offsets: the menu always grows from the
+                            // trigger's edge, so the sign of `y` follows the placement.
+                            initial={{
+                                ...POPOVER_MOTION.initial,
+                                y: menuStyle.placement === 'above' ? -POPOVER_MOTION.initial.y : POPOVER_MOTION.initial.y,
+                            }}
+                            exit={{
+                                ...POPOVER_MOTION.exit,
+                                y: menuStyle.placement === 'above' ? -POPOVER_MOTION.exit.y : POPOVER_MOTION.exit.y,
+                            }}
                             style={{
                                 position: 'fixed',
                                 top: menuStyle.top,
@@ -215,8 +226,8 @@ export default function CustomSelect({
                                     key={option.value}
                                     type="button"
                                     onClick={() => handleSelect(option.value)}
+                                    {...PRESSABLE_TEXT}
                                     whileHover={{ backgroundColor: 'var(--bg-hover)' }}
-                                    whileTap={{ scale: 0.98 }}
                                     style={{
                                         width: '100%',
                                         padding: styles.padding,
@@ -231,7 +242,9 @@ export default function CustomSelect({
                                         justifyContent: 'space-between',
                                         gap: '10px',
                                         textAlign: 'left',
-                                        transition: 'all 0.1s ease',
+                                        // Same reasoning as the trigger: framer drives
+                                        // background-color, CSS only handles colour.
+                                        transition: 'color var(--transition-fast)',
                                     }}
                                 >
                                     <span style={{

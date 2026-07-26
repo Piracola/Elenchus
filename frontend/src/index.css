@@ -1,70 +1,73 @@
-:root:not(.dark) {
-  /* Light theme palette */
-  --bg-primary: #FAFAFA;
-  --bg-secondary: #FFFFFF;
-  --bg-tertiary: #F5F5F7;
-  --bg-card: #FFFFFF;
-  --bg-hover: #F0F0F2;
-  --bg-elevated: #FFFFFF;
+:root {
+  /* ─── Typography ───────────────────────────────────────────────
+     A CJK-capable stack is essential: the product's content is long-form
+     Chinese, and the previous stack fell through to an unspecified system
+     font on Windows. */
+  --font-sans: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC',
+    Roboto, 'Helvetica Neue', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Consolas',
+    'Liberation Mono', monospace;
 
-  --border-subtle: rgba(0, 0, 0, 0.06);
-  --border-accent: #6366F1;
+  /* Type ladder. Body text is set by user preference; these cover UI chrome. */
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
 
-  --text-primary: #1D1D1F;
-  --text-secondary: #6E6E73;
-  --text-muted: #9CA3AF;
+  /* Line heights. CJK needs more leading than Latin at the same size. */
+  --leading-tight: 1.25;
+  --leading-snug: 1.45;
+  --leading-normal: 1.6;
+  --leading-relaxed: 1.8;
 
-  /* Accent palette */
-  --accent-indigo: #6366F1;
-  --accent-cyan: #22D3EE;
-  --accent-emerald: #10B981;
-  --accent-rose: #EF4444;
-  --accent-amber: #F59E0B;
-  --accent-indigo-alpha: rgba(99, 102, 241, 0.12);
-  --accent-rose-alpha: rgba(239, 68, 68, 0.10);
-  --accent-amber-alpha: rgba(245, 158, 11, 0.12);
-  --accent-emerald-alpha: rgba(16, 185, 129, 0.12);
-  --mode-sophistry-bg: #fcfaf8;
-  --mode-sophistry-card: #fffdf9;
-  --mode-sophistry-border: #eadfcd;
-  --mode-sophistry-accent: #b88946;
-  --mode-sophistry-soft: rgba(184, 137, 70, 0.12);
-  --mode-sophistry-shadow: rgba(184, 137, 70, 0.16);
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.04em;
 
-  /* Proposer / Opposer colors */
-  --color-proposer: #34C759;
-  --color-opposer: #FF3B30;
-  --color-judge: #FF9500;
-  --color-system: #007AFF;
-  --color-green-600: #059669;
-  --color-amber-600: #D97706;
-  --color-neutral: #71717A;
+  /* Comfortable CJK measure is 35–45 characters; 1em ≈ 1 CJK glyph. */
+  --measure-reading: 42em;
+  --measure-narrow: 32em;
 
-  /* Shadow system - layered depth */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.10), 0 4px 12px rgba(0, 0, 0, 0.05);
-  --shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.12), 0 8px 20px rgba(0, 0, 0, 0.06);
-  --shadow-2xl: 0 24px 60px rgba(0, 0, 0, 0.15), 0 12px 24px rgba(0, 0, 0, 0.08);
+  /* ─── Motion ───────────────────────────────────────────────────
+     One easing for entrances and hovers, one for on-screen movement.
+     The stock CSS easings are too weak to read as intentional. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 
-  /* Inner shadow for depth */
-  --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.03);
+  --duration-press: 120ms;
+  --duration-fast: 160ms;
+  --duration-normal: 200ms;
+  --duration-slow: 260ms;
 
-  /* Glassmorphism */
-  --glass-bg: rgba(255, 255, 255, 0.75);
-  --glass-border: rgba(255, 255, 255, 0.5);
+  /* Legacy aliases: existing `var(--transition-fast)` declarations adopt the
+     new curve without being touched. */
+  --transition-fast: var(--duration-fast) var(--ease-out);
+  --transition-normal: var(--duration-normal) var(--ease-out);
+  --transition-slow: var(--duration-slow) var(--ease-out);
 
-  /* Unified border radius system */
-  --radius-xs: 4px;
+  /* ─── Layering ─────────────────────────────────────────────── */
+  --z-base: 1;
+  --z-sticky: 10;
+  --z-raised: 30;
+  --z-header: 40;
+  --z-drawer: 50;
+  --z-popover: 100;
+  --z-modal: 1000;
+  --z-select: 3000;
+  --z-toast: 9999;
+
+  /* ─── Geometry ─────────────────────────────────────────────── */
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 10px;
   --radius-xl: 12px;
-  --radius-2xl: 16px;
   --radius-full: 9999px;
 
-  /* Spacing system */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -74,69 +77,165 @@
   --space-8: 32px;
   --space-10: 40px;
 
-  /* Transitions */
-  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
-  --glass-blur: 20px;
+  /* Role identity marker width, used by every speaker-attributed surface. */
+  --marker-width: 3px;
+}
+
+:root:not(.dark) {
+  /* ─── Surfaces ─────────────────────────────────────────────────
+     Paper character: a warm page, a plain white reading column, and real
+     contrast steps between them. Depth comes from borders and whitespace
+     rather than shadows. */
+  --surface-page: #FBFAF8;
+  --surface-sunken: #F1EEE8;
+  --surface: #FFFFFF;
+  --surface-muted: #F6F4EF;
+  --surface-raised: #FFFFFF;
+
+  /* Legacy aliases so existing components pick up the new palette. */
+  --bg-primary: var(--surface-page);
+  --bg-secondary: var(--surface);
+  --bg-tertiary: var(--surface-muted);
+  --bg-card: var(--surface);
+  --bg-hover: #F0EDE6;
+  --bg-elevated: var(--surface-raised);
+
+  /* ─── Borders ──────────────────────────────────────────────────
+     The primary layering device, so it needs three usable steps.
+     `--border-strong` was referenced by the toolbar but never defined. */
+  --border-hairline: rgba(26, 24, 18, 0.05);
+  --border-subtle: rgba(26, 24, 18, 0.10);
+  --border-strong: rgba(26, 24, 18, 0.18);
+
+  /* ─── Text ─────────────────────────────────────────────────── */
+  --text-primary: #1A1815;
+  --text-secondary: #56534C;
+  --text-muted: #85817A;
+  --text-faint: #A8A49C;
+
+  /* ─── Role identity ───────────────────────────────────────────
+     Deepened for legibility on white; used only for avatars and markers,
+     never as a decorative fill. */
+  --role-proposer: #2C7A57;
+  --role-opposer: #A2413B;
+  --role-judge: #8A6A2F;
+  --role-discussion: #3D6875;
+  --role-moderator: #645C78;
+  --role-neutral: #6F6B63;
+
+  /* Legacy aliases consumed by messageRow/shared.ts. */
+  --color-proposer: var(--role-proposer);
+  --color-opposer: var(--role-opposer);
+  --color-judge: var(--role-judge);
+  --color-system: var(--role-discussion);
+  --color-neutral: var(--role-neutral);
+  --color-green-600: #2C7A57;
+  --color-amber-600: #8A6A2F;
+
+  /* ─── Accents (status and interaction only) ─────────────────── */
+  --accent-indigo: #4F5BD5;
+  --accent-cyan: #2E7D8A;
+  --accent-emerald: #2C7A57;
+  --accent-rose: #B03A3A;
+  --accent-amber: #A9762A;
+  --accent-indigo-alpha: rgba(79, 91, 213, 0.10);
+  --accent-rose-alpha: rgba(176, 58, 58, 0.10);
+  --accent-amber-alpha: rgba(169, 118, 42, 0.12);
+  --accent-emerald-alpha: rgba(44, 122, 87, 0.12);
+
+  --focus-ring: rgba(79, 91, 213, 0.30);
+
+  /* ─── Sophistry mode ──────────────────────────────────────── */
+  --mode-sophistry-bg: #FBF7F0;
+  --mode-sophistry-card: #FFFDF8;
+  --mode-sophistry-border: rgba(138, 106, 47, 0.20);
+  --mode-sophistry-accent: #8A6A2F;
+  --mode-sophistry-soft: rgba(138, 106, 47, 0.10);
+  --mode-sophistry-shadow: rgba(138, 106, 47, 0.12);
+
+  /* ─── Shadows: warm-tinted and restrained ─────────────────── */
+  --shadow-xs: 0 1px 2px rgba(28, 25, 20, 0.04);
+  --shadow-sm: 0 1px 3px rgba(28, 25, 20, 0.06);
+  --shadow-md: 0 4px 12px rgba(28, 25, 20, 0.07);
+  --shadow-lg: 0 12px 28px rgba(28, 25, 20, 0.10);
+  --shadow-xl: 0 20px 48px rgba(28, 25, 20, 0.13);
+  --shadow-2xl: 0 28px 64px rgba(28, 25, 20, 0.16);
+  --shadow-inner: inset 0 1px 2px rgba(28, 25, 20, 0.04);
+
+  --glass-bg: rgba(251, 250, 248, 0.86);
+  --glass-border: rgba(26, 24, 18, 0.08);
+  --glass-blur: 16px;
 }
 
 :root.dark {
-  /* Dark theme palette */
-  --bg-primary: #0D0D0F;
-  --bg-secondary: #1C1C1E;
-  --bg-tertiary: #2C2C2E;
-  --bg-card: #1C1C1E;
-  --bg-hover: #2C2C2E;
-  --bg-elevated: #2C2C2E;
+  /* Warm-neutral dark rather than pure black, so paper character survives. */
+  --surface-page: #14130F;
+  --surface-sunken: #1B1A16;
+  --surface: #1F1E1A;
+  --surface-muted: #262420;
+  --surface-raised: #292722;
 
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-accent: #6366f1;
+  --bg-primary: var(--surface-page);
+  --bg-secondary: var(--surface);
+  --bg-tertiary: var(--surface-muted);
+  --bg-card: var(--surface);
+  --bg-hover: #2E2C26;
+  --bg-elevated: var(--surface-raised);
 
-  --text-primary: #FFFFFF;
-  --text-secondary: #A0A0A5;
-  --text-muted: #6E6E73;
+  --border-hairline: rgba(245, 240, 230, 0.06);
+  --border-subtle: rgba(245, 240, 230, 0.12);
+  --border-strong: rgba(245, 240, 230, 0.22);
 
-  /* Accent palette */
-  --accent-indigo: #818cf8;
-  --accent-cyan: #67e8f9;
-  --accent-emerald: #34d399;
-  --accent-rose: #fb7185;
-  --accent-amber: #fbbf24;
-  --accent-indigo-alpha: rgba(129, 140, 248, 0.16);
-  --accent-rose-alpha: rgba(251, 113, 133, 0.14);
-  --accent-amber-alpha: rgba(251, 191, 36, 0.14);
-  --accent-emerald-alpha: rgba(52, 211, 153, 0.14);
-  --mode-sophistry-bg: #26211a;
-  --mode-sophistry-card: #312a20;
-  --mode-sophistry-border: rgba(234, 223, 205, 0.22);
-  --mode-sophistry-accent: #d6a363;
-  --mode-sophistry-soft: rgba(214, 163, 99, 0.18);
-  --mode-sophistry-shadow: rgba(214, 163, 99, 0.24);
+  --text-primary: #F4F1EA;
+  --text-secondary: #B4AFA4;
+  --text-muted: #8A857B;
+  --text-faint: #6B675F;
 
-  /* Proposer / Opposer colors */
-  --color-proposer: #30D158;
-  --color-opposer: #FF453A;
-  --color-judge: #FF9F0A;
-  --color-system: #0A84FF;
-  --color-green-600: #10B981;
-  --color-amber-600: #F59E0B;
-  --color-neutral: #A1A1AA;
+  --role-proposer: #5FBE8C;
+  --role-opposer: #E08079;
+  --role-judge: #D6A363;
+  --role-discussion: #7BB4C2;
+  --role-moderator: #A79BC4;
+  --role-neutral: #A6A199;
 
-  /* Shadow system for dark mode - softer, colored shadows */
-  --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.25);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.35);
-  --shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.7), 0 8px 20px rgba(0, 0, 0, 0.4);
-  --shadow-2xl: 0 24px 60px rgba(0, 0, 0, 0.8), 0 12px 24px rgba(0, 0, 0, 0.45);
+  --color-proposer: var(--role-proposer);
+  --color-opposer: var(--role-opposer);
+  --color-judge: var(--role-judge);
+  --color-system: var(--role-discussion);
+  --color-neutral: var(--role-neutral);
+  --color-green-600: #5FBE8C;
+  --color-amber-600: #D6A363;
 
-  /* Inner shadow for depth */
-  --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+  --accent-indigo: #99A1F5;
+  --accent-cyan: #7BB4C2;
+  --accent-emerald: #5FBE8C;
+  --accent-rose: #E08079;
+  --accent-amber: #D6A363;
+  --accent-indigo-alpha: rgba(153, 161, 245, 0.16);
+  --accent-rose-alpha: rgba(224, 128, 121, 0.16);
+  --accent-amber-alpha: rgba(214, 163, 99, 0.16);
+  --accent-emerald-alpha: rgba(95, 190, 140, 0.16);
 
-  /* Glassmorphism */
-  --glass-bg: rgba(28, 28, 30, 0.75);
-  --glass-border: rgba(255, 255, 255, 0.08);
+  --focus-ring: rgba(153, 161, 245, 0.40);
+
+  --mode-sophistry-bg: #1D1913;
+  --mode-sophistry-card: #241F17;
+  --mode-sophistry-border: rgba(214, 163, 99, 0.24);
+  --mode-sophistry-accent: #D6A363;
+  --mode-sophistry-soft: rgba(214, 163, 99, 0.14);
+  --mode-sophistry-shadow: rgba(214, 163, 99, 0.20);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.36);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.44);
+  --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.52);
+  --shadow-xl: 0 20px 48px rgba(0, 0, 0, 0.60);
+  --shadow-2xl: 0 28px 64px rgba(0, 0, 0, 0.68);
+  --shadow-inner: inset 0 1px 2px rgba(0, 0, 0, 0.30);
+
+  --glass-bg: rgba(20, 19, 15, 0.86);
+  --glass-border: rgba(245, 240, 230, 0.10);
+  --glass-blur: 16px;
 }
 
 /* ─── Global Styles ──────────────────────────────────────────── */
@@ -156,26 +255,58 @@ html {
 }
 
 body {
-  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont,
-    'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-  background-color: var(--bg-primary);
+  font-family: var(--font-sans);
+  background-color: var(--surface-page);
   color: var(--text-primary);
-  line-height: 1.5;
+  line-height: var(--leading-snug);
   min-height: 100vh;
   overflow-x: hidden;
+  /* Chinese text renders with visible seams when synthetic weights kick in. */
+  font-synthesis-weight: none;
 }
 
 #root {
   position: relative;
-  z-index: 1;
+  z-index: var(--z-base);
   min-height: 100vh;
+}
+
+/* Numeric readouts (scores, token counts) must not jitter as digits change. */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* ─── Focus ──────────────────────────────────────────────────────
+   A single visible ring for every interactive element. Components that
+   set `outline: none` on inputs rely on this to stay keyboard-navigable. */
+
+:focus-visible {
+  outline: 2px solid var(--accent-indigo);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+button:focus-visible,
+a:focus-visible,
+[role='button']:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent-indigo);
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 /* ─── Scrollbar ──────────────────────────────────────────────── */
 
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -185,196 +316,33 @@ body {
 ::-webkit-scrollbar-thumb {
   background: var(--border-subtle);
   border-radius: var(--radius-full);
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: var(--border-strong);
+  background-clip: content-box;
 }
 
-/* ─── Card Component Classes ─────────────────────────────────── */
+/* ─── Reading surface ────────────────────────────────────────────
+   The debate transcript is the product. `--measure-reading` keeps a CJK
+   line at a comfortable 35–45 characters; before this, lines ran past 60. */
 
-.card {
-  background: var(--bg-card);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow var(--transition-fast), transform var(--transition-fast);
+.reading-column {
+  max-width: var(--measure-reading);
 }
 
-.card:hover {
-  box-shadow: var(--shadow-md);
-}
-
-.card-elevated {
-  background: var(--bg-elevated);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
-}
-
-.card-subtle {
-  background: var(--bg-secondary);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-xs);
-}
-
-/* ─── Panel Component Classes ────────────────────────────────── */
-
-.panel {
-  background: var(--bg-secondary);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-}
-
-.panel-sidebar {
-  background: var(--bg-secondary);
-  border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
-  box-shadow: var(--shadow-lg);
-}
-
-/* ─── Input Component Classes ────────────────────────────────── */
-
-.input-field {
-  background: var(--bg-tertiary);
-  border: none;
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
+.reading-prose {
+  font-size: var(--reading-font-size, var(--text-base));
+  line-height: var(--leading-relaxed);
   color: var(--text-primary);
-  font-size: 14px;
-  transition: box-shadow var(--transition-fast), background var(--transition-fast);
-  box-shadow: var(--shadow-inner);
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
 }
 
-.input-field:focus {
-  outline: none;
-  background: var(--bg-card);
-  box-shadow: var(--shadow-sm), 0 0 0 2px var(--accent-indigo);
-}
-
-.input-field::placeholder {
-  color: var(--text-muted);
-}
-
-/* ─── Button Component Classes ───────────────────────────────── */
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  border: none;
-}
-
-.btn-primary {
-  background: var(--text-primary);
-  color: var(--bg-primary);
-  box-shadow: var(--shadow-sm);
-}
-
-.btn-primary:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
-}
-
-.btn-secondary {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  box-shadow: var(--shadow-xs);
-}
-
-.btn-secondary:hover {
-  background: var(--bg-hover);
-  box-shadow: var(--shadow-sm);
-}
-
-.btn-ghost {
-  background: transparent;
-  color: var(--text-secondary);
-}
-
-.btn-ghost:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-/* ─── Glass Component Classes ────────────────────────────────── */
-
-.glass {
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-}
-
-.glass-panel {
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
-}
-
-/* ─── Glow Effects ───────────────────────────────────────────── */
-
-.glow-indigo {
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.2),
-              0 0 60px rgba(99, 102, 241, 0.08);
-}
-
-.glow-rose {
-  box-shadow: 0 0 20px rgba(244, 63, 94, 0.2),
-              0 0 60px rgba(244, 63, 94, 0.08);
-}
-
-/* ─── Message Card Styles ────────────────────────────────────── */
-
-.message-card {
-  background: var(--bg-card);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm);
-  padding: var(--space-5);
-  position: relative;
-  transition: box-shadow var(--transition-fast);
-}
-
-.message-card:hover {
-  box-shadow: var(--shadow-md);
-}
-
-.message-card-proposer {
-  background: linear-gradient(135deg, var(--bg-card) 0%, rgba(52, 199, 89, 0.03) 100%);
-  box-shadow: var(--shadow-sm), 0 2px 8px rgba(52, 199, 89, 0.08);
-}
-
-.message-card-opposer {
-  background: linear-gradient(135deg, var(--bg-card) 0%, rgba(255, 59, 48, 0.03) 100%);
-  box-shadow: var(--shadow-sm), 0 2px 8px rgba(255, 59, 48, 0.08);
-}
-
-.message-card-judge {
-  background: linear-gradient(135deg, var(--bg-card) 0%, rgba(255, 149, 0, 0.03) 100%);
-  box-shadow: var(--shadow-sm), 0 2px 8px rgba(255, 149, 0, 0.08);
-}
-
-/* ─── Badge/Tag Styles ───────────────────────────────────────── */
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
-  font-size: 12px;
-  font-weight: 500;
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  box-shadow: var(--shadow-xs);
+.reading-prose > * + * {
+  margin-top: 0.9em;
 }
 
 /* ─── Agent Config Panel ─────────────────────────────────────── */
@@ -737,26 +705,6 @@ body {
   }
 }
 
-/* ─── List Item Styles ───────────────────────────────────────── */
-
-.list-item {
-  padding: var(--space-4);
-  border-radius: var(--radius-md);
-  background: transparent;
-  transition: all var(--transition-fast);
-  cursor: pointer;
-}
-
-.list-item:hover {
-  background: var(--bg-hover);
-  box-shadow: var(--shadow-xs);
-}
-
-.list-item-active {
-  background: var(--bg-card);
-  box-shadow: var(--shadow-sm);
-}
-
 /* ─── Typography ─────────────────────────────────────────────── */
 
 h1, h2, h3, h4 {
@@ -782,58 +730,16 @@ a:hover {
   color: #fff;
 }
 
-/* ─── Modal/Dialog Styles ────────────────────────────────────── */
-
-.modal-overlay {
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
-}
-
-.modal-content {
-  background: var(--bg-secondary);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-2xl);
-}
-
-/* ─── Status Banner ──────────────────────────────────────────── */
-
-.status-banner {
-  background: linear-gradient(90deg, rgba(34, 211, 238, 0.08) 0%, rgba(34, 211, 238, 0.04) 100%);
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-  box-shadow: inset 0 -1px 0 rgba(34, 211, 238, 0.1);
-}
-
-@keyframes status-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* ─── Score Card Styles ──────────────────────────────────────── */
-
-.score-card {
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
-  padding: var(--space-3);
-  box-shadow: var(--shadow-xs);
-  transition: box-shadow var(--transition-fast);
-}
-
-.score-card:hover {
-  box-shadow: var(--shadow-sm);
-}
-
 /* ─── Markdown Styles ─────────────────────────────────────────── */
 
 /* Base markdown body */
 .markdown-body {
-  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont,
-    'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-  line-height: 1.7;
+  font-family: var(--font-sans);
+  line-height: var(--leading-relaxed);
   color: var(--text-primary);
+  text-wrap: pretty;
+  /* Long CJK runs and bare URLs must not force horizontal scrolling. */
+  overflow-wrap: anywhere;
 }
 
 /* Headings */
@@ -843,46 +749,50 @@ a:hover {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
-  margin-top: 1.5em;
-  margin-bottom: 0.75em;
-  font-weight: 600;
-  line-height: 1.3;
+  margin-top: 1.8em;
+  margin-bottom: 0.6em;
+  font-weight: 700;
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
   color: var(--text-primary);
 }
 
-.markdown-body h1 {
-  font-size: 1.8em;
-  border-bottom: 1px solid var(--border-subtle);
-  padding-bottom: 0.3em;
+.markdown-body > :first-child {
+  margin-top: 0;
 }
 
+.markdown-body h1,
 .markdown-body h2 {
-  font-size: 1.5em;
-  border-bottom: 1px solid var(--border-subtle);
-  padding-bottom: 0.3em;
+  font-size: 1.16em;
 }
 
 .markdown-body h3 {
-  font-size: 1.25em;
+  font-size: 1.08em;
 }
 
-.markdown-body h4 {
-  font-size: 1.1em;
-}
-
-.markdown-body h5 {
-  font-size: 1em;
-}
-
+.markdown-body h4,
+.markdown-body h5,
 .markdown-body h6 {
-  font-size: 0.9em;
+  font-size: 1em;
   color: var(--text-secondary);
 }
 
 /* Paragraphs */
 .markdown-body p {
-  margin-top: 0.8em;
-  margin-bottom: 0.8em;
+  margin-top: 0.9em;
+  margin-bottom: 0.9em;
+}
+
+/* Emphasis carries the argument in these speeches, so it needs to read as
+   emphasis without shouting. */
+.markdown-body strong {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.markdown-body em {
+  font-style: normal;
+  border-bottom: 1px solid var(--border-strong);
 }
 
 /* Lists */
@@ -964,13 +874,15 @@ a:hover {
 }
 
 /* Blockquotes */
+/* Debaters close each turn with a blockquoted "本轮厘清的是…" summary; on
+   paper that reads better as a quiet inset than as a filled callout. */
 .markdown-body blockquote {
-  border-left: 4px solid var(--accent-indigo);
-  background: var(--bg-tertiary);
-  padding: 1em 1.2em;
-  margin-top: 0.8em;
-  margin-bottom: 0.8em;
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  border-left: var(--marker-width) solid var(--border-strong);
+  background: transparent;
+  padding: 0.1em 0 0.1em 1.1em;
+  margin-top: 1.2em;
+  margin-bottom: 1.2em;
+  border-radius: 0;
   color: var(--text-secondary);
 }
 

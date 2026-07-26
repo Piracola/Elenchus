@@ -9,8 +9,11 @@ import { ToastContainer } from './components/shared/ToastContainer';
 import { useSessionViewState } from './hooks/useDebateViewState';
 import { useToastState } from './hooks/useToastState';
 import { useThemeStore } from './stores/themeStore';
+import { BACKDROP_MOTION, TRANSITION } from './config/motion';
 
 const MOBILE_SIDEBAR_BREAKPOINT = 760;
+/** Kept in one place: the drawer's resting width and its off-screen offset must agree. */
+const DESKTOP_SIDEBAR_WIDTH = 320;
 const previewSafeMotion = import.meta.env.VITE_ELENCHUS_PREVIEW_SAFE_MOTION === '1';
 
 function isMobileSidebarViewport() {
@@ -71,10 +74,7 @@ function App() {
                   <>
                     <motion.div
                       key="mobile-sidebar-backdrop"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.16 }}
+                      {...BACKDROP_MOTION}
                       onClick={() => setIsSidebarCollapsed(true)}
                       style={{
                         position: 'fixed',
@@ -83,12 +83,14 @@ function App() {
                         zIndex: 40,
                       }}
                     />
+                    {/* A drawer has to arrive from the edge it is anchored to; fading
+                        it in place gave no sense of where it came from. */}
                     <motion.div
                       key="mobile-sidebar-sheet"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.16 }}
+                      initial={{ x: '-100%', opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      exit={{ x: '-100%', opacity: 0 }}
+                      transition={TRANSITION.slow}
                       style={{
                         position: 'fixed',
                         top: 0,
@@ -103,13 +105,17 @@ function App() {
                     </motion.div>
                   </>
                 ) : (
+                  // Slides on `x` rather than `width`: animating width relaid out the
+                  // whole chat transcript on every frame. The resting width is now a
+                  // plain style, so the layout is identical once at rest.
                   <motion.div
                     key="desktop-sidebar"
-                    initial={{ width: 0, opacity: 0 }}
-                    animate={{ width: 320, opacity: 1 }}
-                    exit={{ width: 0, opacity: 0 }}
-                    transition={{ duration: 0.16 }}
+                    initial={{ x: -DESKTOP_SIDEBAR_WIDTH, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    exit={{ x: -DESKTOP_SIDEBAR_WIDTH, opacity: 0 }}
+                    transition={TRANSITION.slow}
                     style={{
+                      width: DESKTOP_SIDEBAR_WIDTH,
                       flexShrink: 0,
                       minWidth: 0,
                       height: '100%',

@@ -1,7 +1,19 @@
 import { motion } from 'framer-motion';
+import { AlertTriangle, Layers, Scale, ShieldCheck, Telescope } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+
+import { ENTER_UP, TRANSITION } from '../../../config/motion';
 import { SCORE_DIMENSIONS, SCORE_MODULES } from '../../../types';
 import type { DialogueEntry, ScoreDimensionKey, ScoreModuleKey, TurnScore } from '../../../types';
 import { DIMENSION_WEIGHT_MAP, MODULE_DIMENSIONS, STATIC_MOTION_PROPS } from './shared';
+
+/** Line icons instead of emoji: emoji render per-platform and read as toys. */
+const MODULE_ICONS: Record<ScoreModuleKey, LucideIcon> = {
+    foundation: Layers,
+    confrontation: Scale,
+    stability: ShieldCheck,
+    vision: Telescope,
+};
 
 function formatScoreValue(score: number): string {
     const rounded = Math.round(score * 10) / 10;
@@ -78,187 +90,156 @@ export function ScoreGrid({ judgeEntry, animated }: ScoreGridProps) {
         return null;
     }
 
+    const parseFailed = Boolean((judgeEntry.scores as TurnScore).parse_failed);
+
     return (
         <motion.div
-            {...(animated
-                ? { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.2 } }
-                : STATIC_MOTION_PROPS)}
+            {...(animated ? { ...ENTER_UP, transition: TRANSITION.normal } : STATIC_MOTION_PROPS)}
             style={{
-                marginTop: '20px',
-                padding: '20px',
-                background: 'var(--bg-tertiary)',
-                borderRadius: 'var(--radius-lg)',
-                boxShadow: 'var(--shadow-inner)',
+                marginTop: 'var(--space-4)',
+                paddingTop: 'var(--space-4)',
+                borderTop: '1px solid var(--border-subtle)',
             }}
         >
             <div
                 style={{
-                    fontSize: '12px',
-                    color: 'var(--text-muted)',
-                    marginBottom: '12px',
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
+                    alignItems: 'baseline',
+                    justifyContent: 'space-between',
+                    gap: 'var(--space-3)',
+                    marginBottom: 'var(--space-4)',
                 }}
             >
-                概念边界评分表
-                {(judgeEntry.scores as TurnScore).parse_failed && (
+                <span
+                    style={{
+                        fontSize: 'var(--text-2xs)',
+                        color: 'var(--text-muted)',
+                        fontWeight: 700,
+                        letterSpacing: 'var(--tracking-wide)',
+                    }}
+                >
+                    概念边界评分
+                </span>
+                {parseFailed && (
                     <span
                         title="裁判输出未能解析为有效评分，本轮已按中性 5 分记录，不代表真实评估。"
                         style={{
-                            padding: '2px 8px',
-                            borderRadius: 'var(--radius-full)',
-                            background: 'var(--bg-secondary)',
-                            border: '1px solid var(--border-subtle)',
-                            color: 'var(--text-muted)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: 'var(--text-2xs)',
                             fontWeight: 600,
-                            textTransform: 'none',
-                            letterSpacing: 'normal',
+                            color: 'var(--accent-rose)',
                         }}
                     >
-                        ⚠ 解析失败·中性分
+                        <AlertTriangle size={12} aria-hidden="true" />
+                        解析失败·中性分
                     </span>
                 )}
             </div>
+
             {comprehensiveScore !== null && (
-                <motion.div
-                    {...(animated ? { whileHover: { scale: 1.01 } } : STATIC_MOTION_PROPS)}
+                <div
                     style={{
                         display: 'flex',
-                        flexDirection: 'column',
-                        gap: '8px',
-                        background: 'var(--bg-secondary)',
-                        border: '1px solid var(--border-subtle)',
-                        padding: '16px',
-                        borderRadius: 'var(--radius-lg)',
-                        boxShadow: 'var(--shadow-xs)',
-                        marginBottom: '12px',
+                        alignItems: 'baseline',
+                        gap: 'var(--space-3)',
+                        marginBottom: 'var(--space-4)',
                     }}
                 >
-                    <div
+                    <span
+                        className="tabular-nums"
                         style={{
-                            fontSize: '12px',
-                            color: 'var(--text-secondary)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: '8px',
-                        }}
-                    >
-                        <span>综合认知贡献</span>
-                        <span
-                            style={{
-                                padding: '4px 8px',
-                                borderRadius: 'var(--radius-full)',
-                                background: 'var(--bg-tertiary)',
-                                color: 'var(--text-secondary)',
-                                fontWeight: 600,
-                            }}
-                        >
-                            加权汇总
-                        </span>
-                    </div>
-                    <div
-                        style={{
-                            fontSize: '30px',
-                            fontWeight: 800,
-                            color: 'var(--color-judge)',
+                            fontSize: 'var(--text-3xl)',
+                            fontWeight: 700,
                             lineHeight: 1,
+                            letterSpacing: 'var(--tracking-tight)',
+                            color: 'var(--text-primary)',
                         }}
                     >
                         {formatScoreValue(comprehensiveScore)}
-                        <span
-                            style={{
-                                fontSize: '13px',
-                                color: 'var(--text-muted)',
-                                fontWeight: 500,
-                                marginLeft: '4px',
-                            }}
-                        >
-                            /10
-                        </span>
-                    </div>
-                </motion.div>
-            )}
-
-            <div
-                style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-                    gap: '10px',
-                }}
-            >
-                {moduleCards.map((module) => (
-                    <motion.div
-                        key={module.key}
-                        {...(animated ? { whileHover: { scale: 1.02 } } : STATIC_MOTION_PROPS)}
+                    </span>
+                    <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-faint)' }}>/ 10</span>
+                    <span
                         style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '8px',
-                            background: 'var(--bg-card)',
-                            padding: '14px',
-                            borderRadius: 'var(--radius-md)',
-                            boxShadow: 'var(--shadow-xs)',
+                            marginLeft: 'auto',
+                            fontSize: 'var(--text-2xs)',
+                            color: 'var(--text-muted)',
                         }}
                     >
-                        <div
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: '8px',
-                            }}
-                        >
+                        加权综合
+                    </span>
+                </div>
+            )}
+
+            {moduleCards.length > 0 && (
+                <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
+                    {moduleCards.map((module) => {
+                        const Icon = MODULE_ICONS[module.key] ?? Layers;
+                        return (
                             <div
+                                key={module.key}
                                 style={{
-                                    fontSize: '12px',
-                                    color: 'var(--text-secondary)',
-                                    display: 'flex',
+                                    display: 'grid',
+                                    gridTemplateColumns: 'auto 1fr auto',
                                     alignItems: 'center',
-                                    gap: '6px',
+                                    gap: 'var(--space-3)',
                                 }}
                             >
-                                <span>{module.icon}</span>
-                                {module.label}
+                                <span
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        fontSize: 'var(--text-xs)',
+                                        color: 'var(--text-secondary)',
+                                        whiteSpace: 'nowrap',
+                                    }}
+                                >
+                                    <Icon size={13} aria-hidden="true" style={{ color: 'var(--text-faint)' }} />
+                                    {module.label}
+                                    <span style={{ color: 'var(--text-faint)' }}>{module.weight}%</span>
+                                </span>
+
+                                {/* A rule whose filled portion encodes the score keeps the
+                                    readout monochrome while still being scannable. */}
+                                <span
+                                    aria-hidden="true"
+                                    style={{
+                                        position: 'relative',
+                                        height: '2px',
+                                        borderRadius: 'var(--radius-full)',
+                                        background: 'var(--border-subtle)',
+                                        overflow: 'hidden',
+                                    }}
+                                >
+                                    <span
+                                        style={{
+                                            position: 'absolute',
+                                            inset: '0 auto 0 0',
+                                            width: `${Math.max(0, Math.min(100, module.score * 10))}%`,
+                                            background: 'var(--text-secondary)',
+                                        }}
+                                    />
+                                </span>
+
+                                <span
+                                    className="tabular-nums"
+                                    style={{
+                                        fontSize: 'var(--text-sm)',
+                                        fontWeight: 700,
+                                        color: 'var(--text-primary)',
+                                        minWidth: '2.4em',
+                                        textAlign: 'right',
+                                    }}
+                                >
+                                    {formatScoreValue(module.score)}
+                                </span>
                             </div>
-                            <span
-                                style={{
-                                    fontSize: '11px',
-                                    color: 'var(--text-muted)',
-                                    padding: '3px 7px',
-                                    borderRadius: 'var(--radius-full)',
-                                    background: 'var(--bg-tertiary)',
-                                }}
-                            >
-                                {module.weight}%
-                            </span>
-                        </div>
-                        <div
-                            style={{
-                                fontSize: '22px',
-                                fontWeight: 700,
-                                color: 'var(--color-judge)',
-                            }}
-                        >
-                            {formatScoreValue(module.score)}
-                            <span
-                                style={{
-                                    fontSize: '12px',
-                                    color: 'var(--text-muted)',
-                                    fontWeight: 400,
-                                    marginLeft: '2px',
-                                }}
-                            >
-                                /10
-                            </span>
-                        </div>
-                    </motion.div>
-                ))}
-            </div>
+                        );
+                    })}
+                </div>
+            )}
         </motion.div>
     );
 }

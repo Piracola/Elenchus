@@ -9,6 +9,7 @@ import TokenUsageChip from './TokenUsageChip';
 import ReferenceLibraryPanel from './ReferenceLibraryPanel';
 import SidebarExpandButton from '../shared/SidebarExpandButton';
 import DebaterSettingsModal from './DebaterSettingsModal';
+import { POPOVER_MOTION, PRESSABLE, PRESSABLE_TEXT } from '../../config/motion';
 import {
   HEADER_TOOLBAR_BUTTON_ACTIVE_STYLE,
   HEADER_TOOLBAR_BUTTON_STYLE,
@@ -197,7 +198,9 @@ export default function ChatHeaderOverlay({
             />
           )}
 
-          <motion.div
+          {/* Static card: it carried no motion props, so a motion component only
+              cost a subscription on every header render. */}
+          <div
             style={{
               padding: '8px 16px',
               background: isSophistryMode ? 'var(--mode-sophistry-card)' : 'var(--bg-card)',
@@ -260,7 +263,7 @@ export default function ChatHeaderOverlay({
             >
               <StatusBanner />
             </div>
-          </motion.div>
+          </div>
         </div>
 
         {/* 第二行：轮次、按钮等 */}
@@ -276,8 +279,7 @@ export default function ChatHeaderOverlay({
           >
               {transcriptCollapseSummary.hasAgentRows && (
                 <motion.button
-                  whileHover={{ opacity: 0.92 }}
-                  whileTap={{ opacity: 0.82 }}
+                  {...PRESSABLE_TEXT}
                   onClick={onToggleAllAgentMessages}
                   style={{
                     ...HEADER_TOOLBAR_BUTTON_STYLE,
@@ -299,8 +301,7 @@ export default function ChatHeaderOverlay({
 
               <motion.button
                 ref={debaterSettingsButtonRef}
-                whileHover={{ opacity: 0.92 }}
-                whileTap={{ opacity: 0.82 }}
+                {...PRESSABLE}
                 onClick={() => setShowDebaterSettings((current) => !current)}
                 style={{
                   ...HEADER_TOOLBAR_BUTTON_STYLE,
@@ -316,8 +317,7 @@ export default function ChatHeaderOverlay({
               <div style={{ position: 'relative' }}>
                 <motion.button
                   ref={exportButtonRef}
-                  whileHover={{ opacity: 0.92 }}
-                  whileTap={{ opacity: 0.82 }}
+                  {...PRESSABLE}
                   onClick={() => setShowExportMenu((current) => !current)}
                   disabled={Boolean(exportingFormat)}
                   style={{
@@ -343,10 +343,7 @@ export default function ChatHeaderOverlay({
                 {showExportMenu && (
                   <motion.div
                     ref={exportMenuRef}
-                    initial={{ opacity: 0, y: -8, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -8, scale: 0.96 }}
-                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    {...POPOVER_MOTION}
                     style={{
                       position: 'absolute',
                       top: 'calc(100% + 8px)',
@@ -428,8 +425,7 @@ export default function ChatHeaderOverlay({
                         Markdown
                       </span>
                       <motion.button
-                        whileHover={{ opacity: 0.9 }}
-                        whileTap={{ opacity: 0.8 }}
+                        {...PRESSABLE}
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -459,8 +455,7 @@ export default function ChatHeaderOverlay({
                         HTML 网页
                       </span>
                       <motion.button
-                        whileHover={{ opacity: 0.9 }}
-                        whileTap={{ opacity: 0.8 }}
+                        {...PRESSABLE}
                         onClick={() => {
                           void handleExport('html');
                           setShowExportMenu(false);
@@ -490,8 +485,7 @@ export default function ChatHeaderOverlay({
                       JSON
                     </span>
                     <motion.button
-                      whileHover={{ opacity: 0.9 }}
-                      whileTap={{ opacity: 0.8 }}
+                      {...PRESSABLE}
                       onClick={() => {
                         void handleExport('json');
                         setShowExportMenu(false);
@@ -520,8 +514,7 @@ export default function ChatHeaderOverlay({
                       生成视频
                     </span>
                     <motion.button
-                      whileHover={{ opacity: 0.9 }}
-                      whileTap={{ opacity: 0.8 }}
+                      {...PRESSABLE}
                       onClick={() => {
                         void handleSendToVideo();
                       }}

@@ -1,16 +1,17 @@
-import { motion } from 'framer-motion';
-
 type HomeStatusLegendProps = {
     isSophistryMode: boolean;
     compact?: boolean;
 };
 
+/**
+ * Static legend. It used to be a `motion.div` with `initial={false}` animating to
+ * `opacity: 1` after a 500ms delay — a motion component whose animation could
+ * never run. The home entrance is owned by one wrapper in HomeView; the legend
+ * simply rides along with it.
+ */
 export function HomeStatusLegend({ isSophistryMode, compact = false }: HomeStatusLegendProps) {
     return (
-        <motion.div
-            initial={false}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
+        <div
             style={{
                 display: 'flex',
                 gap: compact ? '12px' : '24px',
@@ -55,6 +56,6 @@ export function HomeStatusLegend({ isSophistryMode, compact = false }: HomeStatu
                 />
                 <span>{isSophistryMode ? '观察报告' : '裁判评分'}</span>
             </div>
-        </motion.div>
+        </div>
     );
 }

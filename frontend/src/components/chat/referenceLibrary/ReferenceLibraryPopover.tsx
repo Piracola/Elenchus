@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { FileUp, RefreshCw, Trash2 } from 'lucide-react';
 import type { SessionDocumentsResponse } from '../../../types';
 import { formatSize, getStatusMeta } from './shared';
@@ -7,6 +7,7 @@ import {
     HEADER_TOOLBAR_PRIMARY_BUTTON_STYLE,
     HEADER_TOOLBAR_SECONDARY_BUTTON_STYLE,
 } from '../toolbarStyles';
+import { POPOVER_MOTION, PRESSABLE, PRESSABLE_ICON } from '../../../config/motion';
 
 type ReferenceLibraryPopoverProps = {
     currentSessionId: string;
@@ -37,12 +38,12 @@ export function ReferenceLibraryPopover({
     onUploadClick,
     referenceLibrary,
 }: ReferenceLibraryPopoverProps) {
-    if (!isOpen) {
-        return null;
-    }
-
     return (
-        <div
+        <AnimatePresence>
+            {isOpen && (
+        <motion.div
+            key="reference-library-popover"
+            {...POPOVER_MOTION}
             style={{
                 position: 'absolute',
                 top: 'calc(100% + 8px)',
@@ -59,6 +60,7 @@ export function ReferenceLibraryPopover({
                 flexDirection: 'column',
                 gap: '12px',
                 zIndex: 100,
+                transformOrigin: 'top left',
             }}
         >
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -77,8 +79,7 @@ export function ReferenceLibraryPopover({
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <motion.button
-                    whileHover={{ opacity: 0.92 }}
-                    whileTap={{ opacity: 0.82 }}
+                    {...PRESSABLE}
                     onClick={onUploadClick}
                     disabled={isUploading || Boolean(deletingDocumentId)}
                     style={{
@@ -93,8 +94,7 @@ export function ReferenceLibraryPopover({
                 </motion.button>
 
                 <motion.button
-                    whileHover={{ opacity: 0.92 }}
-                    whileTap={{ opacity: 0.82 }}
+                    {...PRESSABLE_ICON}
                     onClick={() => onRefresh(currentSessionId)}
                     disabled={isLoading || isUploading}
                     style={{
@@ -223,8 +223,7 @@ export function ReferenceLibraryPopover({
                                 </div>
 
                                 <motion.button
-                                    whileHover={{ opacity: 0.92 }}
-                                    whileTap={{ opacity: 0.82 }}
+                                    {...PRESSABLE_ICON}
                                     onClick={() => onDeleteDocument(document.id, document.filename)}
                                     disabled={isDeleting || isUploading}
                                     style={{
@@ -269,6 +268,8 @@ export function ReferenceLibraryPopover({
                     );
                 })}
             </div>
-        </div>
+        </motion.div>
+            )}
+        </AnimatePresence>
     );
 }

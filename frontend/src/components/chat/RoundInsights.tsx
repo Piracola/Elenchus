@@ -1,8 +1,9 @@
 import { memo, useState } from 'react';
-import { useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { DialogueEntry } from '../../types';
 import { MarkdownRenderer } from './messageRow/MarkdownRenderer';
+import { COLLAPSE_MOTION, PRESSABLE_TEXT } from '../../config/motion';
 
 export type InsightSection = {
     key: string;
@@ -81,10 +82,11 @@ function RoundInsights({ sections }: RoundInsightsProps) {
                             boxShadow: 'var(--shadow-xs)',
                         }}
                     >
-                        <button
+                        <motion.button
                             type="button"
                             aria-expanded={!collapsed}
                             onClick={toggleCollapsed}
+                            {...PRESSABLE_TEXT}
                             style={{
                                 display: 'flex',
                                 alignItems: 'center',
@@ -164,10 +166,15 @@ function RoundInsights({ sections }: RoundInsightsProps) {
                                     {collapsed ? '展开' : '收起'}
                                 </span>
                             </div>
-                        </button>
+                        </motion.button>
 
+                        <AnimatePresence initial={false}>
                         {!collapsed && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                            <motion.div
+                                key="insight-entries"
+                                {...COLLAPSE_MOTION}
+                                style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px', overflow: 'hidden' }}
+                            >
                                 {section.entries.map((entry, index) => {
                                     return (
                                         <div
@@ -211,8 +218,9 @@ function RoundInsights({ sections }: RoundInsightsProps) {
                                         </div>
                                     );
                                 })}
-                            </div>
+                            </motion.div>
                         )}
+                        </AnimatePresence>
                     </section>
                 );
             })}

@@ -3,6 +3,7 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { AlertCircle, CheckCircle2, CircleDashed, Loader2, PauseCircle } from 'lucide-react';
 import type { DebatePhase, RunStatus } from '../../types';
 import { useRuntimeViewState } from '../../hooks/useDebateViewState';
+import { TRANSITION } from '../../config/motion';
 
 const NODE_LABELS: Record<string, string> = {
     manage_context: '整理上下文',
@@ -169,7 +170,7 @@ function StatusIcon({ tone }: { tone: StatusTone }) {
             <Loader2
                 size={13}
                 style={{
-                    animation: reducedMotion ? 'none' : 'status-spin 1s linear infinite',
+                    animation: reducedMotion ? 'none' : 'spin 1s linear infinite',
                 }}
             />
         );
@@ -210,7 +211,7 @@ export default function StatusBanner() {
         <motion.div
             initial={{ opacity: 0, y: -2 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.18 }}
+            transition={TRANSITION.normal}
             title={viewModel.title}
             style={{
                 height: 30,

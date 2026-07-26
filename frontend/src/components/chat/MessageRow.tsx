@@ -89,6 +89,9 @@ function MessageRow({
 
     const agentAccentColor = agentVisual.color;
     const badgeTextColor = '#fff';
+    // Opposition is spatial: the opposing side is mirrored to the right edge.
+    const speakerRole = agentEntry?.role ?? judgeEntry?.target_role ?? '';
+    const speaksOnRight = speakerRole.startsWith('opposer');
 
     if (systemEntry) {
         if (systemEntry.role === 'audience') {
@@ -162,7 +165,6 @@ function MessageRow({
     if (!agentEntry && !judgeEntry) return null;
 
     const judgeOnly = Boolean(judgeEntry && !agentEntry);
-    const agentOnly = Boolean(agentEntry && !judgeEntry);
 
     // 正方/反方消息卡片（统一头部行样式）
     const agentCard = agentEntry ? (
@@ -172,11 +174,15 @@ function MessageRow({
                 : STATIC_MOTION_PROPS)}
             style={{
                 position: 'relative',
-                background: 'var(--bg-card)',
-                padding: '16px 24px 24px',
-                borderRadius: 'var(--radius-xl)',
-                border: '1px solid var(--border-subtle)',
-                boxShadow: 'var(--shadow-sm)',
+                background: 'var(--surface)',
+                padding: 'var(--space-4) var(--space-6) var(--space-5)',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--border-hairline)',
+                // Paper character: the role marker and hairline carry the
+                // structure, so the card needs no elevation.
+                boxShadow: 'none',
+                [speaksOnRight ? 'borderRight' : 'borderLeft']:
+                    `var(--marker-width) solid ${agentAccentColor}`,
             }}
         >
             <div
@@ -204,14 +210,13 @@ function MessageRow({
                             width: '32px',
                             height: '32px',
                             background: agentAccentColor,
-                            borderRadius: 'var(--radius-md)',
+                            borderRadius: 'var(--radius-sm)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             color: badgeTextColor,
                             fontWeight: 700,
-                            fontSize: '14px',
-                            boxShadow: 'var(--shadow-xs)',
+                            fontSize: 'var(--text-sm)',
                             flexShrink: 0,
                         }}
                     >
@@ -315,35 +320,34 @@ function MessageRow({
                 }
                 : STATIC_MOTION_PROPS)}
             style={{
-                background: 'var(--bg-secondary)',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--border-subtle)',
+                background: 'var(--surface-muted)',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--border-hairline)',
                 overflow: 'hidden',
-                boxShadow: 'var(--shadow-sm)',
+                boxShadow: 'none',
             }}
         >
             <div style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'flex-start',
-                gap: '9px',
-                padding: '12px 14px 8px',
-                background: 'var(--bg-card)',
+                gap: 'var(--space-2)',
+                padding: 'var(--space-3) var(--space-4) var(--space-2)',
             }}>
                 <motion.div
                     {...(animated ? { whileHover: { scale: 1.04 } } : STATIC_MOTION_PROPS)}
                     style={{
-                        width: '32px',
-                        height: '32px',
-                        background: 'var(--color-judge)',
-                        borderRadius: 'var(--radius-md)',
+                        width: '26px',
+                        height: '26px',
+                        background: 'transparent',
+                        border: `1px solid ${judgeVisual.color}`,
+                        borderRadius: 'var(--radius-sm)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: badgeTextColor,
+                        color: judgeVisual.color,
                         fontWeight: 700,
-                        fontSize: '14px',
-                        boxShadow: 'var(--shadow-xs)',
+                        fontSize: 'var(--text-xs)',
                         flexShrink: 0,
                     }}
                 >
@@ -403,63 +407,31 @@ function MessageRow({
                 display: 'flex',
                 flexDirection: 'column',
                 width: '100%',
-                gap: '12px',
-                marginBottom: '24px',
-                background: rowFocused ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
+                gap: 'var(--space-3)',
+                marginBottom: 'var(--space-8)',
+                background: rowFocused ? 'var(--accent-indigo-alpha)' : 'transparent',
                 transition: 'background var(--transition-fast)',
             }}
         >
             <RoundInsights sections={insightSections} />
 
-            {agentEntry && judgeEntry && (
-                <div
-                    style={{
-                        display: 'flex',
-                        flexDirection: 'row',
-                        width: '100%',
-                        gap: '20px',
-                    }}
-                >
-                    <div style={{ flex: '6 1 0', display: 'flex', flexDirection: 'column' }}>
-                        {agentCard}
-                    </div>
-                    <div style={{ flex: '4 1 0', display: 'flex', flexDirection: 'column' }}>
-                        {judgeCard}
-                    </div>
-                </div>
-            )}
-
-            {agentOnly && (
-                <div
-                    style={{
-                        display: 'flex',
-                        flexDirection: 'row',
-                        width: '100%',
-                        gap: '20px',
-                    }}
-                >
-                    <div style={{ flex: '6 1 0', display: 'flex', flexDirection: 'column' }}>
-                        {agentCard}
-                    </div>
-                    <div style={{ flex: '4 1 0' }} />
-                </div>
-            )}
-
-            {judgeOnly && (
-                <div
-                    style={{
-                        display: 'flex',
-                        flexDirection: 'row',
-                        width: '100%',
-                        gap: '20px',
-                    }}
-                >
-                    <div style={{ flex: '6 1 0' }} />
-                    <div style={{ flex: '4 1 0', display: 'flex', flexDirection: 'column' }}>
-                        {judgeCard}
-                    </div>
-                </div>
-            )}
+            {/* Proposer and opposer sit on opposite sides so the exchange reads
+                as an exchange; the verdict follows the speech it judges. */}
+            <div
+                style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 'var(--space-3)',
+                    width: '100%',
+                    maxWidth: 'min(100%, var(--measure-reading))',
+                    marginLeft: speaksOnRight ? 'auto' : 0,
+                    marginRight: speaksOnRight ? 0 : 'auto',
+                    alignItems: 'stretch',
+                }}
+            >
+                {agentCard}
+                {judgeCard}
+            </div>
         </div>
     );
 }

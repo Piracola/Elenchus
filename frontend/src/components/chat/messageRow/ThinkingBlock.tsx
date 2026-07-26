@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { MessageMarkdown } from './MarkdownRenderer';
 import { markdownBodyStyle } from './contentStyles';
+import { COLLAPSE_MOTION, PRESSABLE_TEXT } from '../../../config/motion';
 
 const THINKING_PANEL_LABEL = '\u601d\u7ef4\u94fe';
 const THINKING_PANEL_SHOW = '\u5c55\u5f00';
@@ -116,7 +117,7 @@ export function ThinkingBlock({
                     aria-label={expanded ? THINKING_PANEL_HIDE_TITLE : THINKING_PANEL_SHOW_TITLE}
                     title={expanded ? THINKING_PANEL_HIDE_TITLE : THINKING_PANEL_SHOW_TITLE}
                     onClick={() => setExpanded((current) => !current)}
-                    whileTap={{ scale: 0.98 }}
+                    {...PRESSABLE_TEXT}
                     style={thinkingToggleStyle(expanded)}
                 >
                     <span>{expanded ? THINKING_PANEL_HIDE : THINKING_PANEL_SHOW}</span>
@@ -128,10 +129,7 @@ export function ThinkingBlock({
                         key="thinking-content"
                         className="markdown-body"
                         data-thinking-content="visible"
-                        initial={{ opacity: 0, height: 0, y: -6 }}
-                        animate={{ opacity: 1, height: 'auto', y: 0 }}
-                        exit={{ opacity: 0, height: 0, y: -4 }}
-                        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                        {...COLLAPSE_MOTION}
                         style={{
                             ...markdownBodyStyle(fontSize, textColor),
                             padding: '0 12px 10px',
@@ -145,10 +143,7 @@ export function ThinkingBlock({
                     <motion.div
                         key="thinking-hint"
                         data-thinking-content="collapsed"
-                        initial={{ opacity: 0, height: 0, y: -6 }}
-                        animate={{ opacity: 1, height: 'auto', y: 0 }}
-                        exit={{ opacity: 0, height: 0, y: -4 }}
-                        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                        {...COLLAPSE_MOTION}
                         style={{ ...thinkingHintStyle(), overflow: 'hidden' }}
                     >
                         {THINKING_PANEL_HINT}

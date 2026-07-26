@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { motion } from 'framer-motion';
 import { PanelLeftOpen } from 'lucide-react';
+import { PRESSABLE_ICON } from '../../config/motion';
 
 type SidebarExpandButtonProps = {
     onClick: () => void;
@@ -20,8 +21,10 @@ export default function SidebarExpandButton({
     return (
         <motion.button
             className={className}
+            {...PRESSABLE_ICON}
+            /* A 1px lift is the one hover transform allowed on a text-free control:
+               it moves the whole button rather than resampling any glyphs. */
             whileHover={{ y: -1 }}
-            whileTap={{ scale: 0.98 }}
             onClick={onClick}
             style={{
                 display: 'inline-flex',

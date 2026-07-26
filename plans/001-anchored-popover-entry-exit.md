@@ -1,10 +1,17 @@
 # 001 - 锚定弹层与下拉菜单的入场/出场动画
 
-> **状态：部分完成（2026-07-26 核对）** — 导出菜单、辩手设置弹层与首页上传弹层已接入
-> `AnimatePresence`；`ReferenceLibraryPopover.tsx` 仍缺入场/出场过渡。
+> **状态：已完成（2026-07-26）** — 在「动效统一重构」中收尾。四处锚定弹层
+> （导出菜单、辩手设置弹层、首页上传弹层、`ReferenceLibraryPopover.tsx`）现在
+> 全部由 `AnimatePresence` 托管，并统一取 `src/config/motion.ts` 的
+> `POPOVER_MOTION`（辩手设置弹层按其模态尺度取 `MODAL_MOTION`），不再各写一套
+> `duration` / `ease` / `scale` 字面量。
+>
+> 补充说明：首页上传弹层原先把 `AnimatePresence` 写在 `{showUploadPopover && (`
+> **内部**，条件为假时 `AnimatePresence` 自身也随之卸载，`exit` 永不播放；现已把
+> `AnimatePresence` 提到条件外面，透明遮罩 `<div>` 作为兄弟节点留在其外。
 
-- **Status**: 部分完成（见顶部说明）
-- **Commit**: 4664896
+- **Status**: 已完成
+- **Commit**: 4664896（基线）
 - **Severity**: HIGH
 - **Category**: Physicality & origin / Missed opportunities
 - **Estimated scope**: 3 files, ~30 lines
@@ -243,3 +250,14 @@ transformOrigin: 'top left'   // 或 'top right',见各位置说明
   - DevTools 动画面板降到 10% 回放,确认缩放原点在触发器一侧而非中心。
   - 渲染面板勾选 `prefers-reduced-motion`(依赖 005 落地后):位移/缩放被去掉,仅保留透明度反馈。
 - **Done when**:三处浮层都以 `scale:0.96→1` 从触发器一侧缩放进入、反向退出,且类型检查与既有测试通过。
+
+## 收尾记录（2026-07-26）
+
+落地时对上文「目标配方」做了一处升级：字面量 `duration: 0.15, ease: 'easeOut'`
+与 `scale: 0.96` 不再逐处手写，改为从 `frontend/src/config/motion.ts` 取
+`POPOVER_MOTION`（`scale 0.97 → 1`、`y -4 → 0`、`TRANSITION.normal`）。原因是本计划
+写作时仓库尚无动效词汇表，`CustomSelect` 是事实范例；词汇表落地后再复制字面量只会
+重新制造漂移。第四处 `ReferenceLibraryPopover.tsx` 由 `if (!isOpen) return null` 改为
+`AnimatePresence` + `motion.div`，`transformOrigin: 'top left'`（它挂在触发按钮下方
+左侧）。辩手设置弹层按词汇表归类为模态，取 `MODAL_MOTION`，并保留其
+`transformOrigin: 'top left'` 以维持与触发器的空间关联。

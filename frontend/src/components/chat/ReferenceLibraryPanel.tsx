@@ -9,6 +9,7 @@ import {
     HEADER_TOOLBAR_BUTTON_ACTIVE_STYLE,
     HEADER_TOOLBAR_BUTTON_STYLE,
 } from './toolbarStyles';
+import { PRESSABLE } from '../../config/motion';
 
 export default function ReferenceLibraryPanel({
     currentSessionId,
@@ -46,8 +47,7 @@ export default function ReferenceLibraryPanel({
             />
 
             <motion.button
-                whileHover={{ opacity: 0.92 }}
-                whileTap={{ opacity: 0.82 }}
+                {...PRESSABLE}
                 onClick={() => setIsOpen((current) => !current)}
                 style={{
                     ...HEADER_TOOLBAR_BUTTON_STYLE,

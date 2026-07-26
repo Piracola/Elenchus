@@ -20,6 +20,7 @@ import SidebarExpandButton from './shared/SidebarExpandButton';
 import SophistryModeNotice from './shared/SophistryModeNotice';
 import { api } from '../api/client';
 import { toast } from '../utils/chat/toast';
+import { COLLAPSE_MOTION, ENTER_UP, TRANSITION } from '../config/motion';
 
 interface HomeViewProps {
     isSidebarCollapsed: boolean;
@@ -256,34 +257,40 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
             }}
             className={advancedPanelVisible ? 'home-workbench home-workbench--advanced' : 'home-workbench'}
         >
-            {isSidebarCollapsed && (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.14 }}
-                    style={{
-                        position: 'absolute',
-                        top: '20px',
-                        left: '20px',
-                        zIndex: 2,
-                    }}
-                >
-                    <SidebarExpandButton
-                        onClick={onExpandSidebar}
+            {/* Was missing its AnimatePresence, so the `exit` never played and the
+                button vanished the moment the sidebar opened. */}
+            <AnimatePresence initial={false}>
+                {isSidebarCollapsed && (
+                    <motion.div
+                        key="home-sidebar-expand"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={TRANSITION.fast}
                         style={{
-                            boxShadow: 'var(--shadow-sm)',
-                            backdropFilter: undefined,
+                            position: 'absolute',
+                            top: '20px',
+                            left: '20px',
+                            zIndex: 2,
                         }}
-                        className="home-sidebar-expand-button"
-                    />
-                </motion.div>
-            )}
+                    >
+                        <SidebarExpandButton
+                            onClick={onExpandSidebar}
+                            style={{
+                                boxShadow: 'var(--shadow-sm)',
+                                backdropFilter: undefined,
+                            }}
+                            className="home-sidebar-expand-button"
+                        />
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
+            {/* The single owner of the home entrance: one surface arrives, the title
+                row, composer card and legend ride along inside it. Four independent
+                fades on the same frame read as jitter, not as one screen. */}
             <motion.div
-                initial={false}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                {...ENTER_UP}
                 style={{
                     width: '100%',
                     maxWidth: '900px',
@@ -296,10 +303,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                 }}
                 className={isSidebarCollapsed ? 'home-workbench-content home-workbench-content--with-sidebar-button' : 'home-workbench-content'}
             >
-                <motion.div
-                    initial={false}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.05, duration: 0.24 }}
+                <div
                     style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -344,7 +348,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                         </div>
                     </div>
                     <HomeStatusLegend isSophistryMode={isSophistryMode} compact />
-                </motion.div>
+                </div>
 
                 <div ref={composerAnchorRef} style={{ width: '100%' }}>
                     <HomeComposerCard
@@ -394,10 +398,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                         {isSophistryMode && (
                             <motion.div
                                 key="sophistry-notice"
-                                initial={{ opacity: 0, height: 0, y: -10 }}
-                                animate={{ opacity: 1, height: 'auto', y: 0 }}
-                                exit={{ opacity: 0, height: 0, y: -6 }}
-                                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                                {...COLLAPSE_MOTION}
                                 style={{ width: '100%', overflow: 'hidden' }}
                             >
                                 <SophistryModeNotice compact fontSize={homeFontSizes.warningBody} />
@@ -409,10 +410,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                     {advancedPanelVisible && (
                         <motion.div
                             key="agent-config-panel"
-                            initial={{ opacity: 0, height: 0, y: -8 }}
-                            animate={{ opacity: 1, height: 'auto', y: 0 }}
-                            exit={{ opacity: 0, height: 0, y: -4 }}
-                            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                            {...COLLAPSE_MOTION}
                             style={{ width: '100%', overflow: 'visible', minHeight: 0 }}
                         >
                             {agentConfigsError && (
@@ -448,6 +446,7 @@ export default function HomeView({ isSidebarCollapsed, onExpandSidebar }: HomeVi
                             initial={{ opacity: 0, y: -8 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -8 }}
+                            transition={TRANSITION.normal}
                             style={{
                                 color: 'var(--accent-rose)',
                                 fontSize: '13px',

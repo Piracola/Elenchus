@@ -11,19 +11,10 @@ import { SettingsDisplayTab } from './settings/SettingsDisplayTab';
 import { SettingsContextTab } from './settings/SettingsContextTab';
 import { SettingsLoggingTab } from './settings/SettingsLoggingTab';
 import { SettingsProvidersTab } from './settings/SettingsProvidersTab';
+import { BACKDROP_MOTION, MODAL_MOTION, TRANSITION } from '../../config/motion';
 import './settings/settings.css';
 
 export type SettingsTab = 'providers' | 'display' | 'logging' | 'search' | 'context';
-
-const SETTINGS_TAB_TRANSITION = {
-    duration: 0.16,
-    ease: 'easeOut' as const,
-};
-
-const SETTINGS_SHELL_TRANSITION = {
-    duration: 0.18,
-    ease: 'easeOut' as const,
-};
 
 const SETTINGS_TABS: Array<{
     value: SettingsTab;
@@ -155,19 +146,13 @@ export default function SettingsPanel({
             {isOpen && (
                 <>
                     <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={SETTINGS_SHELL_TRANSITION}
+                        {...BACKDROP_MOTION}
                         onClick={onClose}
                         className="settings-modal-overlay"
                     >
                         <motion.div
                             onClick={(e) => e.stopPropagation()}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={SETTINGS_SHELL_TRANSITION}
+                            {...MODAL_MOTION}
                             className="settings-modal-shell"
                         >
                             <div className="settings-modal-header">
@@ -214,7 +199,7 @@ export default function SettingsPanel({
                                             initial={{ opacity: 0, y: 4 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             exit={{ opacity: 0, y: -4 }}
-                                            transition={SETTINGS_TAB_TRANSITION}
+                                            transition={TRANSITION.fast}
                                             className="settings-tab-panel"
                                         >
                                             {renderActiveTab()}

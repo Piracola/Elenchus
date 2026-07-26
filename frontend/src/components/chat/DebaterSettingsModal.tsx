@@ -12,6 +12,7 @@ import { useSessionActions, useSessionViewState } from '../../hooks/useDebateVie
 import { toast } from '../../utils/chat/toast';
 import { AGENT_ROLES } from '../../utils/agent/agentConfigs';
 import AgentConfigPanel from '../shared/AgentConfigPanel';
+import { MODAL_MOTION, PRESSABLE, PRESSABLE_ICON } from '../../config/motion';
 import {
     HEADER_TOOLBAR_PANEL_STYLE,
     HEADER_TOOLBAR_PRIMARY_BUTTON_STYLE,
@@ -201,10 +202,7 @@ export default function DebaterSettingsModal({
             {isOpen && (
                 <motion.div
                     ref={popoverRef}
-                    initial={{ opacity: 0, scale: 0.96 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.96 }}
-                    transition={{ duration: 0.16, ease: 'easeOut' }}
+                    {...MODAL_MOTION}
                     style={{
                         ...popoverStyle,
                         padding: '14px',
@@ -228,7 +226,7 @@ export default function DebaterSettingsModal({
                         <motion.button
                             type="button"
                             onClick={onClose}
-                            whileTap={{ scale: 0.98 }}
+                            {...PRESSABLE_ICON}
                             style={{
                                 ...HEADER_TOOLBAR_SECONDARY_BUTTON_STYLE,
                                 width: '32px',
@@ -278,7 +276,8 @@ export default function DebaterSettingsModal({
                                 void reload();
                             }}
                             disabled={agentConfigsLoading || isSaving}
-                            whileTap={agentConfigsLoading || isSaving ? {} : { scale: 0.98 }}
+                            {...PRESSABLE}
+                            whileTap={agentConfigsLoading || isSaving ? {} : PRESSABLE.whileTap}
                             style={{
                                 ...HEADER_TOOLBAR_SECONDARY_BUTTON_STYLE,
                                 opacity: agentConfigsLoading || isSaving ? 0.65 : 1,
@@ -293,8 +292,8 @@ export default function DebaterSettingsModal({
                                 void handleSave();
                             }}
                             disabled={isSaving || agentConfigsLoading}
-                            whileHover={isSaving || agentConfigsLoading ? {} : { scale: 1.02 }}
-                            whileTap={isSaving || agentConfigsLoading ? {} : { scale: 0.98 }}
+                            {...PRESSABLE}
+                            whileTap={isSaving || agentConfigsLoading ? {} : PRESSABLE.whileTap}
                             style={{
                                 ...HEADER_TOOLBAR_PRIMARY_BUTTON_STYLE,
                                 opacity: isSaving || agentConfigsLoading ? 0.65 : 1,

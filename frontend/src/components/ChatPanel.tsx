@@ -88,6 +88,8 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
         }
     };
 
+    const scrimColor = isSophistryMode ? 'var(--mode-sophistry-bg)' : 'var(--surface-page)';
+
     return (
         <motion.section
             initial={{ opacity: 0 }}
@@ -99,8 +101,8 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
                 flexDirection: 'column',
                 minHeight: 0,
                 background: isSophistryMode
-                    ? 'linear-gradient(180deg, var(--mode-sophistry-bg) 0%, rgba(252, 250, 248, 0.92) 100%)'
-                    : 'var(--bg-primary)',
+                    ? 'var(--mode-sophistry-bg)'
+                    : 'var(--surface-page)',
                 position: 'relative',
             }}
         >
@@ -170,12 +172,25 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
                         left: 16,
                         right: 16,
                         bottom: 0,
-                        zIndex: 30,
+                        zIndex: 'var(--z-raised)',
                         pointerEvents: 'none',
                     }}
                 >
                     <div
+                        aria-hidden="true"
                         style={{
+                            position: 'absolute',
+                            left: -16,
+                            right: -16,
+                            bottom: 0,
+                            height: 'calc(100% + 28px)',
+                            background: `linear-gradient(180deg, transparent 0%, ${scrimColor} 62%)`,
+                            pointerEvents: 'none',
+                        }}
+                    />
+                    <div
+                        style={{
+                            position: 'relative',
                             padding: '8px 0 12px',
                             display: 'flex',
                             justifyContent: 'center',

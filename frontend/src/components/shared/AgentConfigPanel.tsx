@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import { Settings2, Thermometer } from 'lucide-react';
 import CustomSelect from './CustomSelect';
 import SettingsPanel from '../sidebar/SettingsPanel';
+import { POPOVER_MOTION } from '../../config/motion';
 import type { ModelConfig } from '../../types';
 import {
     AGENT_ROLES,
@@ -49,12 +50,14 @@ export default function AgentConfigPanel({
 
     return (
         <>
+            {/* No AnimatePresence here on purpose: this panel has no visibility prop of
+                its own, so a local AnimatePresence would report "present" forever and
+                actually swallow the exit it is meant to enable. The exit below is driven
+                by the caller's AnimatePresence (HomeView / DebaterSettingsModal), which
+                propagates presence down to nested motion components. */}
             <motion.div
                 className="agent-config-panel"
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.2 }}
+                {...POPOVER_MOTION}
             >
                 <div className="agent-config-panel__header">
                     <div className="agent-config-panel__title-wrap">

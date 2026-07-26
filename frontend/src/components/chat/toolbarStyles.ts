@@ -16,9 +16,15 @@ export const HEADER_TOOLBAR_BUTTON_STYLE: CSSProperties = {
     lineHeight: 1,
     whiteSpace: 'nowrap',
     boxShadow: 'none',
-    transition: 'background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, opacity 0.16s ease',
+    transition: 'background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast)',
 };
 
+/**
+ * Active state keeps the border at 1px and only darkens its colour, so toggling
+ * a toolbar button never shifts the layout. `--border-strong` is defined in
+ * index.css; while it was missing the whole `border` shorthand was invalid at
+ * computed-value time, which dropped the border to 0 and moved the label by 1px.
+ */
 export const HEADER_TOOLBAR_BUTTON_ACTIVE_STYLE: CSSProperties = {
     background: 'var(--bg-secondary)',
     color: 'var(--text-primary)',
@@ -46,7 +52,7 @@ export const HEADER_TOOLBAR_SECONDARY_BUTTON_STYLE: CSSProperties = {
     cursor: 'pointer',
     fontSize: '12px',
     fontWeight: 600,
-    transition: 'background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, opacity 0.16s ease',
+    transition: 'background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast)',
 };
 
 export const HEADER_TOOLBAR_PRIMARY_BUTTON_STYLE: CSSProperties = {
@@ -62,5 +68,5 @@ export const HEADER_TOOLBAR_PRIMARY_BUTTON_STYLE: CSSProperties = {
     cursor: 'pointer',
     fontSize: '12px',
     fontWeight: 700,
-    transition: 'opacity 0.16s ease',
+    transition: 'opacity var(--transition-fast)',
 };

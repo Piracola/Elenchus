@@ -13,6 +13,7 @@ import BrandIcon from '../shared/BrandIcon';
 import type { SessionListItem } from '../../types';
 import { filterSessionsByQuery, getSessionModePresentation, mergeSessionPage } from '../../utils/session/sessionList';
 import { toast } from '../../utils/chat/toast';
+import { PRESSABLE, PRESSABLE_ICON, PRESSABLE_TEXT } from '../../config/motion';
 
 type SessionListSection = {
     key: 'active' | 'history';
@@ -214,8 +215,7 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                 </div>
 
                 <motion.button
-                    whileHover={{ scale: 1.05, background: 'var(--bg-hover)' }}
-                    whileTap={{ scale: 0.95 }}
+                    {...PRESSABLE_ICON}
                     onClick={onCollapse}
                     style={{
                         background: 'var(--bg-card)',
@@ -239,8 +239,7 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
             {/* Actions */}
             <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <motion.button
-                    whileHover={{ scale: 1.01, background: 'var(--bg-hover)' }}
-                    whileTap={{ scale: 0.99 }}
+                    {...PRESSABLE}
                     onClick={() => {
                         setCurrentSession(null);
                     }}
@@ -258,7 +257,7 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                         fontWeight: 600,
                         cursor: 'pointer',
                         boxShadow: 'var(--shadow-xs)',
-                        transition: 'all var(--transition-fast)',
+                        transition: 'background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast)',
                     }}
                 >
                     <Plus size={16} strokeWidth={2.5} />
@@ -269,7 +268,7 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                     position: 'relative',
                     background: 'var(--bg-tertiary)',
                     borderRadius: 'var(--radius-lg)',
-                    transition: 'all var(--transition-fast)',
+                    transition: 'background-color var(--transition-fast), border-color var(--transition-fast)',
                 }}>
                     <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                     <input
@@ -435,7 +434,10 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                                                 ? 'var(--accent-emerald)'
                                                 : 'var(--accent-indigo)';
                             return (
-                                <motion.div
+                                /* Plain div: the row's hover/active feedback is the CSS
+                                   background transition below, and a text-bearing row must
+                                   never scale. Keeps long lists off the motion render loop. */
+                                <div
                                     key={item.id}
                                     data-session-mode={item.debate_mode}
                                     role="button"
@@ -464,7 +466,7 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                                         boxShadow: isActive
                                             ? 'var(--shadow-xs)'
                                             : 'none',
-                                        transition: 'background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast)',
+                                        transition: 'background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast)',
                                         position: 'relative',
                                         display: 'flex',
                                         alignItems: 'flex-start',
@@ -591,8 +593,7 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                                     <motion.button
                                         initial={false}
                                         animate={{ opacity: isHovered || isActive ? 1 : 0 }}
-                                        whileHover={{ scale: 1.1, color: 'var(--accent-rose)' }}
-                                        whileTap={{ scale: 0.95 }}
+                                        {...PRESSABLE_ICON}
                                         onClick={(e) => handleDelete(e, item.id)}
                                         onPointerDown={(e) => {
                                             e.stopPropagation();
@@ -609,13 +610,13 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                                             alignItems: 'center',
                                             justifyContent: 'center',
                                             marginTop: '2px',
-                                            transition: 'background var(--transition-fast), color var(--transition-fast)',
+                                            transition: 'background-color var(--transition-fast), color var(--transition-fast)',
                                         }}
                                         title="删除"
                                     >
                                         <Trash2 size={14} />
                                     </motion.button>
-                                </motion.div>
+                                </div>
                                         );
                                     })}
                                 </div>
@@ -623,7 +624,7 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                         ))}
                         {sessions.length < total && !searchQuery && (
                             <motion.button
-                                whileHover={{ scale: 1.01, background: 'var(--bg-hover)' }}
+                                {...PRESSABLE_TEXT}
                                 onClick={() => loadSessions(sessions.length, true)}
                                 disabled={isLoadingMore}
                                 style={{
@@ -637,7 +638,7 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                                     cursor: isLoadingMore ? 'not-allowed' : 'pointer',
                                     opacity: isLoadingMore ? 0.5 : 1,
                                     boxShadow: 'var(--shadow-xs)',
-                                    transition: 'all var(--transition-fast)',
+                                    transition: 'background-color var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast)',
                                 }}
                             >
                                 {isLoadingMore ? '加载中...' : `加载更多 (${total - sessions.length})`}
@@ -657,8 +658,7 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                 justifyContent: 'space-between',
             }}>
                 <motion.button
-                    whileHover={{ scale: 1.05, background: 'var(--bg-hover)' }}
-                    whileTap={{ scale: 0.95 }}
+                    {...PRESSABLE_ICON}
                     style={{
                         background: 'var(--bg-card)',
                         border: '1px solid var(--border-subtle)',
@@ -678,8 +678,7 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                 </motion.button>
 
                 <motion.button
-                    whileHover={{ scale: 1.05, background: 'var(--bg-hover)' }}
-                    whileTap={{ scale: 0.95 }}
+                    {...PRESSABLE_ICON}
                     onClick={toggleTheme}
                     style={{
                         background: 'var(--bg-card)',

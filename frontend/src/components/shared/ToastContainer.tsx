@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, AlertCircle, CheckCircle, Info } from 'lucide-react';
 import type { ToastType } from '../../utils/chat/toast';
+import { TRANSITION } from '../../config/motion';
 
 interface Toast {
     id: string;
@@ -62,7 +63,7 @@ export function ToastContainer({ toasts, removeToast }: ToastContainerProps) {
                             initial={{ opacity: 0, x: 50, scale: 0.9 }}
                             animate={{ opacity: 1, x: 0, scale: 1 }}
                             exit={{ opacity: 0, x: 50, scale: 0.9 }}
-                            transition={{ duration: 0.2 }}
+                            transition={TRANSITION.normal}
                             style={{
                                 padding: '12px 16px',
                                 background: colors.bg,

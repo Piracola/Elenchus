@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../../api/client';
 import BrandIcon from './BrandIcon';
+import { PRESSABLE, TRANSITION } from '../../config/motion';
 
 interface Props {
     children: React.ReactNode;
@@ -76,6 +77,7 @@ export function BackendHealthCheck({ children }: Props) {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -20 }}
+                        transition={TRANSITION.slow}
                         style={{
                             display: 'flex',
                             flexDirection: 'column',
@@ -115,6 +117,7 @@ export function BackendHealthCheck({ children }: Props) {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -20 }}
+                        transition={TRANSITION.slow}
                         style={{
                             display: 'flex',
                             flexDirection: 'column',
@@ -165,8 +168,7 @@ export function BackendHealthCheck({ children }: Props) {
                             </p>
                         </div>
                         <motion.button
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
+                            {...PRESSABLE}
                             onClick={handleRetry}
                             style={{
                                 padding: '10px 24px',
