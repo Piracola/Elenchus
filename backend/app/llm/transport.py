@@ -36,6 +36,7 @@ def build_openai_chat_payload(
     config: ResolvedLLMConfig,
     tools: Sequence[BaseTool] | None = None,
     stream: bool = False,
+    include_stream_usage: bool = True,
 ) -> dict[str, Any]:
     """Build the OpenAI-compatible chat completions payload."""
     known_params, extra_body = split_openai_params(config.custom_parameters)
@@ -48,6 +49,10 @@ def build_openai_chat_payload(
         "stream": stream,
     }
 
+    if stream and include_stream_usage:
+        # Ask the provider to append a final usage frame to the stream.
+        payload.setdefault("stream_options", {"include_usage": True})
+
     if tools:
         payload["tools"] = [convert_to_openai_tool(tool) for tool in tools]
         payload["tool_choice"] = "auto"
@@ -56,6 +61,12 @@ def build_openai_chat_payload(
         payload["extra_body"] = extra_body
 
     return payload
+
+
+def _is_stream_options_rejection(exc: Exception) -> bool:
+    """Detect providers that reject the stream_options parameter outright."""
+    text = str(exc).lower()
+    return "stream_options" in text
 
 
 async def invoke_openai_chat_raw(
@@ -104,14 +115,28 @@ async def invoke_openai_chat_raw_streaming(
     streaming_think_block = False
 
     try:
-        stream = await client.chat.completions.create(
-            **build_openai_chat_payload(
-                messages=messages,
-                config=config,
-                tools=tools,
-                stream=True,
+        try:
+            stream = await client.chat.completions.create(
+                **build_openai_chat_payload(
+                    messages=messages,
+                    config=config,
+                    tools=tools,
+                    stream=True,
+                )
             )
-        )
+        except Exception as exc:
+            if not _is_stream_options_rejection(exc):
+                raise
+            # Provider rejects stream_options: retry once without usage frames.
+            stream = await client.chat.completions.create(
+                **build_openai_chat_payload(
+                    messages=messages,
+                    config=config,
+                    tools=tools,
+                    stream=True,
+                    include_stream_usage=False,
+                )
+            )
         async for chunk in stream:
             chunk_json = (
                 chunk.model_dump_json()

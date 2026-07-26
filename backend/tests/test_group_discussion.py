@@ -21,6 +21,7 @@ async def test_group_discussion_appends_entries_to_recent_context(monkeypatch):
         timeout_seconds=None,
         heartbeat_interval_seconds=None,
         max_retries=None,
+        **kwargs,
     ):
         captured_instructions.append(
             next(message.content for message in messages if isinstance(message, HumanMessage))
@@ -68,6 +69,7 @@ async def test_group_discussion_generates_only_missing_rounds_after_resume(monke
         timeout_seconds=None,
         heartbeat_interval_seconds=None,
         max_retries=None,
+        **kwargs,
     ):
         nonlocal calls
         calls += 1
@@ -166,6 +168,7 @@ async def test_group_discussion_retries_with_retry_after_then_writes_error_entry
         timeout_seconds=None,
         heartbeat_interval_seconds=None,
         max_retries=None,
+        **kwargs,
     ):
         nonlocal attempts
         attempts += 1
@@ -222,6 +225,7 @@ async def test_group_discussion_uses_context_model_override(monkeypatch):
         timeout_seconds=None,
         heartbeat_interval_seconds=None,
         max_retries=None,
+        **kwargs,
     ):
         nonlocal captured_override
         captured_override = dict(override or {})

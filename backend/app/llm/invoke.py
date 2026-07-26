@@ -26,6 +26,7 @@ from app.llm.transport import (
     invoke_openai_chat_raw,
     invoke_openai_chat_raw_streaming,
 )
+from app.llm.usage import UsageCallback, emit_usage
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +167,7 @@ async def invoke_chat_model(
     tools: Sequence[BaseTool] | None = None,
     on_token: TokenCallback | None = None,
     on_progress: ProgressCallback | None = None,
+    on_usage: UsageCallback | None = None,
     timeout_seconds: float = 120.0,
     heartbeat_interval_seconds: float = 1.0,
     max_retries: int = 2,
@@ -179,6 +181,7 @@ async def invoke_chat_model(
     result into an `AIMessage`.
     """
     config = None
+    bound_tools = list(tools or [])
 
     for attempt in range(max_retries + 1):
         used_raw_transport_this_attempt = False
@@ -190,11 +193,10 @@ async def invoke_chat_model(
                 "max_tokens": config.max_tokens,
                 "streaming": streaming,
             }
-            bound_tools = list(tools or [])
 
             if streaming and config.provider_type == "openai":
                 used_raw_transport_this_attempt = True
-                return await _invoke_openai_raw(
+                response = await _invoke_openai_raw(
                     messages=list(messages),
                     config=config,
                     tools=bound_tools,
@@ -203,6 +205,13 @@ async def invoke_chat_model(
                     timeout_seconds=timeout_seconds,
                     heartbeat_interval_seconds=heartbeat_interval_seconds,
                 )
+                await emit_usage(
+                    on_usage,
+                    response,
+                    provider_type=config.provider_type,
+                    model=config.model,
+                )
+                return response
 
             llm = create_llm_from_config(config, streaming=streaming)
 
@@ -210,7 +219,7 @@ async def invoke_chat_model(
                 llm = llm.bind_tools(bound_tools)
 
             if on_token is not None:
-                return await _run_with_heartbeat(
+                response = await _run_with_heartbeat(
                     lambda: _invoke_chat_model_streaming(
                         llm=llm,
                         config=config,
@@ -222,11 +231,24 @@ async def invoke_chat_model(
                     timeout_seconds=timeout_seconds,
                     heartbeat_interval_seconds=heartbeat_interval_seconds,
                 )
+                await emit_usage(
+                    on_usage,
+                    response,
+                    provider_type=config.provider_type,
+                    model=config.model,
+                )
+                return response
             response = await _run_with_heartbeat(
                 lambda: llm.ainvoke(list(messages)),
                 on_progress=on_progress,
                 timeout_seconds=timeout_seconds,
                 heartbeat_interval_seconds=heartbeat_interval_seconds,
+            )
+            await emit_usage(
+                on_usage,
+                response,
+                provider_type=config.provider_type,
+                model=config.model,
             )
             # 处理 reasoning_content（如 gemma-4 等模型的思维链）
             if isinstance(response, AIMessage):
@@ -264,7 +286,7 @@ async def invoke_chat_model(
                     current_config.api_base_url or "(default)",
                     exc,
                 )
-                return await _invoke_openai_raw(
+                fallback_response = await _invoke_openai_raw(
                     messages=list(messages),
                     config=current_config,
                     tools=bound_tools,
@@ -273,6 +295,13 @@ async def invoke_chat_model(
                     timeout_seconds=timeout_seconds,
                     heartbeat_interval_seconds=heartbeat_interval_seconds,
                 )
+                await emit_usage(
+                    on_usage,
+                    fallback_response,
+                    provider_type=current_config.provider_type,
+                    model=current_config.model,
+                )
+                return fallback_response
 
 
 async def invoke_text_model(
@@ -282,6 +311,7 @@ async def invoke_text_model(
     tools: Sequence[BaseTool] | None = None,
     on_token: TokenCallback | None = None,
     on_progress: ProgressCallback | None = None,
+    on_usage: UsageCallback | None = None,
     timeout_seconds: float = 120.0,
     heartbeat_interval_seconds: float = 1.0,
     max_retries: int = 2,
@@ -295,6 +325,7 @@ async def invoke_text_model(
                 tools=tools,
                 on_token=on_token,
                 on_progress=on_progress,
+                on_usage=on_usage,
                 timeout_seconds=timeout_seconds,
                 heartbeat_interval_seconds=heartbeat_interval_seconds,
                 max_retries=0,

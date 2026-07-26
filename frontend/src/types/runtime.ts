@@ -34,8 +34,22 @@ export type WSMessageType =
     | 'turn_complete'
     | 'debate_complete'
     | 'audience_message'
+    | 'group_discussion'
+    | 'token_usage'
     | 'error'
     | 'pong';
+
+export interface TokenUsageBucket {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+    calls: number;
+}
+
+export interface TokenUsageSummary {
+    total: TokenUsageBucket;
+    by_role: Record<string, TokenUsageBucket>;
+}
 
 export interface WSMessage {
     type: WSMessageType | string;

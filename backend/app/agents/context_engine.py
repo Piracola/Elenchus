@@ -308,6 +308,8 @@ async def build_round_digest(
         f"{transcript}"
     )
     try:
+        from app.agents.runtime_progress import build_usage_callback
+
         context_override = await build_context_helper_override()
         summary = await invoke_text_model(
             [
@@ -315,6 +317,7 @@ async def build_round_digest(
                 HumanMessage(content=prompt),
             ],
             override=context_override,
+            on_usage=build_usage_callback(state, node_name="manage_context"),
         )
     except Exception as exc:
         logger.warning("Context round digest generation failed for turn %d: %s", turn_index + 1, exc)

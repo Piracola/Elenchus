@@ -27,7 +27,7 @@ def _score_payload(score: int = 8) -> dict[str, object]:
 
 @pytest.mark.asyncio
 async def test_judge_score_parses_json_wrapped_in_markdown(monkeypatch):
-    async def fake_invoke_text_model(messages, *, override=None, tools=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+    async def fake_invoke_text_model(messages, *, override=None, tools=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None, **kwargs):
         payload = json.dumps(_score_payload(), ensure_ascii=False, indent=2)
         return f"```json\n{payload}\n```"
 
@@ -94,13 +94,76 @@ def test_default_scores_use_localized_fallback_comment():
 
     assert fallback["overall_comment"] == "评分解析失败，本轮暂按中性分处理。"
     assert fallback["logical_rigor"]["score"] == 5
+    assert fallback["parse_failed"] is True
+
+
+def test_score_payload_accepts_legacy_persuasiveness_key():
+    parsed = judge._parse_score_response(json.dumps(_score_payload(), ensure_ascii=False))
+
+    assert parsed is not None
+    assert parsed.boundary_contribution.score == 7
+    assert "boundary_contribution" in parsed.model_dump()
+
+
+def test_score_payload_accepts_boundary_contribution_key():
+    payload = _score_payload()
+    payload["boundary_contribution"] = payload.pop("persuasiveness")
+    parsed = judge._parse_score_response(json.dumps(payload, ensure_ascii=False))
+
+    assert parsed is not None
+    assert parsed.boundary_contribution.score == 7
+
+
+@pytest.mark.asyncio
+async def test_judge_parse_failure_marks_scores_and_keeps_cumulative_aligned(monkeypatch):
+    async def fake_invoke_text_model(messages, **kwargs):
+        return "这不是 JSON，无法解析。"
+
+    monkeypatch.setattr(judge, "get_judge_prompt", lambda: "Judge carefully.")
+    monkeypatch.setattr(judge, "invoke_text_model", fake_invoke_text_model)
+
+    result = await judge.judge_score(
+        {
+            "topic": "Should AI regulate itself?",
+            "participants": ["proposer"],
+            "dialogue_history": [{"role": "proposer", "content": "Argument"}],
+            "shared_knowledge": [],
+            "current_turn": 1,
+            "cumulative_scores": {"proposer": {dim: [8] for dim in judge._SCORE_DIMS}},
+            "agent_configs": {},
+        }
+    )
+
+    proposer_scores = result["current_scores"]["proposer"]
+    assert proposer_scores["parse_failed"] is True
+    # The failed round records None so later rounds stay index-aligned.
+    for dim in judge._SCORE_DIMS:
+        assert result["cumulative_scores"]["proposer"][dim] == [8, None]
+
+
+def test_build_judge_instruction_only_includes_current_turn_speeches():
+    instruction = judge._build_judge_instruction(
+        topic="Should AI regulate itself?",
+        role_to_judge="proposer",
+        dialogue_history=[
+            {"role": "proposer", "content": "第一轮的陈词", "turn": 0},
+            {"role": "opposer", "content": "第一轮的反驳", "turn": 0},
+            {"role": "proposer", "content": "第二轮的最新发言", "turn": 1},
+        ],
+        shared_knowledge=[],
+        current_turn=1,
+    )
+
+    assert "第二轮的最新发言" in instruction
+    assert "第一轮的陈词" not in instruction
+    assert "Complete Dialogue History" not in instruction
 
 
 @pytest.mark.asyncio
 async def test_judge_uses_dialogue_history_when_recent_is_stale(monkeypatch):
     captured_instructions: list[str] = []
 
-    async def fake_invoke_text_model(messages, *, override=None, tools=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+    async def fake_invoke_text_model(messages, *, override=None, tools=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None, **kwargs):
         captured_instructions.append(messages[-1].content)
         return json.dumps(_score_payload(), ensure_ascii=False)
 
@@ -140,7 +203,7 @@ def test_build_judge_instruction_warns_against_ascii_double_quotes():
 
 @pytest.mark.asyncio
 async def test_judge_scores_participants_concurrently(monkeypatch):
-    async def fake_invoke_text_model(messages, *, override=None, tools=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+    async def fake_invoke_text_model(messages, *, override=None, tools=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None, **kwargs):
         await asyncio.sleep(0.08)
         return json.dumps(_score_payload(), ensure_ascii=False)
 

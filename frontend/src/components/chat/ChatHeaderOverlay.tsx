@@ -5,6 +5,7 @@ import { api } from '../../api/client';
 import type { MarkdownExportCategory } from '../../types';
 import { toast } from '../../utils/chat/toast';
 import StatusBanner from './StatusBanner';
+import TokenUsageChip from './TokenUsageChip';
 import ReferenceLibraryPanel from './ReferenceLibraryPanel';
 import SidebarExpandButton from '../shared/SidebarExpandButton';
 import DebaterSettingsModal from './DebaterSettingsModal';
@@ -267,6 +268,8 @@ export default function ChatHeaderOverlay({
                   {bulkCollapseLabel}
                 </motion.button>
               )}
+
+              <TokenUsageChip />
 
               {currentSessionId && (
                 <ReferenceLibraryPanel

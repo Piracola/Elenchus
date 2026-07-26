@@ -18,6 +18,7 @@ from app.agents.context_engine import build_context_packet
 from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.prompt_loader import get_judge_prompt
 from app.agents.runtime_progress import (
+    build_usage_callback,
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
     MODEL_INVOCATION_TIMEOUT_SECONDS,
     build_status_heartbeat_callback,
@@ -29,6 +30,9 @@ logger = logging.getLogger(__name__)
 
 _SCORE_DIMS = list(SCORE_DIMENSION_WEIGHTS.keys())
 
+# Models prompted before the dimension rename may still emit the legacy key.
+_LEGACY_DIM_NAME_ALIASES = {"persuasiveness": "boundary_contribution"}
+
 _OUTPUT_SCHEMA = {
     "logical_rigor": {"score": 1, "rationale": "Explain the score."},
     "evidence_quality": {"score": 1, "rationale": "Explain the score."},
@@ -38,6 +42,14 @@ _OUTPUT_SCHEMA = {
     "boundary_contribution": {"score": 1, "rationale": "Explain the score."},
     "overall_comment": "One concise summary of the debater's performance.",
 }
+
+
+def _entry_turn(entry: dict[str, Any]) -> int:
+    value = entry.get("turn")
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return -1
 
 
 def _strip_code_fences(text: str) -> str:
@@ -145,22 +157,26 @@ def _build_judge_instruction(
         f"## Task\nScore the **{role_to_judge}** debater for turn {current_turn + 1}.\n",
         f"## Debate Topic\n{topic}\n",
         packet.render(),
-        "## Complete Dialogue History",
+        "## Current Turn Speeches",
     ]
 
-    for entry in dialogue_history:
+    # Historical turns are covered by the packet's round digests and recent
+    # dialogue excerpts; only the turn being judged needs full text. This keeps
+    # the judge prompt bounded instead of growing linearly with the debate.
+    current_turn_entries = [
+        entry
+        for entry in dialogue_history
+        if isinstance(entry, dict) and _entry_turn(entry) == current_turn
+    ]
+    if not current_turn_entries:
+        current_turn_entries = [
+            entry for entry in dialogue_history if isinstance(entry, dict)
+        ][-4:]
+    for entry in current_turn_entries:
         role = entry.get("role", "")
         content = entry.get("content", "")
         marker = " <- being judged" if role == role_to_judge else ""
         parts.append(f"\n### [{role}]{marker}\n{content}")
-
-    facts = [item for item in shared_knowledge if item.get("type") == "fact"]
-    if facts:
-        parts.append("\n## Fact Check Results")
-        for fact in facts:
-            parts.append(
-                f"- Query: {fact.get('query', '')}\n  Result: {fact.get('result', '')}"
-            )
 
     parts.append(
         "\n## Instructions\n"
@@ -241,7 +257,7 @@ def _lenient_extract_score(text: str) -> TurnScore | None:
 
     dimensions: dict[str, Any] = {}
     for match in dim_pattern.finditer(text):
-        dim_name = match.group(1)
+        dim_name = _LEGACY_DIM_NAME_ALIASES.get(match.group(1), match.group(1))
         if dim_name in _SCORE_DIMS:
             dimensions[dim_name] = {
                 "score": int(match.group(2)),
@@ -252,15 +268,10 @@ def _lenient_extract_score(text: str) -> TurnScore | None:
     if overall_match:
         dimensions["overall_comment"] = overall_match.group(1)
 
-    # Only return if we found at least the core dimensions
+    # Only return if we found all core dimensions
     found_dims = set(dimensions.keys()) & set(_SCORE_DIMS)
     if len(found_dims) < len(_SCORE_DIMS):
         return None
-
-    # Fill missing dimensions with neutral defaults
-    for dim in _SCORE_DIMS:
-        if dim not in dimensions:
-            dimensions[dim] = {"score": 5, "rationale": "宽松解析回退分"}
 
     if "overall_comment" not in dimensions:
         dimensions["overall_comment"] = "宽松解析回退评语。"
@@ -274,7 +285,11 @@ def _default_scores() -> dict[str, Any]:
         for dim in _SCORE_DIMS
     }
     fallback_dimensions["overall_comment"] = "评分解析失败，本轮暂按中性分处理。"
-    return TurnScore(**fallback_dimensions).model_dump()
+    payload = TurnScore(**fallback_dimensions).model_dump()
+    # Machine-readable marker so events, exports, and the UI can distinguish
+    # a real neutral score from a parsing failure.
+    payload["parse_failed"] = True
+    return payload
 
 
 async def _score_participant(
@@ -298,6 +313,7 @@ async def _score_participant(
         state=state,
     )
 
+    usage_callback = build_usage_callback(state, node_name="judge", role=role)
     for attempt in range(2):
         try:
             response_text = await invoke_text_model(
@@ -307,6 +323,7 @@ async def _score_participant(
                 ],
                 override=override,
                 on_progress=progress_callback,
+                on_usage=usage_callback,
                 timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
                 heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
             )
@@ -394,6 +411,13 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
             logger.error("Judge failed to score [%s] after retries", role)
             score_dict = _default_scores()
             current_scores[role] = score_dict
+
+            # Keep every dimension list aligned across turns: a parse failure
+            # records None so downstream per-round series don't shift rounds.
+            if role not in cumulative_scores:
+                cumulative_scores[role] = {dim: [] for dim in _SCORE_DIMS}
+            for dim in _SCORE_DIMS:
+                cumulative_scores[role].setdefault(dim, []).append(None)
 
         judge_history_entries.append(
             {

@@ -22,7 +22,7 @@ Source: https://example.com/b
 
 @pytest.mark.asyncio
 async def test_debater_repairs_search_dump_into_final_speech(monkeypatch):
-    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None, **kwargs):
         return AIMessage(
             content=(
                 'I\'ll search for "topic".\n'
@@ -32,7 +32,7 @@ async def test_debater_repairs_search_dump_into_final_speech(monkeypatch):
             )
         )
 
-    async def fake_invoke_text_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+    async def fake_invoke_text_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None, **kwargs):
         return "这是整理后的正式辩论发言。"
 
     monkeypatch.setattr(debater, "get_debater_system_prompt", lambda role: "系统提示")
@@ -101,7 +101,7 @@ async def test_debater_streams_tokens_through_runtime_event_emitter(monkeypatch)
                 },
             ))
 
-    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None, **kwargs):
         assert on_token is not None
         await on_token("实时")
         await on_token("输出")
@@ -140,7 +140,7 @@ async def test_debater_retries_empty_public_speech(monkeypatch):
     captured_instructions: list[str] = []
     calls = 0
 
-    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None, **kwargs):
         nonlocal calls
         calls += 1
         captured_instructions.append(messages[-1].content)
@@ -172,7 +172,7 @@ async def test_debater_retries_empty_public_speech(monkeypatch):
 async def test_debater_injects_role_specific_speech_limit(monkeypatch):
     captured_instructions: list[str] = []
 
-    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None, **kwargs):
         captured_instructions.append(messages[1].content)
         return AIMessage(content="正式发言")
 
@@ -207,7 +207,7 @@ async def test_debater_injects_role_specific_speech_limit(monkeypatch):
 async def test_debater_treats_think_only_response_as_empty(monkeypatch):
     calls = 0
 
-    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None, **kwargs):
         nonlocal calls
         calls += 1
         if calls == 1:
@@ -250,7 +250,7 @@ async def test_debater_cancels_stream_before_retrying_empty_speech(monkeypatch):
         async def emit_speech_cancel(self, session_id, *, role, agent_name, turn):
             emitted.append("speech_cancel")
 
-    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None, **kwargs):
         nonlocal calls
         calls += 1
         if calls == 1:
@@ -284,7 +284,7 @@ async def test_debater_cancels_stream_before_retrying_empty_speech(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_debater_raises_after_repeated_empty_speech(monkeypatch):
-    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None, **kwargs):
         return AIMessage(content="")
 
     monkeypatch.setattr(debater, "get_debater_system_prompt", lambda role: "系统提示")
@@ -310,7 +310,7 @@ async def test_debater_raises_after_repeated_empty_speech(monkeypatch):
 async def test_debater_includes_only_own_previous_judge_feedback(monkeypatch):
     captured_instructions: list[str] = []
 
-    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None, **kwargs):
         captured_instructions.append(messages[-1].content)
         return AIMessage(content="正式发言")
 
@@ -368,7 +368,7 @@ async def test_debater_includes_only_own_previous_judge_feedback(monkeypatch):
 async def test_debater_falls_back_to_older_feedback_and_excludes_same_turn(monkeypatch):
     captured_instructions: list[str] = []
 
-    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+    async def fake_invoke_chat_model(messages, *, override=None, tools=None, on_token=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None, **kwargs):
         captured_instructions.append(messages[-1].content)
         return AIMessage(content="正式发言")
 

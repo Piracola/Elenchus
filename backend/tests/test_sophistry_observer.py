@@ -7,7 +7,7 @@ from app.agents import sophistry_observer
 
 @pytest.mark.asyncio
 async def test_sophistry_observer_report_records_source_mapping(monkeypatch):
-    async def fake_invoke_text_model(messages, *, override=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None):
+    async def fake_invoke_text_model(messages, *, override=None, on_progress=None, timeout_seconds=None, heartbeat_interval_seconds=None, **kwargs):
         return "观察员总结"
 
     monkeypatch.setattr(sophistry_observer, "get_sophistry_observer_prompt", lambda: "系统提示")

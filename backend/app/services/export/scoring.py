@@ -57,7 +57,7 @@ def format_score(score_value: Any) -> str:
 
 def format_cumulative_value(value: Any) -> str:
     if isinstance(value, list):
-        compact_values = [str(item) for item in value]
+        compact_values = ["-" if item is None else str(item) for item in value]
         return " -> ".join(compact_values) if compact_values else "-"
     if value in (None, ""):
         return "-"

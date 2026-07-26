@@ -802,6 +802,7 @@ class RunLedgerService:
             "current_mode_report": projected_data.get("current_mode_report"),
             "final_mode_report": projected_data.get("final_mode_report"),
             "builtin_reference_docs": builtin_reference_docs,
+            "token_usage": projected_data.get("token_usage"),
         }
 
     def _document_projection_entries(

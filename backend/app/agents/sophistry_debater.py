@@ -13,6 +13,7 @@ from langgraph.graph.message import RemoveMessage
 from app.agents.context_builder import build_runtime_context_for_agent
 from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.runtime_progress import (
+    build_usage_callback,
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
     MODEL_INVOCATION_TIMEOUT_SECONDS,
     build_status_heartbeat_callback,
@@ -151,6 +152,7 @@ async def sophistry_debater_speak(state: dict[str, Any]) -> dict[str, Any]:
         node_name="sophistry_speaker",
         template="诡辩发言仍在生成，已等待 {seconds} 秒...",
     )
+    usage_callback = build_usage_callback(state, node_name="sophistry_speaker", role=role)
 
     async def handle_token(token: str) -> None:
         nonlocal speech_started
@@ -200,6 +202,7 @@ async def sophistry_debater_speak(state: dict[str, Any]) -> dict[str, Any]:
             tools=None,
             on_token=handle_token,
             on_progress=progress_callback,
+            on_usage=usage_callback,
             timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
             heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
         )

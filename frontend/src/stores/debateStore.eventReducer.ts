@@ -2,6 +2,8 @@ import type {
     DialogueEntry,
     ModeArtifact,
     RuntimeEvent,
+    TokenUsageBucket,
+    TokenUsageSummary,
     TurnScore,
 } from '../types';
 import {
@@ -535,6 +537,56 @@ function handleAudienceMessage(
     };
 }
 
+const EMPTY_TOKEN_BUCKET: TokenUsageBucket = {
+    input_tokens: 0,
+    output_tokens: 0,
+    total_tokens: 0,
+    calls: 0,
+};
+
+function addToBucket(
+    bucket: TokenUsageBucket | undefined,
+    input: number,
+    output: number,
+    total: number,
+): TokenUsageBucket {
+    const base = bucket ?? EMPTY_TOKEN_BUCKET;
+    return {
+        input_tokens: base.input_tokens + input,
+        output_tokens: base.output_tokens + output,
+        total_tokens: base.total_tokens + total,
+        calls: base.calls + 1,
+    };
+}
+
+function handleTokenUsage(
+    state: DebateState,
+    payload: Record<string, unknown>,
+): Partial<DebateState> {
+    const input = getPayloadNumber(payload, 'input_tokens') ?? 0;
+    const output = getPayloadNumber(payload, 'output_tokens') ?? 0;
+    const total = getPayloadNumber(payload, 'total_tokens') ?? input + output;
+    if (input <= 0 && output <= 0 && total <= 0) return {};
+
+    const roleKey =
+        getPayloadString(payload, 'role')
+        || getPayloadString(payload, 'node')
+        || 'other';
+    const previous: TokenUsageSummary = state.tokenUsage ?? {
+        total: EMPTY_TOKEN_BUCKET,
+        by_role: {},
+    };
+    return {
+        tokenUsage: {
+            total: addToBucket(previous.total, input, output, total),
+            by_role: {
+                ...previous.by_role,
+                [roleKey]: addToBucket(previous.by_role[roleKey], input, output, total),
+            },
+        },
+    };
+}
+
 // ── Event handler registry ─────────────────────────────────────
 
 const eventHandlers: Record<string, EventHandler> = {
@@ -556,6 +608,7 @@ const eventHandlers: Record<string, EventHandler> = {
     judge_score: handleJudgeScore,
     turn_complete: handleTurnComplete,
     debate_complete: handleDebateComplete,
+    token_usage: handleTokenUsage,
     error: handleError,
     audience_message: handleAudienceMessage,
 };

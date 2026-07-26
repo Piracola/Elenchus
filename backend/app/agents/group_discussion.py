@@ -16,6 +16,7 @@ from app.agents.context_engine import build_context_helper_override
 from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.prompt_loader import get_group_discussion_prompt
 from app.agents.runtime_progress import (
+    build_usage_callback,
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
     MODEL_INVOCATION_TIMEOUT_SECONDS,
     build_status_heartbeat_callback,
@@ -249,6 +250,7 @@ async def run_group_discussion(state: dict[str, Any]) -> dict[str, Any]:
         node_name="group_discussion",
         template="组内讨论仍在生成，已等待 {seconds} 秒...",
     )
+    usage_callback = build_usage_callback(state, node_name="group_discussion")
 
     for offset in range(rounds_to_generate):
         round_index = len(existing_discussions) + offset
@@ -269,6 +271,7 @@ async def run_group_discussion(state: dict[str, Any]) -> dict[str, Any]:
                     ],
                     override=override,
                     on_progress=progress_callback,
+                    on_usage=usage_callback,
                     timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
                     heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
                     max_retries=0,

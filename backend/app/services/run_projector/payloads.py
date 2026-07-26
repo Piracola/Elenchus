@@ -24,6 +24,7 @@ def default_projection(session: SessionRecord) -> dict[str, Any]:
         "shared_knowledge": [],
         "current_scores": {},
         "cumulative_scores": {},
+        "token_usage": {"total": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "calls": 0}, "by_role": {}},
         "mode_artifacts": [],
         "current_mode_report": None,
         "final_mode_report": None,

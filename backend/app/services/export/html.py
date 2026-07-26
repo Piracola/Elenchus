@@ -379,6 +379,47 @@ def _render_speech_stats(stats: dict[str, int]) -> str:
 """.strip()
 
 
+def _render_token_stats(session_data: dict[str, Any]) -> str:
+    usage = session_data.get("token_usage")
+    if not isinstance(usage, dict):
+        return ""
+    total = usage.get("total")
+    if not isinstance(total, dict):
+        return ""
+    total_tokens = total.get("total_tokens")
+    if not isinstance(total_tokens, (int, float)) or total_tokens <= 0:
+        return ""
+
+    input_tokens = int(total.get("input_tokens", 0) or 0)
+    output_tokens = int(total.get("output_tokens", 0) or 0)
+    calls = int(total.get("calls", 0) or 0)
+    items = [
+        ("输入", input_tokens, "input"),
+        ("输出", output_tokens, "output"),
+        ("合计", int(total_tokens), "total"),
+    ]
+    rendered_items = "\n".join(
+        '<div class="speech-stat-item" data-role="'
+        f'{_html(role)}">'
+        f'<span>{_html(label)}</span>'
+        f'<strong>{_html(f"{count:,}")}</strong>'
+        "<small>token</small>"
+        "</div>"
+        for label, count, role in items
+    )
+    return f"""
+<section class="speech-stats" aria-label="模型 token 用量统计">
+  <div class="speech-stats-heading">
+    <span>Token 用量</span>
+    <small>{_html(f"{calls} 次模型调用")}</small>
+  </div>
+  <div class="speech-stats-grid">
+    {rendered_items}
+  </div>
+</section>
+""".strip()
+
+
 def _render_legend(roles: list[str]) -> str:
     if not roles:
         return ""
@@ -1926,6 +1967,7 @@ def export_html(session_data: dict[str, Any], categories: list[str] | tuple[str,
         </div>
       </div>
       {_render_speech_stats(speech_stats)}
+      {_render_token_stats(session_data)}
     </header>
 
     {_render_reading_map(sections, has_scores=bool(scores_html))}

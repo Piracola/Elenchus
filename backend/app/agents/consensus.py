@@ -14,6 +14,7 @@ from app.agents.context_engine import build_context_packet
 from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.prompt_loader import get_consensus_prompt
 from app.agents.runtime_progress import (
+    build_usage_callback,
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
     MODEL_INVOCATION_TIMEOUT_SECONDS,
     build_status_heartbeat_callback,
@@ -112,6 +113,7 @@ async def converge_consensus(state: dict[str, Any]) -> dict[str, Any]:
             ],
             override=override if isinstance(override, dict) else None,
             on_progress=progress_callback,
+            on_usage=build_usage_callback(state, node_name="consensus"),
             timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
             heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
         )

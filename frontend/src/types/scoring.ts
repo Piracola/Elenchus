@@ -24,6 +24,8 @@ export interface TurnScore {
     module_scores?: Partial<Record<ScoreModuleKey, number>>;
     comprehensive_score?: number;
     overall_comment: string;
+    /** Set by the backend when score parsing failed and neutral 5s were substituted. */
+    parse_failed?: boolean;
 }
 
 export const SCORE_DIMENSIONS: {

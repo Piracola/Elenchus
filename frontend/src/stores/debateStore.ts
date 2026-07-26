@@ -13,6 +13,7 @@ import type {
     DebatePhase,
     RuntimeEvent,
     RunSummary,
+    TokenUsageSummary,
 } from '../types';
 import {
     appendDialogueWithDedupe,
@@ -44,6 +45,7 @@ export interface DebateRuntimeSlice {
     isDocumentVisible: boolean;
     visibilityResumeToken: number;
     collapsedAgentMessagesBySession: Record<string, Record<string, boolean>>;
+    tokenUsage: TokenUsageSummary | null;
 }
 
 export interface DebateConnectionSlice {
@@ -114,6 +116,7 @@ const initialRuntimeState: DebateRuntimeSlice = {
     isDocumentVisible: typeof document === 'undefined' ? true : document.visibilityState !== 'hidden',
     visibilityResumeToken: 0,
     collapsedAgentMessagesBySession: {},
+    tokenUsage: null,
 };
 
 const initialConnectionState: DebateConnectionSlice = {
@@ -280,6 +283,7 @@ export const useDebateStore = create<DebateState>((set) => ({
                 phase: runtimeFallback.phase,
                 currentStatus: runtimeFallback.status,
                 currentNode: runtimeFallback.node,
+                tokenUsage: safeSession?.token_usage ?? null,
             });
         }),
 

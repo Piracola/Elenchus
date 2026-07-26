@@ -47,6 +47,46 @@ def dialogue_entry_from_payload(payload: dict[str, Any], event: RunEventRecord) 
     }
 
 
+def _coerce_tokens(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, (int, float)) and value >= 0:
+        return int(value)
+    return 0
+
+
+def _accumulate_token_usage(projection: dict[str, Any], payload: dict[str, Any]) -> None:
+    usage = projection.get("token_usage")
+    if not isinstance(usage, dict):
+        usage = {}
+    total = usage.get("total")
+    if not isinstance(total, dict):
+        total = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "calls": 0}
+    by_role = usage.get("by_role")
+    if not isinstance(by_role, dict):
+        by_role = {}
+
+    role_key = str(payload.get("role") or payload.get("node") or "other")
+    bucket = by_role.get(role_key)
+    if not isinstance(bucket, dict):
+        bucket = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "calls": 0}
+
+    for target in (total, bucket):
+        target["input_tokens"] = _coerce_tokens(target.get("input_tokens")) + _coerce_tokens(
+            payload.get("input_tokens")
+        )
+        target["output_tokens"] = _coerce_tokens(target.get("output_tokens")) + _coerce_tokens(
+            payload.get("output_tokens")
+        )
+        target["total_tokens"] = _coerce_tokens(target.get("total_tokens")) + _coerce_tokens(
+            payload.get("total_tokens")
+        )
+        target["calls"] = _coerce_tokens(target.get("calls")) + 1
+
+    by_role[role_key] = bucket
+    projection["token_usage"] = {"total": total, "by_role": by_role}
+
+
 def apply_event_to_projection(projection: dict[str, Any], event: RunEventRecord) -> None:
     payload = event.payload if isinstance(event.payload, dict) else {}
     event_type = str(event.type or "")
@@ -149,6 +189,10 @@ def apply_event_to_projection(projection: dict[str, Any], event: RunEventRecord)
             projection["current_scores"] = payload["current_scores"]
         if isinstance(payload.get("cumulative_scores"), dict):
             projection["cumulative_scores"] = payload["cumulative_scores"]
+        return
+
+    if event_type == "token_usage":
+        _accumulate_token_usage(projection, payload)
         return
 
     if event_type == "memory_write":

@@ -10,6 +10,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.runtime_progress import (
+    build_usage_callback,
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
     MODEL_INVOCATION_TIMEOUT_SECONDS,
     build_status_heartbeat_callback,
@@ -102,6 +103,7 @@ async def sophistry_observer_report(state: dict[str, Any]) -> dict[str, Any]:
             ],
             override=override,
             on_progress=progress_callback,
+            on_usage=build_usage_callback(state, node_name="sophistry_observer"),
             timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
             heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
         )
@@ -169,6 +171,7 @@ async def sophistry_final_report(state: dict[str, Any]) -> dict[str, Any]:
             ],
             override=override,
             on_progress=progress_callback,
+            on_usage=build_usage_callback(state, node_name="sophistry_postmortem"),
             timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
             heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
         )

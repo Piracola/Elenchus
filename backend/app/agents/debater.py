@@ -16,6 +16,7 @@ from app.agents.context_builder import build_runtime_context_for_agent
 from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.prompt_loader import get_debater_system_prompt, load_prompt
 from app.agents.runtime_progress import (
+    build_usage_callback,
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
     MODEL_INVOCATION_TIMEOUT_SECONDS,
     build_status_heartbeat_callback,
@@ -100,6 +101,7 @@ def _looks_like_search_dump(text: str) -> bool:
 async def _repair_search_dump(
     payload_messages: list[BaseMessage],
     override: dict[str, Any] | None,
+    on_usage=None,
 ) -> str:
     """Ask the model to convert gathered evidence into an actual debate speech."""
     repaired = await invoke_text_model(
@@ -114,6 +116,7 @@ async def _repair_search_dump(
         ],
         override=override,
         tools=None,
+        on_usage=on_usage,
     )
     return normalize_model_text(repaired)
 
@@ -243,6 +246,7 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
         node_name="speaker",
         template="辩手仍在生成发言，已等待 {seconds} 秒...",
     )
+    usage_callback = build_usage_callback(state, node_name="speaker", role=role)
 
     async def handle_token(token: str) -> None:
         nonlocal speech_started
@@ -289,6 +293,7 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
             tools=(skills or None) if attempt == 0 else None,
             on_token=handle_token,
             on_progress=progress_callback,
+            on_usage=usage_callback,
             timeout_seconds=MODEL_INVOCATION_TIMEOUT_SECONDS,
             heartbeat_interval_seconds=MODEL_HEARTBEAT_INTERVAL_SECONDS,
         )
@@ -314,7 +319,7 @@ async def debater_speak(state: dict[str, Any]) -> dict[str, Any]:
                 role,
             )
             try:
-                content = await _repair_search_dump(attempt_messages, override)
+                content = await _repair_search_dump(attempt_messages, override, usage_callback)
             except Exception as exc:
                 logger.warning("Repair pass failed for [%s]: %s", role, exc)
 

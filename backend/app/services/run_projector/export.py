@@ -61,4 +61,5 @@ async def build_export_payload(
         "mode_artifacts": projected_data.get("mode_artifacts", []),
         "current_mode_report": projected_data.get("current_mode_report"),
         "final_mode_report": projected_data.get("final_mode_report"),
+        "token_usage": projected_data.get("token_usage", {}),
     }

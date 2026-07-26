@@ -1,4 +1,5 @@
 import type { TurnScore } from './scoring';
+import type { TokenUsageSummary } from './runtime';
 
 export type SessionStatus = 'pending' | 'in_progress' | 'completed' | 'error';
 export type RunStatus =
@@ -108,6 +109,7 @@ export interface Session {
     mode_artifacts: ModeArtifact[];
     current_mode_report?: ModeArtifact | Record<string, unknown> | null;
     final_mode_report?: ModeArtifact | Record<string, unknown> | null;
+    token_usage?: TokenUsageSummary | null;
 }
 
 export interface SessionListItem {

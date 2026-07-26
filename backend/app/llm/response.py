@@ -8,8 +8,15 @@ from typing import TYPE_CHECKING, Any
 from langchain_core.messages import AIMessage
 from langchain_core.messages.tool import tool_call
 
+from app.llm.usage import usage_from_openai_payload
+
 if TYPE_CHECKING:
     from app.llm.config import ResolvedLLMConfig
+
+
+def _build_usage_metadata(usage: Any) -> dict[str, int] | None:
+    """Convert a raw provider usage object into LangChain usage_metadata shape."""
+    return usage_from_openai_payload(usage)
 
 MAX_NORMALIZED_TEXT_LENGTH = 50000
 _HTML_GUARD_MESSAGE = (
@@ -175,6 +182,13 @@ def _coerce_openai_response_to_ai_message(raw_text: str) -> AIMessage:
         content = _normalize_reasoning_content_to_text(content, reasoning)
     tool_calls = _parse_tool_calls(message_payload.get("tool_calls"))
 
+    usage_metadata = _build_usage_metadata(payload.get("usage"))
+    if usage_metadata is not None:
+        return AIMessage(
+            content=content,
+            tool_calls=tool_calls,
+            usage_metadata=usage_metadata,
+        )
     return AIMessage(content=content, tool_calls=tool_calls)
 
 
@@ -183,6 +197,7 @@ def _coerce_openai_sse_to_ai_message(raw_text: str) -> AIMessage:
     content_parts: list[str] = []
     reasoning_parts: list[str] = []
     tool_call_buffers: dict[str, dict[str, Any]] = {}
+    usage_metadata: dict[str, int] | None = None
 
     for raw_line in raw_text.splitlines():
         line = raw_line.strip()
@@ -200,6 +215,12 @@ def _coerce_openai_sse_to_ai_message(raw_text: str) -> AIMessage:
 
         if not isinstance(payload, dict):
             continue
+
+        # The usage frame (stream_options include_usage) carries an empty
+        # choices array, so read it before the choices guard below.
+        chunk_usage = _build_usage_metadata(payload.get("usage"))
+        if chunk_usage is not None:
+            usage_metadata = chunk_usage
 
         choices = payload.get("choices")
         if not isinstance(choices, list):
@@ -256,6 +277,12 @@ def _coerce_openai_sse_to_ai_message(raw_text: str) -> AIMessage:
     if not content and not tool_calls:
         return AIMessage(content="[Malformed provider streaming response omitted]")
 
+    if usage_metadata is not None:
+        return AIMessage(
+            content=content,
+            tool_calls=tool_calls,
+            usage_metadata=usage_metadata,
+        )
     return AIMessage(content=content, tool_calls=tool_calls)
 
 

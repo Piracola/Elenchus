@@ -99,9 +99,29 @@ export function ScoreGrid({ judgeEntry, animated }: ScoreGridProps) {
                     fontWeight: 600,
                     textTransform: 'uppercase',
                     letterSpacing: '0.05em',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
                 }}
             >
                 概念边界评分表
+                {(judgeEntry.scores as TurnScore).parse_failed && (
+                    <span
+                        title="裁判输出未能解析为有效评分，本轮已按中性 5 分记录，不代表真实评估。"
+                        style={{
+                            padding: '2px 8px',
+                            borderRadius: 'var(--radius-full)',
+                            background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-subtle)',
+                            color: 'var(--text-muted)',
+                            fontWeight: 600,
+                            textTransform: 'none',
+                            letterSpacing: 'normal',
+                        }}
+                    >
+                        ⚠ 解析失败·中性分
+                    </span>
+                )}
             </div>
             {comprehensiveScore !== null && (
                 <motion.div
