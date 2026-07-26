@@ -23,21 +23,6 @@ export const MESSAGE_WIDTH_VALUES: Record<DisplaySettings['messageWidth'], strin
   full: '100%',
 };
 
-/**
- * Line-length cap for a speech, per width setting. Without this the transcript
- * ignores `messageWidth` entirely: the container grows but every message stays
- * pinned at the default measure, so "full" looks identical to "wide".
- *
- * The band stays inside what is readable in Chinese (~35-50 glyphs per line);
- * the rest of a wide page is used by the verdict column, not by longer lines.
- */
-export const MESSAGE_MEASURE_VALUES: Record<DisplaySettings['messageWidth'], string> = {
-  narrow: '34em',
-  medium: '38em',
-  wide: '42em',
-  full: '46em',
-};
-
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({

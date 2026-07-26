@@ -113,8 +113,6 @@ export default function StreamingMessage({
     }, [entry]);
 
     const badgeBg = agentVisual?.color ?? 'var(--accent-indigo)';
-    // Same spatial rule as MessageRow so a speech keeps its side when it settles.
-    const speaksOnRight = (entry.role ?? '').startsWith('opposer');
     const streamingStatus = status || '正在发言...';
 
     const splitContent = useMemo(
@@ -153,17 +151,19 @@ export default function StreamingMessage({
             // announces that a speech is being generated; the text itself is read
             // by navigating the transcript once it settles.
             aria-live="off"
+            // Mirrors MessageRow's row geometry: same speech column, same
+            // reserved verdict column, so a speech does not resize or shift when
+            // it stops streaming and becomes a settled row.
             style={{
                 display: 'flex',
-                flexDirection: 'column',
+                flexWrap: 'wrap',
+                gap: 'var(--space-5)',
                 width: '100%',
-                maxWidth: 'min(100%, var(--measure-reading))',
-                marginLeft: speaksOnRight ? 'auto' : 0,
-                marginRight: speaksOnRight ? 0 : 'auto',
+                alignItems: 'flex-start',
                 marginBottom: 'var(--space-8)',
             }}
         >
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 var(--transcript-speech-min)', minWidth: 0 }}>
                 <motion.div
                     {...STATIC_MOTION_PROPS}
                     style={{
@@ -173,8 +173,6 @@ export default function StreamingMessage({
                         borderRadius: 'var(--radius-lg)',
                         border: '1px solid var(--border-hairline)',
                         boxShadow: 'none',
-                        [speaksOnRight ? 'borderRight' : 'borderLeft']:
-                            `var(--marker-width) solid ${badgeBg}`,
                     }}
                 >
                     <div
@@ -269,6 +267,8 @@ export default function StreamingMessage({
                     </div>
                 </motion.div>
             </div>
+            {/* Holds the verdict column open while the speech streams. */}
+            <div style={{ flex: '0 1 var(--transcript-verdict-column)', minWidth: 0 }} />
         </div>
     );
 }

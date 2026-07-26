@@ -142,11 +142,22 @@ easing, or hover-scale literal.
 Visual character is a **paper reading surface**: a warm page
 (`--surface-page`), a white reading column (`--surface`), and three border steps
 (`--border-hairline`/`--border-subtle`/`--border-strong`) carrying the structure
-instead of shadows. Role colour appears only on a speaker avatar and the 3px
-`--marker-width` marker on a card's leading edge; scores are monochrome numerals
-with `.tabular-nums`, never colour-coded. Transcript columns cap at
-`--measure-reading` (42em) — a full-width line of Chinese is unreadable. 正方
-hugs the left, 反方 the right, so the exchange reads as an exchange.
+instead of shadows. Role colour appears only on a speaker avatar — speech cards
+carry no coloured edge marker, because a 3px bar bending around the corner
+radius reads as a defect. Scores are monochrome numerals with `.tabular-nums`,
+never colour-coded.
+
+A transcript row is two columns: the speech takes the remaining width from a
+`--transcript-speech-min` basis, and the verdict takes
+`--transcript-verdict-column` (`clamp(300px, 32%, 520px)`), so a wider page
+gives the speech proportionally more — the verdict's content does not grow with
+the viewport. Below the speech minimum the row wraps and the verdict stacks
+under the speech; there is no breakpoint to keep in sync. The verdict column is
+held open on speech-only rows, and `StreamingMessage` reproduces the same row
+geometry, so a speech never resizes when its verdict lands or when streaming
+ends. Line length is the user's call through the `messageWidth` display setting
+(`MESSAGE_WIDTH_VALUES`), not a hard-coded measure — do not reintroduce a
+per-message `max-width` cap on top of it, or the setting silently stops working.
 
 `motion.ts` exports four durations (`TRANSITION.press/fast/normal/slow`) and one
 on-screen curve (`EASE_OUT`); `--transition-fast` in CSS is the same curve so

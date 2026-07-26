@@ -89,9 +89,6 @@ function MessageRow({
 
     const agentAccentColor = agentVisual.color;
     const badgeTextColor = '#fff';
-    // Opposition is spatial: the opposing side is mirrored to the right edge.
-    const speakerRole = agentEntry?.role ?? judgeEntry?.target_role ?? '';
-    const speaksOnRight = speakerRole.startsWith('opposer');
 
     if (systemEntry) {
         if (systemEntry.role === 'audience') {
@@ -167,7 +164,6 @@ function MessageRow({
     const judgeOnly = Boolean(judgeEntry && !agentEntry);
     // Only a speech-plus-verdict row claims the wider two-column span; a lone
     // card keeps the plain reading measure.
-    const hasVerdictBeside = Boolean(agentEntry && judgeEntry);
 
     // 正方/反方消息卡片（统一头部行样式）
     const agentCard = agentEntry ? (
@@ -181,11 +177,10 @@ function MessageRow({
                 padding: 'var(--space-4) var(--space-6) var(--space-5)',
                 borderRadius: 'var(--radius-lg)',
                 border: '1px solid var(--border-hairline)',
-                // Paper character: the role marker and hairline carry the
-                // structure, so the card needs no elevation.
+                // No elevation and no edge marker: a 3px bar bending around the
+                // corner radius read as a defect. Role identity is carried by the
+                // avatar and the name label instead.
                 boxShadow: 'none',
-                [speaksOnRight ? 'borderRight' : 'borderLeft']:
-                    `var(--marker-width) solid ${agentAccentColor}`,
             }}
         >
             <div
@@ -418,56 +413,41 @@ function MessageRow({
         >
             <RoundInsights sections={insightSections} />
 
-            {/* Proposer and opposer sit on opposite sides so the exchange reads
-                as an exchange. The verdict rides alongside the speech it judges
-                when the page is wide enough and wraps under it when not — the
-                wrap is done by flex-basis, so there is no breakpoint to keep in
-                sync with the width setting. Reversing the row for the opposer
-                keeps the speech on the outer edge, which is what carries the
-                left/right opposition. */}
+            {/* Speech left, verdict right, filling the width the user picked.
+                The verdict column is a clamped percentage rather than a fixed
+                fraction, so a wider page gives the speech proportionally more —
+                the verdict's content does not grow with the viewport. The empty
+                column is held open on speech-only rows so the speech does not
+                resize when its verdict lands. */}
             <div
                 style={{
                     display: 'flex',
-                    flexDirection: speaksOnRight ? 'row-reverse' : 'row',
                     flexWrap: 'wrap',
-                    gap: 'var(--space-3)',
+                    gap: 'var(--space-5)',
                     width: '100%',
-                    maxWidth: hasVerdictBeside
-                        ? 'min(100%, calc(var(--measure-reading) + var(--measure-verdict) + var(--space-3)))'
-                        : 'min(100%, var(--measure-reading))',
-                    marginLeft: speaksOnRight ? 'auto' : 0,
-                    marginRight: speaksOnRight ? 0 : 'auto',
                     alignItems: 'flex-start',
                 }}
             >
-                {agentCard && (
-                    <div
-                        style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            flex: '1 1 var(--measure-reading)',
-                            maxWidth: 'var(--measure-reading)',
-                            minWidth: 0,
-                        }}
-                    >
-                        {agentCard}
-                    </div>
-                )}
-                {judgeCard && (
-                    <div
-                        style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            // A basis below the verdict's own cap is what lets the
-                            // pair fit on one line before the cap applies.
-                            flex: '1 1 300px',
-                            maxWidth: 'var(--measure-verdict)',
-                            minWidth: 0,
-                        }}
-                    >
-                        {judgeCard}
-                    </div>
-                )}
+                <div
+                    style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        flex: '1 1 var(--transcript-speech-min)',
+                        minWidth: 0,
+                    }}
+                >
+                    {agentCard}
+                </div>
+                <div
+                    style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        flex: '0 1 var(--transcript-verdict-column)',
+                        minWidth: 0,
+                    }}
+                >
+                    {judgeCard}
+                </div>
             </div>
         </div>
     );

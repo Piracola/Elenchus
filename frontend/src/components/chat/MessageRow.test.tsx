@@ -80,13 +80,20 @@ describe('MessageRow', () => {
         expect(screen.getByText('private reasoning')).toBeInTheDocument();
     });
 
-    it('claims the two-column span only when a verdict accompanies the speech', () => {
+    it('holds the verdict column open on speech-only rows so the speech never resizes', () => {
         const { container, rerender } = render(
             <MessageRow agentEntry={makeEntry({})} />,
         );
 
-        const speechOnlyRow = container.querySelector<HTMLElement>('[style*="flex-wrap"]');
-        expect(speechOnlyRow?.style.maxWidth).toBe('min(100%, var(--measure-reading))');
+        const columnsOf = () => Array.from(
+            container.querySelector<HTMLElement>('[style*="flex-wrap"]')?.children ?? [],
+        ).map((child) => (child as HTMLElement).style.flex);
+
+        const speechOnly = columnsOf();
+        expect(speechOnly).toEqual([
+            '1 1 var(--transcript-speech-min)',
+            '0 1 var(--transcript-verdict-column)',
+        ]);
 
         rerender(
             <MessageRow
@@ -95,21 +102,15 @@ describe('MessageRow', () => {
             />,
         );
 
-        const pairedRow = container.querySelector<HTMLElement>('[style*="flex-wrap"]');
-        expect(pairedRow?.style.maxWidth).toContain('var(--measure-verdict)');
+        expect(columnsOf()).toEqual(speechOnly);
     });
 
-    it('mirrors the opposer so its speech keeps the outer edge', () => {
-        const { container } = render(
-            <MessageRow
-                agentEntry={makeEntry({ role: 'opposer', agent_name: '反方' })}
-                judgeEntry={makeEntry({ role: 'judge', agent_name: '裁判', content: '本轮反驳有力' })}
-            />,
+    it('drops the role colour bar from the speech card edge', () => {
+        const markup = renderToStaticMarkup(
+            <MessageRow agentEntry={makeEntry({ role: 'proposer' })} />,
         );
 
-        const row = container.querySelector<HTMLElement>('[style*="flex-wrap"]');
-        expect(row?.style.flexDirection).toBe('row-reverse');
-        expect(row?.style.marginLeft).toBe('auto');
+        expect(markup).not.toContain('var(--marker-width)');
     });
 
     it('renders sophistry observer reports without the score grid', () => {
