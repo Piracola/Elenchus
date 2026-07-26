@@ -1,6 +1,5 @@
 """Service layer — business logic between API routes and data stores."""
 
-from app.services.intervention_manager import InterventionManager
 from app.services.agent_config_service import AgentConfigService
 
 # Subpackage facades
@@ -14,17 +13,14 @@ from app.dependencies import (
     get_provider_service,
     get_llm_router,
     get_search_factory,
-    get_intervention_manager,
     clear_dependency_cache,
 )
 
 __all__ = [
-    "InterventionManager",
     "AgentConfigService",
     "ProviderService",
     "export_json",
     "export_markdown",
-    "get_intervention_manager",
     "get_agent_config_service",
     "get_runtime_bus",
     # Dependency injection functions

@@ -31,7 +31,6 @@ if TYPE_CHECKING:
     from app.search.factory import SearchProviderFactory
     from app.services.agent_config_service import AgentConfigService
     from app.services.provider.service import ProviderService
-    from app.services.intervention_manager import InterventionManager
 
 
 @lru_cache()
@@ -72,17 +71,6 @@ def get_search_factory() -> "SearchProviderFactory":
     """
     from app.search.factory import SearchProviderFactory
     return SearchProviderFactory()
-
-
-@lru_cache()
-def get_intervention_manager() -> "InterventionManager":
-    """
-    Get the singleton InterventionManager instance.
-
-    Manages pending user interventions for debate runs.
-    """
-    from app.services.intervention_manager import InterventionManager
-    return InterventionManager()
 
 
 @lru_cache()
@@ -131,7 +119,6 @@ def clear_dependency_cache() -> None:
     get_provider_service.cache_clear()
     get_llm_router.cache_clear()
     get_search_factory.cache_clear()
-    get_intervention_manager.cache_clear()
     get_agent_config_service.cache_clear()
     get_runtime_bus.cache_clear()
     get_debate_runtime_service.cache_clear()

@@ -40,14 +40,6 @@ class _FakeOrchestrator:
             raise
 
 
-class _FakeInterventionManager:
-    def __init__(self) -> None:
-        self.messages: list[tuple[str, str]] = []
-
-    async def add_intervention(self, run_id: str, content: str) -> None:
-        self.messages.append((run_id, content))
-
-
 @pytest.mark.asyncio
 async def test_runtime_service_manages_single_task_per_run(db_session):
     session = await session_service.create_session(SessionCreate(topic="Test topic"))
@@ -62,11 +54,9 @@ async def test_runtime_service_manages_single_task_per_run(db_session):
     repository = _FakeRepository()
     repository.session["id"] = session["id"]
     orchestrator = _FakeOrchestrator()
-    interventions = _FakeInterventionManager()
     service = DebateRuntimeService(
         repository=repository,
         orchestrator=orchestrator,
-        intervention_manager=interventions,
     )
 
     started = await service.start_run(run_id)
@@ -81,9 +71,8 @@ async def test_runtime_service_manages_single_task_per_run(db_session):
     assert duplicate.started is False
     assert duplicate.message == "This run is already running."
 
-    is_running = await service.queue_intervention(run_id, "hello")
-    assert is_running is True
-    assert interventions.messages == [(run_id, "hello")]
+    interrupted = await service.interrupt_run(run_id)
+    assert interrupted is True
 
     stopped = await service.stop_run(run_id)
     assert stopped is True
@@ -97,7 +86,6 @@ async def test_runtime_service_reports_missing_run(db_session):
     service = DebateRuntimeService(
         repository=_FakeRepository(),
         orchestrator=_FakeOrchestrator(),
-        intervention_manager=_FakeInterventionManager(),
     )
 
     result = await service.start_run("missing")
@@ -122,7 +110,6 @@ async def test_runtime_service_resume_uses_existing_run(db_session):
     service = DebateRuntimeService(
         repository=repository,
         orchestrator=orchestrator,
-        intervention_manager=_FakeInterventionManager(),
     )
 
     started = await service.start_run(run_id)
@@ -150,7 +137,6 @@ async def test_runtime_service_reconciles_stale_running_run_to_stalled(db_sessio
     service = DebateRuntimeService(
         repository=_FakeRepository(),
         orchestrator=_FakeOrchestrator(),
-        intervention_manager=_FakeInterventionManager(),
     )
 
     summary = await service.reconcile_run_liveness(run_id)

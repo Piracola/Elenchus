@@ -236,3 +236,5 @@ class SessionDocumentRecord(Base):
 Index("ix_run_events_run_seq", RunEventRecord.run_id, RunEventRecord.seq, unique=True)
 Index("ix_run_attempts_run_attempt", RunAttemptRecord.run_id, RunAttemptRecord.attempt_number, unique=True)
 Index("ix_run_checkpoints_run_seq", RunCheckpointRecord.run_id, RunCheckpointRecord.seq)
+# Pending-command polling happens at every graph node boundary.
+Index("ix_run_commands_run_status", RunCommandRecord.run_id, RunCommandRecord.status)

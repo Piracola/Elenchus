@@ -110,35 +110,29 @@ class DebateGraphState(TypedDict, total=False):
 
 # ── Node functions ──────────────────────────────────────────────
 
+def _has_round_digest_for_turn(knowledge: list[Any], turn_index: int) -> bool:
+    return any(
+        isinstance(entry, dict)
+        and str(entry.get("type", "") or "") == "round_digest"
+        and _coerce_turn(entry.get("source_turn", -1), -1) == turn_index
+        for entry in knowledge
+    )
+
+
 async def node_manage_context(state: DebateGraphState) -> dict[str, Any]:
     """Prepare derived context artifacts before a new turn starts."""
     knowledge = state.get("shared_knowledge", [])
     current_turn = int(state.get("current_turn", 0) or 0)
 
     updated_knowledge = list(knowledge) if isinstance(knowledge, list) else []
-    if current_turn > 0:
+    # Idempotency guard: re-entry (resume / intervention re-injection) must not
+    # pay another LLM call when the previous round is already summarized.
+    if current_turn > 0 and not _has_round_digest_for_turn(updated_knowledge, current_turn - 1):
         digest_entry = await build_round_digest(state, turn_index=current_turn - 1)
         updated_knowledge = merge_round_digest_knowledge(updated_knowledge, digest_entry)
 
-    # Inject any pending user interventions as audience dialogue entries.
-    from app.dependencies import get_intervention_manager
-    run_id = str(state.get("run_id", "") or "")
-    intervention_mgr = get_intervention_manager()
-    queued = await intervention_mgr.pop_interventions(run_id) if run_id else []
-    intervention_entries = [
-        {
-            "role": "audience",
-            "agent_name": "观众介入",
-            "content": content,
-            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-            "citations": [],
-        }
-        for content in queued
-    ]
-
     return {
         "shared_knowledge": updated_knowledge,
-        "dialogue_history": intervention_entries,
         "last_executed_node": "manage_context",
     }
 
@@ -424,6 +418,13 @@ def build_debate_graph() -> StateGraph:
             "set_speaker": "set_speaker",
             "consensus": "consensus",
             "end": END,
+            # Resume / re-injection can target any mid-turn node; every value
+            # predict_resume_next_node may return must be mapped or LangGraph
+            # raises KeyError when routing.
+            "speaker": "speaker",
+            "tool_executor": "tool_executor",
+            "judge": "judge",
+            "advance_turn": "advance_turn",
         },
     )
     graph.add_edge("group_discussion", "set_speaker")

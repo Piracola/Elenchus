@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import delete, desc, func, select
+from sqlalchemy import delete, desc, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_session_factory
@@ -644,6 +644,75 @@ class RunLedgerService:
                 "acknowledged_at": command.acknowledged_at,
                 "created_at": now,
             }
+
+    async def list_commands(
+        self,
+        run_id: str,
+        *,
+        statuses: tuple[str, ...] = ("pending",),
+        command_types: tuple[str, ...] | None = None,
+    ) -> list[dict[str, Any]]:
+        async with self._session_factory() as db:
+            query = select(RunCommandRecord).where(RunCommandRecord.run_id == run_id)
+            if statuses:
+                query = query.where(RunCommandRecord.status.in_(statuses))
+            if command_types:
+                query = query.where(RunCommandRecord.command_type.in_(command_types))
+            result = await db.execute(query.order_by(RunCommandRecord.created_at))
+            return [self._command_to_dict(record) for record in result.scalars().all()]
+
+    async def consume_pending_commands(
+        self,
+        run_id: str,
+        *,
+        command_types: tuple[str, ...],
+    ) -> list[dict[str, Any]]:
+        """Atomically claim pending commands and mark them consumed."""
+        now = _utcnow()
+        async with self._session_factory() as db:
+            result = await db.execute(
+                select(RunCommandRecord)
+                .where(RunCommandRecord.run_id == run_id)
+                .where(RunCommandRecord.status == "pending")
+                .where(RunCommandRecord.command_type.in_(command_types))
+                .order_by(RunCommandRecord.created_at)
+            )
+            records = list(result.scalars().all())
+            if not records:
+                return []
+            claimed: list[dict[str, Any]] = []
+            for record in records:
+                record.status = "consumed"
+                record.acknowledged_at = now
+                claimed.append(self._command_to_dict(record))
+            await db.commit()
+            return claimed
+
+    async def revoke_command(self, run_id: str, command_id: str) -> bool:
+        """Revoke a pending command. Returns False if already consumed or missing."""
+        async with self._session_factory() as db:
+            result = await db.execute(
+                update(RunCommandRecord)
+                .where(RunCommandRecord.id == command_id)
+                .where(RunCommandRecord.run_id == run_id)
+                .where(RunCommandRecord.status == "pending")
+                .values(status="revoked", acknowledged_at=_utcnow())
+            )
+            await db.commit()
+            return bool(result.rowcount)
+
+    @staticmethod
+    def _command_to_dict(record: RunCommandRecord) -> dict[str, Any]:
+        return {
+            "id": record.id,
+            "run_id": record.run_id,
+            "session_id": record.session_id,
+            "command_type": record.command_type,
+            "payload": dict(record.payload or {}),
+            "status": record.status,
+            "acknowledged_at": record.acknowledged_at,
+            "created_at": record.created_at,
+        }
 
     async def attach_document_context(self, session_id: str, document: dict[str, Any]) -> None:
         async with self._session_factory() as db:

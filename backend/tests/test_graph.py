@@ -47,27 +47,66 @@ def test_add_reducer_appends():
 
 
 @pytest.mark.asyncio
-async def test_manage_context_consumes_interventions_by_run(monkeypatch):
+async def test_manage_context_skips_digest_when_already_summarized(monkeypatch):
     from app.agents import graph
-    from app.dependencies import get_intervention_manager
 
-    manager = get_intervention_manager()
-    await manager.clear_run("run-1")
-    await manager.add_intervention("run-1", "请回应这个补充问题")
+    calls = 0
+
+    async def fake_build_round_digest(state, *, turn_index):
+        nonlocal calls
+        calls += 1
+        return {"type": "round_digest", "content": "摘要", "source_turn": turn_index}
+
+    monkeypatch.setattr(graph, "build_round_digest", fake_build_round_digest)
+
+    existing = [{"type": "round_digest", "content": "已有摘要", "source_turn": 0}]
+    result = await graph.node_manage_context(
+        {
+            "run_id": "run-1",
+            "session_id": "shared-session",
+            "current_turn": 1,
+            "shared_knowledge": existing,
+        }
+    )
+
+    # Re-entry must not pay for a duplicate digest LLM call.
+    assert calls == 0
+    assert result["shared_knowledge"] == existing
+    assert result["last_executed_node"] == "manage_context"
+
+
+@pytest.mark.asyncio
+async def test_manage_context_builds_digest_when_missing(monkeypatch):
+    from app.agents import graph
+
+    async def fake_build_round_digest(state, *, turn_index):
+        return {"type": "round_digest", "content": "摘要", "source_turn": turn_index}
+
+    monkeypatch.setattr(graph, "build_round_digest", fake_build_round_digest)
 
     result = await graph.node_manage_context(
         {
             "run_id": "run-1",
             "session_id": "shared-session",
-            "current_turn": 0,
+            "current_turn": 1,
             "shared_knowledge": [],
         }
     )
 
-    assert await manager.get_interventions("run-1") == []
-    assert len(result["dialogue_history"]) == 1
-    assert result["dialogue_history"][0]["role"] == "audience"
-    assert result["dialogue_history"][0]["content"] == "请回应这个补充问题"
+    assert result["shared_knowledge"] == [
+        {"type": "round_digest", "content": "摘要", "source_turn": 0}
+    ]
+
+
+def test_manage_context_path_map_covers_every_resume_target():
+    """Resume can target mid-turn nodes; unmapped keys crash LangGraph routing."""
+    from app.agents.graph import build_debate_graph
+
+    graph = build_debate_graph()
+    branches = graph.branches["manage_context"]
+    path_map = next(iter(branches.values())).ends
+    for node in ("speaker", "tool_executor", "judge", "advance_turn"):
+        assert node in path_map
 
 
 def test_debate_graph_routes_resumed_final_turn_to_consensus_or_end():

@@ -180,7 +180,10 @@ async def test_group_discussion_retries_with_retry_after_then_writes_error_entry
     monkeypatch.setattr(group_discussion, "refresh_agent_configs_for_session", fake_refresh_agent_configs)
     monkeypatch.setattr(group_discussion, "invoke_text_model", fake_invoke_text_model)
     monkeypatch.setattr(group_discussion, "get_group_discussion_prompt", lambda: "系统提示")
-    monkeypatch.setattr(group_discussion.asyncio, "sleep", fake_sleep)
+    # Backoff now lives in the shared LLM layer instead of a local copy.
+    from app.llm import invoke as invoke_module
+
+    monkeypatch.setattr(invoke_module.asyncio, "sleep", fake_sleep)
 
     result = await group_discussion.run_group_discussion(
         {

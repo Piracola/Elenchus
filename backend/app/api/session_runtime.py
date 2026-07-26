@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 from app.models.schemas import (
+    PendingRunCommand,
     RunCommandAck,
+    RunCommandListResponse,
     RunCommandRequest,
     RunCreate,
     RunProjectionResponse,
@@ -15,8 +17,10 @@ from app.services.run_service import (
     get_run,
     get_run_projection,
     get_session_for_run,
+    list_pending_commands,
     list_run_events,
     record_command,
+    revoke_command,
     transition_run_to_cancelled,
     transition_run_to_status,
 )
@@ -171,12 +175,40 @@ async def post_run_command(run_id: str, body: RunCommandRequest):
             )
             raise HTTPException(status_code=409, detail=result.message or "Run could not be resumed.")
         message = result.message or "Resume requested."
-    elif body.command_type.value == "intervene":
+    elif body.command_type.value in {"intervene", "interrupt"}:
         if not body.content or not body.content.strip():
             raise HTTPException(status_code=422, detail="Intervention content is required.")
-        await runtime_service.queue_intervention(run_id, body.content)
-        message = "Intervention queued."
-    await record_command(
+        command_payload = {
+            "content": body.content.strip(),
+            "kind": "moderator_directive",
+        }
+        # Persist first so a crash between here and injection cannot lose it;
+        # the orchestrator consumes pending commands at node boundaries.
+        command = await record_command(
+            run_id=run_id,
+            session_id=run_record.session_id,
+            command_type=body.command_type,
+            payload=command_payload,
+        )
+        if body.command_type.value == "interrupt":
+            interrupted = await runtime_service.interrupt_run(run_id)
+            message = (
+                "已请求打断当前发言，辩手将结合指令重新发言。"
+                if interrupted
+                else "运行未在发言中，指令已排队，将在下一环节生效。"
+            )
+        else:
+            pending = await list_pending_commands(run_id)
+            message = f"主持人指令已排队（第 {len(pending)} 条），将在下一环节生效。"
+        return RunCommandAck(
+            accepted=True,
+            run_id=run_id,
+            command_type=body.command_type,
+            message=message,
+            command_id=str(command.get("id") or ""),
+        )
+
+    command = await record_command(
         run_id=run_id,
         session_id=run_record.session_id,
         command_type=body.command_type,
@@ -187,4 +219,44 @@ async def post_run_command(run_id: str, body: RunCommandRequest):
         run_id=run_id,
         command_type=body.command_type,
         message=message,
+        command_id=str(command.get("id") or ""),
     )
+
+
+@router.get(
+    "/runs/{run_id}/commands",
+    response_model=RunCommandListResponse,
+    include_in_schema=False,
+)
+async def get_pending_run_commands(run_id: str):
+    run_record = await get_run(run_id)
+    if run_record is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    commands = await list_pending_commands(run_id)
+    return RunCommandListResponse(
+        run_id=run_id,
+        commands=[
+            PendingRunCommand(
+                id=str(item["id"]),
+                run_id=run_id,
+                command_type=item["command_type"],
+                content=str((item.get("payload") or {}).get("content", "") or ""),
+                created_at=item["created_at"],
+            )
+            for item in commands
+        ],
+    )
+
+
+@router.delete("/runs/{run_id}/commands/{command_id}", include_in_schema=False)
+async def delete_pending_run_command(run_id: str, command_id: str):
+    run_record = await get_run(run_id)
+    if run_record is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    revoked = await revoke_command(run_id, command_id)
+    if not revoked:
+        raise HTTPException(
+            status_code=409,
+            detail="Command was already applied or does not exist.",
+        )
+    return {"revoked": True, "run_id": run_id, "command_id": command_id}

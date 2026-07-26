@@ -304,3 +304,33 @@ async def record_command(
         command_type=command_type,
         payload=payload,
     )
+
+
+INTERVENTION_COMMAND_TYPES: tuple[str, ...] = ("intervene", "interrupt")
+
+
+async def list_pending_commands(
+    run_id: str,
+    *,
+    command_types: tuple[str, ...] | None = INTERVENTION_COMMAND_TYPES,
+) -> list[dict[str, Any]]:
+    return await _ledger.list_commands(
+        run_id,
+        statuses=("pending",),
+        command_types=command_types,
+    )
+
+
+async def has_pending_interventions(run_id: str) -> bool:
+    return bool(await list_pending_commands(run_id))
+
+
+async def consume_pending_interventions(run_id: str) -> list[dict[str, Any]]:
+    return await _ledger.consume_pending_commands(
+        run_id,
+        command_types=INTERVENTION_COMMAND_TYPES,
+    )
+
+
+async def revoke_command(run_id: str, command_id: str) -> bool:
+    return await _ledger.revoke_command(run_id, command_id)

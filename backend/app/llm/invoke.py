@@ -26,6 +26,12 @@ from app.llm.transport import (
     invoke_openai_chat_raw,
     invoke_openai_chat_raw_streaming,
 )
+from app.llm.failure_budget import (
+    FailureBudgetExhausted,
+    clamp_retry_delay,
+    record_backoff,
+    record_failure,
+)
 from app.llm.usage import UsageCallback, emit_usage
 
 logger = logging.getLogger(__name__)
@@ -87,9 +93,21 @@ def _extract_retry_after_seconds(exc: Exception) -> int | None:
 
 
 async def _sleep_before_retry(exc: Exception, attempt: int) -> None:
-    """Sleep using provider-advised retry_after when available, else exponential backoff."""
+    """Sleep using provider-advised retry_after when available, else exponential backoff.
+
+    The provider-advised value is clamped: an unclamped `retry_after` sits
+    outside the invocation timeout and could otherwise stall a node for hours.
+    """
     retry_after_seconds = _extract_retry_after_seconds(exc)
-    delay_seconds = retry_after_seconds if retry_after_seconds is not None else 2 ** attempt
+    raw_delay = retry_after_seconds if retry_after_seconds is not None else 2 ** attempt
+    delay_seconds = clamp_retry_delay(raw_delay)
+    record_backoff(delay_seconds, exc)
+    if retry_after_seconds is not None and delay_seconds < retry_after_seconds:
+        logger.warning(
+            "Clamped provider retry_after from %ss to %ss",
+            retry_after_seconds,
+            int(delay_seconds),
+        )
     await asyncio.sleep(delay_seconds)
 
 
@@ -258,7 +276,10 @@ async def invoke_chat_model(
                     llm_kwargs,
                 )
             return response
+        except FailureBudgetExhausted:
+            raise
         except Exception as exc:
+            record_failure(exc)
             current_config = config if config is not None else await resolve_llm_config(override)
             if used_raw_transport_this_attempt or not _should_use_openai_raw_fallback(current_config, exc):
                 if attempt < max_retries:
@@ -334,6 +355,8 @@ async def invoke_text_model(
             if hasattr(response, "content"):
                 return extract_text_content(response.content)
             return extract_text_content(response)
+        except FailureBudgetExhausted:
+            raise
         except Exception as exc:
             if attempt < max_retries:
                 logger.warning(

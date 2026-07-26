@@ -12,6 +12,10 @@ from langgraph.graph.message import RemoveMessage
 
 from app.agents.context_builder import build_runtime_context_for_agent
 from app.agents.live_agent_config import refresh_agent_configs_for_session
+from app.agents.moderator import (
+    render_judge_directive_note,
+    select_unanswered_directives,
+)
 from app.agents.runtime_progress import (
     build_usage_callback,
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
@@ -66,6 +70,7 @@ def _build_instruction(
     current_turn: int,
     max_turns: int,
     context_block: str,
+    directive_note: str = "",
 ) -> str:
     if current_turn == 0 and role == "proposer":
         current_task = (
@@ -79,6 +84,15 @@ def _build_instruction(
         current_task = (
             f"当前是第 {current_turn + 1} / {max_turns} 轮。你要继续巩固己方叙事，"
             "同时主动指出对手的谬误、偷换和压力转移。"
+        )
+
+    if directive_note:
+        # Interaction zone only: the review zone is explicitly framed as
+        # non-instructional, which would neutralize a live directive.
+        current_task = (
+            f"{current_task}\n"
+            f"主持人刚刚下达指令：{directive_note}。"
+            "你必须在发言开头正面处理该指令（可用修辞技巧消解，但不得无视）。"
         )
 
     interaction_block = (
@@ -127,6 +141,10 @@ async def sophistry_debater_speak(state: dict[str, Any]) -> dict[str, Any]:
             "这是诡辩实验模式，可把历史材料视为操控与防御素材。",
         ],
     )
+    pending_directives = select_unanswered_directives(
+        state.get("dialogue_history", []),
+        state.get("participants", []),
+    )
     instruction = _build_instruction(
         topic=topic,
         role=role,
@@ -134,6 +152,7 @@ async def sophistry_debater_speak(state: dict[str, Any]) -> dict[str, Any]:
         current_turn=current_turn,
         max_turns=max_turns,
         context_block=context_block,
+        directive_note=render_judge_directive_note(pending_directives),
     )
     speech_limit_instruction = build_speech_limit_instruction(
         get_role_speech_limit_chars(state.get("speech_config", {}), role)

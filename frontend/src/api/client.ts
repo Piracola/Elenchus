@@ -21,6 +21,7 @@ import type {
     SearchConfigUpdatePayload,
     SearchProviderStatus,
     SessionDocumentResponse,
+    PendingRunCommand,
     RunCommandAck,
     RunCommandType,
     RunProjectionResponse,
@@ -261,6 +262,12 @@ export const api = {
                     ...(content ? { content } : {}),
                 }),
             }),
+
+        pendingCommands: (runId: string): Promise<{ run_id: string; commands: PendingRunCommand[] }> =>
+            request(`/runs/${runId}/commands`),
+
+        revokeCommand: (runId: string, commandId: string): Promise<{ revoked: boolean }> =>
+            request(`/runs/${runId}/commands/${commandId}`, { method: 'DELETE' }),
     },
 
     settings: {

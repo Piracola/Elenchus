@@ -2,8 +2,10 @@
  * DebateControls - compact input bar to create, start, and stop debates.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { X } from 'lucide-react';
+import { toast } from '../../utils/chat/toast';
 import { useAgentConfigs } from '../../hooks/useAgentConfigs';
 import { isRunStatusInProgress, useConnectionViewState, useSessionViewState } from '../../hooks/useDebateViewState';
 import { useDebateWebSocket } from '../../hooks/useDebateWebSocket';
@@ -18,7 +20,7 @@ import {
     parseSpeechMaxCharsInput,
 } from '../../utils/agent/debateSession';
 import AgentConfigPanel from '../shared/AgentConfigPanel';
-import type { RecentDebateConfig } from '../../types';
+import type { PendingRunCommand, RecentDebateConfig } from '../../types';
 
 function ActiveSessionControls() {
     const { isConnected, currentSession, activeRun, activeRunId } = useConnectionViewState();
@@ -41,11 +43,60 @@ function ActiveSessionControls() {
     const runIsLive = canStopRun;
     const canResumeRun = !runIsLive && Boolean(activeRunId && runStatus && runStatus === 'stalled');
     const canSendIntervention = Boolean(activeRunId && isConnected);
+    const [pendingCommands, setPendingCommands] = useState<PendingRunCommand[]>([]);
+    const [isSending, setIsSending] = useState(false);
 
-    const handleSendIntervention = () => {
-        if (!interventionText.trim() || !canSendIntervention) return;
-        sendIntervention(interventionText.trim());
-        setInterventionText('');
+    const refreshPendingCommands = useCallback(async () => {
+        if (!activeRunId) {
+            setPendingCommands([]);
+            return;
+        }
+        try {
+            const response = await api.runs.pendingCommands(activeRunId);
+            setPendingCommands(response.commands ?? []);
+        } catch {
+            // A transient failure just leaves the previous list on screen.
+        }
+    }, [activeRunId]);
+
+    useEffect(() => {
+        void refreshPendingCommands();
+        if (!activeRunId || !runIsLive) return;
+        // Directives are consumed by the backend at node boundaries, so poll
+        // slowly to retire chips that already took effect.
+        const timer = setInterval(() => void refreshPendingCommands(), 8000);
+        return () => clearInterval(timer);
+    }, [activeRunId, runIsLive, refreshPendingCommands]);
+
+    const submitDirective = async (interrupt: boolean) => {
+        const content = interventionText.trim();
+        if (!content || !canSendIntervention || isSending) return;
+        setIsSending(true);
+        try {
+            const ack = await sendIntervention(content, { interrupt });
+            setInterventionText('');
+            if (ack?.message) {
+                toast(ack.message);
+            }
+            await refreshPendingCommands();
+        } catch (err) {
+            toast(err instanceof Error ? err.message : '主持人指令发送失败');
+        } finally {
+            setIsSending(false);
+        }
+    };
+
+    const canSubmitDirective = canSendIntervention && Boolean(interventionText.trim()) && !isSending;
+
+    const handleRevokeCommand = async (commandId: string) => {
+        if (!activeRunId) return;
+        try {
+            await api.runs.revokeCommand(activeRunId, commandId);
+            toast('指令已撤回');
+        } catch {
+            toast('该指令已生效，无法撤回');
+        }
+        await refreshPendingCommands();
     };
 
     return (
@@ -59,10 +110,77 @@ function ActiveSessionControls() {
                 boxShadow: '0 14px 34px rgba(15, 23, 42, 0.12)',
                 backdropFilter: 'blur(14px)',
                 display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
+                flexDirection: 'column',
+                gap: '8px',
             }}
         >
+            <AnimatePresence initial={false}>
+                {pendingCommands.length > 0 && (
+                    <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            alignItems: 'center',
+                            gap: '6px',
+                            overflow: 'hidden',
+                        }}
+                    >
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                            待生效指令
+                        </span>
+                        {pendingCommands.map((command) => (
+                            <span
+                                key={command.id}
+                                title={command.content}
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    maxWidth: '260px',
+                                    padding: '3px 6px 3px 10px',
+                                    borderRadius: 'var(--radius-full)',
+                                    background: 'var(--bg-tertiary)',
+                                    border: '1px solid var(--border-subtle)',
+                                    color: 'var(--text-secondary)',
+                                    fontSize: '11px',
+                                }}
+                            >
+                                <span
+                                    style={{
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                    }}
+                                >
+                                    {command.content}
+                                </span>
+                                <motion.button
+                                    whileTap={{ scale: 0.9 }}
+                                    onClick={() => void handleRevokeCommand(command.id)}
+                                    aria-label="撤回该指令"
+                                    title="撤回该指令"
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        border: 'none',
+                                        background: 'transparent',
+                                        color: 'var(--text-muted)',
+                                        cursor: 'pointer',
+                                        padding: '2px',
+                                    }}
+                                >
+                                    <X size={11} />
+                                </motion.button>
+                            </span>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div
                 style={{
                     display: 'flex',
@@ -129,8 +247,12 @@ function ActiveSessionControls() {
                 type="text"
                 value={interventionText}
                 onChange={(event) => setInterventionText(event.target.value)}
-                onKeyDown={(event) => event.key === 'Enter' && handleSendIntervention()}
-                placeholder={isConnected ? '输入干预意见...' : '连接已断开...'}
+                onKeyDown={(event) => {
+                    if (event.key !== 'Enter') return;
+                    // Shift+Enter escalates to an interrupt of the live speech.
+                    void submitDirective(event.shiftKey && runIsLive);
+                }}
+                placeholder={isConnected ? '输入主持人指令，下一位辩手必须正面回应...' : '连接已断开...'}
                 disabled={!canSendIntervention}
                 style={{
                     flex: 1,
@@ -167,61 +289,86 @@ function ActiveSessionControls() {
                     终止
                 </motion.button>
             ) : (
-                <>
-                    <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => {
-                            if (canResumeRun) {
-                                void resumeRun();
-                                return;
-                            }
-                            void startRun(
-                                currentSession?.topic || '新辩题',
-                                ['proposer', 'opposer'],
-                                maxTurns,
-                            );
-                        }}
-                        disabled={false}
-                        style={{
-                            padding: '8px 14px',
-                            borderRadius: 'var(--radius-md)',
-                            border: 'none',
-                            background: 'var(--text-primary)',
-                            color: 'var(--bg-primary)',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            opacity: 1,
-                            fontSize: '12px',
-                            flexShrink: 0,
-                        }}
-                    >
-                        {canResumeRun ? '继续辩论' : '开始辩论'}
-                    </motion.button>
-                    <motion.button
-                        whileHover={canSendIntervention && interventionText.trim() ? { scale: 1.02 } : {}}
-                        whileTap={canSendIntervention && interventionText.trim() ? { scale: 0.98 } : {}}
-                        onClick={handleSendIntervention}
-                        disabled={!canSendIntervention || !interventionText.trim()}
-                        style={{
-                            padding: '8px 14px',
-                            borderRadius: 'var(--radius-md)',
-                            border: 'none',
-                            background: canSendIntervention && interventionText.trim()
-                                ? 'var(--accent-indigo)'
-                                : 'var(--bg-tertiary)',
-                            color: canSendIntervention && interventionText.trim() ? '#fff' : 'var(--text-muted)',
-                            fontWeight: 600,
-                            cursor: canSendIntervention && interventionText.trim() ? 'pointer' : 'not-allowed',
-                            opacity: canSendIntervention && interventionText.trim() ? 1 : 0.5,
-                            fontSize: '12px',
-                            flexShrink: 0,
-                        }}
-                    >
-                        发送
-                    </motion.button>
-                </>
+                <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                        if (canResumeRun) {
+                            void resumeRun();
+                            return;
+                        }
+                        void startRun(
+                            currentSession?.topic || '新辩题',
+                            ['proposer', 'opposer'],
+                            maxTurns,
+                        );
+                    }}
+                    disabled={false}
+                    style={{
+                        padding: '8px 14px',
+                        borderRadius: 'var(--radius-md)',
+                        border: 'none',
+                        background: 'var(--text-primary)',
+                        color: 'var(--bg-primary)',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        opacity: 1,
+                        fontSize: '12px',
+                        flexShrink: 0,
+                    }}
+                >
+                    {canResumeRun ? '继续辩论' : '开始辩论'}
+                </motion.button>
             )}
+
+            {/* Directive controls stay available while the run is live —
+                previously the send button vanished behind the stop button. */}
+            <motion.button
+                whileHover={canSubmitDirective ? { scale: 1.02 } : {}}
+                whileTap={canSubmitDirective ? { scale: 0.98 } : {}}
+                onClick={() => void submitDirective(false)}
+                disabled={!canSubmitDirective}
+                title="排队一条主持人指令，下一位辩手必须正面回应"
+                style={{
+                    padding: '8px 14px',
+                    borderRadius: 'var(--radius-md)',
+                    border: 'none',
+                    background: canSubmitDirective ? 'var(--accent-indigo)' : 'var(--bg-tertiary)',
+                    color: canSubmitDirective ? '#fff' : 'var(--text-muted)',
+                    fontWeight: 600,
+                    cursor: canSubmitDirective ? 'pointer' : 'not-allowed',
+                    opacity: canSubmitDirective ? 1 : 0.5,
+                    fontSize: '12px',
+                    flexShrink: 0,
+                }}
+            >
+                发送指令
+            </motion.button>
+
+            {runIsLive && (
+                <motion.button
+                    whileHover={canSubmitDirective ? { scale: 1.02 } : {}}
+                    whileTap={canSubmitDirective ? { scale: 0.98 } : {}}
+                    onClick={() => void submitDirective(true)}
+                    disabled={!canSubmitDirective}
+                    title="立即中止当前发言，辩手结合指令重新发言"
+                    style={{
+                        padding: '8px 14px',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--color-opposer)',
+                        background: 'transparent',
+                        color: 'var(--color-opposer)',
+                        fontWeight: 600,
+                        cursor: canSubmitDirective ? 'pointer' : 'not-allowed',
+                        opacity: canSubmitDirective ? 1 : 0.5,
+                        fontSize: '12px',
+                        flexShrink: 0,
+                    }}
+                >
+                    打断
+                </motion.button>
+            )}
+            </div>
         </motion.div>
     );
 }

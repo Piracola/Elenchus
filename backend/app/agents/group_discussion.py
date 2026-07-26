@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -25,14 +23,13 @@ from app.agents.speech_limits import (
     build_speech_limit_instruction,
     get_role_speech_limit_chars,
 )
-from app.llm.invoke import invoke_text_model, normalize_model_text
+from app.llm.invoke import _sleep_before_retry, invoke_text_model, normalize_model_text
 from app.text_repair import format_runtime_error_message
 
 logger = logging.getLogger(__name__)
 
 _MAX_GROUP_DISCUSSION_ROUNDS = 5
 _GROUP_DISCUSSION_MAX_RETRIES = 3
-_RETRY_AFTER_SECONDS_RE = re.compile(r"'retry_after':\s*(\d+)", re.IGNORECASE)
 
 
 def _coerce_discussion_rounds(value: Any) -> int:
@@ -50,59 +47,6 @@ def _coerce_turn(value: Any, fallback: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return fallback
-
-
-def _extract_retry_after_seconds(exc: Exception) -> int | None:
-    response = getattr(exc, "response", None)
-    if response is not None:
-        headers = getattr(response, "headers", None)
-        if headers is not None and hasattr(headers, "get"):
-            header_value = headers.get("retry-after") or headers.get("Retry-After")
-            if header_value is not None:
-                try:
-                    parsed = int(str(header_value).strip())
-                except (TypeError, ValueError):
-                    parsed = 0
-                if parsed > 0:
-                    return parsed
-
-    for attr in ("retry_after", "retryAfter"):
-        value = getattr(exc, attr, None)
-        if value is None:
-            continue
-        try:
-            parsed = int(value)
-        except (TypeError, ValueError):
-            parsed = 0
-        if parsed > 0:
-            return parsed
-
-    body = getattr(exc, "body", None)
-    if isinstance(body, dict):
-        for key in ("retry_after", "retryAfter"):
-            value = body.get(key)
-            if value is None:
-                continue
-            try:
-                parsed = int(value)
-            except (TypeError, ValueError):
-                parsed = 0
-            if parsed > 0:
-                return parsed
-
-    text = str(exc)
-    match = _RETRY_AFTER_SECONDS_RE.search(text)
-    if match:
-        return int(match.group(1))
-
-    return None
-
-
-async def _sleep_before_retry(exc: Exception, attempt_index: int) -> None:
-    delay_seconds = _extract_retry_after_seconds(exc)
-    if delay_seconds is None:
-        delay_seconds = 2 ** attempt_index
-    await asyncio.sleep(delay_seconds)
 
 
 def _format_group_discussion_error(exc: Exception) -> str:

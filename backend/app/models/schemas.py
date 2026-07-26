@@ -50,6 +50,7 @@ class RunCommandType(str, Enum):
     STOP = "stop"
     RESUME = "resume"
     INTERVENE = "intervene"
+    INTERRUPT = "interrupt"
 
 
 class DebateMode(str, Enum):
@@ -436,6 +437,22 @@ class RunCommandAck(BaseModel):
     run_id: str
     command_type: RunCommandType
     message: str | None = None
+    command_id: str | None = None
+
+
+class PendingRunCommand(BaseModel):
+    """A queued command that has not been applied to the run yet."""
+
+    id: str
+    run_id: str
+    command_type: RunCommandType
+    content: str = ""
+    created_at: datetime
+
+
+class RunCommandListResponse(BaseModel):
+    run_id: str
+    commands: list[PendingRunCommand]
 
 
 class SessionDocumentListItem(BaseModel):

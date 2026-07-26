@@ -7,7 +7,6 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from app.dependencies import get_intervention_manager
 from app.runtime.orchestrator import DebateOrchestrator
 from app.runtime.session_repository import SessionRuntimeRepository
 from app.services import run_service
@@ -34,12 +33,11 @@ class DebateRuntimeService:
         *,
         repository: SessionRuntimeRepository | None = None,
         orchestrator: DebateOrchestrator | None = None,
-        intervention_manager: Any | None = None,
     ) -> None:
         self._repository = repository or SessionRuntimeRepository()
         self._orchestrator = orchestrator or DebateOrchestrator(repository=self._repository)
-        self._intervention_manager = intervention_manager or get_intervention_manager()
         self._tasks: dict[str, asyncio.Task] = {}
+        self._interrupt_events: dict[str, asyncio.Event] = {}
         self._task_lock = asyncio.Lock()
 
     def is_running(self, run_id: str) -> bool:
@@ -144,6 +142,8 @@ class DebateRuntimeService:
                 reason="辩论正在运行。",
                 source="runtime.service",
             )
+            interrupt_event = asyncio.Event()
+            self._interrupt_events[run_id] = interrupt_event
             task = asyncio.create_task(
                 self._orchestrator.run_debate(
                     run_id=run_id,
@@ -155,6 +155,7 @@ class DebateRuntimeService:
                     ),
                     max_turns=int(run_payload.get("max_turns", session_data.get("max_turns", 5)) or 5),
                     agent_configs=dict(run_payload.get("agent_configs") or session_data.get("agent_configs", {})),
+                    interrupt_event=interrupt_event,
                 )
             )
             self._tasks[run_id] = task
@@ -171,17 +172,25 @@ class DebateRuntimeService:
                 return True
             return False
 
-    async def queue_intervention(self, run_id: str, content: str) -> bool:
-        run_record = await run_service.get_run(run_id)
-        if run_record is None:
+    async def interrupt_run(self, run_id: str) -> bool:
+        """Ask a running debate to abort the in-flight speech and re-enter.
+
+        Returns True when the signal was delivered to a live run; a queued
+        command still applies at the next node boundary either way.
+        """
+        if not self.is_running(run_id):
             return False
-        await self._intervention_manager.add_intervention(run_id, content)
-        return self.is_running(run_id)
+        event = self._interrupt_events.get(run_id)
+        if event is None:
+            return False
+        event.set()
+        return True
 
     def _cleanup_task(self, run_id: str, done_task: asyncio.Task) -> None:
         current_task = self._tasks.get(run_id)
         if current_task is done_task:
             self._tasks.pop(run_id, None)
+            self._interrupt_events.pop(run_id, None)
         if done_task.cancelled():
             return
         try:

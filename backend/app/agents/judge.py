@@ -17,6 +17,11 @@ from pydantic import ValidationError
 from app.agents.context_engine import build_context_packet
 from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.prompt_loader import get_judge_prompt
+from app.agents.moderator import (
+    JUDGE_LIVE_CONSTRAINT,
+    render_judge_directive_note,
+    select_unanswered_directives,
+)
 from app.agents.runtime_progress import (
     build_usage_callback,
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
@@ -141,17 +146,30 @@ def _build_judge_instruction(
         "shared_knowledge": shared_knowledge,
         "current_turn": current_turn,
     }
+    task_lines = [
+        f"辩题：{topic}",
+        f"请评估 {role_to_judge} 在第 {current_turn + 1} 轮的表现。",
+    ]
+    live_constraints = [
+        "只根据正式辩手公开发言评分，不参考组内讨论文本进行加分。",
+        "若需要判断一致性，请优先依据历史摘要与该辩手本轮发言。",
+    ]
+    # Moderator directives never enter the scored transcript, so surface them
+    # here instead — otherwise the judge cannot tell a debater ignored one.
+    directives = select_unanswered_directives(
+        state.get("dialogue_history", []),
+        state.get("participants", []),
+    ) or select_unanswered_directives(dialogue_history, state.get("participants", []))
+    directive_note = render_judge_directive_note(directives)
+    if directive_note:
+        task_lines.append(directive_note)
+        live_constraints.append(JUDGE_LIVE_CONSTRAINT)
+
     packet = build_context_packet(
         state,
         agent_role="judge",
-        task_lines=[
-            f"辩题：{topic}",
-            f"请评估 {role_to_judge} 在第 {current_turn + 1} 轮的表现。",
-        ],
-        live_constraints=[
-            "只根据正式辩手公开发言评分，不参考组内讨论文本进行加分。",
-            "若需要判断一致性，请优先依据历史摘要与该辩手本轮发言。",
-        ],
+        task_lines=task_lines,
+        live_constraints=live_constraints,
     )
     parts = [
         f"## Task\nScore the **{role_to_judge}** debater for turn {current_turn + 1}.\n",

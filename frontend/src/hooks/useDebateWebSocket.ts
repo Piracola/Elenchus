@@ -390,11 +390,19 @@ export function useDebateWebSocket(runId: string | null) {
         }
     }, []);
 
-    const sendIntervention = useCallback((content: string) => {
-        const activeRunId = getStore().activeRunId;
-        if (!activeRunId || !content.trim()) return;
-        void api.runs.command(activeRunId, 'intervene', content.trim());
-    }, []);
+    const sendIntervention = useCallback(
+        async (content: string, options?: { interrupt?: boolean }) => {
+            const activeRunId = getStore().activeRunId;
+            const trimmed = content.trim();
+            if (!activeRunId || !trimmed) return null;
+            return api.runs.command(
+                activeRunId,
+                options?.interrupt ? 'interrupt' : 'intervene',
+                trimmed,
+            );
+        },
+        [],
+    );
 
     return { startRun, resumeRun, stopRun, sendIntervention };
 }

@@ -31,8 +31,8 @@ class _FakeRuntimeService:
         self.reconciled.append(run_id)
         return None
 
-    async def queue_intervention(self, run_id: str, content: str) -> bool:
-        self.interventions.append((run_id, content))
+    async def interrupt_run(self, run_id: str) -> bool:
+        self.interventions.append((run_id, "interrupt"))
         return True
 
 

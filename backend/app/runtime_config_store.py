@@ -12,7 +12,36 @@ from app.context_runtime import (
     infer_context_injection_mode,
     values_for_context_injection_mode,
 )
+from app.constants import (
+    DEFAULT_MAX_RUN_DURATION_MINUTES,
+    DEFAULT_MAX_TOTAL_BACKOFF_SECONDS,
+    DEFAULT_MAX_TOTAL_FAILURES,
+    DEFAULT_RETRY_AFTER_CLAMP_SECONDS,
+)
 from app.runtime_paths import get_runtime_paths, prepare_runtime_environment
+
+_FAILURE_BUDGET_BOUNDS: dict[str, tuple[int, int]] = {
+    "max_total_failures": (1, 200),
+    "retry_after_clamp_seconds": (1, 600),
+    "max_total_backoff_seconds": (5, 7200),
+    "max_run_duration_minutes": (1, 1440),
+}
+
+
+def _normalize_failure_budget(
+    incoming: Any,
+    defaults: dict[str, int],
+) -> dict[str, int]:
+    section = incoming if isinstance(incoming, dict) else {}
+    normalized: dict[str, int] = {}
+    for key, default_value in defaults.items():
+        try:
+            value = int(section.get(key, default_value))
+        except (TypeError, ValueError):
+            value = default_value
+        low, high = _FAILURE_BUDGET_BOUNDS.get(key, (1, 10_000))
+        normalized[key] = max(low, min(high, value))
+    return normalized
 
 SUPPORTED_SEARCH_PROVIDERS = {"ddgs", "duckduckgo", "custom"}
 SEARCH_PROVIDER_ALIASES = {"duckduckgo": "ddgs"}
@@ -92,6 +121,12 @@ def _default_config() -> dict[str, Any]:
                 "use_low_cost_context_model": True,
                 "low_cost_model_provider_id": "",
                 "low_cost_model_id": "",
+            },
+            "failure_budget": {
+                "max_total_failures": DEFAULT_MAX_TOTAL_FAILURES,
+                "retry_after_clamp_seconds": DEFAULT_RETRY_AFTER_CLAMP_SECONDS,
+                "max_total_backoff_seconds": DEFAULT_MAX_TOTAL_BACKOFF_SECONDS,
+                "max_run_duration_minutes": DEFAULT_MAX_RUN_DURATION_MINUTES,
             },
         },
         "search": {
@@ -243,6 +278,10 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
                 else base["debate"]["context_runtime"]["low_cost_model_id"]
             ),
         },
+        "failure_budget": _normalize_failure_budget(
+            debate.get("failure_budget"),
+            base["debate"]["failure_budget"],
+        ),
     })
 
     search = incoming.get("search") if isinstance(incoming.get("search"), dict) else {}

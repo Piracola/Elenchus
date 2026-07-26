@@ -13,7 +13,7 @@ export type RunStatus =
     | 'failed'
     | 'cancelled'
     | 'stalled';
-export type RunCommandType = 'stop' | 'resume' | 'intervene';
+export type RunCommandType = 'stop' | 'resume' | 'intervene' | 'interrupt';
 export type DebateMode = 'standard' | 'sophistry_experiment';
 export type DocumentStatus = 'uploaded' | 'processing' | 'processed' | 'failed';
 
@@ -175,6 +175,16 @@ export interface RunCommandAck {
     run_id: string;
     command_type: RunCommandType;
     message?: string | null;
+    command_id?: string | null;
+}
+
+/** A moderator directive that has not been applied to the run yet. */
+export interface PendingRunCommand {
+    id: string;
+    run_id: string;
+    command_type: RunCommandType;
+    content: string;
+    created_at: string;
 }
 
 export interface RuntimeSettings {
