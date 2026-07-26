@@ -165,6 +165,9 @@ function MessageRow({
     if (!agentEntry && !judgeEntry) return null;
 
     const judgeOnly = Boolean(judgeEntry && !agentEntry);
+    // Only a speech-plus-verdict row claims the wider two-column span; a lone
+    // card keeps the plain reading measure.
+    const hasVerdictBeside = Boolean(agentEntry && judgeEntry);
 
     // 正方/反方消息卡片（统一头部行样式）
     const agentCard = agentEntry ? (
@@ -416,21 +419,55 @@ function MessageRow({
             <RoundInsights sections={insightSections} />
 
             {/* Proposer and opposer sit on opposite sides so the exchange reads
-                as an exchange; the verdict follows the speech it judges. */}
+                as an exchange. The verdict rides alongside the speech it judges
+                when the page is wide enough and wraps under it when not — the
+                wrap is done by flex-basis, so there is no breakpoint to keep in
+                sync with the width setting. Reversing the row for the opposer
+                keeps the speech on the outer edge, which is what carries the
+                left/right opposition. */}
             <div
                 style={{
                     display: 'flex',
-                    flexDirection: 'column',
+                    flexDirection: speaksOnRight ? 'row-reverse' : 'row',
+                    flexWrap: 'wrap',
                     gap: 'var(--space-3)',
                     width: '100%',
-                    maxWidth: 'min(100%, var(--measure-reading))',
+                    maxWidth: hasVerdictBeside
+                        ? 'min(100%, calc(var(--measure-reading) + var(--measure-verdict) + var(--space-3)))'
+                        : 'min(100%, var(--measure-reading))',
                     marginLeft: speaksOnRight ? 'auto' : 0,
                     marginRight: speaksOnRight ? 0 : 'auto',
-                    alignItems: 'stretch',
+                    alignItems: 'flex-start',
                 }}
             >
-                {agentCard}
-                {judgeCard}
+                {agentCard && (
+                    <div
+                        style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            flex: '1 1 var(--measure-reading)',
+                            maxWidth: 'var(--measure-reading)',
+                            minWidth: 0,
+                        }}
+                    >
+                        {agentCard}
+                    </div>
+                )}
+                {judgeCard && (
+                    <div
+                        style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            // A basis below the verdict's own cap is what lets the
+                            // pair fit on one line before the cap applies.
+                            flex: '1 1 300px',
+                            maxWidth: 'var(--measure-verdict)',
+                            minWidth: 0,
+                        }}
+                    >
+                        {judgeCard}
+                    </div>
+                )}
             </div>
         </div>
     );

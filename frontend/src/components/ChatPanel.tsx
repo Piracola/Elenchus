@@ -11,7 +11,7 @@ import { useChatViewportMetrics } from '../hooks/chat/useChatViewportMetrics';
 import { useTranscriptPanelState } from '../hooks/chat/useTranscriptPanelState';
 import { useTranscriptActions } from '../hooks/useDebateViewState';
 import { useDebateStore } from '../stores/debateStore';
-import { useSettingsStore, MESSAGE_WIDTH_VALUES } from '../stores/settingsStore';
+import { useSettingsStore, MESSAGE_WIDTH_VALUES, MESSAGE_MEASURE_VALUES } from '../stores/settingsStore';
 import DebateControls from './chat/DebateControls';
 import ChatHeaderOverlay from './chat/ChatHeaderOverlay';
 import ChatHistoryList from './chat/ChatHistoryList';
@@ -69,6 +69,7 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
 
     const isSophistryMode = debateMode === 'sophistry_experiment';
     const panelMaxWidth = MESSAGE_WIDTH_VALUES[displaySettings.messageWidth];
+    const panelMeasure = MESSAGE_MEASURE_VALUES[displaySettings.messageWidth];
     const messageFontSize = displaySettings.messageFontSize ?? 15;
     const chatFontSizes = useMemo(() => getMessageFontTokens(messageFontSize).chat, [messageFontSize]);
 
@@ -112,6 +113,10 @@ export default function ChatPanel({ isSidebarCollapsed, onExpandSidebar }: ChatP
                     display: 'flex',
                     flexDirection: 'column',
                     maxWidth: panelMaxWidth,
+                    // Scoped override: the reading measure follows the width
+                    // setting inside the transcript only, leaving the global
+                    // token alone for the rest of the app.
+                    ['--measure-reading' as string]: panelMeasure,
                     margin: '0 auto',
                     width: '100%',
                     padding: '0 16px',

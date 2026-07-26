@@ -80,6 +80,38 @@ describe('MessageRow', () => {
         expect(screen.getByText('private reasoning')).toBeInTheDocument();
     });
 
+    it('claims the two-column span only when a verdict accompanies the speech', () => {
+        const { container, rerender } = render(
+            <MessageRow agentEntry={makeEntry({})} />,
+        );
+
+        const speechOnlyRow = container.querySelector<HTMLElement>('[style*="flex-wrap"]');
+        expect(speechOnlyRow?.style.maxWidth).toBe('min(100%, var(--measure-reading))');
+
+        rerender(
+            <MessageRow
+                agentEntry={makeEntry({})}
+                judgeEntry={makeEntry({ role: 'judge', agent_name: '裁判', content: '本轮立论扎实' })}
+            />,
+        );
+
+        const pairedRow = container.querySelector<HTMLElement>('[style*="flex-wrap"]');
+        expect(pairedRow?.style.maxWidth).toContain('var(--measure-verdict)');
+    });
+
+    it('mirrors the opposer so its speech keeps the outer edge', () => {
+        const { container } = render(
+            <MessageRow
+                agentEntry={makeEntry({ role: 'opposer', agent_name: '反方' })}
+                judgeEntry={makeEntry({ role: 'judge', agent_name: '裁判', content: '本轮反驳有力' })}
+            />,
+        );
+
+        const row = container.querySelector<HTMLElement>('[style*="flex-wrap"]');
+        expect(row?.style.flexDirection).toBe('row-reverse');
+        expect(row?.style.marginLeft).toBe('auto');
+    });
+
     it('renders sophistry observer reports without the score grid', () => {
         const markup = renderToStaticMarkup(
             <MessageRow

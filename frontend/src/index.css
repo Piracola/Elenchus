@@ -29,9 +29,15 @@
   --tracking-normal: 0;
   --tracking-wide: 0.04em;
 
-  /* Comfortable CJK measure is 35–45 characters; 1em ≈ 1 CJK glyph. */
+  /* Comfortable CJK measure is 35–45 characters; 1em ≈ 1 CJK glyph.
+     ChatPanel overrides --measure-reading per the messageWidth setting, so a
+     wider page buys a longer line only within the readable band — the extra
+     room goes to the verdict column beside the speech instead. */
   --measure-reading: 42em;
   --measure-narrow: 32em;
+  /* The verdict is scanned, not read in sequence, so it sits below the
+     speech's measure and stops the pair from spanning a whole wide screen. */
+  --measure-verdict: 32em;
 
   /* ─── Motion ───────────────────────────────────────────────────
      One easing for entrances and hovers, one for on-screen movement.
