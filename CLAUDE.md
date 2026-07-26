@@ -108,7 +108,9 @@ A directive is persisted to `run_commands` (`pending` → `consumed`/`revoked`) 
 
 ### Configuration
 
-`runtime/config.json` is the single active config source (server, providers, search, logging, debate defaults). Do not reintroduce legacy sources (`.env` config, `config.yaml`, provider DB). Provider API keys are entered in the Web UI and stored there; with the `ELENCHUS_ENCRYPTION_KEY` env var set they are transparently encrypted (see README). Session `agent_configs` reference saved providers by `provider_id` (`{ model, provider_type, provider_id, api_base_url }`), never raw API keys. ### Search providers
+`runtime/config.json` is the single active config source (server, providers, search, logging, debate defaults). Do not reintroduce legacy sources (`.env` config, `config.yaml`, provider DB). Provider API keys are entered in the Web UI and stored there; with the `ELENCHUS_ENCRYPTION_KEY` env var set they are transparently encrypted (see README). Session `agent_configs` reference saved providers by `provider_id` (`{ model, provider_type, provider_id, api_base_url }`), never raw API keys.
+
+### Search providers
 
 `backend/app/search/registry.py` is the single source of truth. A provider is a
 module under `backend/app/search/` decorated with `@register_search_provider`
@@ -125,12 +127,52 @@ Fallback runs current-provider-first then by `fallback_priority`; DDGS declares
 the highest value so it stays the no-configuration safety net. Providers missing
 a required field are never instantiated and report `configured: false`.
 `app/search/limits.py` owns the shared results-per-query clamp used by both
-`tools/search_tool.py` and `agents/fact_checker.py`. `video.base_url` points at the local video renderer console (default `http://127.0.0.1:4317`); the backend only proxies the session export to it and never renders in-process.
+`tools/search_tool.py` and `agents/fact_checker.py`.
+
+`video.base_url` points at the local video renderer console (default
+`http://127.0.0.1:4317`); the backend only proxies the session export to it and
+never renders in-process.
+
+### Frontend design system
+
+`frontend/src/index.css` holds every design token; `frontend/src/config/motion.ts`
+holds every animation value. Read from them — do not add a local duration,
+easing, or hover-scale literal.
+
+Visual character is a **paper reading surface**: a warm page
+(`--surface-page`), a white reading column (`--surface`), and three border steps
+(`--border-hairline`/`--border-subtle`/`--border-strong`) carrying the structure
+instead of shadows. Role colour appears only on a speaker avatar and the 3px
+`--marker-width` marker on a card's leading edge; scores are monochrome numerals
+with `.tabular-nums`, never colour-coded. Transcript columns cap at
+`--measure-reading` (42em) — a full-width line of Chinese is unreadable. 正方
+hugs the left, 反方 the right, so the exchange reads as an exchange.
+
+`motion.ts` exports four durations (`TRANSITION.press/fast/normal/slow`) and one
+on-screen curve (`EASE_OUT`); `--transition-fast` in CSS is the same curve so
+plain CSS declarations stay in sync. Press feedback comes in three flavours and
+picking the wrong one is visible: `PRESSABLE` for solid buttons,
+`PRESSABLE_ICON` for icon-only buttons, and `PRESSABLE_TEXT` (opacity only) for
+anything containing text — scaling Chinese glyphs blurs them. Anchored surfaces
+use `POPOVER_MOTION` with a `transformOrigin` pointing at their trigger;
+`MODAL_MOTION` stays centred; `COLLAPSE_MOTION` is for expand/collapse.
+An `exit` needs an `AnimatePresence` that outlives the condition — putting the
+`AnimatePresence` *inside* `{cond && ...}` means the exit never plays.
+
+Accessibility invariants that are easy to undo:
+
+- Focus rings are global (`:focus-visible` in `index.css`). Never add inline
+  `outline: 'none'` — that is exactly how CustomSelect became keyboard-invisible.
+- Dialogs use `useDialogA11y` (`frontend/src/hooks/`) for initial focus, Escape,
+  in-dialog Tab wrapping, and focus restore. Tab is wrapped rather than
+  document-trapped because selects inside dialogs portal their menus to `<body>`.
+- Streaming text is never a live region; `StatusBanner` owns the one polite
+  region and announces state changes.
 
 ## Conventions
 
 - **UTF-8 everywhere**: all source files, JSON/Markdown/log output, and backend `text/*` and `application/json` responses must declare `charset=utf-8`; Chinese filenames in `Content-Disposition` use `filename*=UTF-8''...`; frontend file imports decode with `TextDecoder('utf-8', { fatal: true })`. Never commit mojibake literals.
 - **Console logging is deliberately quiet**: console shows only startup/shutdown, key lifecycle, and WARNING+. Per-statement SQL, `ROLLBACK`s, HTTP access logs, and third-party INFO belong in `runtime/logs/`, not the terminal — keep `--no-access-log`, don't enable SQLAlchemy `echo`, and route loggers through `app/services/log_service.py`.
-- **Frontend style contract**: calm, professional, content-first tool UI. No large gradients, glow, glassmorphism, or decorative animation; reuse existing tokens and components; respect reduced-motion.
+- **Frontend style contract**: calm, professional, content-first tool UI. No large gradients, glow, glassmorphism, or decorative animation; take every value from `index.css` tokens and `config/motion.ts`; respect reduced-motion. See "Frontend design system" above for the paper-surface rules and the press-feedback variants.
 - **Run status presentation**: `frontend/src/utils/runtime/runStatusPresentation.ts` is the single mapping from run status to `isDebating`/`phase`. Both the run-summary path and the live `run_status_changed` path must go through it, or the UI flips depending on which wrote last.
 - **Debugging runs**: check `/api/runs/{run_id}` (summary + projection), `/api/runs/{run_id}/events?after_seq=0`, the SQLite `runs`/`run_events`/`run_checkpoints`/`run_projections` rows, then `runtime/logs/`. `runtime/config.json` explains static config only, never why a run reached a state.
