@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC
 
 import pytest
 
@@ -245,7 +246,7 @@ async def test_runtime_bus_send_drops_closed_socket_without_warning(caplog):
 
 @pytest.mark.asyncio
 async def test_runtime_bus_send_json_encodes_datetimes():
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     bus = RuntimeBus()
     websocket = _FakeWebSocket()
@@ -254,7 +255,7 @@ async def test_runtime_bus_send_json_encodes_datetimes():
     delivered = await bus.send(
         "session-1",
         websocket,
-        {"type": "status", "timestamp": datetime(2026, 7, 1, tzinfo=timezone.utc)},
+        {"type": "status", "timestamp": datetime(2026, 7, 1, tzinfo=UTC)},
     )
 
     assert delivered is True

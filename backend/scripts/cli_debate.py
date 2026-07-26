@@ -12,16 +12,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import sys
 from pathlib import Path
 
 # Ensure the backend root is on sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from app.agents.graph import compile_debate_graph, DebateGraphState
+from app.agents.graph import DebateGraphState, compile_debate_graph
 from app.config import get_settings
-
 
 _DIM_LABELS = {
     "logical_rigor": "逻辑严密度",
@@ -69,7 +67,7 @@ def _print_scores(scores: dict):
         print(f"\n  📊 {label} 评分:")
 
         if not isinstance(score_data, dict):
-            print(f"    (无评分数据)")
+            print("    (无评分数据)")
             continue
 
         total = 0
@@ -85,7 +83,7 @@ def _print_scores(scores: dict):
                     count += 1
 
         if count:
-            print(f"    ──────────────────")
+            print("    ──────────────────")
             print(f"    平均分: {total / count:.1f}/10")
 
         comment = score_data.get("overall_comment", "")

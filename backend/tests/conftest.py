@@ -19,14 +19,15 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.config import get_settings
 from app.db import database as db_module
-from app.db.database import Base
-from app.dependencies import clear_dependency_cache
-from app.runtime_paths import get_runtime_paths
-from app.services.run_ledger_service import RunLedgerService
 
 # Import db utils (formerly models) for utility functions.
 from app.db import db_utils as _models  # noqa: F401
+from app.db.database import Base
+from app.dependencies import clear_dependency_cache
 from app.models import ledger as _ledger_models  # noqa: F401
+from app.runtime_paths import get_runtime_paths
+from app.services.run_ledger_service import RunLedgerService
+
 
 @pytest.fixture(scope="session")
 def event_loop():

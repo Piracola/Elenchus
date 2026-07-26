@@ -46,7 +46,7 @@ class RuntimePaths:
     default_database_file: Path
 
 
-@lru_cache()
+@lru_cache
 def get_runtime_paths() -> RuntimePaths:
     bundle_root = _bundle_root()
     is_frozen = _is_frozen_runtime()

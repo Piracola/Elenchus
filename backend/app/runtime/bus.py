@@ -5,15 +5,15 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import deque
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
-from fastapi.encoders import jsonable_encoder
 from fastapi import WebSocket, WebSocketDisconnect
+from fastapi.encoders import jsonable_encoder
 from starlette.websockets import WebSocketState
 
-from app.runtime.event_schema import RuntimeEvent, build_runtime_event
 from app.runtime.event_persistence import compact_runtime_event_payload, should_persist_runtime_event
+from app.runtime.event_schema import RuntimeEvent, build_runtime_event
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +120,7 @@ class RuntimeBus:
         self,
         run_id: str,
         websocket: WebSocket,
-        message: dict[str, Any],
+        message: Mapping[str, Any],
     ) -> bool:
         if self._is_closed(websocket):
             self.disconnect(run_id, websocket)
@@ -152,7 +152,7 @@ class RuntimeBus:
                 logger.warning("Failed to send WS message for run %s: %s", run_id, exc)
             return False
 
-    async def broadcast(self, run_id: str, message: dict[str, Any]) -> None:
+    async def broadcast(self, run_id: str, message: Mapping[str, Any]) -> None:
         """Broadcast message to all active WebSocket connections in parallel."""
         websockets = list(self._active.get(run_id, []))
         if not websockets:

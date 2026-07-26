@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
@@ -17,26 +17,26 @@ from app.agents.moderator import (
     select_unanswered_directives,
 )
 from app.agents.runtime_progress import (
-    build_usage_callback,
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
     MODEL_INVOCATION_TIMEOUT_SECONDS,
     build_status_heartbeat_callback,
+    build_usage_callback,
+)
+from app.agents.sophistry_prompt_loader import get_sophistry_debater_system_prompt
+from app.agents.speech_limits import (
+    build_speech_limit_instruction,
+    get_role_speech_limit_chars,
 )
 from app.agents.speech_response import (
     EMPTY_SPEECH_RETRY_INSTRUCTION,
     is_usable_speech_content,
     normalize_response_content,
 )
-from app.agents.speech_limits import (
-    build_speech_limit_instruction,
-    get_role_speech_limit_chars,
-)
+from app.constants import ROLE_NAMES
 from app.llm.invoke import (
     invoke_chat_model,
 )
 from app.llm.request_params import UNSUPPORTED_PROVIDER_PARAMS_METADATA_KEY
-from app.agents.sophistry_prompt_loader import get_sophistry_debater_system_prompt
-from app.constants import ROLE_NAMES
 
 logger = logging.getLogger(__name__)
 _MAX_SPEECH_ATTEMPTS = 3
@@ -248,7 +248,7 @@ async def sophistry_debater_speak(state: dict[str, Any]) -> dict[str, Any]:
         "agent_name": agent_name,
         "content": content,
         "citations": [],
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "turn": current_turn,
     }
     metadata = _extract_user_visible_response_metadata(response)

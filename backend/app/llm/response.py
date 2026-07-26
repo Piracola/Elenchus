@@ -127,7 +127,7 @@ def _looks_like_html_document(text: str) -> bool:
     return "<html" in stripped and "</html>" in stripped and "<body" in stripped
 
 
-def _provider_html_response_error(config: "ResolvedLLMConfig") -> ValueError:
+def _provider_html_response_error(config: ResolvedLLMConfig) -> ValueError:
     base = config.api_base_url or "(provider default / env)"
     return ValueError(
         "Model invocation blocked: provider endpoint returned HTML instead of "

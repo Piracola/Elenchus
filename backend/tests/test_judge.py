@@ -4,8 +4,8 @@ Tests for judge scoring robustness.
 
 from __future__ import annotations
 
-import json
 import asyncio
+import json
 import time
 
 import pytest

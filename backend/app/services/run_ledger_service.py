@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import delete, desc, func, select, update
@@ -10,16 +10,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_session_factory
 from app.db.db_utils import _gen_id
 from app.models.ledger import (
+    RecentDebateConfigRecord,
     RunCheckpointRecord,
     RunCommandRecord,
     RunEventRecord,
     RunProjectionRecord,
     RunRecord,
-    RecentDebateConfigRecord,
     SessionDocumentRecord,
     SessionRecord,
 )
 from app.models.schemas import RunCommandType, RunStatus, SessionStatus
+from app.services.run_projector.documents import (
+    BUILTIN_SOPHISTRY_DOCUMENT_ID,
+    builtin_reference_doc,
+    builtin_reference_entries,
+    document_projection_entry,
+)
 from app.services.session_service_helpers import (
     default_reasoning_config,
     default_speech_config,
@@ -27,24 +33,18 @@ from app.services.session_service_helpers import (
     normalize_mode_config,
     sanitize_state_snapshot,
 )
-from app.services.run_projector.documents import (
-    BUILTIN_SOPHISTRY_DOCUMENT_ID,
-    builtin_reference_doc,
-    builtin_reference_entries,
-    document_projection_entry,
-)
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _serialize_datetime(value: datetime | None) -> datetime | None:
     if value is None:
         return None
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _session_status_from_run(run_status: str | None) -> str:

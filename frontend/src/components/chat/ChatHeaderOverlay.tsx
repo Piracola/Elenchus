@@ -62,7 +62,7 @@ export default function ChatHeaderOverlay({
   bulkCollapseLabel,
   onToggleAllAgentMessages,
 }: ChatHeaderOverlayProps) {
-  const [exportingFormat, setExportingFormat] = useState<'markdown' | 'json' | 'html' | null>(null);
+  const [exportingFormat, setExportingFormat] = useState<'markdown' | 'json' | 'html' | 'video' | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showDebaterSettings, setShowDebaterSettings] = useState(false);
   const [exportCategories, setExportCategories] = useState<MarkdownExportCategory[]>([]);
@@ -137,6 +137,25 @@ export default function ChatHeaderOverlay({
       setShowExportMenu(false);
     } catch (error) {
       toast(error instanceof Error ? error.message : '导出失败', 'error');
+    } finally {
+      setExportingFormat(null);
+    }
+  };
+
+  const handleSendToVideo = async () => {
+    if (!hasCurrentSession || exportingFormat || !currentSessionId) {
+      return;
+    }
+    setExportingFormat('video');
+    try {
+      const result = await api.sessions.sendToVideo(currentSessionId, activeRunId);
+      result.warnings?.forEach((warning: string) => toast(warning));
+      toast(`已送入视频生成器（${result.speech_count} 条发言）`, 'success');
+      setShowExportMenu(false);
+      window.open(result.video_ui_url, '_blank', 'noopener');
+    } catch (error) {
+      // The renderer runs as a separate local tool; a 503 means it is not up.
+      toast(error instanceof Error ? error.message : '发送到视频生成器失败', 'error');
     } finally {
       setExportingFormat(null);
     }
@@ -490,6 +509,35 @@ export default function ChatHeaderOverlay({
                   </div>
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)', paddingLeft: '4px' }}>
                     包含完整原始数据结构，适合程序处理。
+                  </span>
+
+                  {/* 分隔线 */}
+                  <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
+
+                  {/* 视频生成器 */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      生成视频
+                    </span>
+                    <motion.button
+                      whileHover={{ opacity: 0.9 }}
+                      whileTap={{ opacity: 0.8 }}
+                      onClick={() => {
+                        void handleSendToVideo();
+                      }}
+                      disabled={Boolean(exportingFormat)}
+                      style={{
+                        ...HEADER_TOOLBAR_PRIMARY_BUTTON_STYLE,
+                        padding: '5px 10px',
+                        fontSize: '11px',
+                        opacity: exportingFormat ? 0.65 : 1,
+                      }}
+                    >
+                      {exportingFormat === 'video' ? '发送中...' : '发送'}
+                    </motion.button>
+                  </div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', paddingLeft: '4px' }}>
+                    把本场辩论送入本地视频生成器（需先运行 video/启动视频生成器.bat），随后在其网页中配音并渲染。
                   </span>
                   </motion.div>
                 )}

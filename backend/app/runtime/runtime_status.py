@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 NODE_STATUS = {
     "manage_context": ("正在整理上下文...", "preparing"),
     "set_speaker": ("正在切换发言者...", "preparing"),

@@ -14,6 +14,7 @@ from .documents import (
     document_projection_entry,
 )
 
+
 async def latest_run(db: AsyncSession, session_id: str) -> RunRecord | None:
     result = await db.execute(
         select(RunRecord)

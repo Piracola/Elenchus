@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from app.agents.config_resolver import resolve_agent_override, AGENT_CONFIG_FALLBACKS
+from app.agents.config_resolver import AGENT_CONFIG_FALLBACKS, resolve_agent_override
 
 
 class TestResolveAgentOverride:

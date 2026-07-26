@@ -22,11 +22,11 @@ from app.agents.runtime_progress import (
     build_status_heartbeat_callback,
     build_usage_callback,
 )
+from app.dependencies import get_search_factory
 from app.llm.invoke import invoke_text_model
 from app.tools.search_formatter import format_evidence_brief
 from app.tools.search_query_planner import sanitize_search_query
 from app.tools.search_result_filter import filter_results
-from app.dependencies import get_search_factory
 
 logger = logging.getLogger(__name__)
 

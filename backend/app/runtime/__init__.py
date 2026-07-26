@@ -10,7 +10,6 @@ from importlib import import_module
 from typing import Any
 
 __all__ = [
-    "DebateRunner",
     "DebateOrchestrator",
     "DebateRuntimeService",
     "SessionRuntimeRepository",
@@ -19,7 +18,6 @@ __all__ = [
 ]
 
 _EXPORTS: dict[str, tuple[str, str]] = {
-    "DebateRunner": ("app.runtime.runner", "DebateRunner"),
     "DebateOrchestrator": ("app.runtime.orchestrator", "DebateOrchestrator"),
     "DebateRuntimeService": ("app.runtime.service", "DebateRuntimeService"),
     "SessionRuntimeRepository": ("app.runtime.session_repository", "SessionRuntimeRepository"),

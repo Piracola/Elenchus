@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import sqlite3
-import importlib.util
 from pathlib import Path
 
 import pytest
@@ -11,6 +11,7 @@ from app.runtime.event_persistence import (
     compact_runtime_event_payload,
     should_persist_runtime_event,
 )
+
 _SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "compact_runtime_events.py"
 _SPEC = importlib.util.spec_from_file_location("compact_runtime_events", _SCRIPT_PATH)
 assert _SPEC and _SPEC.loader

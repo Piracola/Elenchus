@@ -4,8 +4,8 @@ import logging
 
 from app import config as config_module
 from app.runtime_config_store import load_runtime_config
-from app.services.log_service import LogLevel, LogManager
 from app.runtime_paths import get_runtime_paths
+from app.services.log_service import LogLevel, LogManager
 
 
 def test_set_level_persists_to_runtime_config(runtime_dir):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi import APIRouter, File, HTTPException, Response, UploadFile
 
 from app.models.schemas import (
     SessionDocumentListResponse,

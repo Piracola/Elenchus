@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildVideoScript, cleanTextForTts as cleanSegmentTextForTts, segmentCuesToLineCues } from "../src/videoScript.ts";
+import { resolveCompositorBinary } from "./compositor-binaries.mjs";
 import {
   createTtsCacheKey,
   EDGE_TTS_RETRY_DELAYS_MS,
@@ -29,8 +30,8 @@ const logDir = join(rootDir, "logs");
 const edgeTtsErrorLogPath = join(logDir, "edge-tts-errors.log");
 const remotionCli = join(rootDir, "node_modules", "@remotion", "cli", "remotion-cli.js");
 const tsxCli = join(rootDir, "node_modules", "tsx", "dist", "cli.mjs");
-const ffmpegPath = join(rootDir, "node_modules", "@remotion", "compositor-win32-x64-msvc", "ffmpeg.exe");
-const ffprobePath = join(rootDir, "node_modules", "@remotion", "compositor-win32-x64-msvc", "ffprobe.exe");
+const ffmpegPath = resolveCompositorBinary(rootDir, "ffmpeg");
+const ffprobePath = resolveCompositorBinary(rootDir, "ffprobe");
 const edgeTtsBridgePath = join(rootDir, "scripts", "edge_tts_bridge.py");
 const host = "127.0.0.1";
 const port = Number(process.env.PORT || 4317);

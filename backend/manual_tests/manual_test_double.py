@@ -3,9 +3,8 @@ Manual test script for double debate runner.
 
 Run with: python backend/manual_tests/manual_test_double.py
 """
-from scripts.test_utils import setup_backend_path, run_async
-
 from app.agents.runner import run_debate
+from scripts.test_utils import run_async, setup_backend_path
 
 
 async def main():

@@ -27,6 +27,7 @@ import type {
     RunProjectionResponse,
     RunSummary,
     RuntimeEvent,
+    VideoHandoffResult,
 } from '../types';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
@@ -230,6 +231,15 @@ export const api = {
             if (runId) params.set('run_id', runId);
             categories?.forEach((category) => params.append('categories', category));
             return download(`/sessions/${id}/export?${params.toString()}`, buildTopicFilename(topic, 'html'));
+        },
+
+        sendToVideo: (id: string, runId?: string | null): Promise<VideoHandoffResult> => {
+            const params = new URLSearchParams();
+            if (runId) params.set('run_id', runId);
+            const query = params.toString();
+            return request(`/sessions/${id}/send-to-video${query ? `?${query}` : ''}`, {
+                method: 'POST',
+            });
         },
 
     },

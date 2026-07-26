@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+
 from app.agents import context_engine
 
 
@@ -88,12 +89,6 @@ async def test_build_context_helper_override_fills_default_model_from_provider(m
                 )
             )
         ),
-    )
-
-    fake_service = SimpleNamespace(
-        resolve_provider_selection=AsyncMock(
-            return_value=SimpleNamespace(default_model="deepseek-v4-flash")
-        )
     )
 
     import app.dependencies as dependencies

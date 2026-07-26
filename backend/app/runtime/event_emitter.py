@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
-from .emitters.discussion import emit_discussion_entry as _emit_discussion_entry
-from .emitters.discussion import emit_discussion_entries as _emit_discussion_entries
 from .emitters.discussion import emit_consensus_summary as _emit_consensus_summary
+from .emitters.discussion import emit_discussion_entries as _emit_discussion_entries
+from .emitters.discussion import emit_discussion_entry as _emit_discussion_entry
 from .emitters.report import emit_fact_check as _emit_fact_check
 from .emitters.report import emit_judge_scores as _emit_judge_scores
 from .emitters.report import emit_memory_updates as _emit_memory_updates
@@ -17,7 +17,6 @@ from .emitters.speech import emit_speech as _emit_speech
 from .emitters.speech import emit_speech_cancel as _emit_speech_cancel
 from .emitters.speech import emit_speech_start as _emit_speech_start
 from .emitters.speech import emit_speech_token as _emit_speech_token
-from .runtime_status import NODE_STATUS as _NODE_STATUS
 from .runtime_status import describe_status as _describe_status
 from .runtime_status import predict_next_status_node as _predict_next_status_node
 
@@ -38,7 +37,7 @@ class RuntimeEventEmitter:
     def __init__(
         self,
         *,
-        runtime_bus: "RuntimeBus" | None = None,
+        runtime_bus: RuntimeBus | None = None,
         emit_event: EventEmitter = noop_emit_event,
         default_run_id: str | None = None,
     ) -> None:
@@ -46,7 +45,7 @@ class RuntimeEventEmitter:
         self._emit_event = emit_event
         self._default_run_id = default_run_id
 
-    def for_run(self, run_id: str) -> "RuntimeEventEmitter":
+    def for_run(self, run_id: str) -> RuntimeEventEmitter:
         return RuntimeEventEmitter(
             runtime_bus=self._runtime_bus,
             emit_event=self._emit_event,

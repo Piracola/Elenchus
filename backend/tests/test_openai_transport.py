@@ -7,10 +7,8 @@ import pytest
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 
-from app.llm.config import ResolvedLLMConfig
 from app.llm import transport
-
-from openai import AsyncOpenAI
+from app.llm.config import ResolvedLLMConfig
 
 
 @tool

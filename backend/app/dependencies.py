@@ -33,8 +33,8 @@ if TYPE_CHECKING:
     from app.services.provider.service import ProviderService
 
 
-@lru_cache()
-def get_provider_service() -> "ProviderService":
+@lru_cache
+def get_provider_service() -> ProviderService:
     """
     Get the singleton ProviderService instance.
 
@@ -45,25 +45,19 @@ def get_provider_service() -> "ProviderService":
     return ProviderService()
 
 
-@lru_cache()
-def get_llm_router() -> "LLMRouter":
+@lru_cache
+def get_llm_router() -> LLMRouter:
     """
     Get the singleton LLMRouter instance.
 
     The router maintains a registry of provider clients for LLM calls.
     """
-    from app.llm.providers.base import BaseProviderClient
-    from app.llm.providers.clients import (
-        OpenAIProviderClient,
-        AnthropicProviderClient,
-        GeminiProviderClient,
-    )
     from app.llm.router import LLMRouter
     return LLMRouter()
 
 
-@lru_cache()
-def get_search_factory() -> "SearchProviderFactory":
+@lru_cache
+def get_search_factory() -> SearchProviderFactory:
     """
     Get the singleton SearchProviderFactory instance.
 
@@ -73,8 +67,8 @@ def get_search_factory() -> "SearchProviderFactory":
     return SearchProviderFactory()
 
 
-@lru_cache()
-def get_runtime_bus() -> "RuntimeBus":
+@lru_cache
+def get_runtime_bus() -> RuntimeBus:
     """Get the shared runtime bus for websocket delivery and event sequencing."""
     from app.runtime.bus import RuntimeBus
     from app.runtime.session_repository import SessionRuntimeRepository
@@ -83,26 +77,26 @@ def get_runtime_bus() -> "RuntimeBus":
     return RuntimeBus(repository=repository)
 
 
-@lru_cache()
-def get_agent_config_service() -> "AgentConfigService":
+@lru_cache
+def get_agent_config_service() -> AgentConfigService:
     """Get the shared agent config normalization service."""
     from app.services.agent_config_service import AgentConfigService
 
     return AgentConfigService()
 
 
-@lru_cache()
-def get_debate_runtime_service() -> "DebateRuntimeService":
+@lru_cache
+def get_debate_runtime_service() -> DebateRuntimeService:
     """
     Get the singleton runtime task manager.
 
     This owns long-running debate tasks so API transports stay thin.
     """
-    from app.runtime.runner import DebateRunner
+    from app.runtime.orchestrator import DebateOrchestrator
     from app.runtime.service import DebateRuntimeService
 
     runtime_bus = get_runtime_bus()
-    orchestrator = DebateRunner(
+    orchestrator = DebateOrchestrator(
         runtime_bus=runtime_bus,
     )
 

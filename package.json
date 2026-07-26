@@ -9,7 +9,10 @@
     "dev:backend": "node scripts/run-backend-dev.cjs",
     "dev:frontend": "node scripts/run-frontend-dev.cjs",
     "test:backend": "node scripts/run-backend-tests.cjs",
+    "test:video": "npm --prefix video test",
     "kill:backend": "node scripts/kill-backend-port.cjs",
-    "lint": "npm --prefix frontend run lint"
+    "lint": "npm --prefix frontend run lint",
+    "lint:backend": "uv run --project backend --frozen --group dev ruff check backend",
+    "typecheck:backend": "uv run --project backend --frozen --group dev mypy backend/app"
   }
 }

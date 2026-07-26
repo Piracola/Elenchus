@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.models.schemas import ModelConfigResponse
@@ -11,7 +11,7 @@ def has_configured_api_key(value: str | None) -> bool:
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def parse_provider_timestamp(value: Any) -> datetime:

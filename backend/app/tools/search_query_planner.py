@@ -118,10 +118,7 @@ def looks_like_fact_query(query: str) -> bool:
     if any(hint in lowered for hint in FACT_HINTS):
         return True
 
-    if len(query.split()) >= 4 and not any(marker in query for marker in STANCE_MARKERS):
-        return True
-
-    return False
+    return len(query.split()) >= 4 and not any(marker in query for marker in STANCE_MARKERS)
 
 
 def extract_subject(topic: str) -> str:

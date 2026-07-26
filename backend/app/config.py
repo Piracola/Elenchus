@@ -37,7 +37,8 @@ class SearchConfig(BaseModel):
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None = None) -> SearchConfig:
         data = data or {}
-        custom = data.get("custom") if isinstance(data.get("custom"), dict) else {}
+        raw_custom = data.get("custom")
+        custom = raw_custom if isinstance(raw_custom, dict) else {}
         return cls(
             provider=normalize_search_provider_name(str(data.get("provider") or "ddgs")),
             max_results_per_query=int(data.get("max_results_per_query") or 5),
@@ -157,7 +158,7 @@ class Settings(BaseModel):
         return _RUNTIME_PATHS.runtime_root
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """Return the singleton settings object."""
     return Settings()

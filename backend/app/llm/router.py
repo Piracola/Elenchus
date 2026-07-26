@@ -5,9 +5,9 @@ from langchain_core.language_models import BaseChatModel
 
 from app.llm.providers.base import BaseProviderClient
 from app.llm.providers.clients import (
-    OpenAIProviderClient,
     AnthropicProviderClient,
     GeminiProviderClient,
+    OpenAIProviderClient,
 )
 
 logger = logging.getLogger(__name__)

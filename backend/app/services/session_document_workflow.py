@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from app.models.ledger import SessionRecord
 from app.services import document_service
 

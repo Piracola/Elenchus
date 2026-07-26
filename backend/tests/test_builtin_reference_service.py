@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
+from app.models.schemas import SessionCreate
 from app.services import builtin_reference_service, session_service
 from app.services.builtin_reference_service import (
     BUILTIN_SOPHISTRY_DOCUMENT_ID,
     ensure_builtin_mode_references,
 )
-from app.models.schemas import SessionCreate
 
 
 @pytest.mark.asyncio

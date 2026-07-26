@@ -5,10 +5,9 @@ Tests for safe model invocation fallbacks and response normalization.
 from __future__ import annotations
 
 import pytest
-from langchain_core.messages import HumanMessage
-from langchain_core.messages import AIMessage, AIMessageChunk
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 
-from app.llm.config import DEFAULT_MAX_TOKENS, ResolvedLLMConfig
+from app.llm.config import ResolvedLLMConfig
 
 
 async def fake_resolve_llm_config(override=None):

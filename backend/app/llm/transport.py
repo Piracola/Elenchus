@@ -14,12 +14,12 @@ from langchain_openai.chat_models.base import _convert_message_to_dict
 from openai import AsyncOpenAI
 
 from app.llm.config import ResolvedLLMConfig
+from app.llm.request_params import split_openai_params
 from app.llm.response import (
     _coerce_openai_response_to_ai_message,
     _looks_like_html_document,
     _provider_html_response_error,
 )
-from app.llm.request_params import split_openai_params
 
 TokenCallback = Callable[[str], Awaitable[None]]
 
@@ -153,12 +153,11 @@ async def invoke_openai_chat_raw_streaming(
 
                     # Emit reasoning tokens if present (deep-thinking models)
                     reasoning = getattr(delta, "reasoning_content", None)
-                    if isinstance(reasoning, str) and reasoning:
-                        if on_token is not None:
-                            if not streaming_think_block:
-                                await on_token("<think>")
-                                streaming_think_block = True
-                            await on_token(reasoning)
+                    if isinstance(reasoning, str) and reasoning and on_token is not None:
+                        if not streaming_think_block:
+                            await on_token("<think>")
+                            streaming_think_block = True
+                        await on_token(reasoning)
 
                     content = getattr(delta, "content", None)
                     if content is None:

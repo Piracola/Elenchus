@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
+
+from app.dependencies import get_debate_runtime_service
 from app.models.schemas import (
     PendingRunCommand,
     RunCommandAck,
@@ -8,8 +10,8 @@ from app.models.schemas import (
     RunCommandRequest,
     RunCreate,
     RunProjectionResponse,
-    RunSummary,
     RunStatus,
+    RunSummary,
 )
 from app.services import session_service
 from app.services.run_service import (
@@ -24,7 +26,6 @@ from app.services.run_service import (
     transition_run_to_cancelled,
     transition_run_to_status,
 )
-from app.dependencies import get_debate_runtime_service
 
 router = APIRouter(tags=["runs"])
 

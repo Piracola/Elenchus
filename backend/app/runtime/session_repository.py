@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.models.schemas import DebateMode
-from app.services import runtime_event_service, run_service, session_service
+from app.services import run_service, runtime_event_service, session_service
 from app.services.builtin_reference_service import ensure_builtin_mode_references
 from app.text_repair import repair_text_tree
 

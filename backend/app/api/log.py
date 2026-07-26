@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.services.log_service import get_log_manager, LogLevel
+from app.services.log_service import LogLevel, get_log_manager
 
 router = APIRouter(prefix="/log", tags=["log"])
 

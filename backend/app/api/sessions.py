@@ -13,9 +13,14 @@ from app.models.schemas import (
     SessionCreate,
     SessionListResponse,
     SessionResponse,
+    VideoHandoffResponse,
 )
 from app.services import export, session_service
 from app.services.run_service import export_payload as export_run_payload
+from app.services.video_bridge_service import (
+    VideoToolUnavailableError,
+    send_session_to_video_tool,
+)
 
 router = APIRouter(tags=["sessions"])
 router.include_router(session_documents_router)
@@ -129,4 +134,29 @@ async def export_session(
         headers={
             "Content-Disposition": export.build_content_disposition(filename)
         },
+    )
+
+
+@router.post("/sessions/{session_id}/send-to-video", response_model=VideoHandoffResponse)
+async def send_session_to_video(
+    session_id: str,
+    run_id: str | None = Query(default=None),
+):
+    """Hand this session's transcript to the local video renderer console."""
+    data = await export_run_payload(session_id, run_id=run_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    try:
+        result = await send_session_to_video_tool(data)
+    except VideoToolUnavailableError as exc:
+        # 503: the debate data is fine, the external tool simply is not running.
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return VideoHandoffResponse(
+        session_id=session_id,
+        video_ui_url=result.video_ui_url,
+        topic=result.topic,
+        speech_count=result.speech_count,
+        warnings=result.warnings,
     )

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.models.schemas import SessionCreate
-from app.services import runtime_event_service, run_service, session_service
+from app.services import run_service, runtime_event_service, session_service
 
 
 def make_event(seq: int, *, run_id: str, session_id: str) -> dict[str, object]:

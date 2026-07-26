@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, NotRequired, TypedDict
 from uuid import uuid4
 
@@ -27,7 +27,7 @@ class RuntimeEvent(TypedDict):
 
 
 def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def build_runtime_event(

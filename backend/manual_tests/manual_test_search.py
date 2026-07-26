@@ -3,9 +3,8 @@ Manual test script for search providers.
 
 Run with: python backend/manual_tests/manual_test_search.py
 """
-from scripts.test_utils import setup_backend_path, run_async
-
 from app.dependencies import get_search_factory
+from scripts.test_utils import run_async, setup_backend_path
 
 
 async def main():

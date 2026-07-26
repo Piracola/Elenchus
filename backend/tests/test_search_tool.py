@@ -4,8 +4,8 @@ Tests for search-tool guardrails.
 
 import pytest
 
-from app.tools import search_tool
 from app.search.base import SearchResult
+from app.tools import search_tool
 
 
 def test_sanitize_search_query_extracts_topic_from_prompt_text():

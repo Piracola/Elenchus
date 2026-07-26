@@ -12,6 +12,7 @@
     "still": "remotion still src/index.ts DebateTranscript out/frame.png --frame=180 --props=public/data/render-props.json",
     "fast-render": "tsx scripts/fast-render.mjs",
     "fast-frame": "tsx scripts/fast-render.mjs --frames-only",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:process": "node scripts/process-integration.mjs",
     "verify:artifacts": "node scripts/verify-artifacts.mjs",

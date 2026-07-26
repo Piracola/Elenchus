@@ -6,7 +6,7 @@ import hashlib
 import json
 import sys
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -54,8 +54,8 @@ def _parse_args() -> argparse.Namespace:
 def _parse_datetime(value: Any) -> datetime:
     if isinstance(value, datetime):
         if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc)
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
     if not isinstance(value, str) or not value.strip():
         return _utcnow()
     normalized = value.strip()
@@ -66,8 +66,8 @@ def _parse_datetime(value: Any) -> datetime:
     except ValueError:
         return _utcnow()
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -160,7 +160,7 @@ async def _document_id_for_import(
         existing = await db.get(SessionDocumentRecord, document_id)
         if existing is None or existing.session_id == session_id:
             return document_id
-    digest = hashlib.sha1(f"{session_id}:{document_id}".encode("utf-8")).hexdigest()[:25]
+    digest = hashlib.sha1(f"{session_id}:{document_id}".encode()).hexdigest()[:25]
     return f"legacy_{digest}"
 
 

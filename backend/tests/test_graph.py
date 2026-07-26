@@ -16,8 +16,9 @@ def test_graph_compiles():
 
 def test_debate_graph_state_reducers():
     """Verify that shared_knowledge and dialogue_history use `add` reducer."""
-    from app.agents.graph import DebateGraphState
     import typing
+
+    from app.agents.graph import DebateGraphState
 
     hints = typing.get_type_hints(DebateGraphState, include_extras=True)
 

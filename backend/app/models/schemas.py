@@ -458,6 +458,16 @@ class RunCommandListResponse(BaseModel):
     commands: list[PendingRunCommand]
 
 
+class VideoHandoffResponse(BaseModel):
+    """Result of handing a session transcript to the local video renderer."""
+
+    session_id: str
+    video_ui_url: str
+    topic: str
+    speech_count: int
+    warnings: list[str] = []
+
+
 class SessionDocumentListItem(BaseModel):
     """Lightweight document info for per-session reference files."""
 

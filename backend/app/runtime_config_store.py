@@ -2,21 +2,21 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
 from typing import Any
 
-from app.context_runtime import (
-    DEFAULT_CONTEXT_INJECTION_MODE,
-    infer_context_injection_mode,
-    values_for_context_injection_mode,
-)
 from app.constants import (
     DEFAULT_MAX_RUN_DURATION_MINUTES,
     DEFAULT_MAX_TOTAL_BACKOFF_SECONDS,
     DEFAULT_MAX_TOTAL_FAILURES,
     DEFAULT_RETRY_AFTER_CLAMP_SECONDS,
+)
+from app.context_runtime import (
+    DEFAULT_CONTEXT_INJECTION_MODE,
+    infer_context_injection_mode,
+    values_for_context_injection_mode,
 )
 from app.runtime_paths import get_runtime_paths, prepare_runtime_environment
 
@@ -54,8 +54,14 @@ _DEFAULT_CORS_ORIGINS = [
 _CONFIG_WRITE_LOCK = Lock()
 
 
+def _dict_section(source: dict[str, Any], key: str) -> dict[str, Any]:
+    """Read a nested config section, tolerating missing or malformed values."""
+    value = source.get(key)
+    return value if isinstance(value, dict) else {}
+
+
 def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def normalize_search_provider_name(value: str) -> str:
@@ -136,6 +142,10 @@ def _default_config() -> dict[str, Any]:
                 "endpoint": "",
                 "api_key": "",
             },
+        },
+        "video": {
+            # Local video renderer console (video/启动视频生成器.bat).
+            "base_url": "http://127.0.0.1:4317",
         },
         "logging": {
             "level": "INFO",
@@ -238,7 +248,7 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
     base = _default_config()
     incoming = dict(config or {})
 
-    server = incoming.get("server") if isinstance(incoming.get("server"), dict) else {}
+    server = _dict_section(incoming, "server")
     base["server"].update({
         "host": str(server.get("host") or base["server"]["host"]),
         "port": int(server.get("port") or base["server"]["port"]),
@@ -250,8 +260,8 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
         ),
     })
 
-    debate = incoming.get("debate") if isinstance(incoming.get("debate"), dict) else {}
-    context_runtime = debate.get("context_runtime") if isinstance(debate.get("context_runtime"), dict) else {}
+    debate = _dict_section(incoming, "debate")
+    context_runtime = _dict_section(debate, "context_runtime")
     context_injection_mode = infer_context_injection_mode(context_runtime)
     context_policy_values = values_for_context_injection_mode(
         context_injection_mode,
@@ -284,8 +294,8 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
         ),
     })
 
-    search = incoming.get("search") if isinstance(incoming.get("search"), dict) else {}
-    custom = search.get("custom") if isinstance(search.get("custom"), dict) else {}
+    search = _dict_section(incoming, "search")
+    custom = _dict_section(search, "custom")
     provider = normalize_search_provider_name(
         str(search.get("provider") or base["search"]["provider"])
     )
@@ -300,7 +310,12 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
         },
     }
 
-    logging = incoming.get("logging") if isinstance(incoming.get("logging"), dict) else {}
+    video = _dict_section(incoming, "video")
+    base["video"] = {
+        "base_url": str(video.get("base_url") or base["video"]["base_url"]).rstrip("/"),
+    }
+
+    logging = _dict_section(incoming, "logging")
     base["logging"] = {
         "level": str(logging.get("level") or base["logging"]["level"]).upper(),
         "log_dir": str(logging.get("log_dir") or base["logging"]["log_dir"]),

@@ -120,6 +120,25 @@ export ELENCHUS_ENCRYPTION_KEY="<上面生成的密钥>"
 
 </details>
 
+<details>
+<summary><b>视频生成器（附属工具）</b></summary>
+
+`video/` 是主项目的附属工具，把辩论记录渲染成带配音和字幕的 MP4（Remotion + Edge TTS）。
+
+使用流程：
+
+1. 双击 `video/启动视频生成器.bat`（首次会自建 Python 虚拟环境并安装 Edge TTS）。
+2. 在辩论页的**导出**菜单中点击「生成视频 → 发送」，本场辩论会被送入生成器并自动打开其网页。
+3. 在生成器网页中生成配音，再选择快速渲染或正式渲染。
+
+补充说明：
+
+- 生成器未启动时，导出菜单会提示先运行 bat；后端不会在自身进程内渲染视频。
+- 生成器地址可在 `runtime/config.json` 的 `video.base_url` 中修改，默认 `http://127.0.0.1:4317`。
+- 诡辩实验模式的观察员报告不会进入视频，仅渲染辩手发言。
+
+</details>
+
 ## 文档导航
 
 - [文档首页](./docs/README.md)
@@ -134,6 +153,7 @@ export ELENCHUS_ENCRYPTION_KEY="<上面生成的密钥>"
 
 - `frontend/`：React + Vite 前端，负责创建会话、实时观察、聊天与历史恢复界面。
 - `backend/`：FastAPI + LangGraph 后端，负责运行编排、API、会话存储与事件流。
+- `video/`：附属视频生成器，把辩论记录渲染成带配音的 MP4（独立 Node 工具链）。
 - `docs/`：详细文档入口，包括架构、运行时、模式与开发指南。
 - `runtime/`：本地运行时生成内容，包括数据库、日志、会话快照与事件文件。
 

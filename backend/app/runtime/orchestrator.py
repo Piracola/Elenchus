@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from app.llm.failure_budget import (
@@ -13,10 +13,10 @@ from app.llm.failure_budget import (
     reset_failure_budget,
     set_failure_budget,
 )
+from app.models.schemas import RunStatus
 from app.runtime.engines import DebateEngine, LangGraphDebateEngine
 from app.runtime.event_emitter import EventEmitter, RuntimeEventEmitter, noop_emit_event
 from app.runtime.session_repository import SessionRuntimeRepository
-from app.models.schemas import RunStatus
 from app.services import run_service
 from app.text_repair import format_runtime_error_message
 
@@ -70,8 +70,8 @@ class DebateOrchestrator:
         *,
         repository: SessionRuntimeRepository | None = None,
         engine: DebateEngine | None = None,
-        runtime_bus: "RuntimeBus" | None = None,
-        event_gateway: "RuntimeBus" | None = None,
+        runtime_bus: RuntimeBus | None = None,
+        event_gateway: RuntimeBus | None = None,
         emit_event: EventEmitter = noop_emit_event,
     ) -> None:
         self._repository = repository or SessionRuntimeRepository()
@@ -138,7 +138,7 @@ class DebateOrchestrator:
         initial_state["run_id"] = run_id
         initial_state["runtime_event_emitter"] = run_events
         initial_state["interrupted_at"] = None
-        initial_state["last_progress_at"] = datetime.now(timezone.utc).isoformat()
+        initial_state["last_progress_at"] = datetime.now(UTC).isoformat()
 
         logger.info(
             "Starting/Resuming debate: session=%s topic='%s' turns=%d mode=%s",
@@ -197,7 +197,7 @@ class DebateOrchestrator:
 
         budget = budget_from_config(_read_failure_budget_config())
         budget_token = set_failure_budget(budget)
-        run_started_at = datetime.now(timezone.utc)
+        run_started_at = datetime.now(UTC)
         try:
             last_status_node = "manage_context"
             # Directives queued while the run was stopped apply before the
@@ -228,7 +228,7 @@ class DebateOrchestrator:
                         state_snapshot: dict[str, Any] = step  # type: ignore[assignment]
                         node_name = state_snapshot.get("last_executed_node", "")
                         final_state = dict(state_snapshot)
-                        final_state["last_progress_at"] = datetime.now(timezone.utc).isoformat()
+                        final_state["last_progress_at"] = datetime.now(UTC).isoformat()
                         prev_knowledge_len = await run_events.emit_memory_updates(
                             session_id,
                             final_state,
@@ -295,7 +295,7 @@ class DebateOrchestrator:
                             await self._repository.persist_state(run_id, session_id, final_state)
 
                         elapsed_minutes = (
-                            datetime.now(timezone.utc) - run_started_at
+                            datetime.now(UTC) - run_started_at
                         ).total_seconds() / 60
                         if elapsed_minutes > budget.max_run_duration_minutes:
                             raise FailureBudgetExhausted(
@@ -339,7 +339,7 @@ class DebateOrchestrator:
             final_state["status"] = "completed"
             final_state["interrupted_at"] = None
             final_state["last_status_message"] = "辩论已完成"
-            final_state["last_progress_at"] = datetime.now(timezone.utc).isoformat()
+            final_state["last_progress_at"] = datetime.now(UTC).isoformat()
             await self._repository.persist_state(run_id, session_id, final_state)
             await run_events.emit_runtime_event(
                 session_id=session_id,
@@ -364,7 +364,7 @@ class DebateOrchestrator:
                 final_state.get("current_turn", 0),
             )
         except asyncio.CancelledError:
-            interrupted_at = datetime.now(timezone.utc).isoformat()
+            interrupted_at = datetime.now(UTC).isoformat()
             final_state["status"] = "cancelled"
             final_state["interrupted_at"] = interrupted_at
             final_state["last_progress_at"] = interrupted_at
@@ -408,7 +408,7 @@ class DebateOrchestrator:
             session_id,
             exc.last_error,
         )
-        interrupted_at = datetime.now(timezone.utc).isoformat()
+        interrupted_at = datetime.now(UTC).isoformat()
         state["status"] = "in_progress"
         state["interrupted_at"] = interrupted_at
         state["last_progress_at"] = interrupted_at
@@ -520,7 +520,7 @@ class DebateOrchestrator:
             "agent_name": "主持人",
             "intervention_kind": "moderator_directive",
             "content": str(payload.get("content", "") or ""),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "citations": [],
             "turn": turn,
             "command_id": str(command.get("id") or ""),
@@ -642,7 +642,7 @@ class DebateOrchestrator:
         )
         state["status"] = "error"
         state["error"] = user_facing_error
-        state["interrupted_at"] = datetime.now(timezone.utc).isoformat()
+        state["interrupted_at"] = datetime.now(UTC).isoformat()
         state["last_progress_at"] = state["interrupted_at"]
         if last_node:
             state["last_executed_node"] = last_node
@@ -657,7 +657,7 @@ class DebateOrchestrator:
             {
                 "role": "error",
                 "content": f"系统运行出错：{user_facing_error}",
-                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "timestamp": datetime.now(UTC).isoformat() + "Z",
                 "agent_name": "系统",
                 "citations": [],
             }

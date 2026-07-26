@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
 
-from app.db.db_utils import _gen_id, _utcnow
+from app.db.db_utils import _utcnow
 from app.models.schemas import DebateMode
 from app.runtime_paths import get_runtime_paths
 from app.services.run_ledger_service import RunLedgerService

@@ -16,16 +16,15 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
+from app.dependencies import get_search_factory
+from app.search.base import SearchResult
 from app.tools.metadata import mark_tool_shared_knowledge
 from app.tools.search_formatter import format_evidence_brief
 from app.tools.search_query_planner import (
-    MAX_QUERY_CHARS,
     build_search_plan,
     sanitize_search_query,
 )
 from app.tools.search_result_filter import filter_results
-from app.dependencies import get_search_factory
-from app.search.base import SearchResult
 
 logger = logging.getLogger(__name__)
 

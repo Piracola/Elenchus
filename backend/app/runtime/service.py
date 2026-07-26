@@ -7,10 +7,10 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from app.models.schemas import RunStatus
 from app.runtime.orchestrator import DebateOrchestrator
 from app.runtime.session_repository import SessionRuntimeRepository
 from app.services import run_service
-from app.models.schemas import RunStatus
 
 logger = logging.getLogger(__name__)
 

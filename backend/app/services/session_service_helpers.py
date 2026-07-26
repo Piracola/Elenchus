@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.llm.invoke import normalize_model_text
@@ -76,17 +76,17 @@ def sanitize_dialogue_history(dialogue_history: Any) -> list[dict[str, Any]]:
 
 def parse_timestamp(value: Any) -> datetime:
     if not isinstance(value, str) or not value:
-        return datetime.min.replace(tzinfo=timezone.utc)
+        return datetime.min.replace(tzinfo=UTC)
 
     normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
     try:
         parsed = datetime.fromisoformat(normalized)
     except ValueError:
-        return datetime.min.replace(tzinfo=timezone.utc)
+        return datetime.min.replace(tzinfo=UTC)
 
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def coerce_int(value: Any) -> int | None:
@@ -130,7 +130,7 @@ def knowledge_for_turn(entries: Any, turn_index: int) -> list[dict[str, Any]]:
 
 def collect_round_timestamps(*collections: list[dict[str, Any]]) -> list[datetime]:
     parsed: list[datetime] = []
-    floor = datetime.min.replace(tzinfo=timezone.utc)
+    floor = datetime.min.replace(tzinfo=UTC)
     for collection in collections:
         for entry in collection:
             timestamp = entry.get("timestamp") if isinstance(entry, dict) else None

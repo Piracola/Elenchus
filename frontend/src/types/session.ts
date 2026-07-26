@@ -188,6 +188,15 @@ export interface PendingRunCommand {
     created_at: string;
 }
 
+/** Result of handing a session to the local video renderer console. */
+export interface VideoHandoffResult {
+    session_id: string;
+    video_ui_url: string;
+    topic: string;
+    speech_count: number;
+    warnings: string[];
+}
+
 export interface RuntimeSettings {
     debate: {
         context_runtime: ContextRuntimeConfig;

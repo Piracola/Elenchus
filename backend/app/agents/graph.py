@@ -12,7 +12,6 @@ Flow per turn (Dynamic Tool Calling):
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 from operator import add
 from typing import Annotated, Any, Literal, TypedDict
 
@@ -26,9 +25,9 @@ from app.agents.debater import debater_speak
 from app.agents.fact_checker import fact_check_turn
 from app.agents.group_discussion import run_group_discussion
 from app.agents.judge import judge_score
+from app.models.state import DialogueEntryDict, SharedKnowledgeEntry
 from app.tools import get_all_skills
 from app.tools.metadata import get_tool_shared_knowledge_type
-from app.models.state import DialogueEntryDict, SharedKnowledgeEntry
 
 logger = logging.getLogger(__name__)
 
@@ -129,8 +128,8 @@ async def node_manage_context(state: DebateGraphState) -> dict[str, Any]:
     # Idempotency guard: re-entry (resume / intervention re-injection) must not
     # pay another LLM call when the previous round is already summarized.
     if current_turn > 0 and not _has_round_digest_for_turn(updated_knowledge, current_turn - 1):
-        digest_entry = await build_round_digest(state, turn_index=current_turn - 1)
-        updated_knowledge = merge_round_digest_knowledge(updated_knowledge, digest_entry)
+        digest_entry = await build_round_digest(dict(state), turn_index=current_turn - 1)
+        updated_knowledge = merge_round_digest_knowledge(list(updated_knowledge), digest_entry)
 
     return {
         "shared_knowledge": updated_knowledge,
@@ -160,7 +159,7 @@ async def node_set_speaker(state: DebateGraphState) -> dict[str, Any]:
 
 async def node_debater_speak(state: DebateGraphState) -> dict[str, Any]:
     """Wrapper around debater_speak for the LangGraph node."""
-    result = await debater_speak(state)
+    result = await debater_speak(dict(state))
     result["last_executed_node"] = "speaker"
     return result
 
@@ -217,28 +216,28 @@ async def node_tool_executor(state: DebateGraphState) -> dict[str, Any]:
 
 async def node_fact_check(state: DebateGraphState) -> dict[str, Any]:
     """Verify this turn's factual claims before the judge scores them."""
-    result = await fact_check_turn(state)
+    result = await fact_check_turn(dict(state))
     result["last_executed_node"] = "fact_check"
     return result
 
 
 async def node_judge_score(state: DebateGraphState) -> dict[str, Any]:
     """Wrapper around judge_score for the LangGraph node."""
-    result = await judge_score(state)
+    result = await judge_score(dict(state))
     result["last_executed_node"] = "judge"
     return result
 
 
 async def node_group_discussion(state: DebateGraphState) -> dict[str, Any]:
     """Run the configured pre-round group discussion."""
-    result = await run_group_discussion(state)
+    result = await run_group_discussion(dict(state))
     result["last_executed_node"] = "group_discussion"
     return result
 
 
 async def node_consensus(state: DebateGraphState) -> dict[str, Any]:
     """Generate the final consensus convergence memo."""
-    result = await converge_consensus(state)
+    result = await converge_consensus(dict(state))
     result["last_executed_node"] = "consensus"
     return result
 

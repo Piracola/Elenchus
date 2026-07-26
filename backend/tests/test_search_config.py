@@ -9,9 +9,9 @@ import pytest
 
 from app import config as config_module
 from app.runtime_config_store import load_runtime_config
+from app.runtime_paths import get_runtime_paths
 from app.search import factory as factory_module
 from app.search.factory import SearchProviderFactory
-from app.runtime_paths import get_runtime_paths
 
 
 @contextmanager

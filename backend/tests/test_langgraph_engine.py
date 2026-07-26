@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import app.agents.graph as standard_graph_module
 import app.agents.sophistry_graph as sophistry_graph_module
-
 from app.runtime.engines.langgraph import LangGraphDebateEngine
 
 

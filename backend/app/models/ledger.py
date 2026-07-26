@@ -26,12 +26,12 @@ class SessionRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
-    runs: Mapped[list["RunRecord"]] = relationship(
+    runs: Mapped[list[RunRecord]] = relationship(
         "RunRecord",
         back_populates="session",
         cascade="all, delete-orphan",
     )
-    documents: Mapped[list["SessionDocumentRecord"]] = relationship(
+    documents: Mapped[list[SessionDocumentRecord]] = relationship(
         "SessionDocumentRecord",
         back_populates="session",
         cascade="all, delete-orphan",
@@ -77,28 +77,28 @@ class RunRecord(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     session: Mapped[SessionRecord] = relationship("SessionRecord", back_populates="runs")
-    projection: Mapped["RunProjectionRecord | None"] = relationship(
+    projection: Mapped[RunProjectionRecord | None] = relationship(
         "RunProjectionRecord",
         back_populates="run",
         cascade="all, delete-orphan",
         uselist=False,
     )
-    attempts: Mapped[list["RunAttemptRecord"]] = relationship(
+    attempts: Mapped[list[RunAttemptRecord]] = relationship(
         "RunAttemptRecord",
         back_populates="run",
         cascade="all, delete-orphan",
     )
-    events: Mapped[list["RunEventRecord"]] = relationship(
+    events: Mapped[list[RunEventRecord]] = relationship(
         "RunEventRecord",
         back_populates="run",
         cascade="all, delete-orphan",
     )
-    checkpoints: Mapped[list["RunCheckpointRecord"]] = relationship(
+    checkpoints: Mapped[list[RunCheckpointRecord]] = relationship(
         "RunCheckpointRecord",
         back_populates="run",
         cascade="all, delete-orphan",
     )
-    commands: Mapped[list["RunCommandRecord"]] = relationship(
+    commands: Mapped[list[RunCommandRecord]] = relationship(
         "RunCommandRecord",
         back_populates="run",
         cascade="all, delete-orphan",

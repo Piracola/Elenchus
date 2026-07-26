@@ -9,20 +9,20 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.config import get_settings
-from app.api.sessions import router as sessions_router
-from app.api.websocket import router as ws_router
-from app.api.models import router as models_router
 from app.api.log import router as log_router
-from app.api.search import router as search_router
-from app.api.settings import router as settings_router
+from app.api.models import router as models_router
 from app.api.search import build_search_health_payload
-from app.dependencies import get_debate_runtime_service, get_search_factory
+from app.api.search import router as search_router
+from app.api.sessions import router as sessions_router
+from app.api.settings import router as settings_router
+from app.api.websocket import router as ws_router
+from app.config import get_settings
 from app.db.database import init_db
-from app.services.log_service import setup_logging, get_logger
+from app.dependencies import get_debate_runtime_service, get_search_factory
+from app.services.log_service import get_logger, setup_logging
 
 settings = get_settings()
 setup_logging(level=settings.logging.level, log_dir=settings.logging.log_dir)

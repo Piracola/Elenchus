@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from app.dependencies import get_debate_runtime_service, get_runtime_bus
 from app.services.run_service import get_run, list_run_events
+
+if TYPE_CHECKING:
+    from app.runtime.bus import RuntimeBus
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +23,7 @@ _ID_RE = re.compile(r"^[0-9a-f]{12}$")
 
 async def _send_error_event(
     *,
-    runtime_bus: "RuntimeBus",
+    runtime_bus: RuntimeBus,
     run_id: str,
     session_id: str,
     websocket: WebSocket,

@@ -1,10 +1,9 @@
 """Smoke tests for session CRUD operations."""
 
 import pytest
-from app.services import session_service
-from app.services import document_service
-from app.services import run_service
+
 from app.models.schemas import SessionCreate
+from app.services import document_service, run_service, session_service
 
 
 async def _create_run_for_session(session: dict) -> str:

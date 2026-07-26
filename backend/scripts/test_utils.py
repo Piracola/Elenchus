@@ -20,8 +20,8 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Awaitable, Callable
 
 
 def setup_backend_path() -> None:

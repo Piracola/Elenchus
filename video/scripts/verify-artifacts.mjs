@@ -4,11 +4,12 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { resolveCompositorBinary } from "./compositor-binaries.mjs";
 
 const rootDir = process.cwd();
 const publicDir = join(rootDir, "public");
 const dataDir = join(publicDir, "data");
-const ffprobePath = join(rootDir, "node_modules", "@remotion", "compositor-win32-x64-msvc", "ffprobe.exe");
+const ffprobePath = resolveCompositorBinary(rootDir, "ffprobe");
 
 const readJson = (file) => JSON.parse(readFileSync(file, "utf8"));
 const session = readJson(join(dataDir, "session-export.json"));

@@ -6,8 +6,7 @@ import asyncio
 
 import pytest
 
-from app.models.schemas import RunStatus
-from app.models.schemas import SessionCreate
+from app.models.schemas import RunStatus, SessionCreate
 from app.runtime.service import DebateRuntimeService
 from app.services import run_service, session_service
 

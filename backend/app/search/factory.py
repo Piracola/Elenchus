@@ -125,7 +125,7 @@ class SearchProviderFactory:
                     timeout=1.0
                 )
                 return name, available
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("Provider %s availability check timed out", name)
                 return name, False
             except Exception as exc:

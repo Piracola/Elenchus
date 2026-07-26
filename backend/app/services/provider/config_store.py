@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 from app.runtime_config_store import load_runtime_config, update_runtime_config
-
 from app.services.provider.serializers import sort_provider_configs
 
 

@@ -4,8 +4,9 @@ LangGraph GraphState — reusable Pydantic models for dialogue entries.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal, TypedDict
+
 from pydantic import BaseModel, Field
 
 
@@ -16,7 +17,7 @@ class DialogueEntry(BaseModel):
     agent_name: str = Field(default="", description="Display name of the agent")
     content: str = Field(..., description="The spoken content")
     citations: list[str] = Field(default_factory=list, description="URLs or references cited")
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 DialogueRole = Literal[

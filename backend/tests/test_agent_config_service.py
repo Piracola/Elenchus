@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.agent_config_service import AgentConfigService
 from app.runtime_config_store import normalize_runtime_config
+from app.services.agent_config_service import AgentConfigService
 
 
 class _FakeProviderService:

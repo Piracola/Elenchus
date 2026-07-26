@@ -6,7 +6,6 @@ from typing import Any
 import httpx
 from openai import AsyncOpenAI
 
-
 REQUEST_TIMEOUT_SECONDS = 20.0
 ANTHROPIC_DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
 GEMINI_DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"

@@ -38,3 +38,74 @@ build = [
 [tool.uv]
 package = false
 default-groups = ["dev"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+exclude = ["venv", ".venv", "test_runtime", "__pycache__"]
+
+[tool.ruff.lint]
+select = [
+    "E4", "E7", "E9",  # pycodestyle subset ruff enables by default
+    "F",               # pyflakes
+    "I",               # import sorting
+    "B",               # bugbear
+    "UP",              # pyupgrade
+    "SIM",             # flake8-simplify
+    "PLE",             # pylint errors
+    "SLF",             # private member access
+]
+ignore = [
+    "B008",    # FastAPI dependencies are function calls in defaults by design
+    "SIM105",  # contextlib.suppress is not always clearer than try/except
+    "SIM108",  # ternaries are not always more readable than if/else
+    "UP042",   # `str, Enum` keeps pydantic v2 serialization behavior explicit
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Closures here are awaited inside the same loop iteration, so late binding
+# cannot occur; rewriting them would only add indirection.
+"app/llm/invoke.py" = ["B023"]
+"app/services/export/html.py" = ["B023"]
+# Frozen-app entry point: stdio must be repaired before uvicorn is imported,
+# and the replacement streams intentionally outlive the function.
+"run_packaged.py" = ["E402", "SIM115"]
+# Tests reach into private helpers and nest patch contexts for readability.
+"tests/**" = ["SLF", "SIM117"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = false
+# Gradual typing: the codebase is largely unannotated, so start with the
+# checks that catch real bugs rather than demanding full annotations.
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+exclude = "(venv|test_runtime|__pycache__)"
+
+# Modules with a known backlog of third-party signature mismatches (langchain
+# SecretStr, httpx params) and FastAPI dict/response-model boundaries that are
+# valid at runtime. Everything outside this list is gated, so new code cannot
+# add errors — shrink these entries as the annotations are tightened.
+[[tool.mypy.overrides]]
+module = [
+    "app.agents.graph",
+    "app.agents.judge",
+    "app.api.search",
+    "app.api.session_documents",
+    "app.api.session_runtime",
+    "app.api.sessions",
+    "app.db.database",
+    "app.llm.invoke",
+    "app.llm.providers.clients",
+    "app.models.scoring",
+    "app.runtime.bus",
+    "app.runtime.event_schema",
+    "app.runtime.service",
+    "app.search.custom",
+    "app.services.export.html",
+    "app.tools.search_tool",
+]
+ignore_errors = true

@@ -1,8 +1,7 @@
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
 
 from app.dependencies import get_provider_service
-from app.services.provider_service import ProviderService
 from app.models.schemas import (
     ModelConfigCreate,
     ModelConfigResponse,
@@ -12,10 +11,11 @@ from app.models.schemas import (
     ModelProviderProbeResponse,
 )
 from app.services.model_probe import fetch_provider_models, format_model_fetch_error
+from app.services.provider_service import ProviderService
 
 router = APIRouter()
 
-@router.get("", response_model=List[ModelConfigResponse])
+@router.get("", response_model=list[ModelConfigResponse])
 async def list_model_configs(
     service: ProviderService = Depends(get_provider_service)
 ):
@@ -153,7 +153,7 @@ async def create_model_config(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
-        )
+        ) from e
 
 @router.put("/{config_id}", response_model=ModelConfigResponse)
 async def update_model_config(
@@ -168,7 +168,7 @@ async def update_model_config(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
-        )
+        ) from e
     if not updated:
         raise HTTPException(status_code=404, detail="Model configuration not found")
     return updated

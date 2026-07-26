@@ -15,31 +15,26 @@ Or directly:
 from __future__ import annotations
 
 import asyncio
-import json
-from dataclasses import dataclass
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 # We need to import from the app package
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.llm.config import ResolvedLLMConfig, resolve_llm_config, create_llm_from_config
+from app.llm.config import ResolvedLLMConfig
 from app.llm.invoke import (
-    _normalize_reasoning_content,
     _invoke_chat_model_streaming,
+    _normalize_reasoning_content,
     invoke_chat_model,
-    _extract_stream_chunk_text,
 )
 from app.llm.request_params import UNSUPPORTED_PROVIDER_PARAMS_METADATA_KEY
-from app.llm.transport import build_openai_chat_payload, invoke_openai_chat_raw_streaming
 from app.llm.response import _coerce_openai_sse_to_ai_message
-
+from app.llm.transport import build_openai_chat_payload
 
 # ── Test 1: _normalize_reasoning_content wraps reasoning_content into <think> ──
 
@@ -97,9 +92,9 @@ async def test_provider_clients_route_custom_params_safely():
     providers it goes into extra_body; for non-OpenAI providers it is dropped.
     """
     from app.llm.providers.clients import (
-        OpenAIProviderClient,
         AnthropicProviderClient,
         GeminiProviderClient,
+        OpenAIProviderClient,
     )
 
     # OpenAI

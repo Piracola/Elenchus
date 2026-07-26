@@ -5,7 +5,7 @@ Final consensus convergence helper.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -14,10 +14,10 @@ from app.agents.context_engine import build_context_packet
 from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.prompt_loader import get_consensus_prompt
 from app.agents.runtime_progress import (
-    build_usage_callback,
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
     MODEL_INVOCATION_TIMEOUT_SECONDS,
     build_status_heartbeat_callback,
+    build_usage_callback,
 )
 from app.llm.invoke import invoke_text_model, normalize_model_text
 
@@ -127,7 +127,7 @@ async def converge_consensus(state: dict[str, Any]) -> dict[str, Any]:
         "agent_name": "共识收敛员",
         "content": content,
         "citations": [],
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "turn": int(state.get("current_turn", 0) or 0),
         "discussion_kind": "consensus",
     }

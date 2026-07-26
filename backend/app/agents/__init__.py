@@ -8,12 +8,11 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
-__all__ = ["compile_debate_graph", "build_debate_graph", "run_debate"]
+__all__ = ["build_debate_graph", "compile_debate_graph"]
 
 _EXPORTS: dict[str, tuple[str, str]] = {
     "compile_debate_graph": ("app.agents.graph", "compile_debate_graph"),
     "build_debate_graph": ("app.agents.graph", "build_debate_graph"),
-    "run_debate": ("app.agents.runner", "run_debate"),
 }
 
 

@@ -19,19 +19,19 @@ from app.agents.sophistry_observer import sophistry_final_report, sophistry_obse
 
 
 async def node_sophistry_speaker(state: DebateGraphState) -> dict[str, Any]:
-    result = await sophistry_debater_speak(state)
+    result = await sophistry_debater_speak(dict(state))
     result["last_executed_node"] = "sophistry_speaker"
     return result
 
 
 async def node_sophistry_observer(state: DebateGraphState) -> dict[str, Any]:
-    result = await sophistry_observer_report(state)
+    result = await sophistry_observer_report(dict(state))
     result["last_executed_node"] = "sophistry_observer"
     return result
 
 
 async def node_sophistry_postmortem(state: DebateGraphState) -> dict[str, Any]:
-    result = await sophistry_final_report(state)
+    result = await sophistry_final_report(dict(state))
     result["last_executed_node"] = "sophistry_postmortem"
     return result
 

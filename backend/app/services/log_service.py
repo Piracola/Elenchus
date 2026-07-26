@@ -11,7 +11,6 @@ from datetime import datetime
 from enum import IntEnum
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
-from typing import Optional
 
 from app.config import _clear_settings_cache, get_settings
 from app.runtime_config_store import update_runtime_config
@@ -26,7 +25,7 @@ class LogLevel(IntEnum):
     CRITICAL = logging.CRITICAL
 
     @classmethod
-    def from_string(cls, level: str) -> "LogLevel":
+    def from_string(cls, level: str) -> LogLevel:
         mapping = {
             "DEBUG": cls.DEBUG,
             "INFO": cls.INFO,
@@ -76,20 +75,20 @@ def _quiet_noisy_library_loggers() -> None:
 
 
 class LogManager:
-    _instance: Optional["LogManager"] = None
+    _instance: LogManager | None = None
     _current_level: LogLevel = LogLevel.INFO
-    _file_handler: Optional[logging.Handler] = None
-    _console_handler: Optional[logging.Handler] = None
+    _file_handler: logging.Handler | None = None
+    _console_handler: logging.Handler | None = None
     _log_dir: Path
 
-    def __new__(cls) -> "LogManager":
+    def __new__(cls) -> LogManager:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._log_dir = Path("logs")
+            cls._instance._log_dir = Path("logs")  # noqa: SLF001 - own class attribute
         return cls._instance
 
     @classmethod
-    def get_instance(cls) -> "LogManager":
+    def get_instance(cls) -> LogManager:
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance

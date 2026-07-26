@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 ROLE_LIMIT_KEYS = {
     "proposer": "proposer_max_chars",
     "opposer": "opposer_max_chars",

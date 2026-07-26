@@ -8,7 +8,7 @@ import asyncio
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -16,17 +16,17 @@ from pydantic import ValidationError
 
 from app.agents.context_engine import build_context_packet
 from app.agents.live_agent_config import refresh_agent_configs_for_session
-from app.agents.prompt_loader import get_judge_prompt
 from app.agents.moderator import (
     JUDGE_LIVE_CONSTRAINT,
     render_judge_directive_note,
     select_unanswered_directives,
 )
+from app.agents.prompt_loader import get_judge_prompt
 from app.agents.runtime_progress import (
-    build_usage_callback,
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
     MODEL_INVOCATION_TIMEOUT_SECONDS,
     build_status_heartbeat_callback,
+    build_usage_callback,
 )
 from app.llm.invoke import invoke_text_model
 from app.models.scoring import SCORE_DIMENSION_WEIGHTS, TurnScore
@@ -444,7 +444,7 @@ async def judge_score(state: dict[str, Any]) -> dict[str, Any]:
                 "agent_name": "裁判组视角",
                 "content": score_dict.get("overall_comment", ""),
                 "scores": score_dict,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "citations": [],
                 "turn": current_turn,
             }

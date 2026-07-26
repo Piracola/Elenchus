@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
 import { buildVideoModel } from "../src/normalizeElenchusExport.ts";
 import { buildSceneSlices, buildSceneViewModel, layoutTextLines, SCENE_COLORS, SCENE_LAYOUT, VIDEO_FONT_FAMILY } from "../src/scenePresentation.ts";
+import { resolveCompositorBinary } from "./compositor-binaries.mjs";
 
 const rootDir = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const publicDir = join(rootDir, "public");
@@ -17,7 +18,7 @@ const segmentListPath = join(fastDir, "segments-list.txt");
 const silentVideoPath = join(fastDir, "silent.mp4");
 const concatAudioPath = join(fastDir, "audio.wav");
 const outputPath = join(outDir, "debate-fast.mp4");
-const ffmpegPath = join(rootDir, "node_modules", "@remotion", "compositor-win32-x64-msvc", "ffmpeg.exe");
+const ffmpegPath = resolveCompositorBinary(rootDir, "ffmpeg");
 
 const colors = {
   ink: SCENE_COLORS.ink,

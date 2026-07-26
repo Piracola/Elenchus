@@ -6,8 +6,8 @@ from copy import deepcopy
 from typing import Any
 
 from app.text_repair import repair_text_tree
-from .runtime_status import predict_resume_next_node
 
+from .runtime_status import predict_resume_next_node
 from .session_dialogue_helpers import (
     coerce_int,
     entry_turn,
@@ -51,10 +51,7 @@ def normalize_resumable_snapshot(
         snapshot["resume_origin_turn"] = current_turn
         if resume_next_node not in {"tool_executor", "speaker"}:
             snapshot["messages"] = []
-        if last_node == "group_discussion":
-            snapshot["current_speaker"] = ""
-            snapshot["current_speaker_index"] = -1
-        elif last_node in {"fact_check", "judge", "sophistry_observer"}:
+        if last_node == "group_discussion" or last_node in {"fact_check", "judge", "sophistry_observer"}:
             snapshot["current_speaker"] = ""
             snapshot["current_speaker_index"] = -1
         return snapshot

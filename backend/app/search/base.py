@@ -35,6 +35,6 @@ class SearchProvider(ABC):
         """Health check — can this provider serve requests right now?"""
         ...
 
-    async def close(self) -> None:
+    async def close(self) -> None:  # noqa: B027 - optional hook, no-op by design
         """Cleanup resources — optional, override if provider holds resources."""
-        pass
+        return None

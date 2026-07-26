@@ -3,20 +3,20 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.agents.live_agent_config import refresh_agent_configs_for_session
 from app.agents.runtime_progress import (
-    build_usage_callback,
     MODEL_HEARTBEAT_INTERVAL_SECONDS,
     MODEL_INVOCATION_TIMEOUT_SECONDS,
     build_status_heartbeat_callback,
+    build_usage_callback,
 )
-from app.llm.invoke import invoke_text_model, normalize_model_text
 from app.agents.sophistry_prompt_loader import get_sophistry_observer_prompt
+from app.llm.invoke import invoke_text_model, normalize_model_text
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,7 @@ async def sophistry_observer_report(state: dict[str, Any]) -> dict[str, Any]:
         "agent_name": "诡辩观察员",
         "content": report,
         "citations": [],
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "turn": current_turn,
         "source_turn": current_turn,
         "source_roles": [
@@ -177,7 +177,7 @@ async def sophistry_final_report(state: dict[str, Any]) -> dict[str, Any]:
         )
     )
 
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
     entry = {
         "role": "sophistry_final_report",
         "agent_name": "实验总览",
