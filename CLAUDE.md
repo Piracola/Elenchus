@@ -108,7 +108,24 @@ A directive is persisted to `run_commands` (`pending` → `consumed`/`revoked`) 
 
 ### Configuration
 
-`runtime/config.json` is the single active config source (server, providers, search, logging, debate defaults). Do not reintroduce legacy sources (`.env` config, `config.yaml`, provider DB). Provider API keys are entered in the Web UI and stored there; with the `ELENCHUS_ENCRYPTION_KEY` env var set they are transparently encrypted (see README). Session `agent_configs` reference saved providers by `provider_id` (`{ model, provider_type, provider_id, api_base_url }`), never raw API keys. Search defaults to built-in DDGS with fallback from a custom HTTP endpoint. `video.base_url` points at the local video renderer console (default `http://127.0.0.1:4317`); the backend only proxies the session export to it and never renders in-process.
+`runtime/config.json` is the single active config source (server, providers, search, logging, debate defaults). Do not reintroduce legacy sources (`.env` config, `config.yaml`, provider DB). Provider API keys are entered in the Web UI and stored there; with the `ELENCHUS_ENCRYPTION_KEY` env var set they are transparently encrypted (see README). Session `agent_configs` reference saved providers by `provider_id` (`{ model, provider_type, provider_id, api_base_url }`), never raw API keys. ### Search providers
+
+`backend/app/search/registry.py` is the single source of truth. A provider is a
+module under `backend/app/search/` decorated with `@register_search_provider`
+that declares `name`, `label`, `description`, `config_fields`
+(`ProviderFieldSpec`, including `secret`/`required`), and `fallback_priority`.
+Everything else derives from that declaration: `search.providers.<name>` config
+normalization, at-rest encryption of every `secret` field, the
+`GET /api/search/config` payload, and the settings form — the UI renders
+whatever fields the backend reports and knows no provider by name. Adding a
+provider means adding one module; do not reintroduce per-provider branches in
+config, API models, or the frontend.
+
+Fallback runs current-provider-first then by `fallback_priority`; DDGS declares
+the highest value so it stays the no-configuration safety net. Providers missing
+a required field are never instantiated and report `configured: false`.
+`app/search/limits.py` owns the shared results-per-query clamp used by both
+`tools/search_tool.py` and `agents/fact_checker.py`. `video.base_url` points at the local video renderer console (default `http://127.0.0.1:4317`); the backend only proxies the session export to it and never renders in-process.
 
 ## Conventions
 

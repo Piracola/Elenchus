@@ -15,9 +15,9 @@ from typing import Any
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from app.config import get_settings
 from app.dependencies import get_search_factory
 from app.search.base import SearchResult
+from app.search.limits import resolve_results_per_query
 from app.tools.metadata import mark_tool_shared_knowledge
 from app.tools.search_formatter import format_evidence_brief
 from app.tools.search_query_planner import (
@@ -27,8 +27,6 @@ from app.tools.search_query_planner import (
 from app.tools.search_result_filter import filter_results
 
 logger = logging.getLogger(__name__)
-
-_MAX_RESULTS_PER_QUERY = 3
 
 
 class SearchInput(BaseModel):
@@ -65,12 +63,8 @@ def _format_evidence_brief(
 
 async def _execute_search_plan(search_plan: list[str]) -> list[tuple[str, list[SearchResult]]]:
     """Run planned sub-queries in parallel and collect the raw results."""
-    settings = get_settings()
     search_factory = get_search_factory()
-    per_query_results = min(
-        max(settings.search.max_results_per_query, 1),
-        _MAX_RESULTS_PER_QUERY,
-    )
+    per_query_results = resolve_results_per_query()
 
     searches = [
         search_factory.search(planned_query, num_results=per_query_results)

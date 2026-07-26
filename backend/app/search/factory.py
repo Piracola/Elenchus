@@ -1,50 +1,58 @@
 """
-Search provider factory — keeps the runtime search surface intentionally small.
+Search provider factory — instantiates whatever the registry declares.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Literal
 
 from app.config import get_settings, persist_search_provider
 from app.search.base import SearchProvider, SearchResult
-from app.search.custom import CustomSearchProvider
-from app.search.ddgs import DDGSProvider
+from app.search.registry import default_provider_name, provider_classes, provider_names
 
 logger = logging.getLogger(__name__)
 
-ProviderType = Literal["ddgs", "custom"]
+#: Provider names are validated against the registry, not a static literal.
+ProviderType = str
+
+_AVAILABILITY_TIMEOUT_SECONDS = 1.0
 
 
 class ProviderInfo:
     """Information about a search provider's status."""
 
-    def __init__(self, name: str, available: bool, is_primary: bool = False):
+    def __init__(
+        self,
+        name: str,
+        available: bool,
+        is_primary: bool = False,
+        *,
+        configured: bool = True,
+    ):
         self.name = name
         self.available = available
         self.is_primary = is_primary
+        #: False when required fields are still empty, which is why the
+        #: provider was never instantiated.
+        self.configured = configured
 
     def to_dict(self) -> dict:
         return {
             "name": self.name,
             "available": self.available,
             "is_primary": self.is_primary,
+            "configured": self.configured,
         }
 
 
 class SearchProviderFactory:
-    """
-    Creates and manages search provider instances.
-    DDGS is the default provider. A single custom HTTP endpoint is available
-    for users who need to bridge to another search service.
-    """
+    """Creates and manages search provider instances from the registry."""
 
     def __init__(self) -> None:
         """Initialize the factory with empty provider registry."""
         self._providers: dict[str, SearchProvider] = {}
-        self._current_provider: str = "ddgs"
+        self._current_provider: str = default_provider_name()
         self._initialized: bool = False
 
     def _init_providers(self) -> None:
@@ -53,24 +61,31 @@ class SearchProviderFactory:
             return
 
         settings = get_settings()
+        fallback_name = default_provider_name()
 
-        self._providers["ddgs"] = DDGSProvider()
-        if settings.search.custom_endpoint:
-            self._providers["custom"] = CustomSearchProvider(
-                endpoint=settings.search.custom_endpoint,
-                api_key=settings.search.custom_api_key,
-            )
+        for provider_class in provider_classes():
+            provider_settings = settings.search.settings_for(provider_class.name)
+            if not provider_class.is_configured(provider_settings):
+                continue
+            try:
+                self._providers[provider_class.name] = provider_class.create(provider_settings)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to construct search provider '%s': %s",
+                    provider_class.name,
+                    exc,
+                )
 
-        # Set initial provider from config (default to ddgs)
         config_provider = settings.search.provider
         if config_provider in self._providers:
             self._current_provider = config_provider
         else:
             logger.warning(
-                "Configured provider '%s' not available, using ddgs",
+                "Configured provider '%s' is not usable, falling back to '%s'",
                 config_provider,
+                fallback_name,
             )
-            self._current_provider = "ddgs"
+            self._current_provider = fallback_name
 
         self._initialized = True
         logger.info("Search providers initialized. Current: %s", self._current_provider)
@@ -90,10 +105,11 @@ class SearchProviderFactory:
         Set the current search provider at runtime.
 
         Args:
-            provider: The provider to use ("ddgs" or "custom")
+            provider: A registered provider name.
 
         Returns:
-            True if provider was set successfully, False if provider not available.
+            True if the provider was selected, False when it is unknown or
+            still missing required configuration.
         """
         self._init_providers()
 
@@ -122,7 +138,7 @@ class SearchProviderFactory:
             try:
                 available = await asyncio.wait_for(
                     provider.is_available(),
-                    timeout=1.0
+                    timeout=_AVAILABILITY_TIMEOUT_SECONDS,
                 )
                 return name, available
             except TimeoutError:
@@ -140,13 +156,17 @@ class SearchProviderFactory:
         results = await asyncio.gather(*tasks)
         availability_map = dict(results)
 
+        # Report every registered provider, including unconfigured ones: the
+        # settings UI needs them all to render a card.
         providers_info: list[ProviderInfo] = []
-        for name in self._providers:
+        for name in provider_names():
+            configured = name in self._providers
             providers_info.append(
                 ProviderInfo(
                     name=name,
-                    available=availability_map.get(name, False),
+                    available=configured and availability_map.get(name, False),
                     is_primary=(name == self._current_provider),
+                    configured=configured,
                 )
             )
 
@@ -160,14 +180,7 @@ class SearchProviderFactory:
         """
         self._init_providers()
 
-        fallback_order = ["ddgs", "custom"]
-
-        # Put current provider first
-        if self._current_provider in fallback_order:
-            fallback_order.remove(self._current_provider)
-            fallback_order.insert(0, self._current_provider)
-
-        for provider_name in fallback_order:
+        for provider_name in self._fallback_order():
             if provider_name not in self._providers:
                 continue
 
@@ -206,10 +219,10 @@ class SearchProviderFactory:
         except Exception as exc:
             logger.error("Search failed with provider: %s", exc)
 
-            # Try fallback providers
-            self._init_providers()
-            for name, fallback in self._providers.items():
-                if fallback is provider:
+            # Retry down the same ordered list so both fallback paths agree.
+            for name in self._fallback_order():
+                fallback = self._providers.get(name)
+                if fallback is None or fallback is provider:
                     continue
                 try:
                     logger.info("Trying fallback provider: %s", name)
@@ -220,6 +233,13 @@ class SearchProviderFactory:
                     )
 
             return []
+
+    def _fallback_order(self) -> list[str]:
+        """Current provider first, then the registry's declared priority."""
+        order = [name for name in provider_names() if name != self._current_provider]
+        if self._current_provider:
+            order.insert(0, self._current_provider)
+        return order
 
     async def close(self) -> None:
         """Cleanup provider resources."""
@@ -235,5 +255,5 @@ class SearchProviderFactory:
     async def reload(self) -> None:
         """Rebuild provider instances after runtime settings change."""
         await self.close()
-        self._current_provider = "ddgs"
+        self._current_provider = default_provider_name()
         self._init_providers()

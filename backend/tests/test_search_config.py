@@ -10,7 +10,6 @@ import pytest
 from app import config as config_module
 from app.runtime_config_store import load_runtime_config
 from app.runtime_paths import get_runtime_paths
-from app.search import factory as factory_module
 from app.search.factory import SearchProviderFactory
 
 
@@ -54,20 +53,26 @@ def _clear_search_settings_cache(monkeypatch):
     monkeypatch.delenv("ELENCHUS_RUNTIME_DIR", raising=False)
 
 
-def test_persist_search_settings_updates_custom_config_and_snapshot(monkeypatch):
+def test_persist_search_settings_updates_provider_section_and_snapshot(monkeypatch):
     with _workspace_runtime_dir() as runtime_root:
         monkeypatch.setenv("ELENCHUS_RUNTIME_DIR", str(runtime_root.resolve()))
 
         config_module.persist_search_settings(
             provider="custom",
-            custom_endpoint="https://search.example.com/query",
-            custom_api_key="custom-secret",
+            provider_settings={
+                "custom": {
+                    "endpoint": "https://search.example.com/query",
+                    "api_key": "custom-secret",
+                }
+            },
         )
 
         runtime_config = load_runtime_config()
+        sections = runtime_config["search"]["providers"]
         assert runtime_config["search"]["provider"] == "custom"
-        assert runtime_config["search"]["custom"]["endpoint"] == "https://search.example.com/query"
-        assert runtime_config["search"]["custom"]["api_key"] == "custom-secret"
+        assert sections["custom"]["endpoint"] == "https://search.example.com/query"
+        # In-memory config is decrypted for use.
+        assert sections["custom"]["api_key"] == "custom-secret"
 
         snapshot = config_module.get_search_provider_settings_snapshot()
         assert snapshot["custom"] == {
@@ -75,12 +80,93 @@ def test_persist_search_settings_updates_custom_config_and_snapshot(monkeypatch)
             "api_key_configured": True,
         }
 
-        config_module.persist_search_settings(clear_custom_api_key=True)
+        # An omitted field is left untouched; an empty one clears the secret.
+        config_module.persist_search_settings(provider_settings={"custom": {"api_key": ""}})
 
         snapshot = config_module.get_search_provider_settings_snapshot()
         runtime_config = load_runtime_config()
-        assert runtime_config["search"]["custom"]["api_key"] == ""
+        assert runtime_config["search"]["providers"]["custom"]["api_key"] == ""
+        assert runtime_config["search"]["providers"]["custom"]["endpoint"] == (
+            "https://search.example.com/query"
+        )
         assert snapshot["custom"]["api_key_configured"] is False
+
+
+def test_search_provider_secrets_are_encrypted_at_rest(monkeypatch):
+    with _workspace_runtime_dir() as runtime_root:
+        monkeypatch.setenv("ELENCHUS_RUNTIME_DIR", str(runtime_root.resolve()))
+        monkeypatch.delenv("ELENCHUS_ENCRYPTION_KEY", raising=False)
+        from app import crypto
+
+        crypto.reset_crypto_cache()
+
+        config_module.persist_search_settings(
+            provider_settings={"tavily": {"api_key": "tvly-secret"}}
+        )
+
+        on_disk = json.loads((runtime_root / "config.json").read_text(encoding="utf-8"))
+        stored = on_disk["search"]["providers"]["tavily"]["api_key"]
+        assert stored != "tvly-secret"
+        assert stored.startswith("gAAAA")
+
+        # Reading it back must not rewrite plaintext to disk.
+        assert load_runtime_config()["search"]["providers"]["tavily"]["api_key"] == "tvly-secret"
+        still_sealed = json.loads((runtime_root / "config.json").read_text(encoding="utf-8"))
+        assert still_sealed["search"]["providers"]["tavily"]["api_key"] == stored
+
+
+def test_legacy_custom_section_is_migrated_to_provider_map(monkeypatch):
+    with _workspace_runtime_dir() as runtime_root:
+        monkeypatch.setenv("ELENCHUS_RUNTIME_DIR", str(runtime_root.resolve()))
+
+        # Pre-registry layout: settings lived under `search.custom`.
+        (runtime_root / "config.json").write_text(
+            json.dumps(
+                {
+                    "search": {
+                        "provider": "custom",
+                        "custom": {
+                            "endpoint": "https://legacy.example.com/search",
+                            "api_key": "legacy-key",
+                        },
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        runtime_config = load_runtime_config()
+        migrated = runtime_config["search"]["providers"]["custom"]
+        assert migrated["endpoint"] == "https://legacy.example.com/search"
+        assert migrated["api_key"] == "legacy-key"
+        assert "custom" not in runtime_config["search"]
+
+
+def test_unknown_provider_falls_back_and_unknown_fields_are_dropped(monkeypatch):
+    with _workspace_runtime_dir() as runtime_root:
+        monkeypatch.setenv("ELENCHUS_RUNTIME_DIR", str(runtime_root.resolve()))
+
+        (runtime_root / "config.json").write_text(
+            json.dumps(
+                {
+                    "search": {
+                        "provider": "does-not-exist",
+                        "max_results_per_query": 999,
+                        "providers": {
+                            "tavily": {"api_key": "k", "bogus_field": "x"},
+                            "removed-provider": {"api_key": "y"},
+                        },
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        search = load_runtime_config()["search"]
+        assert search["provider"] == "ddgs"
+        assert search["max_results_per_query"] == 10  # clamped
+        assert search["providers"]["tavily"] == {"api_key": "k"}
+        assert "removed-provider" not in search["providers"]
 
 
 def test_load_runtime_config_accepts_utf8_bom(monkeypatch):
@@ -110,35 +196,62 @@ async def test_search_factory_reload_rebuilds_provider_instances(monkeypatch):
     with _workspace_runtime_dir() as runtime_root:
         monkeypatch.setenv("ELENCHUS_RUNTIME_DIR", str(runtime_root.resolve()))
 
-        monkeypatch.setattr(factory_module, "DDGSProvider", _FakeDDGSProvider)
-        monkeypatch.setattr(factory_module, "CustomSearchProvider", _FakeCustomProvider)
-
         config_module.persist_search_settings(
             provider="custom",
-            custom_endpoint="https://search.example.com/query",
-            custom_api_key="initial-key",
+            provider_settings={
+                "custom": {
+                    "endpoint": "https://search.example.com/query",
+                    "api_key": "initial-key",
+                }
+            },
         )
 
         factory = SearchProviderFactory()
         assert factory.get_current_provider() == "custom"
-        assert isinstance(factory._providers["ddgs"], _FakeDDGSProvider)
         assert factory._providers["custom"].endpoint == "https://search.example.com/query"
         assert factory._providers["custom"].api_key == "initial-key"
+        # Providers without their required fields are not instantiated at all.
+        assert "tavily" not in factory._providers
 
         old_custom = factory._providers["custom"]
 
         config_module.persist_search_settings(
             provider="ddgs",
-            custom_endpoint="https://updated-search.example.com/query",
-            clear_custom_api_key=True,
+            provider_settings={
+                "custom": {
+                    "endpoint": "https://updated-search.example.com/query",
+                    "api_key": "",
+                }
+            },
         )
         await factory.reload()
 
-        assert old_custom.closed is True
+        assert old_custom._client.is_closed is True
         assert factory.get_current_provider() == "ddgs"
-        assert "custom" in factory._providers
         assert factory._providers["custom"].endpoint == "https://updated-search.example.com/query"
         assert factory._providers["custom"].api_key == ""
+
+
+@pytest.mark.asyncio
+async def test_configuring_an_api_provider_makes_it_selectable(monkeypatch):
+    with _workspace_runtime_dir() as runtime_root:
+        monkeypatch.setenv("ELENCHUS_RUNTIME_DIR", str(runtime_root.resolve()))
+
+        factory = SearchProviderFactory()
+        assert factory.set_provider("tavily") is False
+
+        config_module.persist_search_settings(
+            provider="tavily",
+            provider_settings={"tavily": {"api_key": "tvly-123"}},
+        )
+        await factory.reload()
+
+        assert factory.get_current_provider() == "tavily"
+        assert factory._providers["tavily"].api_key == "tvly-123"
+        statuses = {info.name: info for info in await factory.get_available_providers()}
+        assert statuses["tavily"].configured is True
+        assert statuses["tavily"].available is True
+        await factory.close()
 
 
 def test_legacy_duckduckgo_provider_is_normalized_to_ddgs(monkeypatch):

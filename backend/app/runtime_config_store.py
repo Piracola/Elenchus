@@ -43,8 +43,47 @@ def _normalize_failure_budget(
         normalized[key] = max(low, min(high, value))
     return normalized
 
-SUPPORTED_SEARCH_PROVIDERS = {"ddgs", "duckduckgo", "custom"}
 SEARCH_PROVIDER_ALIASES = {"duckduckgo": "ddgs"}
+
+
+def clamp_results_per_query(value: object) -> int:
+    from app.search.limits import clamp_results_per_query as _clamp
+
+    return _clamp(value)
+
+
+def supported_search_provider_names() -> set[str]:
+    """Provider names accepted in config, derived from the registry."""
+    from app.search.registry import provider_names
+
+    return set(provider_names()) | set(SEARCH_PROVIDER_ALIASES)
+
+
+def _normalize_search_provider_settings(search: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """Build `search.providers` from the registry's declared fields.
+
+    Only declared fields survive, so a removed provider's leftovers are dropped
+    while every registered provider keeps a well-formed section. Settings from
+    the pre-registry layout (`search.custom`) are migrated in place.
+    """
+    from app.search.registry import default_provider_settings, provider_field_specs, provider_names
+
+    incoming_sections = _dict_section(search, "providers")
+    legacy_custom = _dict_section(search, "custom")
+
+    normalized = default_provider_settings()
+    for name in provider_names():
+        section = _dict_section(incoming_sections, name)
+        if name == "custom" and legacy_custom and not section:
+            section = legacy_custom
+        fields = provider_field_specs(name)
+        if not fields:
+            normalized.pop(name, None)
+            continue
+        normalized[name] = {
+            field.key: str(section.get(field.key, "") or "") for field in fields
+        }
+    return normalized
 _DEFAULT_CORS_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -138,10 +177,9 @@ def _default_config() -> dict[str, Any]:
         "search": {
             "provider": "ddgs",
             "max_results_per_query": 5,
-            "custom": {
-                "endpoint": "",
-                "api_key": "",
-            },
+            # Filled from the provider registry so a new provider needs no
+            # change here; see _normalize_search_provider_settings.
+            "providers": {},
         },
         "video": {
             # Local video renderer console (video/启动视频生成器.bat).
@@ -243,6 +281,37 @@ def _encrypt_provider_keys(providers: list[dict[str, Any]] | None) -> None:
             p["api_key"] = encrypt_value(str(p["api_key"]))
 
 
+def _map_search_secrets(config: dict[str, Any] | None, transform) -> None:
+    """Apply `transform` to every field a search provider declared as secret."""
+    if not isinstance(config, dict):
+        return
+    search = config.get("search")
+    if not isinstance(search, dict):
+        return
+    sections = search.get("providers")
+    if not isinstance(sections, dict):
+        return
+
+    from app.search.registry import secret_field_paths
+
+    for provider_name, field_key in secret_field_paths():
+        section = sections.get(provider_name)
+        if isinstance(section, dict) and section.get(field_key):
+            section[field_key] = transform(str(section[field_key]))
+
+
+def _encrypt_search_secrets(config: dict[str, Any] | None) -> None:
+    from app.crypto import encrypt_value
+
+    _map_search_secrets(config, encrypt_value)
+
+
+def _decrypt_search_secrets(config: dict[str, Any] | None) -> None:
+    from app.crypto import decrypt_value
+
+    _map_search_secrets(config, decrypt_value)
+
+
 def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
     runtime_root = get_runtime_paths().runtime_root
     base = _default_config()
@@ -295,19 +364,19 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
     })
 
     search = _dict_section(incoming, "search")
-    custom = _dict_section(search, "custom")
     provider = normalize_search_provider_name(
         str(search.get("provider") or base["search"]["provider"])
     )
-    if provider not in SUPPORTED_SEARCH_PROVIDERS:
+    if provider not in supported_search_provider_names():
         provider = base["search"]["provider"]
+    try:
+        max_results = int(search.get("max_results_per_query") or base["search"]["max_results_per_query"])
+    except (TypeError, ValueError):
+        max_results = base["search"]["max_results_per_query"]
     base["search"] = {
         "provider": provider,
-        "max_results_per_query": int(search.get("max_results_per_query") or base["search"]["max_results_per_query"]),
-        "custom": {
-            "endpoint": str(custom.get("endpoint") or ""),
-            "api_key": str(custom.get("api_key") or ""),
-        },
+        "max_results_per_query": clamp_results_per_query(max_results),
+        "providers": _normalize_search_provider_settings(search),
     }
 
     video = _dict_section(incoming, "video")
@@ -334,7 +403,6 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
         if normalized_providers:
             if not any(provider_item.get("is_default") for provider_item in normalized_providers):
                 normalized_providers[0]["is_default"] = True
-            _decrypt_provider_keys(normalized_providers)
             base["providers"] = normalized_providers
 
     _fill_context_runtime_model_from_providers(base)
@@ -344,6 +412,22 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
         base["schema_version"] = schema_version
 
     return base
+
+
+def _decrypted_copy(config: dict[str, Any]) -> dict[str, Any]:
+    """In-memory view with secrets readable."""
+    plain = deepcopy(config)
+    _decrypt_provider_keys(plain.get("providers"))
+    _decrypt_search_secrets(plain)
+    return plain
+
+
+def _encrypted_copy(config: dict[str, Any]) -> dict[str, Any]:
+    """On-disk view with every declared secret encrypted."""
+    sealed = deepcopy(config)
+    _encrypt_provider_keys(sealed.get("providers"))
+    _encrypt_search_secrets(sealed)
+    return sealed
 
 
 def _load_json(path: Path) -> dict[str, Any] | None:
@@ -359,7 +443,7 @@ def _load_json(path: Path) -> dict[str, Any] | None:
 def _current_or_initial_runtime_config() -> dict[str, Any]:
     current = _load_json(get_runtime_paths().config_json_file)
     if current is not None:
-        return normalize_runtime_config(current)
+        return _decrypted_copy(normalize_runtime_config(current))
     return _default_config()
 
 
@@ -369,10 +453,12 @@ def ensure_runtime_config() -> dict[str, Any]:
     with _CONFIG_WRITE_LOCK:
         current = _load_json(path)
         if current is not None:
+            # Normalization must not decrypt: this rewrite would otherwise put
+            # plaintext secrets back on disk on every load.
             normalized = normalize_runtime_config(current)
             if normalized != current:
                 _write_json_atomic(path, normalized)
-            return normalized
+            return _decrypted_copy(normalized)
 
         initial = _default_config()
         _write_json_atomic(path, initial)
@@ -386,7 +472,7 @@ def load_runtime_config() -> dict[str, Any]:
 def save_runtime_config(config: dict[str, Any]) -> dict[str, Any]:
     normalized = normalize_runtime_config(config)
     with _CONFIG_WRITE_LOCK:
-        _write_json_atomic(get_runtime_paths().config_json_file, normalized)
+        _write_json_atomic(get_runtime_paths().config_json_file, _encrypted_copy(normalized))
     return deepcopy(normalized)
 
 
@@ -395,10 +481,8 @@ def update_runtime_config(mutator) -> dict[str, Any]:
         current = _current_or_initial_runtime_config()
         updated = mutator(deepcopy(current))
         normalized = normalize_runtime_config(updated if isinstance(updated, dict) else current)
-        _encrypt_provider_keys(normalized.get("providers"))
-        _write_json_atomic(get_runtime_paths().config_json_file, normalized)
-        # Return decrypted copy for in-memory use
-        _decrypt_provider_keys(normalized.get("providers"))
+        _write_json_atomic(get_runtime_paths().config_json_file, _encrypted_copy(normalized))
+    # `normalized` still holds plaintext, which is what in-memory callers want.
     return deepcopy(normalized)
 
 

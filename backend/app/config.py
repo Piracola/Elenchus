@@ -15,35 +15,57 @@ from pydantic import BaseModel, Field
 
 from app.models.schemas import ContextRuntimeConfig
 from app.runtime_config_store import (
-    SUPPORTED_SEARCH_PROVIDERS,
     load_runtime_config,
     normalize_search_provider_name,
+    supported_search_provider_names,
     update_runtime_config,
 )
 from app.runtime_paths import prepare_runtime_environment
+from app.search.limits import clamp_results_per_query
 
 _RUNTIME_PATHS = prepare_runtime_environment()
 _PROJECT_ROOT = _RUNTIME_PATHS.runtime_root
 
 
 class SearchConfig(BaseModel):
-    """Search provider configuration."""
+    """Search provider configuration.
+
+    Per-provider settings live in one nested map keyed by provider name, so a
+    new provider needs no field here.
+    """
 
     provider: str = "ddgs"
     max_results_per_query: int = 5
-    custom_endpoint: str = ""
-    custom_api_key: str = ""
+    provider_settings: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+    def settings_for(self, provider_name: str) -> dict[str, str]:
+        """Stored settings of one provider (empty when never configured)."""
+        return dict(self.provider_settings.get(provider_name) or {})
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None = None) -> SearchConfig:
         data = data or {}
-        raw_custom = data.get("custom")
-        custom = raw_custom if isinstance(raw_custom, dict) else {}
+        raw_sections = data.get("providers")
+        sections = raw_sections if isinstance(raw_sections, dict) else {}
+        # Tolerate the pre-registry layout so an old config still loads.
+        legacy_custom = data.get("custom")
+        if isinstance(legacy_custom, dict) and "custom" not in sections:
+            sections = {**sections, "custom": legacy_custom}
+        try:
+            max_results = int(data.get("max_results_per_query") or 5)
+        except (TypeError, ValueError):
+            max_results = 5
         return cls(
             provider=normalize_search_provider_name(str(data.get("provider") or "ddgs")),
-            max_results_per_query=int(data.get("max_results_per_query") or 5),
-            custom_endpoint=str(custom.get("endpoint") or ""),
-            custom_api_key=str(custom.get("api_key") or ""),
+            max_results_per_query=clamp_results_per_query(max_results),
+            provider_settings={
+                str(name): {
+                    str(key): str(value or "")
+                    for key, value in section.items()
+                }
+                for name, section in sections.items()
+                if isinstance(section, dict)
+            },
         )
 
 
@@ -170,7 +192,7 @@ def _clear_settings_cache() -> None:
 
 def _normalize_search_provider(provider: str) -> str:
     normalized = normalize_search_provider_name(provider)
-    if normalized not in SUPPORTED_SEARCH_PROVIDERS:
+    if normalized not in supported_search_provider_names():
         raise ValueError(f"Unsupported search provider: {provider}")
     return normalized
 
@@ -182,21 +204,24 @@ def persist_search_provider(provider: str) -> None:
 def persist_search_settings(
     *,
     provider: str | None = None,
-    custom_endpoint: str | None = None,
-    custom_api_key: str | None = None,
-    clear_custom_api_key: bool = False,
+    max_results_per_query: int | None = None,
+    provider_settings: dict[str, dict[str, str | None]] | None = None,
 ) -> None:
+    """Write search settings.
+
+    `provider_settings` carries only what should change: a field present with a
+    value sets it, a field present as `None` or `""` clears it, and an absent
+    field is left untouched. That makes a separate "clear this key" flag
+    unnecessary.
+    """
     normalized_provider = _normalize_search_provider(provider) if provider is not None else None
-    normalized_custom_endpoint = custom_endpoint.strip() if custom_endpoint is not None else None
-    normalized_custom_api_key = (custom_api_key or "").strip()
 
     update_runtime_config(
         lambda config: _update_search_config(
             config,
             provider=normalized_provider,
-            custom_endpoint=normalized_custom_endpoint,
-            custom_api_key=normalized_custom_api_key,
-            clear_custom_api_key=clear_custom_api_key,
+            max_results_per_query=max_results_per_query,
+            provider_settings=provider_settings or {},
         )
     )
     _clear_settings_cache()
@@ -206,31 +231,55 @@ def _update_search_config(
     config: dict[str, Any],
     *,
     provider: str | None,
-    custom_endpoint: str | None,
-    custom_api_key: str,
-    clear_custom_api_key: bool,
+    max_results_per_query: int | None,
+    provider_settings: dict[str, dict[str, str | None]],
 ) -> dict[str, Any]:
+    from app.search.registry import provider_field_specs
+
     search = config.setdefault("search", {})
-    custom = search.setdefault("custom", {})
+    sections = search.setdefault("providers", {})
 
     if provider is not None:
         search["provider"] = provider
+    if max_results_per_query is not None:
+        search["max_results_per_query"] = clamp_results_per_query(max_results_per_query)
     if "max_results_per_query" not in search:
         search["max_results_per_query"] = 5
-    if custom_endpoint is not None:
-        custom["endpoint"] = custom_endpoint
-    if clear_custom_api_key:
-        custom["api_key"] = ""
-    elif custom_api_key:
-        custom["api_key"] = custom_api_key
+
+    for provider_name, updates in provider_settings.items():
+        if not isinstance(updates, dict):
+            continue
+        known_keys = {field.key for field in provider_field_specs(provider_name)}
+        if not known_keys:
+            continue
+        section = sections.setdefault(provider_name, {})
+        for key, value in updates.items():
+            if key not in known_keys:
+                continue
+            section[key] = str(value or "").strip()
     return config
 
 
 def get_search_provider_settings_snapshot() -> dict[str, dict[str, Any]]:
+    """Per-provider stored values, with secrets reduced to a boolean.
+
+    Shape: `{provider: {field_key: value, "<secret_key>_configured": bool}}`.
+    Secret values are never included so they cannot leak to a client.
+    """
+    from app.search.registry import provider_classes
+
     settings = get_settings()
-    return {
-        "custom": {
-            "endpoint": settings.search.custom_endpoint,
-            "api_key_configured": bool(settings.search.custom_api_key),
-        },
-    }
+    snapshot: dict[str, dict[str, Any]] = {}
+    for provider_class in provider_classes():
+        stored = settings.search.settings_for(provider_class.name)
+        if not provider_class.config_fields:
+            continue
+        section: dict[str, Any] = {}
+        for field in provider_class.config_fields:
+            value = str(stored.get(field.key, "") or "")
+            if field.secret:
+                section[f"{field.key}_configured"] = bool(value)
+            else:
+                section[field.key] = value
+        snapshot[provider_class.name] = section
+    return snapshot

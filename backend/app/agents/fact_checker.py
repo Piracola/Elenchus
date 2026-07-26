@@ -24,6 +24,7 @@ from app.agents.runtime_progress import (
 )
 from app.dependencies import get_search_factory
 from app.llm.invoke import invoke_text_model
+from app.search.limits import resolve_results_per_query
 from app.tools.search_formatter import format_evidence_brief
 from app.tools.search_query_planner import sanitize_search_query
 from app.tools.search_result_filter import filter_results
@@ -31,7 +32,6 @@ from app.tools.search_result_filter import filter_results
 logger = logging.getLogger(__name__)
 
 MAX_QUERIES_PER_TURN = 3
-_MAX_RESULTS_PER_QUERY = 3
 _MAX_CLAIM_CHARS = 4000
 
 
@@ -95,7 +95,7 @@ def _build_instruction(topic: str, speeches: list[dict[str, Any]]) -> str:
 
 async def _run_search(query: str, topic: str) -> str:
     search_factory = get_search_factory()
-    results = await search_factory.search(query, num_results=_MAX_RESULTS_PER_QUERY)
+    results = await search_factory.search(query, num_results=resolve_results_per_query())
     filtered = filter_results(topic, query, results)
     if not filtered:
         return ""

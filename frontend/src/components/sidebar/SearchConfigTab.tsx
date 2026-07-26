@@ -1,16 +1,21 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { RefreshCw, Search } from 'lucide-react';
+import { ListOrdered, RefreshCw, Save, Search } from 'lucide-react';
 
 import { SearchProviderSelector } from './search/SearchProviderSelector';
 import { SearchProviderSettingsCard } from './search/SearchProviderSettingsCard';
-import { getProviderLabel } from './search/searchConfigShared';
 import { useSearchConfigState } from './search/useSearchConfigState';
 import {
     SettingsBadge,
+    SettingsButton,
+    SettingsField,
+    SettingsInput,
     SettingsNotice,
     SettingsPage,
     SettingsSection,
 } from './settings/SettingsPrimitives';
+
+const MIN_RESULTS_PER_QUERY = 1;
+const MAX_RESULTS_PER_QUERY = 10;
 
 function SearchConfigSkeleton() {
     return (
@@ -40,25 +45,29 @@ export function SearchConfigTab() {
     const {
         providers,
         currentProvider,
-        customEndpoint,
-        setCustomEndpoint,
-        customApiKey,
-        setCustomApiKey,
-        customApiKeyConfigured,
+        maxResultsPerQuery,
+        setMaxResultsPerQuery,
+        drafts,
+        setFieldValue,
         isLoading,
         isRefreshing,
         isBusy,
         activeAction,
         error,
         handleProviderChange,
-        handleSaveCustom,
-        handleClearCustomKey,
+        handleSaveProvider,
+        handleClearSecret,
+        handleSaveMaxResults,
     } = useSearchConfigState();
+
+    const activeLabel =
+        providers.find((provider) => provider.name === currentProvider)?.label ?? currentProvider;
+    const fallbackLabel = providers.at(-1)?.label ?? 'DDGS';
 
     return (
         <SettingsPage
             title="搜索引擎配置"
-            description="保留内置 DDGS，并提供一个薄自定义接口用于接入外部搜索服务。"
+            description="选择检索 provider 并填写其密钥。所有 provider 由后端注册表声明，字段随之自动呈现。"
         >
             <AnimatePresence initial={false}>
                 {isRefreshing && !isLoading && (
@@ -76,9 +85,7 @@ export function SearchConfigTab() {
                 )}
             </AnimatePresence>
 
-            {error && !isLoading && (
-                <SettingsNotice tone="error">{error}</SettingsNotice>
-            )}
+            {error && !isLoading && <SettingsNotice tone="error">{error}</SettingsNotice>}
 
             {isLoading ? (
                 <SearchConfigSkeleton />
@@ -86,7 +93,7 @@ export function SearchConfigTab() {
                 <>
                     <SettingsSection
                         title="当前引擎"
-                        description="选择系统优先使用的搜索 provider。不可用的 provider 会保持禁用。"
+                        description="未填写必填项的 provider 会保持禁用。"
                         icon={<Search size={15} />}
                     >
                         <SearchProviderSelector
@@ -104,65 +111,74 @@ export function SearchConfigTab() {
                                 <span className="settings-field-label" style={{ marginBottom: 0 }}>
                                     当前使用
                                 </span>
-                                <SettingsBadge tone="accent">{getProviderLabel(currentProvider)}</SettingsBadge>
+                                <SettingsBadge tone="accent">{activeLabel}</SettingsBadge>
                             </div>
                             <div className="settings-field-hint" style={{ marginTop: 0 }}>
-                                自定义接口未配置或不可用时，系统会回退到 DDGS。
+                                当前引擎不可用时，系统会按注册顺序回退，最终兜底到 {fallbackLabel}。
                             </div>
                         </div>
                     </SettingsSection>
 
-                    <SearchProviderSettingsCard
-                        title="DDGS"
-                        description="项目内置的轻量搜索 provider，无需 Docker、独立服务或 API Key。"
-                        fields={[]}
-                        onSave={() => {}}
-                        isBusy={false}
-                        activeAction={null}
-                        saveActionId="noop:ddgs"
-                        saveIdleLabel=""
-                        saveBusyLabel=""
-                    />
+                    <SettingsSection
+                        title="检索用量"
+                        description="每个子查询返回的结果条数，直接影响注入提示词的证据量。"
+                        icon={<ListOrdered size={15} />}
+                    >
+                        <div className="settings-form-grid">
+                            <SettingsField
+                                label="单次检索结果数"
+                                hint={`取值 ${MIN_RESULTS_PER_QUERY}-${MAX_RESULTS_PER_QUERY}，越大证据越多，也越占上下文。`}
+                            >
+                                <SettingsInput
+                                    type="number"
+                                    min={MIN_RESULTS_PER_QUERY}
+                                    max={MAX_RESULTS_PER_QUERY}
+                                    value={String(maxResultsPerQuery)}
+                                    onChange={(event) => {
+                                        const parsed = Number.parseInt(event.target.value, 10);
+                                        if (Number.isNaN(parsed)) return;
+                                        setMaxResultsPerQuery(
+                                            Math.max(
+                                                MIN_RESULTS_PER_QUERY,
+                                                Math.min(MAX_RESULTS_PER_QUERY, parsed),
+                                            ),
+                                        );
+                                    }}
+                                />
+                            </SettingsField>
+                        </div>
+                        <div className="settings-inline-controls">
+                            <SettingsButton
+                                variant="primary"
+                                onClick={() => {
+                                    void handleSaveMaxResults(maxResultsPerQuery);
+                                }}
+                                disabled={isBusy}
+                                icon={<Save size={15} />}
+                            >
+                                {activeAction === 'save:max-results' ? '保存中...' : '保存结果数'}
+                            </SettingsButton>
+                        </div>
+                    </SettingsSection>
 
-                    <SearchProviderSettingsCard
-                        title="自定义搜索接口"
-                        description="用于接入自建搜索桥接服务。接口需返回 results、items 或 data 数组。"
-                        fields={[
-                            {
-                                label: 'Endpoint',
-                                value: customEndpoint,
-                                onChange: (event) => setCustomEndpoint(event.target.value),
-                                placeholder: 'https://search.example.com/query',
-                                helperText: '后端会优先 POST JSON，若接口返回 405 则尝试 GET 查询参数。',
-                            },
-                            {
-                                label: 'API Key',
-                                type: 'password',
-                                autoComplete: 'off',
-                                value: customApiKey,
-                                onChange: (event) => setCustomApiKey(event.target.value),
-                                placeholder: customApiKeyConfigured ? '留空则保持已保存的 Key' : '可选',
-                                helperText: customApiKeyConfigured
-                                    ? '已保存 API Key。如果不需要替换，可以保持为空。'
-                                    : '填写后会以 Bearer Token 方式发送。',
-                            },
-                        ]}
-                        onSave={() => {
-                            void handleSaveCustom();
-                        }}
-                        isBusy={isBusy}
-                        activeAction={activeAction}
-                        saveActionId="save:custom"
-                        saveIdleLabel="保存自定义接口"
-                        saveBusyLabel="保存中..."
-                        showClearButton={customApiKeyConfigured}
-                        onClear={() => {
-                            void handleClearCustomKey();
-                        }}
-                        clearActionId="clear:custom"
-                        clearIdleLabel="清除已保存 Key"
-                        clearBusyLabel="清除中..."
-                    />
+                    {providers.map((provider) => (
+                        <SearchProviderSettingsCard
+                            key={provider.name}
+                            provider={provider}
+                            draft={drafts[provider.name] ?? {}}
+                            onFieldChange={(fieldKey, value) => {
+                                setFieldValue(provider.name, fieldKey, value);
+                            }}
+                            onSave={() => {
+                                void handleSaveProvider(provider.name);
+                            }}
+                            onClearSecret={(fieldKey) => {
+                                void handleClearSecret(provider.name, fieldKey);
+                            }}
+                            isBusy={isBusy}
+                            activeAction={activeAction}
+                        />
+                    ))}
                 </>
             )}
         </SettingsPage>

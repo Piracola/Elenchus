@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '../../../api/client';
-import type { SearchConfig, SearchProviderStatus, SearchProviderType } from '../../../types';
+import type {
+    SearchConfig,
+    SearchProviderDescriptor,
+    SearchProviderType,
+} from '../../../types';
 import { toast } from '../../../utils/chat/toast';
-import { PROVIDER_INFO } from './searchConfigShared';
+
+/** Per-provider, per-field draft values keyed by provider name. */
+export type ProviderDrafts = Record<string, Record<string, string>>;
 
 let cachedSearchConfig: SearchConfig | null = null;
 
@@ -11,37 +17,63 @@ export function __resetSearchConfigStateCacheForTests() {
     cachedSearchConfig = null;
 }
 
+/** Non-secret values come from the server; secrets always start blank. */
+function draftsFromConfig(config: SearchConfig): ProviderDrafts {
+    const drafts: ProviderDrafts = {};
+    for (const provider of config.providers) {
+        drafts[provider.name] = {};
+        for (const field of provider.fields) {
+            drafts[provider.name][field.key] = field.secret ? '' : field.value;
+        }
+    }
+    return drafts;
+}
+
+function providerLabelOf(config: SearchConfig | null, name: string): string {
+    return config?.providers.find((provider) => provider.name === name)?.label ?? name;
+}
+
 export function useSearchConfigState() {
-    const [providers, setProviders] = useState<SearchProviderStatus[]>(
-        () => cachedSearchConfig?.available_providers ?? [],
+    const [providers, setProviders] = useState<SearchProviderDescriptor[]>(
+        () => cachedSearchConfig?.providers ?? [],
     );
-    const [currentProvider, setCurrentProvider] = useState<SearchProviderType | string>(
+    const [currentProvider, setCurrentProvider] = useState<SearchProviderType>(
         () => cachedSearchConfig?.provider ?? '',
     );
-    const [customEndpoint, setCustomEndpoint] = useState(
-        () => cachedSearchConfig?.provider_settings.custom.endpoint ?? '',
+    const [maxResultsPerQuery, setMaxResultsPerQuery] = useState(
+        () => cachedSearchConfig?.max_results_per_query ?? 5,
     );
-    const [customApiKey, setCustomApiKey] = useState('');
-    const [customApiKeyConfigured, setCustomApiKeyConfigured] = useState(
-        () => cachedSearchConfig?.provider_settings.custom.api_key_configured ?? false,
+    const [drafts, setDrafts] = useState<ProviderDrafts>(
+        () => (cachedSearchConfig ? draftsFromConfig(cachedSearchConfig) : {}),
     );
     const [isLoading, setIsLoading] = useState(() => cachedSearchConfig === null);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [activeAction, setActiveAction] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const isEditingCustomRef = useRef(false);
+    /** Provider names the user has typed into; background refreshes leave them alone. */
+    const editedProvidersRef = useRef<Set<string>>(new Set());
 
     const isBusy = activeAction !== null;
 
-    const applyConfig = useCallback((config: SearchConfig, options?: { forceCustom?: boolean }) => {
+    const applyConfig = useCallback((config: SearchConfig, options?: { resetProvider?: string }) => {
         cachedSearchConfig = config;
         setCurrentProvider(config.provider);
-        setProviders(config.available_providers);
-        if (options?.forceCustom || !isEditingCustomRef.current) {
-            setCustomEndpoint(config.provider_settings.custom.endpoint);
-            setCustomApiKey('');
+        setProviders(config.providers);
+        setMaxResultsPerQuery(config.max_results_per_query);
+        if (options?.resetProvider) {
+            editedProvidersRef.current.delete(options.resetProvider);
         }
-        setCustomApiKeyConfigured(config.provider_settings.custom.api_key_configured);
+        const serverDrafts = draftsFromConfig(config);
+        setDrafts((previous) => {
+            const merged: ProviderDrafts = { ...serverDrafts };
+            // Preserve in-progress edits so a background refresh cannot wipe them.
+            for (const providerName of editedProvidersRef.current) {
+                if (previous[providerName]) {
+                    merged[providerName] = { ...serverDrafts[providerName], ...previous[providerName] };
+                }
+            }
+            return merged;
+        });
     }, []);
 
     const fetchConfig = useCallback(async (options?: { background?: boolean }) => {
@@ -74,6 +106,14 @@ export function useSearchConfigState() {
         void fetchConfig();
     }, [fetchConfig]);
 
+    const setFieldValue = useCallback((providerName: string, fieldKey: string, value: string) => {
+        editedProvidersRef.current.add(providerName);
+        setDrafts((previous) => ({
+            ...previous,
+            [providerName]: { ...(previous[providerName] ?? {}), [fieldKey]: value },
+        }));
+    }, []);
+
     const handleProviderChange = useCallback(async (providerName: SearchProviderType) => {
         if (providerName === currentProvider || isBusy) {
             return;
@@ -85,63 +125,82 @@ export function useSearchConfigState() {
         try {
             await api.search.setProvider(providerName);
             await fetchConfig();
-            toast(`已切换到 ${PROVIDER_INFO[providerName].label}`, 'success');
+            toast(`已切换到 ${providerLabelOf(cachedSearchConfig, providerName)}`, 'success');
         } catch (err) {
             const message = err instanceof Error ? err.message : '切换搜索引擎失败';
             console.error('Failed to set provider:', err);
             setError(message);
-            toast('切换搜索引擎失败', 'error');
+            toast(message, 'error');
         } finally {
             setActiveAction(null);
         }
     }, [currentProvider, fetchConfig, isBusy]);
 
-    const handleSaveCustom = useCallback(async () => {
-        setActiveAction('save:custom');
+    const handleSaveProvider = useCallback(async (providerName: string) => {
+        const descriptor = providers.find((provider) => provider.name === providerName);
+        if (!descriptor) return;
+
+        setActiveAction(`save:${providerName}`);
         setError(null);
+
+        // Send only what the user actually filled in: a blank secret means
+        // "keep the stored one", so it must be omitted rather than sent empty.
+        const updates: Record<string, string | null> = {};
+        for (const field of descriptor.fields) {
+            const value = (drafts[providerName]?.[field.key] ?? '').trim();
+            if (field.secret && !value) continue;
+            updates[field.key] = value;
+        }
 
         try {
             const config = await api.search.updateConfig({
-                provider_settings: {
-                    custom: {
-                        endpoint: customEndpoint.trim(),
-                        api_key: customApiKey.trim() || null,
-                    },
-                },
+                provider_settings: { [providerName]: updates },
             });
-            isEditingCustomRef.current = false;
-            applyConfig(config, { forceCustom: true });
-            toast('已保存自定义搜索配置', 'success');
+            applyConfig(config, { resetProvider: providerName });
+            toast(`已保存 ${descriptor.label} 配置`, 'success');
         } catch (err) {
-            const message = err instanceof Error ? err.message : '保存自定义搜索配置失败';
-            console.error('Failed to save custom search config:', err);
+            const message = err instanceof Error ? err.message : '保存搜索配置失败';
+            console.error('Failed to save search provider config:', err);
             setError(message);
-            toast('保存自定义搜索配置失败', 'error');
+            toast(message, 'error');
         } finally {
             setActiveAction(null);
         }
-    }, [applyConfig, customApiKey, customEndpoint]);
+    }, [applyConfig, drafts, providers]);
 
-    const handleClearCustomKey = useCallback(async () => {
-        setActiveAction('clear:custom');
+    const handleClearSecret = useCallback(async (providerName: string, fieldKey: string) => {
+        setActiveAction(`clear:${providerName}:${fieldKey}`);
         setError(null);
 
         try {
             const config = await api.search.updateConfig({
-                provider_settings: {
-                    custom: {
-                        clear_api_key: true,
-                    },
-                },
+                provider_settings: { [providerName]: { [fieldKey]: '' } },
             });
-            isEditingCustomRef.current = false;
-            applyConfig(config, { forceCustom: true });
-            toast('已清除自定义搜索 API Key', 'success');
+            applyConfig(config, { resetProvider: providerName });
+            toast('已清除已保存的密钥', 'success');
         } catch (err) {
-            const message = err instanceof Error ? err.message : '清除 API Key 失败';
-            console.error('Failed to clear custom search key:', err);
+            const message = err instanceof Error ? err.message : '清除密钥失败';
+            console.error('Failed to clear search provider secret:', err);
             setError(message);
-            toast('清除 API Key 失败', 'error');
+            toast(message, 'error');
+        } finally {
+            setActiveAction(null);
+        }
+    }, [applyConfig]);
+
+    const handleSaveMaxResults = useCallback(async (value: number) => {
+        setActiveAction('save:max-results');
+        setError(null);
+
+        try {
+            const config = await api.search.updateConfig({ max_results_per_query: value });
+            applyConfig(config);
+            toast('已更新单次检索结果数', 'success');
+        } catch (err) {
+            const message = err instanceof Error ? err.message : '更新检索结果数失败';
+            console.error('Failed to save max results per query:', err);
+            setError(message);
+            toast(message, 'error');
         } finally {
             setActiveAction(null);
         }
@@ -150,24 +209,18 @@ export function useSearchConfigState() {
     return {
         providers,
         currentProvider,
-        customEndpoint,
-        setCustomEndpoint: (value: string) => {
-            isEditingCustomRef.current = true;
-            setCustomEndpoint(value);
-        },
-        customApiKey,
-        setCustomApiKey: (value: string) => {
-            isEditingCustomRef.current = true;
-            setCustomApiKey(value);
-        },
-        customApiKeyConfigured,
+        maxResultsPerQuery,
+        setMaxResultsPerQuery,
+        drafts,
+        setFieldValue,
         isLoading,
         isRefreshing,
         isBusy,
         activeAction,
         error,
         handleProviderChange,
-        handleSaveCustom,
-        handleClearCustomKey,
+        handleSaveProvider,
+        handleClearSecret,
+        handleSaveMaxResults,
     };
 }

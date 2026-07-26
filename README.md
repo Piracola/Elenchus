@@ -67,28 +67,47 @@
 <details>
 <summary><b>Provider API Key 加密</b></summary>
 
-`runtime/config.json` 中的 Provider API Key 支持透明加密存储。启用方法：
+`runtime/config.json` 中的 API Key（模型 provider 与搜索 provider）默认加密存储，无需任何配置。
+
+首次运行时系统会自动生成密钥并保存到 `runtime/encryption.key`。**请备份该文件**：
+丢失后已保存的 Key 将无法解密，需要重新填写。
+
+如需自行管理密钥（例如多机共用同一份配置），可设置环境变量，它的优先级高于密钥文件：
 
 ```bash
-# 生成加密密钥（仅需执行一次，妥善保存）
+# 生成密钥（仅需执行一次，妥善保存）
 uv run --project backend --with cryptography python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
 # 设置为环境变量
 export ELENCHUS_ENCRYPTION_KEY="<上面生成的密钥>"
 ```
 
-设置后，系统会在写入 `runtime/config.json` 时自动加密所有 `api_key`，读取时自动解密。未设置加密密钥时，API Key 仍以明文存储（向后兼容，但会发出警告）。
+历史的明文配置会被自动兼容读取，并在下次写入时转为加密存储。
 
 </details>
 
 <details>
 <summary><b>搜索服务说明</b></summary>
 
-当前项目内置 `DDGS` 作为默认轻量搜索提供商，无需 Docker、无需单独服务、也无需额外部署步骤。
+在 **设置** → **搜索引擎** 中选择检索 provider 并填写密钥。内置以下几种：
 
-如果你希望接入外部搜索 API，可以在 **设置** → **搜索引擎** 中配置一个自定义 HTTP 搜索接口。
+| Provider | 说明 | 需要 |
+| --- | --- | --- |
+| Tavily | 面向 AI 检索的 API，返回已清理的正文摘要 | API Key |
+| Brave Search | 独立索引的通用网页搜索 | API Key |
+| Exa | 语义检索，按含义而非关键词匹配 | API Key |
+| 自定义接口 | 任意 HTTP JSON 搜索服务，自动适配常见字段命名 | Endpoint |
+| DDGS | 内置轻量聚合搜索，随产物分发 | 无 |
 
-**注意：** 默认情况下系统会优先使用 `DDGS`。自定义接口未配置或不可用时，系统会回退到 DDGS。
+回退顺序即上表顺序：当前 provider 不可用时依次下移，最终兜底到无需配置的 DDGS。
+未填写必填项的 provider 会保持禁用，不会被选中也不会参与回退。
+
+**密钥安全：** 搜索 provider 的 API Key 与模型 provider 一样加密存储在
+`runtime/config.json`，接口只回传「是否已配置」，不回传密钥本身。
+
+**扩展：** 新增一个 provider 只需在 `backend/app/search/` 增加一个模块并用
+`@register_search_provider` 注册，声明 `name`/`label`/`description`/`config_fields`。
+配置归一化、加密、REST 契约与设置界面表单都会自动跟随，无需改动其他文件。
 
 </details>
 

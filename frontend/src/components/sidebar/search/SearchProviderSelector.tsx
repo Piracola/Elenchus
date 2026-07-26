@@ -1,15 +1,15 @@
-import type { SearchProviderStatus, SearchProviderType } from '../../../types';
-import { PROVIDER_INFO } from './searchConfigShared';
+import type { SearchProviderDescriptor, SearchProviderType } from '../../../types';
 import { SettingsBadge } from '../settings/SettingsPrimitives';
 
 type SearchProviderSelectorProps = {
-    providers: SearchProviderStatus[];
-    currentProvider: SearchProviderType | string;
+    providers: SearchProviderDescriptor[];
+    currentProvider: SearchProviderType;
     activeAction: string | null;
     isBusy: boolean;
     onProviderChange: (providerName: SearchProviderType) => void;
 };
 
+/** Renders one card per provider the backend registry reports. */
 export function SearchProviderSelector({
     providers,
     currentProvider,
@@ -19,34 +19,37 @@ export function SearchProviderSelector({
 }: SearchProviderSelectorProps) {
     return (
         <div className="settings-radio-list">
-            {(Object.keys(PROVIDER_INFO) as SearchProviderType[]).map((providerKey) => {
-                const provider = providers.find((item) => item.name === providerKey);
-                const info = PROVIDER_INFO[providerKey];
-                const isSelected = currentProvider === providerKey;
-                const isAvailable = provider?.available ?? false;
-                const isSwitching = activeAction === `provider:${providerKey}`;
+            {providers.map((provider) => {
+                const isSelected = currentProvider === provider.name;
+                const isSwitching = activeAction === `provider:${provider.name}`;
+                const canSelect = provider.available && !isBusy;
 
                 return (
                     <button
-                        key={providerKey}
+                        key={provider.name}
                         type="button"
                         className={`settings-radio-card ${isSelected ? 'is-selected' : ''}`}
                         onClick={() => {
-                            if (isAvailable && !isBusy) {
-                                onProviderChange(providerKey);
+                            if (canSelect) {
+                                onProviderChange(provider.name);
                             }
                         }}
-                        disabled={!isAvailable || isBusy}
+                        disabled={!provider.available || isBusy}
                         aria-pressed={isSelected}
                     >
                         <span className="settings-radio-dot" aria-hidden="true" />
                         <span style={{ minWidth: 0 }}>
                             <span className="settings-control-row" style={{ gap: '8px' }}>
-                                <span className="settings-radio-title">{info.label}</span>
-                                {!isAvailable && <SettingsBadge tone="muted">不可用</SettingsBadge>}
+                                <span className="settings-radio-title">{provider.label}</span>
+                                {!provider.configured && (
+                                    <SettingsBadge tone="muted">未配置</SettingsBadge>
+                                )}
+                                {provider.configured && !provider.available && (
+                                    <SettingsBadge tone="muted">不可用</SettingsBadge>
+                                )}
                                 {isSwitching && <SettingsBadge tone="accent">切换中</SettingsBadge>}
                             </span>
-                            <span className="settings-radio-description">{info.description}</span>
+                            <span className="settings-radio-description">{provider.description}</span>
                         </span>
                     </button>
                 );
