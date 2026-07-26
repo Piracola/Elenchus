@@ -13,6 +13,7 @@ import { toast } from '../../utils/chat/toast';
 import { AGENT_ROLES } from '../../utils/agent/agentConfigs';
 import AgentConfigPanel from '../shared/AgentConfigPanel';
 import { MODAL_MOTION, PRESSABLE, PRESSABLE_ICON } from '../../config/motion';
+import { useDialogA11y } from '../../hooks/useDialogA11y';
 import {
     HEADER_TOOLBAR_PANEL_STYLE,
     HEADER_TOOLBAR_PRIMARY_BUTTON_STYLE,
@@ -56,6 +57,7 @@ export default function DebaterSettingsModal({
     const { currentSession } = useSessionViewState();
     const { updateCurrentSessionAgentConfigs } = useSessionActions();
     const popoverRef = useRef<HTMLDivElement>(null);
+    const { dialogRef, onKeyDown: onDialogKeyDown } = useDialogA11y({ isOpen, onClose });
     const [popoverStyle, setPopoverStyle] = useState<CSSProperties>(HIDDEN_POPOVER_STYLE);
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
@@ -159,19 +161,16 @@ export default function DebaterSettingsModal({
             }
             onClose();
         };
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') onClose();
-        };
-
+        // Escape is handled on the dialog itself (useDialogA11y), not on the
+        // document: a select menu open inside this popover must be able to
+        // swallow its own Escape instead of closing the whole popover.
         const timerId = window.setTimeout(() => {
             document.addEventListener('mousedown', handlePointerDown);
-            document.addEventListener('keydown', handleKeyDown);
         }, 0);
 
         return () => {
             window.clearTimeout(timerId);
             document.removeEventListener('mousedown', handlePointerDown);
-            document.removeEventListener('keydown', handleKeyDown);
         };
     }, [anchorRef, isOpen, onClose]);
 
@@ -201,7 +200,17 @@ export default function DebaterSettingsModal({
         <AnimatePresence>
             {isOpen && (
                 <motion.div
-                    ref={popoverRef}
+                    ref={(node) => {
+                        // One element, two consumers: the outside-click check and
+                        // the dialog focus management.
+                        popoverRef.current = node;
+                        dialogRef.current = node;
+                    }}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="debater-settings-title"
+                    tabIndex={-1}
+                    onKeyDown={onDialogKeyDown}
                     {...MODAL_MOTION}
                     style={{
                         ...popoverStyle,
@@ -216,9 +225,9 @@ export default function DebaterSettingsModal({
                 >
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
-                            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                            <h2 id="debater-settings-title" style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
                                 辩手设置
-                            </span>
+                            </h2>
                             <span style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
                                 保存后只影响后续 agent 调用，已完成的发言与评分不会改变。
                             </span>
@@ -235,6 +244,7 @@ export default function DebaterSettingsModal({
                                 padding: 0,
                             }}
                             title="关闭辩手设置"
+                            aria-label="关闭辩手设置"
                         >
                             <X size={14} />
                         </motion.button>
@@ -266,6 +276,7 @@ export default function DebaterSettingsModal({
                             handleConfigSelect={handleConfigSelect}
                             handleTemperatureChange={handleTemperatureChange}
                             manageButtonLabel="管理配置"
+                            titleLevel={3}
                         />
                     </div>
 

@@ -201,15 +201,18 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
                     <BrandIcon size={38} alt="Elenchus 品牌图标" withBadge={false} />
                     <div style={{ minWidth: 0 }}>
-                        <h1 style={{
+                        {/* Persistent chrome, not the page's heading: the main
+                            region already carries the h1, and two identical h1s
+                            leave a screen reader with no single page title. */}
+                        <span style={{
+                            display: 'block',
                             fontSize: '17px',
                             fontWeight: 700,
                             letterSpacing: '-0.02em',
                             color: 'var(--text-primary)',
-                            margin: 0,
                         }}>
                             Elenchus
-                        </h1>
+                        </span>
                         <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '2px 0 0' }}>AI 辩论平台</p>
                     </div>
                 </div>
@@ -281,7 +284,6 @@ export default function SessionList({ onCollapse, fluidWidth = false }: SessionL
                             padding: '10px 12px 10px 36px',
                             background: 'transparent',
                             border: 'none',
-                            outline: 'none',
                             color: 'var(--text-primary)',
                             fontSize: '13px',
                             borderRadius: 'var(--radius-lg)',

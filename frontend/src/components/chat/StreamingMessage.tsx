@@ -147,6 +147,12 @@ export default function StreamingMessage({
     return (
         <div
             ref={scrollRef}
+            aria-busy="true"
+            // Deliberately not a live region: a token-by-token announcement would
+            // restart the utterance dozens of times per speech. StatusBanner
+            // announces that a speech is being generated; the text itself is read
+            // by navigating the transcript once it settles.
+            aria-live="off"
             style={{
                 display: 'flex',
                 flexDirection: 'column',

@@ -161,7 +161,6 @@ const numberInputStyle: CSSProperties = {
     background: 'var(--bg-card)',
     border: '1px solid transparent',
     borderRadius: 'var(--radius-md)',
-    outline: 'none',
     color: 'var(--text-primary)',
     fontSize: '13px',
     fontWeight: 600,
@@ -459,7 +458,6 @@ export function HomeComposerCard({
                             ? '1px solid color-mix(in srgb, var(--mode-sophistry-border) 52%, transparent)'
                             : '1px solid var(--border-subtle)',
                         borderRadius: 'var(--radius-lg)',
-                        outline: 'none',
                         color: 'var(--text-primary)',
                         fontSize: homeFontSizes.topicInput,
                         resize: 'vertical',

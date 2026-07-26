@@ -200,19 +200,32 @@ export default function StatusBanner() {
         [currentNode, currentStatus, isDebating, phase, runStatus, sessionStatus],
     );
 
-    if (!viewModel.show) {
-        return null;
-    }
-
     const toneStyles = getToneStyles(viewModel.tone);
     const isRunning = viewModel.tone === 'running';
 
+    // The live region is rendered unconditionally: a region inserted at the same
+    // moment its text appears is not reliably announced, and the visual banner
+    // does come and go. The banner's own spans are hidden from the reader so the
+    // phase, node, and message arrive as one sentence instead of three.
+    const liveRegion = (
+        <span className="sr-only" role="status" aria-live="polite">
+            {viewModel.show ? viewModel.title : ''}
+        </span>
+    );
+
+    if (!viewModel.show) {
+        return liveRegion;
+    }
+
     return (
+        <>
+        {liveRegion}
         <motion.div
             initial={{ opacity: 0, y: -2 }}
             animate={{ opacity: 1, y: 0 }}
             transition={TRANSITION.normal}
             title={viewModel.title}
+            aria-hidden="true"
             style={{
                 height: 30,
                 minWidth: 0,
@@ -287,5 +300,6 @@ export default function StatusBanner() {
                 {viewModel.message}
             </span>
         </motion.div>
+        </>
     );
 }

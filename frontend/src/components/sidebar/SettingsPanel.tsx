@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BrainCircuit, Database, Monitor, Search, Terminal, X } from 'lucide-react';
@@ -12,6 +12,7 @@ import { SettingsContextTab } from './settings/SettingsContextTab';
 import { SettingsLoggingTab } from './settings/SettingsLoggingTab';
 import { SettingsProvidersTab } from './settings/SettingsProvidersTab';
 import { BACKDROP_MOTION, MODAL_MOTION, TRANSITION } from '../../config/motion';
+import { useDialogA11y } from '../../hooks/useDialogA11y';
 import './settings/settings.css';
 
 export type SettingsTab = 'providers' | 'display' | 'logging' | 'search' | 'context';
@@ -67,6 +68,8 @@ export default function SettingsPanel({
 }: Props) {
     const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
     const { logLevel, setLogLevel, displaySettings, setDisplaySettings, contextRuntime, setContextRuntime } = useSettingsStore();
+    const { dialogRef, onKeyDown: onDialogKeyDown } = useDialogA11y({ isOpen, onClose });
+    const tabListRef = useRef<HTMLDivElement>(null);
 
     // Use the extracted hook for provider management
     const modelConfig = useModelConfigManager();
@@ -98,6 +101,34 @@ export default function SettingsPanel({
         } catch (err) {
             console.error("Failed to set log level", err);
         }
+    };
+
+    // Tabs are a single stop in the tab ring; arrows move between them. Without
+    // this, reaching the last tab takes five Tab presses.
+    const handleTabListKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+        const deltas: Record<string, number> = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 };
+        const delta = deltas[event.key];
+        const currentIndex = SETTINGS_TABS.findIndex((tab) => tab.value === activeTab);
+
+        let nextIndex: number | null = null;
+        if (delta !== undefined) {
+            nextIndex = (currentIndex + delta + SETTINGS_TABS.length) % SETTINGS_TABS.length;
+        } else if (event.key === 'Home') {
+            nextIndex = 0;
+        } else if (event.key === 'End') {
+            nextIndex = SETTINGS_TABS.length - 1;
+        }
+
+        if (nextIndex === null) {
+            return;
+        }
+
+        event.preventDefault();
+        setActiveTab(SETTINGS_TABS[nextIndex].value);
+        tabListRef.current
+            ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+            ?.[nextIndex]
+            ?.focus();
     };
 
     const renderActiveTab = () => {
@@ -151,13 +182,19 @@ export default function SettingsPanel({
                         className="settings-modal-overlay"
                     >
                         <motion.div
+                            ref={dialogRef}
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="settings-modal-title"
+                            tabIndex={-1}
+                            onKeyDown={onDialogKeyDown}
                             onClick={(e) => e.stopPropagation()}
                             {...MODAL_MOTION}
                             className="settings-modal-shell"
                         >
                             <div className="settings-modal-header">
                                 <div className="settings-modal-title-wrap">
-                                    <h2 className="settings-modal-title">设置</h2>
+                                    <h2 id="settings-modal-title" className="settings-modal-title">设置</h2>
                                     <p className="settings-modal-description">
                                         管理模型、搜索、显示和运行日志。
                                     </p>
@@ -174,14 +211,25 @@ export default function SettingsPanel({
                             </div>
 
                             <div className="settings-modal-body">
-                                <nav className="settings-nav" aria-label="设置分类">
+                                <div
+                                    ref={tabListRef}
+                                    role="tablist"
+                                    aria-label="设置分类"
+                                    aria-orientation="vertical"
+                                    className="settings-nav"
+                                    onKeyDown={handleTabListKeyDown}
+                                >
                                     {SETTINGS_TABS.map((tab) => (
                                         <button
                                             key={tab.value}
                                             type="button"
+                                            role="tab"
+                                            id={`settings-tab-${tab.value}`}
+                                            aria-selected={activeTab === tab.value}
+                                            aria-controls={`settings-tabpanel-${tab.value}`}
+                                            tabIndex={activeTab === tab.value ? 0 : -1}
                                             className={`settings-tab-button ${activeTab === tab.value ? 'is-active' : ''}`}
                                             onClick={() => setActiveTab(tab.value)}
-                                            aria-current={activeTab === tab.value ? 'page' : undefined}
                                         >
                                             <span className="settings-tab-icon">{tab.icon}</span>
                                             <span>
@@ -190,12 +238,16 @@ export default function SettingsPanel({
                                             </span>
                                         </button>
                                     ))}
-                                </nav>
+                                </div>
 
                                 <main className="settings-main">
                                     <AnimatePresence mode="wait" initial={false}>
                                         <motion.div
                                             key={activeTab}
+                                            role="tabpanel"
+                                            id={`settings-tabpanel-${activeTab}`}
+                                            aria-labelledby={`settings-tab-${activeTab}`}
+                                            tabIndex={0}
                                             initial={{ opacity: 0, y: 4 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             exit={{ opacity: 0, y: -4 }}

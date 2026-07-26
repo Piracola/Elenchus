@@ -232,7 +232,6 @@ function ActiveSessionControls() {
                             width: '24px',
                             background: 'transparent',
                             border: 'none',
-                            outline: 'none',
                             color: 'var(--text-primary)',
                             fontSize: '11px',
                             fontWeight: 500,
@@ -262,7 +261,6 @@ function ActiveSessionControls() {
                     border: 'none',
                     background: 'var(--bg-tertiary)',
                     color: 'var(--text-primary)',
-                    outline: 'none',
                     cursor: canSendIntervention ? 'text' : 'not-allowed',
                     opacity: canSendIntervention ? 1 : 0.5,
                     fontSize: '13px',
@@ -489,7 +487,6 @@ function SessionCreator() {
                                         border: '1px solid transparent',
                                         background: 'var(--bg-tertiary)',
                                         color: 'var(--text-primary)',
-                                        outline: 'none',
                                     }}
                                 />
                             </label>
@@ -518,7 +515,6 @@ function SessionCreator() {
                                         border: '1px solid transparent',
                                         background: 'var(--bg-tertiary)',
                                         color: 'var(--text-primary)',
-                                        outline: 'none',
                                     }}
                                 />
                             </label>
@@ -547,7 +543,6 @@ function SessionCreator() {
                                         border: '1px solid transparent',
                                         background: 'var(--bg-tertiary)',
                                         color: 'var(--text-primary)',
-                                        outline: 'none',
                                     }}
                                 />
                             </label>
@@ -576,7 +571,6 @@ function SessionCreator() {
                                         border: '1px solid transparent',
                                         background: 'var(--bg-tertiary)',
                                         color: 'var(--text-primary)',
-                                        outline: 'none',
                                     }}
                                 />
                             </label>
@@ -658,7 +652,6 @@ function SessionCreator() {
                         border: 'none',
                         background: 'var(--bg-tertiary)',
                         color: 'var(--text-primary)',
-                        outline: 'none',
                         fontSize: '13px',
                     }}
                 />
@@ -686,7 +679,6 @@ function SessionCreator() {
                             width: '24px',
                             background: 'transparent',
                             border: 'none',
-                            outline: 'none',
                             color: 'var(--text-primary)',
                             fontSize: '12px',
                             fontWeight: 500,

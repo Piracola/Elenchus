@@ -36,6 +36,12 @@ interface AgentConfigPanelProps {
     handleTemperatureChange: (agent: AgentRole, value: string) => void;
     readOnly?: boolean;
     manageButtonLabel?: string;
+    /**
+     * Depth of the panel title in the surrounding document. HomeView nests it
+     * directly under the page h1; inside a dialog it sits under the dialog's own
+     * h2. A fixed level would skip a level in one of the two.
+     */
+    titleLevel?: 2 | 3;
 }
 
 export default function AgentConfigPanel({
@@ -44,7 +50,9 @@ export default function AgentConfigPanel({
     showConfigManager, setShowConfigManager, handleConfigSelect, handleTemperatureChange,
     readOnly = false,
     manageButtonLabel = '管理配置',
+    titleLevel = 2,
 }: AgentConfigPanelProps) {
+    const TitleTag = `h${titleLevel}` as 'h2' | 'h3';
 
     const options = buildModelConfigOptions(savedConfigs);
 
@@ -65,7 +73,7 @@ export default function AgentConfigPanel({
                             <Settings2 size={15} />
                         </span>
                         <div style={{ minWidth: 0 }}>
-                            <h4 className="agent-config-panel__title">执行模型</h4>
+                            <TitleTag className="agent-config-panel__title">执行模型</TitleTag>
                             <p className="agent-config-panel__description">
                                 为每个角色指定模型与温度；深度思考由设置页的服务商选项统一控制。
                             </p>
