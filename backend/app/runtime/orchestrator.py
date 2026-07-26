@@ -30,6 +30,7 @@ _PERSIST_NODES = frozenset(
         "advance_turn",
         "judge",
         "speaker",
+        "fact_check",
         "group_discussion",
         "consensus",
         "sophistry_speaker",
@@ -262,7 +263,7 @@ class DebateOrchestrator:
                                     final_state,
                                     prev_history_len,
                                 )
-                            elif node_name == "tool_executor":
+                            elif node_name in {"tool_executor", "fact_check"}:
                                 await run_events.emit_fact_check(session_id, final_state)
                             elif node_name == "judge":
                                 await run_events.emit_judge_scores(

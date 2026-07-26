@@ -54,3 +54,7 @@ def get_consensus_prompt() -> str:
 
 def get_group_discussion_prompt() -> str:
     return load_prompt("group_discussion_system.md")
+
+
+def get_fact_checker_prompt() -> str:
+    return load_prompt("fact_checker_system.md")

@@ -211,9 +211,10 @@ def test_debate_graph_honors_resume_next_node_before_repeating_group_discussion(
     ) == "set_speaker"
 
 
-def test_debate_graph_routes_from_final_speaker_to_judge():
+def test_debate_graph_routes_from_final_speaker_to_fact_check_then_judge():
     from app.agents.graph import should_execute_tools
 
+    # Fact checking is on by default and runs between the last speech and scoring.
     assert should_execute_tools(
         {
             "messages": [],
@@ -221,13 +222,13 @@ def test_debate_graph_routes_from_final_speaker_to_judge():
             "current_speaker_index": 1,
             "reasoning_config": {"group_discussion_rounds": 1},
         }
-    ) == "judge"
+    ) == "fact_check"
 
     assert should_execute_tools(
         {
             "messages": [],
             "participants": ["proposer", "opposer"],
             "current_speaker_index": 1,
-            "reasoning_config": {"group_discussion_rounds": 0},
+            "reasoning_config": {"group_discussion_rounds": 0, "fact_check_enabled": False},
         }
     ) == "judge"

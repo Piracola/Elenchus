@@ -29,6 +29,7 @@ RESUME_STRATEGY_KEEP_CURRENT_TURN = {
     "set_speaker",
     "speaker",
     "tool_executor",
+    "fact_check",
     "judge",
     "sophistry_speaker",
 }
@@ -53,7 +54,7 @@ def normalize_resumable_snapshot(
         if last_node == "group_discussion":
             snapshot["current_speaker"] = ""
             snapshot["current_speaker_index"] = -1
-        elif last_node in {"judge", "sophistry_observer"}:
+        elif last_node in {"fact_check", "judge", "sophistry_observer"}:
             snapshot["current_speaker"] = ""
             snapshot["current_speaker_index"] = -1
         return snapshot

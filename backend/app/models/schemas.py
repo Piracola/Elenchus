@@ -70,6 +70,9 @@ class ReasoningConfig(BaseModel):
 
     consensus_enabled: bool = True
     group_discussion_rounds: int = Field(default=1, ge=0, le=5)
+    # Runs a neutral fact-check pass after each turn's speeches so the judge
+    # scores evidence quality against retrieved sources.
+    fact_check_enabled: bool = True
 
 
 class ContextRuntimeConfig(BaseModel):

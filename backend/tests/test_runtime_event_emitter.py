@@ -76,15 +76,16 @@ def test_predict_next_status_node_handles_tools_and_turn_progress():
             "current_speaker_index": 1,
             "reasoning_config": {"group_discussion_rounds": 1},
         },
-    ) == "judge"
+    ) == "fact_check"
     assert emitter.predict_next_status_node(
         "speaker",
         {
             "participants": ["proposer", "opposer"],
             "current_speaker_index": 1,
-            "reasoning_config": {"group_discussion_rounds": 0},
+            "reasoning_config": {"group_discussion_rounds": 0, "fact_check_enabled": False},
         },
     ) == "judge"
+    assert emitter.predict_next_status_node("fact_check", {}) == "judge"
     assert emitter.predict_next_status_node("group_discussion", {}) == "set_speaker"
     assert emitter.predict_next_status_node(
         "advance_turn",

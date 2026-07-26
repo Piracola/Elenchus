@@ -20,6 +20,7 @@ export type DocumentStatus = 'uploaded' | 'processing' | 'processed' | 'failed';
 export interface ReasoningConfig {
     consensus_enabled: boolean;
     group_discussion_rounds: number;
+    fact_check_enabled?: boolean;
 }
 
 export interface SpeechConfig {

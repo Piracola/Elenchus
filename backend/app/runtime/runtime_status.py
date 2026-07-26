@@ -12,6 +12,7 @@ NODE_STATUS = {
     "group_discussion": ("组内讨论正在生成本轮赛前简报...", "processing"),
     "sophistry_speaker": ("诡辩实验发言正在生成...", "speaking"),
     "tool_executor": ("正在调用工具核验事实...", "fact_checking"),
+    "fact_check": ("事实核查员正在核对本轮论据...", "fact_checking"),
     "judge": ("裁判正在评估本轮表现...", "judging"),
     "sophistry_observer": ("诡辩观察员正在整理本轮报告...", "processing"),
     "advance_turn": ("准备进入下一回合...", "context"),
@@ -22,6 +23,13 @@ NODE_STATUS = {
 
 def describe_status(node_name: str) -> tuple[str, str]:
     return NODE_STATUS.get(node_name, (f"处理中: {node_name}", "processing"))
+
+
+def _is_fact_check_enabled(state: dict[str, Any]) -> bool:
+    reasoning_config = state.get("reasoning_config", {})
+    if not isinstance(reasoning_config, dict):
+        return True
+    return bool(reasoning_config.get("fact_check_enabled", True))
 
 
 def has_pending_tool_calls(state: dict[str, Any]) -> bool:
@@ -131,8 +139,11 @@ def predict_next_status_node(
         participants = final_state.get("participants", ["proposer", "opposer"])
         current_idx = final_state.get("current_speaker_index", 0)
         if isinstance(participants, list) and current_idx + 1 >= len(participants):
-            return "judge"
+            return "fact_check" if _is_fact_check_enabled(final_state) else "judge"
         return None
+
+    if node_name == "fact_check":
+        return "judge"
 
     if node_name == "sophistry_speaker":
         participants = final_state.get("participants", ["proposer", "opposer"])
@@ -200,8 +211,11 @@ def predict_resume_next_node(
                 if isinstance(role, str) and role not in spoken_roles
             ]
             if not remaining_participants:
-                return "judge"
+                return "fact_check" if _is_fact_check_enabled(state) else "judge"
         return "set_speaker"
+
+    if node_name == "fact_check":
+        return "judge"
 
     if node_name == "tool_executor":
         return "speaker"

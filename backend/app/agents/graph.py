@@ -23,6 +23,7 @@ from langgraph.graph.message import add_messages
 from app.agents.consensus import converge_consensus
 from app.agents.context_engine import build_round_digest, merge_round_digest_knowledge
 from app.agents.debater import debater_speak
+from app.agents.fact_checker import fact_check_turn
 from app.agents.group_discussion import run_group_discussion
 from app.agents.judge import judge_score
 from app.tools import get_all_skills
@@ -214,6 +215,13 @@ async def node_tool_executor(state: DebateGraphState) -> dict[str, Any]:
     }
 
 
+async def node_fact_check(state: DebateGraphState) -> dict[str, Any]:
+    """Verify this turn's factual claims before the judge scores them."""
+    result = await fact_check_turn(state)
+    result["last_executed_node"] = "fact_check"
+    return result
+
+
 async def node_judge_score(state: DebateGraphState) -> dict[str, Any]:
     """Wrapper around judge_score for the LangGraph node."""
     result = await judge_score(state)
@@ -265,13 +273,20 @@ def _has_pending_tool_calls(state: DebateGraphState) -> bool:
     return False
 
 
+def _is_fact_check_enabled(state: DebateGraphState) -> bool:
+    reasoning_config = state.get("reasoning_config", {})
+    if not isinstance(reasoning_config, dict):
+        return True
+    return bool(reasoning_config.get("fact_check_enabled", True))
+
+
 def _get_next_speaker_route(state: DebateGraphState) -> str:
     """Determine the next route after a debater finishes (no tool calls pending)."""
     participants = state.get("participants", ["proposer", "opposer"])
     current_idx = state.get("current_speaker_index", 0)
     if current_idx + 1 < len(participants):
         return "next_speaker"
-    return "judge"
+    return "fact_check" if _is_fact_check_enabled(state) else "judge"
 
 
 def _get_group_discussion_rounds(state: DebateGraphState) -> int:
@@ -404,6 +419,7 @@ def build_debate_graph() -> StateGraph:
     graph.add_node("speaker", node_debater_speak)
     graph.add_node("tool_executor", node_tool_executor)
     graph.add_node("group_discussion", node_group_discussion)
+    graph.add_node("fact_check", node_fact_check)
     graph.add_node("judge", node_judge_score)
     graph.add_node("advance_turn", node_advance_turn)
     graph.add_node("consensus", node_consensus)
@@ -423,6 +439,7 @@ def build_debate_graph() -> StateGraph:
             # raises KeyError when routing.
             "speaker": "speaker",
             "tool_executor": "tool_executor",
+            "fact_check": "fact_check",
             "judge": "judge",
             "advance_turn": "advance_turn",
         },
@@ -437,13 +454,17 @@ def build_debate_graph() -> StateGraph:
         {
             "tools": "tool_executor",
             "next_speaker": "set_speaker",
+            "fact_check": "fact_check",
             "judge": "judge",
         }
     )
-    
+
     # Tools feed back into the speaker to resolve the thought process
     graph.add_edge("tool_executor", "speaker")
-    
+
+    # Fact check runs once per turn, after all speeches and before scoring.
+    graph.add_edge("fact_check", "judge")
+
     # Judge flows to advance turn
     graph.add_edge("judge", "advance_turn")
 

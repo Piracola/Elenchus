@@ -46,6 +46,7 @@ async def test_create_session():
     assert result["reasoning_config"] == {
         "consensus_enabled": True,
         "group_discussion_rounds": 1,
+        "fact_check_enabled": True,
     }
     assert result["speech_config"] == {
         "proposer_max_chars": 0,
@@ -333,6 +334,7 @@ async def test_create_session_persists_reasoning_config():
     assert created["reasoning_config"] == {
         "consensus_enabled": False,
         "group_discussion_rounds": 2,
+        "fact_check_enabled": True,
     }
 
 
@@ -399,6 +401,7 @@ async def test_create_session_updates_recent_debate_config():
     assert recent["reasoning_config"] == {
         "consensus_enabled": False,
         "group_discussion_rounds": 2,
+        "fact_check_enabled": True,
     }
     assert recent["speech_config"]["proposer_max_chars"] == 1200
 
@@ -425,6 +428,7 @@ async def test_create_sophistry_session_enforces_mode_specific_defaults():
     assert created["reasoning_config"] == {
         "consensus_enabled": False,
         "group_discussion_rounds": 0,
+        "fact_check_enabled": False,
     }
 
 

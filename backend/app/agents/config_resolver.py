@@ -17,7 +17,7 @@ AGENT_CONFIG_FALLBACKS: dict[str, list[str]] = {
     "opposer": ["opposer", "debater"],
     # Judge and direct derivatives
     "judge": ["judge"],
-    "fact_checker": ["fact_checker"],
+    "fact_checker": ["fact_checker", "judge"],
     # Consensus and sophistry observers fall back to judge.
     "consensus": ["consensus", "judge"],
     "group_discussion": ["group_discussion", "judge"],

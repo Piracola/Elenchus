@@ -50,6 +50,9 @@ def effective_configs_for_mode(
     return {
         "consensus_enabled": False,
         "group_discussion_rounds": 0,
+        # Sophistry mode disables retrieval at every layer, so there is
+        # nothing for a fact checker to verify against.
+        "fact_check_enabled": False,
     }
 
 
