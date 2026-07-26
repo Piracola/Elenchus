@@ -1,6 +1,8 @@
 # 004 - 按钮按压反馈(whileTap)
 
-- **Status**: TODO
+> **状态：已完成（2026-07-26 核对）** — `whileTap` 已覆盖 17 个组件文件。
+
+- **Status**: 已完成
 - **Commit**: 4664896
 - **Severity**: MEDIUM
 - **Category**: Physicality & origin

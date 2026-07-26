@@ -1,6 +1,9 @@
 # 002 - ThinkingBlock 展开/折叠动画
 
-- **Status**: TODO
+> **状态：已完成（2026-07-26 核对）** — `messageRow/ThinkingBlock.tsx` 已使用
+> `AnimatePresence` + `motion.div` 实现展开/折叠。
+
+- **Status**: 已完成
 - **Commit**: 4664896
 - **Severity**: HIGH
 - **Category**: Missed opportunities / Interruptibility

@@ -91,25 +91,37 @@ export function normalizeDialogueEntryMetadata(
 }
 
 function sameDialogueContent(a: DialogueEntry, b: DialogueEntry): boolean {
+    // Cheap scalar comparisons first: the expensive JSON serialization below
+    // only runs for entries that already match on every identifying field.
+    if (
+        a.role !== b.role
+        || (a.turn ?? -1) !== (b.turn ?? -1)
+        || (a.target_role ?? '') !== (b.target_role ?? '')
+        || (a.discussion_kind ?? '') !== (b.discussion_kind ?? '')
+        || a.agent_name !== b.agent_name
+        || a.content !== b.content
+    ) {
+        return false;
+    }
+    if (!sameCitations(a.citations, b.citations)) {
+        return false;
+    }
     const aScores = JSON.stringify(a.scores ?? null);
     const bScores = JSON.stringify(b.scores ?? null);
+    if (aScores !== bScores) {
+        return false;
+    }
     const aMetadata = JSON.stringify(normalizeDialogueEntryMetadata(a.metadata) ?? null);
     const bMetadata = JSON.stringify(normalizeDialogueEntryMetadata(b.metadata) ?? null);
-    return (
-        a.role === b.role &&
-        (a.turn ?? -1) === (b.turn ?? -1) &&
-        (a.target_role ?? '') === (b.target_role ?? '') &&
-        (a.discussion_kind ?? '') === (b.discussion_kind ?? '') &&
-        a.agent_name === b.agent_name &&
-        a.content === b.content &&
-        sameCitations(a.citations, b.citations) &&
-        aScores === bScores &&
-        aMetadata === bMetadata
-    );
+    return aMetadata === bMetadata;
 }
 
 export function appendDialogueWithDedupe(history: DialogueEntry[], entry: DialogueEntry): DialogueEntry[] {
     // 对所有消息进行全局去重，防止因事件重发、状态恢复等原因导致的重复
+    const entryEventId = entry.event_id;
+    if (entryEventId && history.some((item) => item.event_id === entryEventId)) {
+        return history;
+    }
     const isDuplicate = history.some((item) => sameDialogueContent(item, entry));
     if (isDuplicate) {
         return history;

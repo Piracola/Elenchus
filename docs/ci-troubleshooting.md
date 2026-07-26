@@ -7,7 +7,9 @@
 - `Frontend quality` / `Frontend quality gate`
   说明问题大概率在 `frontend/`，优先看 `npm ci`、`npm run lint`、`npm run test:run`、`npm run build`
 - `Backend tests` / `Backend pytest gate`
-  说明问题大概率在 `backend/` 的 `uv sync --frozen --group dev` 或 `pytest`
+  说明问题大概率在 `backend/` 的 `uv sync --frozen --group dev`、`ruff check`、`mypy app` 或 `pytest`
+- `Video renderer tests`
+  说明问题在 `video/` 的 `npm ci`、`npm run typecheck` 或 `npm test`（该 job 不跑真实渲染与配音）
 - `Build Windows Portable EXE`
   说明前后端基础质量门已经过了，优先看 `uv sync --project backend --frozen --no-default-groups --group build`、smoke test、PyInstaller 打包
 
@@ -27,6 +29,8 @@ npm --prefix frontend run build
 ```bash
 uv lock --check --directory backend
 uv sync --project backend --frozen --group dev
+npm run lint:backend
+npm run typecheck:backend
 npm run test:backend
 ```
 
@@ -70,9 +74,8 @@ uv sync --project backend --frozen --group dev
 
 优先检查：
 
-- [backend/pyproject.toml](/I:/JBCode/AI%20Tools/Elenchus/backend/pyproject.toml)
-- [backend/uv.lock](/I:/JBCode/AI%20Tools/Elenchus/backend/uv.lock)
-- [backend/.python-version](/I:/JBCode/AI%20Tools/Elenchus/backend/.python-version)
+- [backend/pyproject.toml](../backend/pyproject.toml)
+- [backend/uv.lock](../backend/uv.lock)
 
 ### GitHub Actions 里出现 `No GitHub Actions cache found for key`
 
@@ -94,9 +97,9 @@ uv sync --project backend --frozen --group dev
 优先检查：
 
 - `.github/workflows/build-portable-release.yml`
-- [build.ps1](/I:/JBCode/AI%20Tools/Elenchus/build.ps1)
-- [scripts/build_pyinstaller_release.py](/I:/JBCode/AI%20Tools/Elenchus/scripts/build_pyinstaller_release.py)
-- [scripts/smoke_test_release_backend.py](/I:/JBCode/AI%20Tools/Elenchus/scripts/smoke_test_release_backend.py)
+- [build.ps1](../build.ps1)
+- [scripts/build_pyinstaller_release.py](../scripts/build_pyinstaller_release.py)
+- [scripts/smoke_test_release_backend.py](../scripts/smoke_test_release_backend.py)
 
 ## 4. 当日志里出现这些信号时，先看哪里
 

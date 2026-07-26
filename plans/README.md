@@ -2,15 +2,25 @@
 
 基于 `find-animation-opportunities` 审查产出,经 `improve-animations` 流程沉淀。提交基线:`4664896`。
 
+> 状态已按代码实际情况核对（2026-07-26）。这些计划的主体在提交 `564acad`
+> 「完善聊天界面动效并尊重 reduced-motion 偏好」中落地，此前表格仍标 TODO 属文档滞后。
+
 ## 计划总览
 
 | # | 标题 | 严重度 | 状态 |
 | --- | --- | --- | --- |
-| 001 | 锚定弹层与下拉菜单的入场/出场动画 | HIGH | TODO |
-| 002 | ThinkingBlock 展开/折叠动画 | HIGH | TODO |
-| 003 | 待上传参考资料列表的增删动画 | MEDIUM | TODO |
-| 004 | 按钮按压反馈(whileTap) | MEDIUM | TODO |
-| 005 | reduced-motion 尊重系统偏好 | MEDIUM | TODO |
+| 001 | 锚定弹层与下拉菜单的入场/出场动画 | HIGH | 部分完成 |
+| 002 | ThinkingBlock 展开/折叠动画 | HIGH | 已完成 |
+| 003 | 待上传参考资料列表的增删动画 | MEDIUM | 已完成 |
+| 004 | 按钮按压反馈(whileTap) | MEDIUM | 已完成 |
+| 005 | reduced-motion 尊重系统偏好 | MEDIUM | 已完成 |
+
+## 剩余工作
+
+只有 001 还有尾巴：导出菜单（`ChatHeaderOverlay.tsx`）、辩手设置弹层
+（`DebaterSettingsModal.tsx`）与首页上传弹层（`HomeComposerCard.tsx`）都已接入
+`AnimatePresence`，但 `chat/referenceLibrary/ReferenceLibraryPopover.tsx` 目前
+只有按钮按压反馈，仍缺入场/出场过渡。
 
 ## 推荐执行顺序
 

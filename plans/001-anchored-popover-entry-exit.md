@@ -1,6 +1,9 @@
 # 001 - 锚定弹层与下拉菜单的入场/出场动画
 
-- **Status**: TODO
+> **状态：部分完成（2026-07-26 核对）** — 导出菜单、辩手设置弹层与首页上传弹层已接入
+> `AnimatePresence`；`ReferenceLibraryPopover.tsx` 仍缺入场/出场过渡。
+
+- **Status**: 部分完成（见顶部说明）
 - **Commit**: 4664896
 - **Severity**: HIGH
 - **Category**: Physicality & origin / Missed opportunities

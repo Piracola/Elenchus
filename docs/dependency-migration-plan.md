@@ -1,5 +1,15 @@
 # Python 依赖迁移计划：`pyproject.toml + uv.lock`
 
+> **状态：已完成（2026-07-26 核对）。本文保留为迁移记录，不再是待办事项。**
+>
+> 迁移由提交 `888621b`、`e04f78f` 落地：`backend/pyproject.toml` 与
+> `backend/uv.lock` 已是唯一依赖真相源，CI 全部使用 `uv sync --frozen`，
+> 主链路不再存在 `requirements*.txt`。
+>
+> 本计划第 8 节列出的 `ruff` / `mypy` 当时只装了依赖而没有配置与执行路径；
+> 该缺口已在后续补上（见 `backend/pyproject.toml` 的 `[tool.ruff]`、
+> `[tool.mypy]` 与 `.github/workflows/ci.yml` 的 backend job）。
+
 ## 1. 目标
 
 把后端 Python 依赖管理从手工维护的 `requirements.txt / requirements-dev.txt + venv + pip install -r ...`，迁移为：

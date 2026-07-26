@@ -1,6 +1,9 @@
 # 005 - reduced-motion 尊重系统偏好
 
-- **Status**: TODO
+> **状态：已完成（2026-07-26 核对）** — `App.tsx` 的 `MotionConfig` 已改为
+> `reducedMotion={previewSafeMotion ? 'always' : 'user'}`，尊重系统偏好。
+
+- **Status**: 已完成
 - **Commit**: 4664896
 - **Severity**: MEDIUM
 - **Category**: Accessibility

@@ -9,7 +9,6 @@ import type {
 import {
     appendDialogueWithDedupe,
     appendModeArtifact,
-    coerceSearchResults,
     getPayloadCitations,
     getPayloadNumber,
     getPayloadString,
@@ -19,6 +18,11 @@ import {
     sanitizeRuntimeEvent,
     shouldRecordRuntimeEvent,
 } from '../utils/agent/debateStoreHelpers';
+import type { RunStatus } from '../types';
+import {
+    runStatusFallbackMessage,
+    runStatusToProgress,
+} from '../utils/runtime/runStatusPresentation';
 import type { DebateState } from './debateStore';
 
 function createRecordedRuntimePatch(
@@ -121,26 +125,16 @@ function handleRunStatusChanged(
         };
     }
 
-    if (nextStatus === 'completed') {
-        patch.isDebating = false;
-        patch.phase = 'complete';
-        patch.currentStatus = currentStatus || '辩论已完成';
-    } else if (nextStatus === 'failed') {
-        patch.isDebating = false;
-        patch.phase = 'error';
-        patch.currentStatus = currentStatus || '运行中断，请查看最新消息';
-    } else if (nextStatus === 'stalled') {
-        patch.isDebating = false;
-        patch.phase = 'idle';
-        patch.currentStatus = currentStatus || '历史进度已恢复，可以继续辩论';
-    } else if (nextStatus === 'cancelled') {
-        patch.isDebating = false;
-        patch.phase = 'idle';
-        patch.currentStatus = currentStatus || '辩论已停止';
-    } else if (nextStatus === 'stopping') {
-        patch.isDebating = false;
-        patch.phase = 'processing';
-        patch.currentStatus = currentStatus || '正在停止辩论...';
+    // Terminal and winding-down statuses share their presentation rules with
+    // the run-summary path so both cannot disagree.
+    if (nextStatus && nextStatus !== 'running') {
+        const progress = runStatusToProgress(nextStatus as RunStatus);
+        const fallback = runStatusFallbackMessage(nextStatus as RunStatus);
+        if (fallback || progress.phase !== 'initializing') {
+            patch.isDebating = progress.isDebating;
+            patch.phase = progress.phase;
+            patch.currentStatus = currentStatus || fallback;
+        }
     }
 
     if (state.currentSession && nextStatus) {
@@ -337,40 +331,6 @@ function handleSophistryReport(
             : (state.currentSession.final_mode_report ?? null),
     };
     return patch;
-}
-
-function handleFactCheckStart(state: DebateState): Partial<DebateState> {
-    if (!shouldApplyLiveProgress(state)) {
-        return {};
-    }
-    return {
-        isDebating: true,
-        phase: 'fact_checking',
-        currentStatus: '正在核查事实...',
-        currentNode: 'tool_executor',
-    };
-}
-
-function handleFactCheckResult(
-    _state: DebateState,
-    payload: Record<string, unknown>,
-): Partial<DebateState> {
-    return {
-        lastSearchResults: coerceSearchResults(payload),
-        searchResultCount: getPayloadNumber(payload, 'count') ?? 0,
-    };
-}
-
-function handleJudgeStart(state: DebateState): Partial<DebateState> {
-    if (!shouldApplyLiveProgress(state)) {
-        return {};
-    }
-    return {
-        isDebating: true,
-        phase: 'judging',
-        currentStatus: '裁判评估中...',
-        currentNode: 'judge',
-    };
 }
 
 function handleJudgeScore(
@@ -602,9 +562,6 @@ const eventHandlers: Record<string, EventHandler> = {
     speech_end: handleSpeechEnd,
     sophistry_round_report: handleSophistryReport,
     sophistry_final_report: handleSophistryReport,
-    fact_check_start: handleFactCheckStart,
-    fact_check_result: handleFactCheckResult,
-    judge_start: handleJudgeStart,
     judge_score: handleJudgeScore,
     turn_complete: handleTurnComplete,
     debate_complete: handleDebateComplete,
@@ -634,7 +591,13 @@ export function applyRuntimeEventPatch(
         return {};
     }
 
-    if (state.runtimeEvents.some((item) => item.event_id === event.event_id)) {
+    // Only events that actually enter the ring buffer need the duplicate scan.
+    // Streaming tokens are never recorded, so scanning for them once per token
+    // was an O(n) walk over up to MAX_RUNTIME_EVENTS entries per keystroke.
+    if (
+        shouldRecordRuntimeEvent(event)
+        && state.runtimeEvents.some((item) => item.event_id === event.event_id)
+    ) {
         return {};
     }
 

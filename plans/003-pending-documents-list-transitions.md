@@ -1,6 +1,9 @@
 # 003 - 待上传参考资料列表的增删动画
 
-- **Status**: TODO
+> **状态：已完成（2026-07-26 核对）** — `HomeComposerCard.tsx` 的待上传列表已用
+> `AnimatePresence initial={false}` 实现增删过渡。
+
+- **Status**: 已完成
 - **Commit**: 4664896
 - **Severity**: MEDIUM
 - **Category**: Missed opportunities / Interruptibility

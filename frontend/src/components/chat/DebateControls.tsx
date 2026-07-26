@@ -2,7 +2,7 @@
  * DebateControls - compact input bar to create, start, and stop debates.
  */
 
-import { useCallback, useState, useEffect, useRef } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { toast } from '../../utils/chat/toast';
@@ -10,6 +10,7 @@ import { useAgentConfigs } from '../../hooks/useAgentConfigs';
 import { isRunStatusInProgress, useConnectionViewState, useSessionViewState } from '../../hooks/useDebateViewState';
 import { useDebateWebSocket } from '../../hooks/useDebateWebSocket';
 import { useSessionCreate } from '../../hooks/useSessionCreate';
+import { useRecentDebateConfig } from '../../hooks/useRecentDebateConfig';
 import { api } from '../../api/client';
 import {
     DEFAULT_MAX_TURNS,
@@ -374,14 +375,12 @@ function ActiveSessionControls() {
 }
 
 function SessionCreator() {
-    const recentConfigAppliedRef = useRef(false);
     const [topic, setTopic] = useState('');
     const [maxTurnsInput, setMaxTurnsInput] = useState('');
     const [groupDiscussionRoundsInput, setGroupDiscussionRoundsInput] = useState('');
     const [proposerSpeechLimitInput, setProposerSpeechLimitInput] = useState('');
     const [opposerSpeechLimitInput, setOpposerSpeechLimitInput] = useState('');
     const [groupDiscussionSpeechLimitInput, setGroupDiscussionSpeechLimitInput] = useState('');
-    const [recentConfigSnapshot, setRecentConfigSnapshot] = useState<RecentDebateConfig | null>(null);
     const { isCreating, createSession } = useSessionCreate();
     const {
         showAdvanced,
@@ -402,34 +401,16 @@ function SessionCreator() {
     const opposerSpeechLimit = parseSpeechMaxCharsInput(opposerSpeechLimitInput);
     const groupDiscussionSpeechLimit = parseSpeechMaxCharsInput(groupDiscussionSpeechLimitInput);
 
-    useEffect(() => {
-        let cancelled = false;
-        void api.sessions.recentConfig().then((recentConfig) => {
-            if (cancelled || !recentConfig) return;
-            setRecentConfigSnapshot(recentConfig);
-        }).catch((error) => {
-            console.warn('Failed to load recent debate config:', error);
-            recentConfigAppliedRef.current = true;
-        });
+    const applyRecentConfig = useCallback((config: RecentDebateConfig) => {
+        setMaxTurnsInput(String(config.max_turns));
+        setGroupDiscussionRoundsInput(String(config.reasoning_config.group_discussion_rounds));
+        setProposerSpeechLimitInput(String(config.speech_config.proposer_max_chars));
+        setOpposerSpeechLimitInput(String(config.speech_config.opposer_max_chars));
+        setGroupDiscussionSpeechLimitInput(String(config.speech_config.group_discussion_max_chars));
+        applyAgentConfigSnapshot(config.agent_configs);
+    }, [applyAgentConfigSnapshot]);
 
-        return () => {
-            cancelled = true;
-        };
-    }, []);
-
-    useEffect(() => {
-        if (!recentConfigSnapshot || recentConfigAppliedRef.current) return;
-        const hasAgentConfigs = Object.keys(recentConfigSnapshot.agent_configs ?? {}).length > 0;
-        if (hasAgentConfigs && savedConfigs.length === 0) return;
-
-        setMaxTurnsInput(String(recentConfigSnapshot.max_turns));
-        setGroupDiscussionRoundsInput(String(recentConfigSnapshot.reasoning_config.group_discussion_rounds));
-        setProposerSpeechLimitInput(String(recentConfigSnapshot.speech_config.proposer_max_chars));
-        setOpposerSpeechLimitInput(String(recentConfigSnapshot.speech_config.opposer_max_chars));
-        setGroupDiscussionSpeechLimitInput(String(recentConfigSnapshot.speech_config.group_discussion_max_chars));
-        applyAgentConfigSnapshot(recentConfigSnapshot.agent_configs);
-        recentConfigAppliedRef.current = true;
-    }, [applyAgentConfigSnapshot, recentConfigSnapshot, savedConfigs.length]);
+    useRecentDebateConfig({ savedConfigCount: savedConfigs.length, apply: applyRecentConfig });
 
     const handleStart = async () => {
         if (!topic.trim()) return;

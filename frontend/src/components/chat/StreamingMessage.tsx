@@ -18,14 +18,27 @@ import { ThinkingBlock } from './messageRow/ThinkingBlock';
 import { splitLeadingThinkingContent } from '../../utils/chat/thinkingContent';
 import { getMessageFontTokens } from '../../config/display';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useDebateStore } from '../../stores/debateStore';
+import { sanitizeIncomingContent } from '../../utils/agent/debateStoreHelpers';
 
 type StreamingMessageProps = {
     entry: DialogueEntry;
     content: string;
     status: string;
+    /**
+     * When true the live text is read from the store here instead of being
+     * threaded through the transcript view model, so an incoming token
+     * re-renders only this component.
+     */
+    subscribeToStreamingContent?: boolean;
 };
 
-export default function StreamingMessage({ entry, content, status }: StreamingMessageProps) {
+export default function StreamingMessage({
+    entry,
+    content: contentProp,
+    status,
+    subscribeToStreamingContent = false,
+}: StreamingMessageProps) {
     const reducedMotion = useReducedMotion();
     const rafRef = useRef<number | null>(null);
     const isStreamingRef = useRef(false);
@@ -35,6 +48,11 @@ export default function StreamingMessage({ entry, content, status }: StreamingMe
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const messageFontSize = useSettingsStore((state) => state.displaySettings.messageFontSize ?? 15);
     const messageFontSizes = useMemo(() => getMessageFontTokens(messageFontSize).message, [messageFontSize]);
+    const storeStreamingContent = useDebateStore((state) => state.streamingContent);
+    const content = useMemo(
+        () => (subscribeToStreamingContent ? sanitizeIncomingContent(storeStreamingContent) : contentProp),
+        [subscribeToStreamingContent, storeStreamingContent, contentProp],
+    );
 
     // Use a ref to track the latest content without triggering re-render
     const latestContentRef = useRef('');

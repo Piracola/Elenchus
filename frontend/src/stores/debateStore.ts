@@ -8,20 +8,20 @@ import type {
     DialogueEntry,
     Session,
     SessionListItem,
-    TurnScore,
-    SearchResult,
     DebatePhase,
     RuntimeEvent,
     RunSummary,
     TokenUsageSummary,
 } from '../types';
 import {
-    appendDialogueWithDedupe,
     getSessionRuntimeFallback,
-    sanitizeIncomingContent,
     sanitizeSession,
 } from '../utils/agent/debateStoreHelpers';
 import { upsertSessionListItem } from '../utils/session/sessionList';
+import {
+    runStatusFallbackMessage,
+    runStatusToProgress,
+} from '../utils/runtime/runStatusPresentation';
 import {
     applyRuntimeEventPatch,
 } from './debateStore.runtime';
@@ -62,11 +62,6 @@ export interface DebateStreamingSlice {
     streamingEntry: DialogueEntry | null;
 }
 
-export interface DebateSearchSlice {
-    lastSearchResults: SearchResult[];
-    searchResultCount: number;
-}
-
 export interface DebateActionSlice {
     setSessions: (
         sessions: SessionListItem[] | ((current: SessionListItem[]) => SessionListItem[])
@@ -82,15 +77,6 @@ export interface DebateActionSlice {
     setAllAgentMessagesCollapsed: (sessionId: string, collapseKeys: string[], collapsed: boolean) => void;
     clearSessionCollapsedAgentMessages: (sessionId: string) => void;
     updateCurrentSessionAgentConfigs: (agentConfigs: Session['agent_configs']) => void;
-    appendDialogueEntry: (entry: DialogueEntry) => void;
-    startStreaming: (role: string) => void;
-    appendStreamToken: (token: string) => void;
-    endStreaming: (role: string, content: string, citations: string[], agentName?: string) => void;
-    updateCurrentScores: (role: string, scores: TurnScore) => void;
-    updateCumulativeScores: (scores: Record<string, Record<string, number[]>>) => void;
-    advanceTurn: (turn: number) => void;
-    setSearchResults: (results: SearchResult[], count: number) => void;
-    completeDebate: (finalScores: Record<string, Record<string, number[]>>, totalTurns: number) => void;
     reset: () => void;
 }
 
@@ -99,7 +85,6 @@ export interface DebateState
     DebateRuntimeSlice,
     DebateConnectionSlice,
     DebateStreamingSlice,
-    DebateSearchSlice,
     DebateActionSlice {}
 
 const initialSessionState: DebateSessionSlice = {
@@ -133,17 +118,11 @@ const initialStreamingState: DebateStreamingSlice = {
     streamingEntry: null,
 };
 
-const initialSearchState: DebateSearchSlice = {
-    lastSearchResults: [],
-    searchResultCount: 0,
-};
-
 const initialState = {
     ...initialSessionState,
     ...initialRuntimeState,
     ...initialConnectionState,
     ...initialStreamingState,
-    ...initialSearchState,
 };
 
 const EMPTY_COLLAPSED_AGENT_MESSAGES: Record<string, boolean> = {};
@@ -176,73 +155,21 @@ const storeInitialState = createInitialState();
 
 function deriveConnectionStateFromRun(run: RunSummary | null): Pick<DebateState, 'isDebating' | 'phase' | 'currentStatus' | 'currentNode'> {
     const status = run?.status ?? null;
-    if (!status) {
-        return {
-            isDebating: false,
-            phase: 'idle',
-            currentStatus: '',
-            currentNode: '',
-        };
-    }
-
-    if (status === 'completed') {
-        return {
-            isDebating: false,
-            phase: 'complete',
-            currentStatus: run?.last_status_message || '辩论已完成',
-            currentNode: '',
-        };
-    }
-
-    if (status === 'failed') {
-        return {
-            isDebating: false,
-            phase: 'error',
-            currentStatus: run?.last_error_message || run?.last_status_message || '运行中断',
-            currentNode: '',
-        };
-    }
-
-    if (status === 'stalled') {
-        return {
-            isDebating: false,
-            phase: 'idle',
-            currentStatus: run?.last_error_message || run?.last_status_message || '',
-            currentNode: '',
-        };
-    }
-
-    if (status === 'cancelled') {
-        return {
-            isDebating: false,
-            phase: 'idle',
-            currentStatus: run?.last_status_message || '',
-            currentNode: '',
-        };
-    }
-
+    const progress = runStatusToProgress(status);
+    const message = status === 'failed'
+        ? (run?.last_error_message || run?.last_status_message)
+        : status === 'stalled'
+            ? (run?.last_error_message || run?.last_status_message)
+            : run?.last_status_message;
     return {
-        isDebating: true,
-        phase: status === 'stopping'
-            ? 'processing'
-            : status === 'running'
-                ? 'processing'
-                : 'initializing',
-        currentStatus: run?.last_status_message || '',
+        ...progress,
+        currentStatus: message || runStatusFallbackMessage(status),
         currentNode: '',
     };
 }
 
 function resetStoreState() {
     return createInitialState();
-}
-
-function finalizePatch(_state: DebateState, patch: Partial<DebateState>): Partial<DebateState> {
-    return patch;
-}
-
-function noMutationResult(): Partial<DebateState> {
-    return {};
 }
 
 function withSyncedSessionList(
@@ -343,113 +270,26 @@ export const useDebateStore = create<DebateState>((set) => ({
                 : {}
         )),
 
-    appendDialogueEntry: (entry) =>
-        set((state) => {
-            if (!state.currentSession) {
-                return {};
-            }
-            return {
-                currentSession: {
-                    ...state.currentSession,
-                    dialogue_history: appendDialogueWithDedupe(state.currentSession.dialogue_history, entry),
-                },
-            };
-        }),
-
-    startStreaming: (role) => set({ streamingRole: role, streamingContent: '', streamingEntry: null }),
-    appendStreamToken: (token) =>
-        set((state) => ({ streamingContent: state.streamingContent + token })),
-    endStreaming: (role, content, citations, agentName) =>
-        set((state) => {
-            if (!state.currentSession) {
-                return { streamingRole: '', streamingContent: '', streamingEntry: null };
-            }
-
-            const entry: DialogueEntry = {
-                role,
-                agent_name: agentName || role,
-                content: sanitizeIncomingContent(content),
-                citations,
-                timestamp: new Date().toISOString(),
-            };
-            return {
-                streamingRole: '',
-                streamingContent: '',
-                streamingEntry: null,
-                currentSession: {
-                    ...state.currentSession,
-                    dialogue_history: appendDialogueWithDedupe(state.currentSession.dialogue_history, entry),
-                },
-            };
-        }),
-
-    updateCurrentScores: (role, scores) =>
-        set((state) => ({
-            currentSession: state.currentSession
-                ? {
-                    ...state.currentSession,
-                    current_scores: {
-                        ...state.currentSession.current_scores,
-                        [role]: scores,
-                    },
-                }
-                : null,
-        })),
-    updateCumulativeScores: (scores) =>
-        set((state) =>
-            withSyncedSessionList(state, {
-                currentSession: state.currentSession
-                    ? { ...state.currentSession, cumulative_scores: scores }
-                    : null,
-            }),
-        ),
-    advanceTurn: (turn) =>
-        set((state) =>
-            withSyncedSessionList(state, {
-                currentSession: state.currentSession
-                    ? { ...state.currentSession, current_turn: turn }
-                    : null,
-            }),
-        ),
-
-    setSearchResults: (results, count) =>
-        set({ lastSearchResults: results, searchResultCount: count }),
-
-    completeDebate: (finalScores, totalTurns) =>
-        set((state) => ({
-            isDebating: false,
-            phase: 'complete',
-            currentStatus: '辩论已完成',
-            currentSession: state.currentSession
-                ? {
-                    ...state.currentSession,
-                    status: 'completed',
-                    current_turn: totalTurns,
-                    cumulative_scores: finalScores,
-                }
-                : null,
-        })),
-
     toggleAgentMessageCollapsed: (sessionId, collapseKey) =>
         set((state) => {
             if (!sessionId || !collapseKey) {
-                return noMutationResult();
+                return {};
             }
-            return finalizePatch(state, patchCollapsedKey(state, sessionId, collapseKey));
+            return patchCollapsedKey(state, sessionId, collapseKey);
         }),
     setAllAgentMessagesCollapsed: (sessionId, collapseKeys, collapsed) =>
         set((state) => {
             if (!sessionId || collapseKeys.length === 0) {
-                return noMutationResult();
+                return {};
             }
-            return finalizePatch(state, patchCollapsedKeys(state, sessionId, collapseKeys, collapsed));
+            return patchCollapsedKeys(state, sessionId, collapseKeys, collapsed);
         }),
     clearSessionCollapsedAgentMessages: (sessionId) =>
         set((state) => {
             if (!sessionId) {
-                return noMutationResult();
+                return {};
             }
-            return finalizePatch(state, patchClearSessionCollapsedKeys(state, sessionId));
+            return patchClearSessionCollapsedKeys(state, sessionId);
         }),
 
     reset: () => set(resetStoreState()),

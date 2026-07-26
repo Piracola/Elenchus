@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -77,7 +78,9 @@ type MarkdownRendererProps = {
     text: string;
 };
 
-export function MarkdownRenderer({ text }: MarkdownRendererProps) {
+// Memoized: streaming re-renders this on every frame, and re-parsing the
+// markdown each time defeats the caller's rAF throttling.
+export const MarkdownRenderer = memo(function MarkdownRenderer({ text }: MarkdownRendererProps) {
     return (
         <ReactMarkdown
             remarkPlugins={CHAT_MARKDOWN_REMARK_PLUGINS}
@@ -90,6 +93,6 @@ export function MarkdownRenderer({ text }: MarkdownRendererProps) {
             {text}
         </ReactMarkdown>
     );
-}
+});
 
 export const MessageMarkdown = MarkdownRenderer;

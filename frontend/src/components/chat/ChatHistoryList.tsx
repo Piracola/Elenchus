@@ -150,6 +150,9 @@ export default function ChatHistoryList({
                     entry={liveTranscript.speech.entry}
                     content={liveTranscript.speech.content}
                     status={liveTranscript.speech.status}
+                    // Live text is subscribed to inside the component so each
+                    // token re-renders only this node, not the transcript.
+                    subscribeToStreamingContent={liveTranscript.speech.source === 'stream'}
                 />
             )}
 

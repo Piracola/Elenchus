@@ -30,12 +30,20 @@ uv sync --frozen --group dev
 uv run --frozen --no-dev python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload --no-access-log
 uv run --frozen --group dev pytest
 uv run --frozen --group dev pytest tests/test_graph.py
+uv run --frozen --group dev ruff check .
+uv run --frozen --group dev mypy app
 ```
+
+`ruff` 与 `mypy` 是 CI 的强制门禁，配置在 `backend/pyproject.toml`。
+mypy 对少数存量模块登记了豁免（第三方签名差异与 FastAPI 边界），
+豁免表之外的新代码一旦引入类型错误就会失败。
 
 如果在仓库根目录，也可以运行：
 
 ```bash
 npm run test:backend
+npm run lint:backend
+npm run typecheck:backend
 ```
 
 ### 前端
@@ -45,9 +53,23 @@ cd frontend
 npm run dev
 npm run lint
 npm run test:run
+npm run test:coverage
 npm run build
 npm run preview
 ```
+
+### 视频生成器（附属工具）
+
+```bash
+cd video
+npm ci
+npm run typecheck
+npm test          # 单测，CI 会跑
+npm run ui        # 本地控制台，配音与渲染在这里操作
+```
+
+渲染与配音需要 FFmpeg、字体、Chrome 与 Edge TTS 网络访问，因此只在本地手动执行；
+CI 只跑类型检查与单测。
 
 ## 3. 本地联调
 

@@ -26,7 +26,6 @@ type LiveTranscriptArgs = {
     dialogueHistory: DialogueEntry[];
     runtimeEvents: RuntimeEvent[];
     streamingEntry: DialogueEntry | null;
-    streamingContent: string;
     phase: DebatePhase;
     currentNode: string;
     currentStatus: string;
@@ -36,10 +35,6 @@ type LiveTranscriptArgs = {
 const SPEECH_STATUS = '正在发言...';
 const GROUP_DISCUSSION_STATUS = '组内讨论正在生成本轮赛前简报...';
 const RUNTIME_NODE_PREFIX = 'runtime.node.';
-
-function sanitizeStreamContent(content: string): string {
-    return sanitizeIncomingContent(content);
-}
 
 function isSpeech(entry: DialogueEntry | null | undefined, participants?: string[]): boolean {
     if (!entry) return false;
@@ -153,7 +148,10 @@ function buildLiveSpeech(args: LiveTranscriptArgs): LiveSpeechViewModel | null {
                     ...streamingEntry,
                     content: '',
                 },
-                content: sanitizeStreamContent(args.streamingContent),
+                // Streaming text is read straight from the store by the
+                // renderer; keeping it out of the view model means a token does
+                // not invalidate the whole transcript memo.
+                content: '',
                 status: SPEECH_STATUS,
                 source: 'stream',
             };

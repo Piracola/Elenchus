@@ -26,7 +26,6 @@ export function useTranscriptPanelState() {
         participants,
         runtimeEvents,
         streamingEntry,
-        streamingContent,
         phase,
         currentStatus,
         currentNode,
@@ -50,7 +49,6 @@ export function useTranscriptPanelState() {
             dialogueHistory,
             runtimeEvents,
             streamingEntry,
-            streamingContent,
             phase,
             currentNode,
             currentStatus,
@@ -77,7 +75,6 @@ export function useTranscriptPanelState() {
         participants,
         phase,
         runtimeEvents,
-        streamingContent,
         streamingEntry,
     ]);
 
