@@ -162,8 +162,6 @@ function MessageRow({
     if (!agentEntry && !judgeEntry) return null;
 
     const judgeOnly = Boolean(judgeEntry && !agentEntry);
-    // Only a speech-plus-verdict row claims the wider two-column span; a lone
-    // card keeps the plain reading measure.
 
     // 正方/反方消息卡片（统一头部行样式）
     const agentCard = agentEntry ? (

@@ -29,16 +29,12 @@
   --tracking-normal: 0;
   --tracking-wide: 0.04em;
 
-  /* Comfortable CJK measure is 35–45 characters; 1em ≈ 1 CJK glyph.
-     ChatPanel overrides --measure-reading per the messageWidth setting, so a
-     wider page buys a longer line only within the readable band — the extra
-     room goes to the verdict column beside the speech instead. */
-  --measure-reading: 42em;
-  --measure-narrow: 32em;
-  /* Transcript columns. The verdict is scanned rather than read in sequence, so
-     it takes a share of the row that shrinks as a proportion on wide pages —
-     the speech absorbs the extra width. Below --transcript-speech-min the two
-     columns stop fitting and the verdict wraps under the speech. */
+  /* Transcript columns. Line length is the user's call through the messageWidth
+     display setting; these only split the row between the two kinds of content.
+     The verdict is scanned rather than read in sequence, so it takes a share
+     that shrinks as a proportion on wide pages — the speech absorbs the extra
+     width. Below --transcript-speech-min the two columns stop fitting and the
+     verdict wraps under the speech. */
   --transcript-verdict-column: clamp(300px, 32%, 520px);
   --transcript-speech-min: 380px;
 
@@ -355,26 +351,6 @@ select:focus-visible {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border-strong);
   background-clip: content-box;
-}
-
-/* ─── Reading surface ────────────────────────────────────────────
-   The debate transcript is the product. `--measure-reading` keeps a CJK
-   line at a comfortable 35–45 characters; before this, lines ran past 60. */
-
-.reading-column {
-  max-width: var(--measure-reading);
-}
-
-.reading-prose {
-  font-size: var(--reading-font-size, var(--text-base));
-  line-height: var(--leading-relaxed);
-  color: var(--text-primary);
-  text-wrap: pretty;
-  overflow-wrap: anywhere;
-}
-
-.reading-prose > * + * {
-  margin-top: 0.9em;
 }
 
 /* ─── Agent Config Panel ─────────────────────────────────────── */
