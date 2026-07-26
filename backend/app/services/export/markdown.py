@@ -7,6 +7,7 @@ from typing import Any
 from .scoring import (
     DIM_LABELS,
     DIM_WEIGHTS,
+    LEGACY_DIM_ALIASES,
     MODULE_LABELS,
     MODULE_WEIGHTS,
     format_cumulative_value,
@@ -14,6 +15,15 @@ from .scoring import (
     resolve_comprehensive_score,
     resolve_module_scores,
 )
+
+
+def _dim_data(scores: dict[str, Any], dim_key: str) -> Any:
+    value = scores.get(dim_key)
+    if value is None:
+        legacy_key = LEGACY_DIM_ALIASES.get(dim_key)
+        if legacy_key:
+            value = scores.get(legacy_key)
+    return value
 
 ROLE_LABELS = {
     "proposer": "正方 (Proposer)",
@@ -341,7 +351,7 @@ def export_markdown(session_data: dict[str, Any], categories: list[str] | tuple[
             lines.append("| 底层维度 | 权重 | 得分 | 评语 |")
             lines.append("|------|------|------|------|")
             for dim_key, dim_label in DIM_LABELS.items():
-                dim_data = scores.get(dim_key, {})
+                dim_data = _dim_data(scores, dim_key) or {}
                 if isinstance(dim_data, dict):
                     score = format_score(dim_data.get("score"))
                     rationale = dim_data.get("rationale") or "-"
@@ -369,7 +379,7 @@ def export_markdown(session_data: dict[str, Any], categories: list[str] | tuple[
             lines.append(f"### {role_label(str(role))}")
             lines.append("")
             for dim_key, dim_label in DIM_LABELS.items():
-                value = format_cumulative_value(score_data.get(dim_key))
+                value = format_cumulative_value(_dim_data(score_data, dim_key))
                 lines.append(f"- **{dim_label}**：{value}")
             lines.append("")
 

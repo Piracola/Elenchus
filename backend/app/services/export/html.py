@@ -15,6 +15,7 @@ from .markdown import (
 )
 from .scoring import (
     DIM_LABELS,
+    LEGACY_DIM_ALIASES,
     format_score,
     resolve_comprehensive_score,
     weighted_average,
@@ -605,10 +606,19 @@ def _score_value_at(value: Any, round_index: int) -> float | None:
     return None
 
 
+def _dim_value(score_data: dict[str, Any], dim_key: str) -> Any:
+    value = score_data.get(dim_key)
+    if value is None:
+        legacy_key = LEGACY_DIM_ALIASES.get(dim_key)
+        if legacy_key:
+            value = score_data.get(legacy_key)
+    return value
+
+
 def _cumulative_round_count(score_data: dict[str, Any]) -> int:
     round_count = 0
     for dim_key in DIM_LABELS:
-        value = score_data.get(dim_key)
+        value = _dim_value(score_data, dim_key)
         if isinstance(value, (list, tuple)):
             round_count = max(round_count, len(value))
         elif _is_numeric_score(value):
@@ -619,7 +629,7 @@ def _cumulative_round_count(score_data: dict[str, Any]) -> int:
 def _weighted_score_for_round(score_data: dict[str, Any], round_index: int) -> float | None:
     score_map: dict[str, float] = {}
     for dim_key in DIM_LABELS:
-        score = _score_value_at(score_data.get(dim_key), round_index)
+        score = _score_value_at(_dim_value(score_data, dim_key), round_index)
         if score is not None:
             score_map[dim_key] = score
     return weighted_average(score_map, tuple(score_map.keys()))

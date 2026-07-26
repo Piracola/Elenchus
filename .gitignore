@@ -9,6 +9,7 @@
 .claude/
 .trae/
 .qwen/
+.codex/
 .codex-run/
 
 # ========================================
@@ -59,7 +60,14 @@ yarn-error.log*
 # IDE
 # ========================================
 .vscode/
+.idea/
 *.code-workspace
+
+# ========================================
+# OS Artifacts
+# ========================================
+.DS_Store
+Thumbs.db
 
 # ========================================
 # Static Analysis / Build Cache
@@ -86,6 +94,5 @@ err.txt
 # Runtime data (root directory only)
 /runtime/*
 
-# Test files
-test_thinking_chain
-test_thinking_chain.*
+# Uploaded reference documents
+.uploads/

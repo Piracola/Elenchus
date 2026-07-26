@@ -77,7 +77,9 @@ async def update_session_agent_configs(
     session_id: str,
     agent_configs: dict[str, dict[str, Any]] | None,
 ) -> dict[str, Any] | None:
-    return await _ledger.update_session_agent_configs(session_id, agent_configs)
+    agent_config_service = get_agent_config_service()
+    normalized = await agent_config_service.normalize_agent_configs_for_update(agent_configs)
+    return await _ledger.update_session_agent_configs(session_id, normalized)
 
 
 async def delete_session(session_id: str) -> bool:

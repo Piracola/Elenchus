@@ -8,7 +8,7 @@ DIM_LABELS = {
     "topic_focus": "切题度与定义稳定",
     "rebuttal_strength": "反驳力度",
     "consistency": "前后一致性",
-    "persuasiveness": "价值立意与说服力",
+    "boundary_contribution": "边界贡献度",
 }
 
 DIM_WEIGHTS = {
@@ -17,7 +17,12 @@ DIM_WEIGHTS = {
     "logical_rigor": 20,
     "rebuttal_strength": 20,
     "consistency": 15,
-    "persuasiveness": 15,
+    "boundary_contribution": 15,
+}
+
+# Sessions exported before the rename stored this dimension under the old key.
+LEGACY_DIM_ALIASES = {
+    "boundary_contribution": "persuasiveness",
 }
 
 MODULE_LABELS = {
@@ -38,7 +43,7 @@ MODULE_DIMENSIONS = {
     "foundation": ("evidence_quality", "topic_focus"),
     "confrontation": ("logical_rigor", "rebuttal_strength"),
     "stability": ("consistency",),
-    "vision": ("persuasiveness",),
+    "vision": ("boundary_contribution",),
 }
 
 
@@ -62,7 +67,10 @@ def format_cumulative_value(value: Any) -> str:
 def extract_dimension_score_map(scores: dict[str, Any]) -> dict[str, float]:
     dimension_scores: dict[str, float] = {}
     for dim_key in DIM_LABELS:
-        dim_data = scores.get(dim_key, {})
+        dim_data = scores.get(dim_key)
+        if not isinstance(dim_data, dict):
+            legacy_key = LEGACY_DIM_ALIASES.get(dim_key)
+            dim_data = scores.get(legacy_key) if legacy_key else None
         if not isinstance(dim_data, dict):
             continue
         raw_score = dim_data.get("score")

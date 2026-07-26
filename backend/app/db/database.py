@@ -4,6 +4,7 @@ SQLAlchemy async engine & session setup.
 
 from __future__ import annotations
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -23,10 +24,21 @@ def _get_engine():
     global _engine
     if _engine is None:
         settings = get_settings()
+        database_url = settings.env.database_url
+        is_sqlite = database_url.startswith("sqlite")
         _engine = create_async_engine(
-            settings.env.database_url,
+            database_url,
             echo=False,
+            connect_args={"timeout": 30} if is_sqlite else {},
         )
+        if is_sqlite:
+            @event.listens_for(_engine.sync_engine, "connect")
+            def _set_sqlite_pragmas(dbapi_connection, connection_record):  # noqa: ARG001
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA busy_timeout=30000")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.close()
     return _engine
 
 

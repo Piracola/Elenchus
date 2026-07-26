@@ -35,7 +35,7 @@ _OUTPUT_SCHEMA = {
     "topic_focus": {"score": 1, "rationale": "Explain the score."},
     "rebuttal_strength": {"score": 1, "rationale": "Explain the score."},
     "consistency": {"score": 1, "rationale": "Explain the score."},
-    "persuasiveness": {"score": 1, "rationale": "Explain the score."},
+    "boundary_contribution": {"score": 1, "rationale": "Explain the score."},
     "overall_comment": "One concise summary of the debater's performance.",
 }
 
@@ -167,7 +167,7 @@ def _build_judge_instruction(
         "Score this debater on all 6 atomic dimensions from 1 to 10 and explain each score. "
         "The system will then aggregate them into 4 display modules: foundation "
         "(evidence_quality + topic_focus), confrontation (logical_rigor + rebuttal_strength), "
-        "stability (consistency), and vision (persuasiveness), plus one weighted comprehensive score. "
+        "stability (consistency), and vision (boundary_contribution), plus one weighted comprehensive score. "
         "Do not output module scores or any extra fields. "
         "Return ONLY valid JSON. Do not include markdown fences, headings, or prose. "
         "If you need to quote a term inside a JSON string, use Chinese quotes like 「」 instead of ASCII double quotes.\n"

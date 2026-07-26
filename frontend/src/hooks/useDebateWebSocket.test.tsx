@@ -309,7 +309,8 @@ describe('useDebateWebSocket', () => {
         });
 
         act(() => {
-            vi.advanceTimersByTime(1000);
+            // Base delay (1000ms) plus the maximum reconnect jitter (500ms).
+            vi.advanceTimersByTime(1500);
         });
 
         expect(MockWebSocket.instances).toHaveLength(3);

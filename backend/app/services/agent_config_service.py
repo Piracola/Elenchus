@@ -58,6 +58,21 @@ class AgentConfigService:
 
         return normalized
 
+    async def normalize_agent_configs_for_update(
+        self,
+        agent_configs: dict[str, dict[str, Any]] | None,
+    ) -> dict[str, dict[str, Any]]:
+        """Normalize updated configs for persistence without adding default roles.
+
+        Shares the same api_key-stripping rules as session creation so raw
+        credentials can never be persisted through the update path.
+        """
+        providers_by_id, _ = await self._load_providers()
+        return {
+            role: self._normalize_for_storage(dict(config), providers_by_id)
+            for role, config in (agent_configs or {}).items()
+        }
+
     async def resolve_provider_selection(
         self,
         override: dict[str, Any] | None,

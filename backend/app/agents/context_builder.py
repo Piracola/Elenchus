@@ -15,6 +15,7 @@ _DIMENSION_LABELS: dict[str, str] = {
     "rebuttal_strength": "Rebuttal Strength",
     "consistency": "Consistency",
     "persuasiveness": "Persuasiveness",
+    "boundary_contribution": "Boundary Contribution",
 }
 
 _MAX_WEAKNESS_DIMENSIONS = 3

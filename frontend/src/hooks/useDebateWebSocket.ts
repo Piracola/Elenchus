@@ -5,12 +5,18 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { api } from '../api/client';
 import { useDebateStore } from '../stores/debateStore';
+import { normalizeRuntimeEvents } from '../utils/agent/debateStoreHelpers';
 import { normalizeRuntimeEvent } from '../utils/runtime/runtimeEvents';
 
 const WS_BASE =
     import.meta.env.VITE_WS_URL ||
     `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api`;
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000];
+const RECONNECT_JITTER_MS = 500;
+const PING_INTERVAL_MS = 20000;
+// A half-open TCP connection keeps readyState OPEN forever; if nothing has
+// arrived (pong or events) for this long, force-close so reconnect kicks in.
+const STALE_CONNECTION_MS = PING_INTERVAL_MS * 2 + 5000;
 const MAX_DEBUG_PREVIEW = 400;
 
 const getStore = () => useDebateStore.getState();
@@ -121,10 +127,41 @@ export function useDebateWebSocket(runId: string | null) {
         const isCurrentConnection = (sock?: WebSocket | null) =>
             isActiveRun() && (!sock || ws.current === sock);
 
+        let lastActivityAt = Date.now();
+        let backfillInFlight = false;
+        let backfillQueued = false;
+
+        // Recover events that were persisted while this client was not
+        // listening (seq gap detected) via the REST catch-up endpoint.
+        const runBackfill = async (sock: WebSocket) => {
+            if (backfillInFlight) {
+                backfillQueued = true;
+                return;
+            }
+            backfillInFlight = true;
+            try {
+                do {
+                    backfillQueued = false;
+                    const lastSeq = Math.max(0, getStore().lastEventSeqByRun[runId] ?? -1);
+                    const response = await api.runs.events(runId, lastSeq);
+                    if (!isCurrentConnection(sock)) return;
+                    const events = normalizeRuntimeEvents(response?.events ?? []);
+                    for (const event of events) {
+                        getStore().applyRuntimeEvent(event);
+                    }
+                } while (backfillQueued && isCurrentConnection(sock));
+            } catch (err) {
+                console.warn('[WS] Event backfill failed:', err);
+            } finally {
+                backfillInFlight = false;
+            }
+        };
+
         const setupSocket = (sock: WebSocket) => {
             sock.onopen = () => {
                 if (!isCurrentConnection(sock)) return;
                 reconnectAttempt.current = 0;
+                lastActivityAt = Date.now();
                 getStore().setConnected(true);
                 clearPingTimer();
                 const pingInterval = setInterval(() => {
@@ -135,26 +172,42 @@ export function useDebateWebSocket(runId: string | null) {
                         }
                         return;
                     }
-                    if (sock.readyState === WebSocket.OPEN) {
-                        sock.send(JSON.stringify({ action: 'ping' }));
-                    } else {
+                    if (sock.readyState !== WebSocket.OPEN) {
                         clearInterval(pingInterval);
                         if (pingTimer.current === pingInterval) {
                             pingTimer.current = null;
                         }
+                        return;
                     }
-                }, 20000);
+                    if (Date.now() - lastActivityAt > STALE_CONNECTION_MS) {
+                        // Half-open connection: nothing (not even pong) came back.
+                        console.warn('[WS] Connection stale, forcing reconnect');
+                        sock.close();
+                        return;
+                    }
+                    sock.send(JSON.stringify({ action: 'ping' }));
+                }, PING_INTERVAL_MS);
                 pingTimer.current = pingInterval;
             };
 
             sock.onmessage = (evt) => {
                 if (!isCurrentConnection(sock)) return;
+                lastActivityAt = Date.now();
                 try {
                     const parsed = JSON.parse(evt.data);
                     const event = normalizeRuntimeEvent(parsed);
                     if (!event) {
                         console.warn('[WS] Ignored unsupported message preview:', previewPayload(evt.data));
                         return;
+                    }
+                    if (typeof event.seq === 'number' && event.seq >= 0) {
+                        const lastSeq = getStore().lastEventSeqByRun[runId] ?? -1;
+                        if (lastSeq >= 0 && event.seq > lastSeq + 1) {
+                            // Gap detected: fetch the missing range (which also
+                            // contains this event) instead of applying out of order.
+                            void runBackfill(sock);
+                            return;
+                        }
                     }
                     getStore().applyRuntimeEvent(event);
                 } catch {
@@ -169,14 +222,13 @@ export function useDebateWebSocket(runId: string | null) {
                 }
                 clearPingTimer();
                 getStore().setConnected(false);
-                const delay = RECONNECT_DELAYS[Math.min(reconnectAttempt.current, RECONNECT_DELAYS.length - 1)];
+                const baseDelay = RECONNECT_DELAYS[Math.min(reconnectAttempt.current, RECONNECT_DELAYS.length - 1)];
+                const delay = baseDelay + Math.floor(Math.random() * RECONNECT_JITTER_MS);
                 reconnectAttempt.current++;
                 clearReconnectTimer();
                 reconnectTimer.current = setTimeout(() => {
                     if (isCurrentConnection()) {
-                        const nextSocket = new WebSocket(buildWsUrl(runId));
-                        ws.current = nextSocket;
-                        setupSocket(nextSocket);
+                        openSocket();
                     }
                 }, delay);
             };
@@ -186,14 +238,30 @@ export function useDebateWebSocket(runId: string | null) {
             };
         };
 
-        const socket = new WebSocket(buildWsUrl(runId));
-        ws.current = socket;
-        setupSocket(socket);
+        const openSocket = () => {
+            const nextSocket = new WebSocket(buildWsUrl(runId));
+            ws.current = nextSocket;
+            setupSocket(nextSocket);
+        };
+
+        const handleOnline = () => {
+            if (!isActiveRun()) return;
+            const current = ws.current;
+            if (current && current.readyState === WebSocket.OPEN) return;
+            // Network came back: skip the remaining backoff delay.
+            clearReconnectTimer();
+            current?.close();
+            openSocket();
+        };
+        window.addEventListener('online', handleOnline);
+
+        openSocket();
 
         return () => {
             if (activeGeneration.current === generation) {
                 activeGeneration.current++;
             }
+            window.removeEventListener('online', handleOnline);
             clearReconnectTimer();
             clearPingTimer();
             const activeSocket = ws.current;

@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 
 EventSink = Callable[[str, dict[str, Any]], Awaitable[None]]
 
+# A stalled TCP peer must never block event persistence or graph progress:
+# emit() holds the per-run emit lock while delivering, so a hung send would
+# stall the whole run. Slow clients are disconnected after this timeout.
+_WS_SEND_TIMEOUT_SECONDS = 5.0
+
 
 class RuntimeBus:
     """Own runtime event delivery and websocket fan-out in one place."""
@@ -101,6 +106,10 @@ class RuntimeBus:
                 self._pending_connections.pop(run_id, None)
         if not self._active.get(run_id) and not self._pending_connections.get(run_id):
             self._run_locks.pop(run_id, None)
+            if self._repository is not None:
+                # Sequence watermark can be reloaded from the ledger on demand;
+                # drop it so idle runs do not leak entries in this dict.
+                self._seq_by_run.pop(run_id, None)
             emit_lock = self._emit_locks.get(run_id)
             if emit_lock is not None and not emit_lock.locked():
                 self._emit_locks.pop(run_id, None)
@@ -118,8 +127,19 @@ class RuntimeBus:
             return False
 
         try:
-            await websocket.send_json(jsonable_encoder(message))
+            await asyncio.wait_for(
+                websocket.send_json(jsonable_encoder(message)),
+                timeout=_WS_SEND_TIMEOUT_SECONDS,
+            )
             return True
+        except TimeoutError:
+            self.disconnect(run_id, websocket)
+            logger.warning(
+                "WS send timed out after %.0fs for run %s; dropping slow client",
+                _WS_SEND_TIMEOUT_SECONDS,
+                run_id,
+            )
+            return False
         except Exception as exc:
             self.disconnect(run_id, websocket)
             if self._is_expected_disconnect_error(exc):

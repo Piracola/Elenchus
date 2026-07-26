@@ -4,7 +4,7 @@ Pydantic schemas for the scoring system.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, computed_field
 
 SCORE_DIMENSION_WEIGHTS: dict[str, int] = {
     "evidence_quality": 15,
@@ -12,14 +12,19 @@ SCORE_DIMENSION_WEIGHTS: dict[str, int] = {
     "logical_rigor": 20,
     "rebuttal_strength": 20,
     "consistency": 15,
-    "persuasiveness": 15,
+    "boundary_contribution": 15,
 }
 
 SCORE_MODULE_DIMENSIONS: dict[str, tuple[str, ...]] = {
     "foundation": ("evidence_quality", "topic_focus"),
     "confrontation": ("logical_rigor", "rebuttal_strength"),
     "stability": ("consistency",),
-    "vision": ("persuasiveness",),
+    "vision": ("boundary_contribution",),
+}
+
+# Historical sessions stored this dimension under its pre-rename key.
+LEGACY_DIMENSION_ALIASES: dict[str, str] = {
+    "boundary_contribution": "persuasiveness",
 }
 
 
@@ -40,12 +45,18 @@ class TurnScore(BaseModel):
     Enforced via Structured Outputs.
     """
 
+    model_config = ConfigDict(populate_by_name=True)
+
     logical_rigor: DimensionScore = Field(..., description="逻辑严密度")
     evidence_quality: DimensionScore = Field(..., description="证据质量")
     topic_focus: DimensionScore = Field(..., description="切题度与定义稳定")
     rebuttal_strength: DimensionScore = Field(..., description="反驳力度")
     consistency: DimensionScore = Field(..., description="前后自洽")
-    persuasiveness: DimensionScore = Field(..., description="价值立意与说服力")
+    boundary_contribution: DimensionScore = Field(
+        ...,
+        validation_alias=AliasChoices("boundary_contribution", "persuasiveness"),
+        description="边界贡献度",
+    )
     overall_comment: str = Field(
         ..., description="裁判对该辩手本轮表现的整体评语"
     )
@@ -57,7 +68,7 @@ class TurnScore(BaseModel):
             "topic_focus": self.topic_focus.score,
             "rebuttal_strength": self.rebuttal_strength.score,
             "consistency": self.consistency.score,
-            "persuasiveness": self.persuasiveness.score,
+            "boundary_contribution": self.boundary_contribution.score,
         }
 
     def _weighted_average(self, dimensions: tuple[str, ...]) -> float:
