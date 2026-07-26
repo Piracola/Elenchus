@@ -103,6 +103,18 @@ describe("markdownToReadableText", () => {
     const result = markdownToReadableText("<think>hidden</think>## Heading");
     expect(result).toBe("Heading");
   });
+
+  it("drops tool-use citation markers so they are neither shown nor spoken", () => {
+    expect(markdownToReadableText("缺乏可靠的实证基础【toolu_vrtx_0154dSNXZy19mHBH4wEGSTTd-0】。")).toBe(
+      "缺乏可靠的实证基础。",
+    );
+    expect(markdownToReadableText("一致语序模式【toolu_vrtx_01Vi4-4】【toolu_vrtx_01Vi4-6】。")).toBe("一致语序模式。");
+  });
+
+  it("keeps chinese bracket usage that is not a citation id", () => {
+    expect(markdownToReadableText("对「跨域」【跨域】的定义")).toBe("对「跨域」【跨域】的定义");
+    expect(markdownToReadableText("见【A1】表")).toBe("见【A1】表");
+  });
 });
 
 describe("resolveSegmentationOptions", () => {
@@ -210,6 +222,33 @@ describe("segmentTextToLines", () => {
     result.forEach((line) => {
       expect(line.length).toBeLessThanOrEqual(28);
     });
+  });
+
+  it("moves a latin term to the next line instead of cutting it in half", () => {
+    const result = segmentTextToLines("原则上可操作的替代范式——违反预期范式（violation-of-expectation）");
+    expect(result.some((line) => line.includes("violation-of-expectation"))).toBe(true);
+    expect(result.join("").replace(/\s/g, "")).toBe(
+      "原则上可操作的替代范式——违反预期范式（violation-of-expectation）",
+    );
+  });
+
+  it("budgets lines by visual width, so latin runs do not eat a whole line", () => {
+    // 38 half-width characters are 21.3 CJK units and still fit one line.
+    expect(segmentTextToLines("a".repeat(38), 22)).toHaveLength(1);
+    expect(segmentTextToLines("字".repeat(38), 22).length).toBeGreaterThan(1);
+  });
+
+  it("never strands an opening bracket at the end of a line", () => {
+    const result = segmentTextToLines("原则上可操作的替代范式——违反预期范式（violation-of-expectation）");
+    result.forEach((line) => {
+      expect("（【《「『([{".includes(line.slice(-1))).toBe(false);
+    });
+  });
+
+  it("still splits an unbreakable run that is wider than one line", () => {
+    const result = segmentTextToLines("前缀" + "x".repeat(200), 22);
+    expect(result.length).toBeGreaterThan(1);
+    expect(result.join("").replace(/\s/g, "")).toBe("前缀" + "x".repeat(200));
   });
 });
 

@@ -5,7 +5,28 @@ import { fileURLToPath } from "node:url";
 
 import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
 import { buildVideoModel } from "../src/normalizeElenchusExport.ts";
-import { buildSceneSlices, buildSceneViewModel, layoutTextLines, SCENE_COLORS, SCENE_LAYOUT, VIDEO_FONT_FAMILY } from "../src/scenePresentation.ts";
+import {
+  BOOKEND_TYPE,
+  buildFooterModel,
+  buildHeaderModel,
+  buildIntroModel,
+  buildOutroModel,
+  buildSceneSlices,
+  buildSceneViewModel,
+  CARD_RADIUS,
+  formatScore,
+  formatScoreFixed,
+  HEADER_TYPE,
+  INTRO_LAYOUT,
+  JUDGE_BOARD,
+  OUTRO_LAYOUT,
+  sampleFrameForSlice,
+  SCENE_COLORS,
+  SCENE_LAYOUT,
+  SCORE_BOARD,
+  SPEAKER_BOARD,
+  VIDEO_FONT_FAMILY,
+} from "../src/scenePresentation.ts";
 import { resolveCompositorBinary } from "./compositor-binaries.mjs";
 
 const rootDir = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -20,20 +41,9 @@ const concatAudioPath = join(fastDir, "audio.wav");
 const outputPath = join(outDir, "debate-fast.mp4");
 const ffmpegPath = resolveCompositorBinary(rootDir, "ffmpeg");
 
-const colors = {
-  ink: SCENE_COLORS.ink,
-  muted: SCENE_COLORS.muted,
-  faint: SCENE_COLORS.faint,
-  panel: SCENE_COLORS.panel,
-  page: SCENE_COLORS.background,
-  proposer: SCENE_COLORS.affirmative,
-  opposer: SCENE_COLORS.negative,
-  judge: SCENE_COLORS.judge,
-  gold: SCENE_COLORS.score,
-};
-
-const WIDTH = 1920;
-const HEIGHT = 1080;
+const colors = SCENE_COLORS;
+const WIDTH = SCENE_LAYOUT.width;
+const HEIGHT = SCENE_LAYOUT.height;
 const FPS = 30;
 
 const bundledFontDir = join(publicDir, "fonts");
@@ -99,8 +109,10 @@ const run = (args) =>
     });
   });
 
+/* ---------- primitives ---------- */
+
 const roundedRect = (ctx, x, y, width, height, radius) => {
-  const r = Math.min(radius, width / 2, height / 2);
+  const r = Math.max(0, Math.min(radius, width / 2, height / 2));
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + width, y, x + width, y + height, r);
@@ -110,18 +122,21 @@ const roundedRect = (ctx, x, y, width, height, radius) => {
   ctx.closePath();
 };
 
-const fillRound = (ctx, x, y, width, height, radius, fill, stroke) => {
+const fillRound = (ctx, x, y, width, height, radius, fill) => {
   roundedRect(ctx, x, y, width, height, radius);
   ctx.fillStyle = fill;
   ctx.fill();
-  if (stroke) {
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  }
 };
 
-const withRectClip = (ctx, x, y, width, height, draw) => {
+const strokeRound = (ctx, x, y, width, height, radius, stroke, lineWidth = 1) => {
+  const inset = lineWidth / 2;
+  roundedRect(ctx, x + inset, y + inset, width - lineWidth, height - lineWidth, radius);
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = lineWidth;
+  ctx.stroke();
+};
+
+const withClip = (ctx, x, y, width, height, draw) => {
   ctx.save();
   ctx.beginPath();
   ctx.rect(x, y, width, height);
@@ -130,226 +145,680 @@ const withRectClip = (ctx, x, y, width, height, draw) => {
   ctx.restore();
 };
 
-const drawTextBlock = (ctx, lines, x, y, options = {}) => {
-  const size = options.size || 28;
-  const lineHeight = options.lineHeight || Math.round(size * 1.55);
-  ctx.font = font(size, options.weight || 400);
+/** Vertically centred text, matching how CSS centres a glyph box in its line box. */
+const text = (ctx, value, x, centerY, options = {}) => {
+  ctx.font = font(options.size || 20, options.weight || 400);
   ctx.fillStyle = options.color || colors.ink;
-  ctx.textBaseline = "top";
-  lines.forEach((line, index) => {
-    ctx.fillText(line, x, y + index * lineHeight);
-  });
-  return lines.length * lineHeight;
+  ctx.textAlign = options.align || "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(String(value ?? ""), x, centerY);
 };
 
-const roleColor = (role) => {
-  if (role === "proposer") return colors.proposer;
-  if (role === "opposer") return colors.opposer;
-  if (role === "judge") return colors.judge;
-  return colors.muted;
+const measure = (ctx, value, size, weight = 400) => {
+  ctx.font = font(size, weight);
+  return ctx.measureText(String(value ?? "")).width;
 };
 
-const roleTextColor = (role) => {
-  if (role === "proposer") return SCENE_COLORS.affirmativeText;
-  if (role === "opposer") return SCENE_COLORS.negativeText;
-  return roleColor(role);
+/** Canvas has no letter-spacing, so tracked headings are drawn glyph by glyph. */
+const trackedText = (ctx, value, centerX, centerY, options = {}) => {
+  const chars = Array.from(String(value ?? ""));
+  const spacing = options.letterSpacing || 0;
+  const size = options.size || 20;
+  const weight = options.weight || 400;
+  ctx.font = font(size, weight);
+  const total = chars.reduce((sum, char) => sum + ctx.measureText(char).width + spacing, 0);
+  let cursor = centerX - total / 2;
+  ctx.fillStyle = options.color || colors.ink;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  for (const char of chars) {
+    ctx.fillText(char, cursor, centerY);
+    cursor += ctx.measureText(char).width + spacing;
+  }
 };
 
-const drawHeader = (ctx, video, scene) => {
-  ctx.save();
-  try {
-  ctx.fillStyle = colors.page;
+const drawPage = (ctx) => {
+  const gradient = ctx.createLinearGradient(0, 0, 0, HEIGHT);
+  gradient.addColorStop(0, colors.background);
+  gradient.addColorStop(1, colors.backgroundEdge);
+  ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  ctx.fillStyle = colors.ink;
-  ctx.font = font(46, 800);
-  ctx.textBaseline = "top";
-  ctx.fillText(layoutTextLines(video.topic, 30, 1)[0] || "辩论视频", SCENE_LAYOUT.header.x, 44);
+};
 
-  ctx.font = font(24, 700);
-  ctx.fillStyle = colors.muted;
-  ctx.fillText(`${scene.turnLabel}  /  ${scene.totalChars.toLocaleString()} 字`, 72, 112);
-
-  fillRound(ctx, 1550, 50, 298, 78, 10, colors.panel, colors.faint);
-  ctx.font = font(24, 800);
-  ctx.fillStyle = colors.muted;
-  ctx.fillText("快速 Canvas 渲染", 1582, 68);
-  } finally {
+const drawCard = (ctx, rect, options = {}) => {
+  const { x, y, width, height } = rect;
+  ctx.save();
+  ctx.shadowColor = "rgba(23,34,43,0.06)";
+  ctx.shadowBlur = 40;
+  ctx.shadowOffsetY = 20;
+  fillRound(ctx, x, y, width, height, CARD_RADIUS, colors.panel);
+  ctx.restore();
+  if (options.active && options.accent) {
+    ctx.save();
+    ctx.globalAlpha = 0.1;
+    strokeRound(ctx, x - 3, y - 3, width + 6, height + 6, CARD_RADIUS + 3, options.accent, 3);
     ctx.restore();
+    strokeRound(ctx, x, y, width, height, CARD_RADIUS, options.accent, 1);
+  } else {
+    strokeRound(ctx, x, y, width, height, CARD_RADIUS, colors.faint, 1);
   }
 };
 
-const drawSpeechColumn = (ctx, scene, view) => {
-  const { x, y, width: w, height: h } = view.layout.speaker;
-  ctx.save();
-  try {
-  ctx.textBaseline = "top";
-  fillRound(ctx, x, y, w, h, 10, colors.panel, colors.faint);
-  ctx.font = font(30, 850);
-  ctx.fillStyle = colors.ink;
-  ctx.fillText("辩手发言", x + 30, y + 26);
+const drawCardTitle = (ctx, rect, options) => {
+  const { titleHeight, paddingX, accent, title } = options;
+  const centerY = rect.y + titleHeight / 2;
+  fillRound(ctx, rect.x + paddingX, centerY - 9, 4, 18, 2, accent);
+  text(ctx, title, rect.x + paddingX + 14, centerY, { size: 22, weight: 700, color: colors.ink });
+  ctx.fillStyle = colors.hairline;
+  ctx.fillRect(rect.x + 1, rect.y + titleHeight - 1, rect.width - 2, 1);
+  return centerY;
+};
 
-  withRectClip(ctx, x + 24, y + 76, w - 48, h - 98, () => {
-    const lines = view.speakerLines;
-    if (!lines.length) {
-      ctx.font = font(25, 700);
-      ctx.fillStyle = colors.muted;
-      ctx.fillText("本轮没有辩手发言。", x + 30, y + 96);
-      return;
-    }
-    let cursor = y + 84;
-    for (const item of lines) {
-      const line = item.cue;
-      const { displayLines, state, style } = item;
-      const accent = roleColor(line.role);
-      const textColor = roleTextColor(line.role);
-      ctx.save();
-      ctx.globalAlpha = style.opacity;
-      const textHeight = displayLines.length * style.fontSize * style.lineHeight;
-      if (state === "active" || state === "near") {
-        ctx.globalAlpha = 1;
-        fillRound(ctx, x + 24, cursor, w - 48, textHeight + 6, 6, `${accent}${state === "active" ? "12" : "08"}`);
-        ctx.globalAlpha = style.opacity;
-      }
-      ctx.font = font(style.fontSize, style.fontWeight);
-      ctx.fillStyle = textColor;
-      displayLines.forEach((text, index) => {
-        ctx.fillText(text, x + 34, cursor + 3 + index * style.fontSize * style.lineHeight);
-      });
-      cursor += textHeight + 6 + style.marginBottom;
-      ctx.restore();
-    }
+/* ---------- scene ---------- */
+
+const drawHeader = (ctx, header) => {
+  const rect = SCENE_LAYOUT.header;
+  const kickerLine = HEADER_TYPE.kickerFontSize * 1.2;
+  const topicLine = HEADER_TYPE.topicFontSize * 1.15;
+  const leftTop = rect.y + rect.height - (kickerLine + 12 + topicLine);
+  trackedText(
+    ctx,
+    header.kicker,
+    rect.x + measureTracked(ctx, header.kicker, HEADER_TYPE.kickerFontSize, 700, HEADER_TYPE.kickerLetterSpacing) / 2,
+    leftTop + kickerLine / 2,
+    {
+      size: HEADER_TYPE.kickerFontSize,
+      weight: 700,
+      color: colors.score,
+      letterSpacing: HEADER_TYPE.kickerLetterSpacing,
+    },
+  );
+  text(ctx, header.topic, rect.x, leftTop + kickerLine + 12 + topicLine / 2, {
+    size: HEADER_TYPE.topicFontSize,
+    weight: 700,
+    color: colors.ink,
   });
-  } finally {
-    ctx.restore();
-  }
-};
 
-const drawJudgeColumn = (ctx, scene, view) => {
-  const { x, y, width: w, height: judgeH } = view.layout.judge;
-  const scoreH = view.layout.score.height;
-  ctx.save();
-  try {
-  ctx.textBaseline = "top";
-  const judgeActive = view.activeRole === "judge" || view.activeSegmentKind === "judge_summary";
-  const scoreActive = view.activeSegmentKind === "score_comment";
-  fillRound(ctx, x, y, w, judgeH, 10, judgeActive ? SCENE_COLORS.judgeSoft : colors.panel, judgeActive ? SCENE_COLORS.judge : colors.faint);
-  ctx.font = font(30, 850);
-  ctx.fillStyle = colors.ink;
-  ctx.fillText("裁判消息", x + 28, y + 24);
+  const right = rect.x + rect.width;
+  const metaLine = HEADER_TYPE.metaFontSize * 1.2;
+  const rightTop = rect.y + rect.height - 4 - (metaLine + 14 + HEADER_TYPE.pillHeight);
+  text(ctx, `${header.stepper.label} · ${header.timelineLabel}`, right, rightTop + metaLine / 2, {
+    size: HEADER_TYPE.metaFontSize,
+    weight: 600,
+    color: colors.muted,
+    align: "right",
+  });
 
-  withRectClip(ctx, x + 28, y + 74, w - 56, judgeH - 96, () => {
-    const judgeLines = view.judgeLines.length ? view.judgeLines : ["本轮暂无裁判消息。"];
-    drawTextBlock(ctx, judgeLines, x + 28, y + 82, {
-      size: 22,
-      lineHeight: 35,
-      color: view.judgeLines.length ? colors.ink : colors.muted,
+  const pillTop = rightTop + metaLine + 14;
+  if (header.stepper.kind === "pills") {
+    const widths = Array.from({ length: header.stepper.total }, (_, index) =>
+      index === header.stepper.index ? HEADER_TYPE.pillActiveWidth : HEADER_TYPE.pillWidth,
+    );
+    const total = widths.reduce((sum, width) => sum + width, 0) + HEADER_TYPE.pillGap * (widths.length - 1);
+    let cursor = right - total;
+    widths.forEach((width, index) => {
+      const fill =
+        index === header.stepper.index
+          ? colors.score
+          : index < header.stepper.index
+            ? "rgba(63,95,143,0.32)"
+            : colors.faint;
+      fillRound(ctx, cursor, pillTop, width, HEADER_TYPE.pillHeight, 999, fill);
+      cursor += width + HEADER_TYPE.pillGap;
     });
+    return;
+  }
+  const barX = right - HEADER_TYPE.barWidth;
+  fillRound(ctx, barX, pillTop, HEADER_TYPE.barWidth, HEADER_TYPE.pillHeight, 999, colors.faint);
+  const filled = (HEADER_TYPE.barWidth * (header.stepper.index + 1)) / header.stepper.total;
+  fillRound(ctx, barX, pillTop, filled, HEADER_TYPE.pillHeight, 999, colors.score);
+};
+
+const measureTracked = (ctx, value, size, weight, spacing) => {
+  ctx.font = font(size, weight);
+  return Array.from(String(value ?? "")).reduce((sum, char) => sum + ctx.measureText(char).width + spacing, 0);
+};
+
+const drawEmptyState = (ctx, rect, top, height, label) => {
+  text(ctx, label, rect.x + rect.width / 2, top + height / 2, {
+    size: 20,
+    weight: 500,
+    color: colors.muted,
+    align: "center",
+  });
+};
+
+const drawSpeakerCard = (ctx, view) => {
+  const rect = SCENE_LAYOUT.speaker;
+  const board = view.speaker;
+  drawCard(ctx, rect);
+  const titleCenter = drawCardTitle(ctx, rect, {
+    titleHeight: SPEAKER_BOARD.titleHeight,
+    paddingX: SPEAKER_BOARD.paddingX,
+    accent: board.speaker?.theme.accent ?? colors.muted,
+    title: "辩手发言",
   });
 
-  fillRound(ctx, x, y + judgeH + 30, w, scoreH, 10, scoreActive ? SCENE_COLORS.scoreSoft : colors.panel, scoreActive ? SCENE_COLORS.score : colors.faint);
-  ctx.font = font(30, 850);
-  ctx.fillStyle = colors.ink;
-  ctx.fillText("评分", x + 28, y + judgeH + 54);
+  if (board.speaker) {
+    const right = rect.x + rect.width - SPEAKER_BOARD.paddingX;
+    const detailWidth = board.speaker.detail ? measure(ctx, board.speaker.detail, 18, 500) : 0;
+    const labelRight = board.speaker.detail ? right - detailWidth - 12 : right;
+    if (board.speaker.detail) {
+      text(ctx, board.speaker.detail, right, titleCenter, {
+        size: 18,
+        weight: 500,
+        color: colors.muted,
+        align: "right",
+      });
+    }
+    text(ctx, board.speaker.label, labelRight, titleCenter, {
+      size: 21,
+      weight: 700,
+      color: board.speaker.theme.text,
+      align: "right",
+    });
+    const labelWidth = measure(ctx, board.speaker.label, 21, 700);
+    fillRound(ctx, labelRight - labelWidth - 12 - 10, titleCenter - 5, 10, 10, 999, board.speaker.theme.accent);
+  }
 
-  let cursor = y + judgeH + 106;
-  const scores = view.scoreCards;
-  if (!scores.length) {
-    ctx.font = font(22, 700);
-    ctx.fillStyle = colors.muted;
-    ctx.fillText("本轮暂无评分。", x + 28, cursor);
+  if (board.empty) {
+    drawEmptyState(
+      ctx,
+      rect,
+      rect.y + SPEAKER_BOARD.titleHeight,
+      rect.height - SPEAKER_BOARD.titleHeight,
+      "本轮没有辩手发言。",
+    );
     return;
   }
 
-  withRectClip(ctx, x + 28, y + judgeH + 96, w - 56, scoreH - 118, () => {
-    for (const score of scores) {
-      ctx.font = font(16, 800);
-      ctx.fillStyle = roleColor(score.role);
-      ctx.fillText(score.label, x + 28, cursor);
-      ctx.fillStyle = colors.gold;
-      ctx.font = font(28, 800);
-      ctx.fillText(score.comprehensiveScore == null ? "-" : String(score.comprehensiveScore), x + w - 94, cursor - 5);
-      cursor += 28;
-      cursor += drawTextBlock(ctx, score.commentLines.length ? score.commentLines : ["暂无总评。"], x + 28, cursor, {
-        size: 13,
-        lineHeight: 20,
-        color: colors.muted,
-      });
-      cursor += 4;
-      for (const dimension of score.displayDimensions) {
-        ctx.font = font(12, 700);
-        ctx.fillStyle = colors.ink;
-        ctx.fillText(dimension.label, x + 28, cursor);
-        ctx.fillStyle = colors.faint;
-        ctx.fillRect(x + 112, cursor + 6, w - 190, 5);
-        ctx.fillStyle = roleColor(score.role);
-        ctx.fillRect(x + 112, cursor + 6, (w - 190) * Math.max(0, Math.min(10, dimension.score || 0)) / 10, 5);
-        ctx.fillText(dimension.score == null ? "-" : String(dimension.score), x + w - 48, cursor);
-        cursor += 18;
+  withClip(ctx, board.rect.x, board.rect.y, board.rect.width, board.rect.height, () => {
+    for (const block of board.blocks) {
+      const top = board.rect.y + block.top + board.scrollOffset;
+      if (block.state === "active") {
+        fillRound(ctx, board.rect.x, top, board.rect.width, block.height, 8, `${block.theme.accent}0f`);
+        fillRound(
+          ctx,
+          board.rect.x,
+          top + SPEAKER_BOARD.blockPaddingY,
+          SPEAKER_BOARD.railWidth,
+          block.height - SPEAKER_BOARD.blockPaddingY * 2,
+          999,
+          block.theme.accent,
+        );
       }
-      cursor += 10;
+      ctx.save();
+      ctx.globalAlpha = block.opacity;
+      block.lines.forEach((line, index) => {
+        text(
+          ctx,
+          line,
+          board.rect.x + SPEAKER_BOARD.blockTextLeft,
+          top + SPEAKER_BOARD.blockPaddingY + (index + 0.5) * board.lineHeightPx,
+          { size: board.fontSize, weight: block.fontWeight, color: block.theme.text },
+        );
+      });
+      ctx.restore();
     }
   });
-  } finally {
-    ctx.restore();
-  }
+
+  // Same soft edge the Remotion mask produces, painted in the card colour.
+  const fadeTop = ctx.createLinearGradient(0, board.rect.y, 0, board.rect.y + SPEAKER_BOARD.fadeHeight);
+  fadeTop.addColorStop(0, colors.panel);
+  fadeTop.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = fadeTop;
+  ctx.fillRect(board.rect.x, board.rect.y, board.rect.width, SPEAKER_BOARD.fadeHeight);
+
+  const fadeBottomTop = board.rect.y + board.rect.height - SPEAKER_BOARD.fadeHeight;
+  const fadeBottom = ctx.createLinearGradient(0, fadeBottomTop, 0, board.rect.y + board.rect.height);
+  fadeBottom.addColorStop(0, "rgba(255,255,255,0)");
+  fadeBottom.addColorStop(1, colors.panel);
+  ctx.fillStyle = fadeBottom;
+  ctx.fillRect(board.rect.x, fadeBottomTop, board.rect.width, SPEAKER_BOARD.fadeHeight);
 };
 
-const drawScene = (video, scene, filePath, frame) => {
+const drawJudgeCard = (ctx, board) => {
+  const rect = SCENE_LAYOUT.judge;
+  drawCard(ctx, rect, { accent: colors.judge, active: board.active });
+  drawCardTitle(ctx, rect, {
+    titleHeight: JUDGE_BOARD.titleHeight,
+    paddingX: JUDGE_BOARD.paddingX,
+    accent: colors.judge,
+    title: "裁判评议",
+  });
+
+  const contentX = rect.x + JUDGE_BOARD.paddingX;
+  const chipTop = rect.y + JUDGE_BOARD.titleHeight + JUDGE_BOARD.paddingTop;
+  const chipCenter = chipTop + JUDGE_BOARD.chipHeight / 2;
+  if (board.winner) {
+    const prefix = "本轮胜方";
+    const prefixWidth = measure(ctx, prefix, JUDGE_BOARD.chipFontSize, 600);
+    const labelWidth = measure(ctx, board.winner.label, JUDGE_BOARD.chipFontSize, 700);
+    const chipWidth = JUDGE_BOARD.chipPaddingX * 2 + prefixWidth + JUDGE_BOARD.chipGap + labelWidth;
+    fillRound(ctx, contentX, chipTop, chipWidth, JUDGE_BOARD.chipHeight, 999, board.winner.theme.soft);
+    text(ctx, prefix, contentX + JUDGE_BOARD.chipPaddingX, chipCenter, {
+      size: JUDGE_BOARD.chipFontSize,
+      weight: 600,
+      color: colors.muted,
+    });
+    text(
+      ctx,
+      board.winner.label,
+      contentX + JUDGE_BOARD.chipPaddingX + prefixWidth + JUDGE_BOARD.chipGap,
+      chipCenter,
+      { size: JUDGE_BOARD.chipFontSize, weight: 700, color: board.winner.theme.text },
+    );
+  } else {
+    text(ctx, "本轮未判定胜方", contentX, chipCenter, {
+      size: JUDGE_BOARD.chipFontSize,
+      weight: 600,
+      color: colors.muted,
+    });
+  }
+
+  const textTop = chipTop + JUDGE_BOARD.chipHeight + JUDGE_BOARD.chipMarginBottom;
+  if (board.empty) {
+    text(ctx, "本轮暂无裁判评议。", contentX, textTop + (JUDGE_BOARD.fontSize * JUDGE_BOARD.lineHeight) / 2, {
+      size: JUDGE_BOARD.fontSize,
+      weight: 500,
+      color: colors.muted,
+    });
+    return;
+  }
+  const lineHeightPx = JUDGE_BOARD.fontSize * JUDGE_BOARD.lineHeight;
+  board.lines.forEach((line, index) => {
+    text(ctx, line, contentX, textTop + (index + 0.5) * lineHeightPx, {
+      size: JUDGE_BOARD.fontSize,
+      weight: 400,
+      color: colors.inkSoft,
+    });
+  });
+};
+
+const drawScoreBar = (ctx, x, y, value, accent, align) => {
+  fillRound(ctx, x, y, SCORE_BOARD.barWidth, SCORE_BOARD.barHeight, 999, colors.faint);
+  const filled = (SCORE_BOARD.barWidth * Math.max(0, Math.min(10, value ?? 0))) / 10;
+  if (filled <= 0) return;
+  const startX = align === "right" ? x + SCORE_BOARD.barWidth - filled : x;
+  fillRound(ctx, startX, y, filled, SCORE_BOARD.barHeight, 999, accent);
+};
+
+const drawScoreCard = (ctx, board) => {
+  const rect = SCENE_LAYOUT.score;
+  const active = board.kind !== "empty" && board.active;
+  drawCard(ctx, rect, { accent: colors.score, active });
+  const titleCenter = drawCardTitle(ctx, rect, {
+    titleHeight: SCORE_BOARD.titleHeight,
+    paddingX: SCORE_BOARD.paddingX,
+    accent: colors.score,
+    title: "本轮评分",
+  });
+  text(ctx, "综合分 / 10", rect.x + rect.width - SCORE_BOARD.paddingX, titleCenter, {
+    size: 16,
+    weight: 600,
+    color: colors.muted,
+    align: "right",
+  });
+
+  const innerX = rect.x + SCORE_BOARD.paddingX;
+  const innerWidth = rect.width - SCORE_BOARD.paddingX * 2;
+  const contentTop = rect.y + SCORE_BOARD.titleHeight + SCORE_BOARD.paddingTop;
+
+  if (board.kind === "empty") {
+    drawEmptyState(
+      ctx,
+      rect,
+      rect.y + SCORE_BOARD.titleHeight,
+      rect.height - SCORE_BOARD.titleHeight,
+      "本轮暂未记录评分。",
+    );
+    return;
+  }
+
+  if (board.kind === "stack") {
+    let cursor = contentTop;
+    for (const card of board.cards) {
+      text(ctx, card.label, innerX, cursor + 10, { size: 19, weight: 700, color: card.theme.text });
+      text(ctx, formatScoreFixed(card.score), innerX + innerWidth, cursor + 16, {
+        size: 32,
+        weight: 700,
+        color: card.theme.accent,
+        align: "right",
+      });
+      cursor += 36;
+      for (const row of card.rows) {
+        const center = cursor + SCORE_BOARD.rowHeight / 2;
+        text(ctx, row.label, innerX, center, { size: 15, weight: 400, color: colors.muted });
+        const barX = innerX + SCORE_BOARD.dimensionLabelWidth + 8;
+        const barWidth = innerWidth - SCORE_BOARD.dimensionLabelWidth - SCORE_BOARD.valueWidth - 24;
+        fillRound(ctx, barX, center - SCORE_BOARD.barHeight / 2, barWidth, SCORE_BOARD.barHeight, 999, colors.faint);
+        fillRound(
+          ctx,
+          barX,
+          center - SCORE_BOARD.barHeight / 2,
+          (barWidth * Math.max(0, Math.min(10, row.score ?? 0))) / 10,
+          SCORE_BOARD.barHeight,
+          999,
+          card.theme.accent,
+        );
+        text(ctx, formatScore(row.score), innerX + innerWidth, center, {
+          size: 14,
+          weight: 700,
+          color: card.theme.text,
+          align: "right",
+        });
+        cursor += SCORE_BOARD.rowHeight;
+      }
+      cursor += 18;
+    }
+    return;
+  }
+
+  const labelLine = SCORE_BOARD.sideLabelFontSize * 1.2;
+  const versusBottom = contentTop + labelLine + SCORE_BOARD.sideLabelGap + SCORE_BOARD.sideScoreFontSize;
+  const drawSide = (side, align) => {
+    const x = align === "left" ? innerX : innerX + innerWidth;
+    text(ctx, side.label, x, contentTop + labelLine / 2, {
+      size: SCORE_BOARD.sideLabelFontSize,
+      weight: 700,
+      color: side.theme.text,
+      align,
+    });
+    text(ctx, formatScoreFixed(side.score), x, versusBottom - SCORE_BOARD.sideScoreFontSize / 2, {
+      size: SCORE_BOARD.sideScoreFontSize,
+      weight: 700,
+      color: side.theme.accent,
+      align,
+    });
+  };
+  drawSide(board.left, "left");
+  drawSide(board.right, "right");
+  text(ctx, "VS", innerX + innerWidth / 2, versusBottom - 10 - 7.5, {
+    size: 15,
+    weight: 700,
+    color: colors.muted,
+    align: "center",
+  });
+
+  const splitTop = versusBottom + SCORE_BOARD.splitBarMarginTop;
+  fillRound(ctx, innerX, splitTop, innerWidth, SCORE_BOARD.splitBarHeight, 999, colors.hairline);
+  withClip(ctx, innerX, splitTop, innerWidth, SCORE_BOARD.splitBarHeight, () => {
+    fillRound(ctx, innerX, splitTop, innerWidth, SCORE_BOARD.splitBarHeight, 999, board.right.theme.accent);
+    fillRound(
+      ctx,
+      innerX,
+      splitTop,
+      innerWidth * board.leftShare,
+      SCORE_BOARD.splitBarHeight,
+      999,
+      board.left.theme.accent,
+    );
+  });
+
+  const rowsTop = splitTop + SCORE_BOARD.splitBarHeight + SCORE_BOARD.rowsMarginTop;
+  const groupWidth =
+    SCORE_BOARD.valueWidth * 2 +
+    SCORE_BOARD.barWidth * 2 +
+    SCORE_BOARD.dimensionLabelWidth +
+    SCORE_BOARD.rowGap * 4;
+  const groupX = innerX + (innerWidth - groupWidth) / 2;
+  board.rows.forEach((row, index) => {
+    const center = rowsTop + index * SCORE_BOARD.rowHeight + SCORE_BOARD.rowHeight / 2;
+    let cursor = groupX;
+    text(ctx, formatScore(row.leftScore), cursor + SCORE_BOARD.valueWidth, center, {
+      size: 14,
+      weight: 700,
+      color: board.left.theme.text,
+      align: "right",
+    });
+    cursor += SCORE_BOARD.valueWidth + SCORE_BOARD.rowGap;
+    drawScoreBar(ctx, cursor, center - SCORE_BOARD.barHeight / 2, row.leftScore, board.left.theme.accent, "right");
+    cursor += SCORE_BOARD.barWidth + SCORE_BOARD.rowGap;
+    text(ctx, row.label, cursor + SCORE_BOARD.dimensionLabelWidth / 2, center, {
+      size: 15,
+      weight: 600,
+      color: colors.muted,
+      align: "center",
+    });
+    cursor += SCORE_BOARD.dimensionLabelWidth + SCORE_BOARD.rowGap;
+    drawScoreBar(ctx, cursor, center - SCORE_BOARD.barHeight / 2, row.rightScore, board.right.theme.accent, "left");
+    cursor += SCORE_BOARD.barWidth + SCORE_BOARD.rowGap;
+    text(ctx, formatScore(row.rightScore), cursor, center, {
+      size: 14,
+      weight: 700,
+      color: board.right.theme.text,
+    });
+  });
+
+  if (!board.comment) {
+    return;
+  }
+  const rowsBottom = rowsTop + board.rows.length * SCORE_BOARD.rowHeight;
+  const dividerY = rowsBottom + SCORE_BOARD.commentMarginTop;
+  ctx.fillStyle = colors.hairline;
+  ctx.fillRect(innerX, dividerY, innerWidth, 1);
+  const titleTop = dividerY + 1 + SCORE_BOARD.commentPaddingTop;
+  text(ctx, `${board.comment.label}总评`, innerX, titleTop + 9, {
+    size: 15,
+    weight: 700,
+    color: board.comment.theme.text,
+  });
+  const linesTop = titleTop + 18 + SCORE_BOARD.commentTitleGap;
+  const lineHeightPx = SCORE_BOARD.commentFontSize * SCORE_BOARD.commentLineHeight;
+  board.comment.lines.forEach((line, index) => {
+    text(ctx, line, innerX, linesTop + (index + 0.5) * lineHeightPx, {
+      size: SCORE_BOARD.commentFontSize,
+      weight: 400,
+      color: colors.muted,
+    });
+  });
+};
+
+const drawFooter = (ctx, video, sceneIndex, frame) => {
+  const model = buildFooterModel(video, sceneIndex, frame);
+  const label = SCENE_LAYOUT.footerLabel;
+  const bar = SCENE_LAYOUT.footer;
+  const labelCenter = label.y + label.height / 2;
+  text(ctx, model.elapsed, label.x, labelCenter, { size: 17, weight: 600, color: colors.muted });
+  text(ctx, model.total, label.x + label.width, labelCenter, {
+    size: 17,
+    weight: 600,
+    color: colors.muted,
+    align: "right",
+  });
+  fillRound(ctx, bar.x, bar.y, bar.width, bar.height, 999, colors.faint);
+  withClip(ctx, bar.x, bar.y, bar.width, bar.height, () => {
+    fillRound(ctx, bar.x, bar.y, Math.max(0, bar.width * model.progress), bar.height, 999, colors.score);
+    ctx.fillStyle = colors.background;
+    for (const tick of model.ticks) {
+      ctx.fillRect(bar.x + bar.width * tick, bar.y, 2, bar.height);
+    }
+  });
+};
+
+const drawScene = (video, scene, sceneIndex, filePath, frame) => {
   const canvas = createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext("2d");
   ctx.resetTransform();
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = "source-over";
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(0, 0, WIDTH, HEIGHT);
-  ctx.clip();
   const view = buildSceneViewModel(scene, frame);
-  drawHeader(ctx, video, scene);
-  drawSpeechColumn(ctx, scene, view);
-  drawJudgeColumn(ctx, scene, view);
-  ctx.restore();
+  drawPage(ctx);
+  drawHeader(ctx, buildHeaderModel(video, scene, sceneIndex));
+  drawSpeakerCard(ctx, view);
+  drawJudgeCard(ctx, view.judge);
+  drawScoreCard(ctx, view.score);
+  drawFooter(ctx, video, sceneIndex, frame);
   writeFileSync(filePath, canvas.toBuffer("image/png"));
 };
 
-const drawBookend = (video, filePath, outro = false) => {
+/* ---------- bookends ---------- */
+
+const drawSidePanel = (ctx, side, x, y, width, height, stats) => {
+  ctx.save();
+  ctx.shadowColor = "rgba(23,34,43,0.06)";
+  ctx.shadowBlur = 40;
+  ctx.shadowOffsetY = 20;
+  fillRound(ctx, x, y, width, height, CARD_RADIUS, colors.panel);
+  ctx.restore();
+  strokeRound(ctx, x, y, width, height, CARD_RADIUS, colors.faint, 1);
+  withClip(ctx, x, y, width, BOOKEND_TYPE.sideAccentHeight, () => {
+    fillRound(ctx, x, y, width, CARD_RADIUS * 2, CARD_RADIUS, side.theme.accent);
+  });
+
+  const labelLine = BOOKEND_TYPE.sideLabelFontSize * 1.2;
+  const detailLine = side.detail ? BOOKEND_TYPE.sideDetailFontSize * 1.2 : 0;
+  const statHeight = stats
+    ? BOOKEND_TYPE.statMarginTop +
+      BOOKEND_TYPE.statLabelFontSize * 1.2 +
+      BOOKEND_TYPE.statLabelGap +
+      BOOKEND_TYPE.statValueFontSize * 1.2
+    : 0;
+  const contentHeight =
+    labelLine +
+    (detailLine ? BOOKEND_TYPE.sideGapY + detailLine : 0) +
+    (statHeight ? BOOKEND_TYPE.sideGapY + statHeight : 0);
+  const centerX = x + width / 2;
+  let cursor = y + BOOKEND_TYPE.sideAccentHeight + (height - BOOKEND_TYPE.sideAccentHeight - contentHeight) / 2;
+
+  text(ctx, side.label, centerX, cursor + labelLine / 2, {
+    size: BOOKEND_TYPE.sideLabelFontSize,
+    weight: 700,
+    color: side.theme.text,
+    align: "center",
+  });
+  cursor += labelLine;
+  if (detailLine) {
+    cursor += BOOKEND_TYPE.sideGapY;
+    text(ctx, side.detail, centerX, cursor + detailLine / 2, {
+      size: BOOKEND_TYPE.sideDetailFontSize,
+      weight: 400,
+      color: colors.muted,
+      align: "center",
+    });
+    cursor += detailLine;
+  }
+  if (!stats) {
+    return;
+  }
+  cursor += BOOKEND_TYPE.sideGapY + BOOKEND_TYPE.statMarginTop;
+  const statLabelLine = BOOKEND_TYPE.statLabelFontSize * 1.2;
+  const statValueLine = BOOKEND_TYPE.statValueFontSize * 1.2;
+  const columnsWidth = BOOKEND_TYPE.statColumnWidth * 2 + BOOKEND_TYPE.statGap;
+  stats.forEach((stat, index) => {
+    const columnCenter =
+      centerX -
+      columnsWidth / 2 +
+      index * (BOOKEND_TYPE.statColumnWidth + BOOKEND_TYPE.statGap) +
+      BOOKEND_TYPE.statColumnWidth / 2;
+    text(ctx, stat.label, columnCenter, cursor + statLabelLine / 2, {
+      size: BOOKEND_TYPE.statLabelFontSize,
+      weight: 400,
+      color: colors.muted,
+      align: "center",
+    });
+    text(
+      ctx,
+      stat.value,
+      columnCenter,
+      cursor + statLabelLine + BOOKEND_TYPE.statLabelGap + statValueLine / 2,
+      {
+        size: BOOKEND_TYPE.statValueFontSize,
+        weight: 700,
+        color: side.theme.accent,
+        align: "center",
+      },
+    );
+  });
+};
+
+const drawBookendText = (ctx, model, layout) => {
+  trackedText(ctx, model.kicker, WIDTH / 2, layout.kickerY + (BOOKEND_TYPE.kickerFontSize * 1.2) / 2, {
+    size: BOOKEND_TYPE.kickerFontSize,
+    weight: 700,
+    color: colors.score,
+    letterSpacing: BOOKEND_TYPE.kickerLetterSpacing,
+  });
+  const topicLine = layout.topicFontSize * layout.topicLineHeight;
+  model.topicLines.forEach((line, index) => {
+    text(ctx, line, WIDTH / 2, layout.topicY + (index + 0.5) * topicLine, {
+      size: layout.topicFontSize,
+      weight: 700,
+      color: colors.ink,
+      align: "center",
+    });
+  });
+  text(ctx, model.meta, WIDTH / 2, layout.metaY + (BOOKEND_TYPE.metaFontSize * 1.2) / 2, {
+    size: BOOKEND_TYPE.metaFontSize,
+    weight: 400,
+    color: colors.muted,
+    align: "center",
+  });
+};
+
+const drawIntro = (video, filePath) => {
   const canvas = createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext("2d");
-  ctx.resetTransform();
-  ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = "source-over";
-  ctx.fillStyle = colors.page;
-  ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = colors.gold;
-  ctx.font = font(28, 800);
-  ctx.fillText(outro ? "复盘结束" : "Elenchus 视频辩论记录", WIDTH / 2, 390);
-  ctx.fillStyle = colors.ink;
-  ctx.font = font(54, 800);
-  const titleLines = layoutTextLines(video.topic, 28, 2);
-  titleLines.forEach((line, index) => ctx.fillText(line, WIDTH / 2, 500 + index * 72));
-  ctx.fillStyle = colors.muted;
-  ctx.font = font(24, 500);
-  ctx.fillText(outro ? `共 ${video.scenes.length} 轮辩论，感谢观看。` : `${video.scenes.length} 轮 · ${video.participants.join(" vs ")}`, WIDTH / 2, 700);
+  const model = buildIntroModel(video);
+  drawPage(ctx);
+  drawBookendText(ctx, model, INTRO_LAYOUT);
+  const totalWidth = INTRO_LAYOUT.sideWidth * 2 + INTRO_LAYOUT.sideGap * 2 + BOOKEND_TYPE.vsWidth;
+  const left = (WIDTH - totalWidth) / 2;
+  if (model.sides[0]) {
+    drawSidePanel(ctx, model.sides[0], left, INTRO_LAYOUT.sideY, INTRO_LAYOUT.sideWidth, INTRO_LAYOUT.sideHeight);
+  }
+  trackedText(ctx, "VS", WIDTH / 2, INTRO_LAYOUT.sideY + INTRO_LAYOUT.sideHeight / 2, {
+    size: BOOKEND_TYPE.vsFontSize,
+    weight: 700,
+    color: colors.muted,
+    letterSpacing: BOOKEND_TYPE.vsLetterSpacing,
+  });
+  if (model.sides[1]) {
+    drawSidePanel(
+      ctx,
+      model.sides[1],
+      left + INTRO_LAYOUT.sideWidth + INTRO_LAYOUT.sideGap * 2 + BOOKEND_TYPE.vsWidth,
+      INTRO_LAYOUT.sideY,
+      INTRO_LAYOUT.sideWidth,
+      INTRO_LAYOUT.sideHeight,
+    );
+  }
+  writeFileSync(filePath, canvas.toBuffer("image/png"));
+};
+
+const drawOutro = (video, filePath) => {
+  const canvas = createCanvas(WIDTH, HEIGHT);
+  const ctx = canvas.getContext("2d");
+  const model = buildOutroModel(video);
+  drawPage(ctx);
+  drawBookendText(ctx, model, OUTRO_LAYOUT);
+  const totalWidth = OUTRO_LAYOUT.sideWidth * 2 + OUTRO_LAYOUT.sideGap;
+  let cursor = (WIDTH - totalWidth) / 2;
+  for (const side of model.sides) {
+    drawSidePanel(ctx, side, cursor, OUTRO_LAYOUT.sideY, OUTRO_LAYOUT.sideWidth, OUTRO_LAYOUT.sideHeight, [
+      { label: "均分", value: formatScoreFixed(side.average) },
+      { label: "胜出", value: `${side.wins} 轮` },
+    ]);
+    cursor += OUTRO_LAYOUT.sideWidth + OUTRO_LAYOUT.sideGap;
+  }
   writeFileSync(filePath, canvas.toBuffer("image/png"));
 };
 
 const writeFrameImages = (video) => {
   const slices = [];
   const introPath = join(frameDir, "scene-000-intro.png");
-  drawBookend(video, introPath, false);
+  drawIntro(video, introPath);
   slices.push({ startFrame: 0, endFrame: video.introFrames, framePath: introPath });
   video.scenes.forEach((scene, sceneIndex) => {
     buildSceneSlices(scene.speakerLines, scene.durationInFrames, scene.segmentCues).forEach((slice, sliceIndex) => {
       const token = `scene-${String(sceneIndex + 1).padStart(3, "0")}-segment-${String(sliceIndex + 1).padStart(3, "0")}`;
       const framePath = join(frameDir, `${token}.png`);
-      drawScene(video, scene, framePath, slice.startFrame);
+      drawScene(video, scene, sceneIndex, framePath, sampleFrameForSlice(slice));
       slices.push({ ...slice, scene, framePath });
     });
   });
   const outroPath = join(frameDir, "scene-999-outro.png");
-  drawBookend(video, outroPath, true);
+  drawOutro(video, outroPath);
   slices.push({ startFrame: 0, endFrame: video.outroFrames, framePath: outroPath });
   return slices;
 };

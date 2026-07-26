@@ -65,6 +65,38 @@ export const roleLabel = (role: string): string => ROLE_LABELS[role] ?? role;
 
 export const charCount = (text: string): number => text.replace(/\s+/g, "").length;
 
+/**
+ * Width in "CJK units": a full-width character is 1, a Latin character about
+ * 0.56. Line budgets are measured this way so a run of English does not eat a
+ * whole line's worth of characters while filling only half its width.
+ */
+export const visualTextWidth = (text: string): number =>
+  Array.from(text).reduce((width, char) => width + (/^[\u0000-\u00ff]$/u.test(char) ? 0.56 : 1), 0);
+
+/** Punctuation that may not open a line (CJK 避头). */
+export const NO_LINE_START = "，。、；：！？%）】》」』”’,.;:!?)]}…";
+/** Punctuation that may not close a line (CJK 避尾). */
+export const NO_LINE_END = "（【《「『“‘([{";
+
+/** Latin runs stay atomic so a term or citation id is never cut in half. */
+const tokenizeKeepingWords = (text: string): string[] => {
+  const tokens: string[] = [];
+  let word = "";
+  for (const char of text) {
+    if (/[0-9A-Za-z@#$&*+=/\\_~^-]/.test(char)) {
+      word += char;
+      continue;
+    }
+    if (word) {
+      tokens.push(word);
+      word = "";
+    }
+    tokens.push(char);
+  }
+  if (word) tokens.push(word);
+  return tokens;
+};
+
 export const resolveSegmentationOptions = (mode?: string): ScriptSegmentationOptions => {
   const key = String(mode || "standard") as ScriptSegmentationPreset;
   return PRESET_OPTIONS[key] ?? PRESET_OPTIONS.standard;
@@ -159,9 +191,17 @@ export const stripThinking = (value: unknown): string => {
   return text;
 };
 
+/**
+ * Tool-use citation markers the model leaves in its answer, e.g.
+ * `【toolu_vrtx_0154dSNXZy19mHBH4wEGSTTd-0】`. Only pure ASCII ids of some
+ * length match, so Chinese bracket usage such as 【跨域】 is left alone.
+ */
+const CITATION_MARKER = /【[A-Za-z0-9_.\-+/=]{8,}】/g;
+
 export const markdownToReadableText = (value: unknown): string => {
   const text = stripThinking(value);
   return text
+    .replace(CITATION_MARKER, "")
     .replace(/^```[a-zA-Z0-9_-]*\s*$/gm, "")
     .replace(/^~~~[a-zA-Z0-9_-]*\s*$/gm, "")
     .replace(/^#{1,6}\s+/gm, "")
@@ -233,14 +273,64 @@ export const segmentTextForVideo = (
   return result;
 };
 
-const splitLongLine = (clause: string, maxChars: number): string[] => {
-  if (clause.length <= maxChars) {
+/**
+ * Split one clause into subtitle lines. Latin runs are kept whole and the
+ * budget is measured in visual width, so `violation-of-expectation` moves to
+ * the next line instead of being cut into `vi` + `olation-of-expectation`.
+ * Only display lines go through here — segment text, and therefore
+ * `scriptHash` and the TTS cache, are unaffected.
+ */
+const splitLongLine = (clause: string, maxWidth: number): string[] => {
+  if (visualTextWidth(clause) <= maxWidth) {
     return [clause];
   }
-  return splitHard(clause, maxChars);
+
+  const result: string[] = [];
+  let current = "";
+  let width = 0;
+  const flush = () => {
+    const line = current.trimEnd();
+    if (line) result.push(line);
+    current = "";
+    width = 0;
+  };
+
+  for (const token of tokenizeKeepingWords(clause)) {
+    const tokenWidth = visualTextWidth(token);
+    if (tokenWidth > maxWidth) {
+      // A single run wider than a whole line still has to be cut.
+      flush();
+      const pieces = splitHard(token, Math.max(1, Math.floor(maxWidth)));
+      result.push(...pieces.slice(0, -1));
+      current = pieces.at(-1) ?? "";
+      width = visualTextWidth(current);
+      continue;
+    }
+    if (width + tokenWidth > maxWidth) {
+      // 避尾: an opening bracket travels to the next line with what it opens.
+      let line = current.trimEnd();
+      let carry = "";
+      while (line.length > 1 && NO_LINE_END.includes(line.slice(-1))) {
+        carry = `${line.slice(-1)}${carry}`;
+        line = line.slice(0, -1);
+      }
+      if (line) result.push(line);
+      current = carry;
+      width = visualTextWidth(carry);
+    }
+    if (!current && !token.trim()) {
+      continue;
+    }
+    current += token;
+    width += tokenWidth;
+  }
+
+  flush();
+  return result;
 };
 
-export const segmentTextToLines = (text: string, maxChars = MAX_LINE_CHARS): string[] => {
+/** `maxWidth` is a visual-width budget in CJK units, not a character count. */
+export const segmentTextToLines = (text: string, maxWidth = MAX_LINE_CHARS): string[] => {
   const trimmed = cleanTextForTts(text);
   if (!trimmed) {
     return [];
@@ -254,7 +344,7 @@ export const segmentTextToLines = (text: string, maxChars = MAX_LINE_CHARS): str
     if (!compact) {
       continue;
     }
-    if (compact.length <= maxChars) {
+    if (visualTextWidth(compact) <= maxWidth) {
       lines.push(compact);
       continue;
     }
@@ -262,12 +352,12 @@ export const segmentTextToLines = (text: string, maxChars = MAX_LINE_CHARS): str
     const clauses = splitByDelimiter(compact, /([，、：,:]+)/);
     let current = "";
     for (const clause of clauses) {
-      for (const sub of splitLongLine(clause, maxChars)) {
+      for (const sub of splitLongLine(clause, maxWidth)) {
         if (!current) {
           current = sub;
           continue;
         }
-        if (current.length + sub.length <= maxChars) {
+        if (visualTextWidth(`${current}${sub}`) <= maxWidth) {
           current += sub;
         } else {
           lines.push(current);
