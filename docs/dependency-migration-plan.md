@@ -2,6 +2,9 @@
 
 > **状态：已完成（2026-07-26 核对）。本文保留为迁移记录，不再是待办事项。**
 >
+> 本文是历史存档，不再进入 [docs/README.md](./README.md) 主索引；当前依赖体系以
+> [development.md](./development.md) 的「依赖体系」一节与 `backend/pyproject.toml` 为准。
+>
 > 迁移由提交 `888621b`、`e04f78f` 落地：`backend/pyproject.toml` 与
 > `backend/uv.lock` 已是唯一依赖真相源，CI 全部使用 `uv sync --frozen`，
 > 主链路不再存在 `requirements*.txt`。
@@ -167,6 +170,9 @@
 - 直接固定到 3.11 能减少本地、CI、打包三条链路的行为差异
 
 ## 8. 分组策略
+
+> 本节是迁移完成（2026-07）时的分组快照，后续依赖增删不会回写本文；
+> 当前事实以 `backend/pyproject.toml` 为准（例如 `cryptography` 已在 2026-08 移除）。
 
 ### 运行依赖
 

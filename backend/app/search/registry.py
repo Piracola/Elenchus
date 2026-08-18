@@ -81,15 +81,6 @@ def default_provider_name() -> str:
     return classes[-1].name if classes else ""
 
 
-def secret_field_paths() -> tuple[tuple[str, str], ...]:
-    """`(provider_name, field_key)` pairs for every field stored encrypted."""
-    return tuple(
-        (cls.name, key)
-        for cls in provider_classes()
-        for key in cls.secret_field_keys()
-    )
-
-
 def default_provider_settings() -> dict[str, dict[str, str]]:
     """Empty settings scaffold for every registered provider."""
     return {

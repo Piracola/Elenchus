@@ -90,40 +90,30 @@ VITE_BACKEND_PORT=8001
 
 ## 4. 运行时配置
 
-当前唯一活动配置源是 `runtime/config.json`。本地启动会初始化该文件，并把运行数据写入 `runtime/`。
+当前唯一活动配置源是 `runtime/config.json`，本地启动会初始化该文件，并把运行数据写入 `runtime/`。
+字段结构与示例见 [运行时与历史恢复](./runtime.md) 的「config.json 字段」一节，这里不重复展开。
 
-后端 Python 依赖的唯一真相源是：
+### 依赖体系
 
-- `backend/pyproject.toml`
-- `backend/uv.lock`
+后端 Python 依赖的唯一真相源是 `backend/pyproject.toml` + `backend/uv.lock`，不再维护
+`requirements*.txt`。依赖按用途分组：
 
-常见配置项：
+- 运行依赖：`project.dependencies`（FastAPI / Uvicorn / Pydantic、SQLAlchemy / aiosqlite、
+  LangGraph / LangChain / OpenAI / Anthropic / Gemini、`httpx`、`ddgs`、`markdown-it-py`）。
+- 开发测试：`dependency-groups.dev`（`pytest`、`pytest-asyncio`、`pytest-cov`、`ruff`、`mypy`）。
+- 发布构建：`dependency-groups.build`（`pyinstaller`）。
 
-```json
-{
-  "server": {
-    "host": "0.0.0.0",
-    "port": 8001,
-    "debug": false,
-    "database_url": "sqlite+aiosqlite:///.../runtime/elenchus.db"
-  },
-  "search": {
-    "provider": "ddgs",
-    "custom": {"endpoint": "", "api_key": ""}
-  },
-  "logging": {
-    "level": "INFO"
-  }
-}
+对应常用命令：
+
+```bash
+uv sync --frozen --group dev                                        # 开发 / 测试环境
+uv run --frozen --group build python scripts/build_pyinstaller_release.py  # 发布构建
 ```
 
-补充说明：
+改了 `pyproject.toml` 后必须同步锁文件（`uv lock --directory backend`）；CI 使用
+`uv sync --frozen`，锁文件不同步会直接失败。依赖升级是显式操作，不允许被动漂移。
 
-- Provider API key 不在仓库 `.env` 中维护，而是在 Web UI 中配置并存储到 `runtime/config.json`。
-- 旧的 `.env` / `config.yaml` / `log_config.json` / provider DB 残留不会再被导入。
-- 当 `DATABASE_URL` 使用相对 SQLite 路径时，后端会把它归一化到 `runtime/` 目录。
-
-运行时文件职责见 [运行时与历史恢复](./runtime.md)。
+迁移过程与历史背景见 [dependency-migration-plan.md](./dependency-migration-plan.md)（历史存档）。
 
 ## 5. 扩展搜索 provider
 

@@ -12,11 +12,23 @@
 
 ### config.json 字段
 
-- `server`：服务运行端口。
-- `providers`：自定义 API 供应商。
-- `debate`：默认最大回合数。
-- `search`：搜索服务相关配置。
-- `video`：视频生成器地址（默认 `http://127.0.0.1:4317`）。
+`runtime/config.json` 是当前唯一的静态配置源，结构与 `backend/app/runtime_config_store.py` 的
+`normalize_runtime_config` 保持一致。顶层字段：
+
+- `schema_version`：配置结构版本。
+- `server`：服务监听配置，含 `host` / `port` / `debug` / `cors_origins` / `database_url`；
+  相对 SQLite 路径会被归一化到 `runtime/` 目录。
+- `providers`：自定义 API 供应商数组，元素形如
+  `{ id, name, provider_type, api_key, api_base_url, default_max_tokens, custom_parameters, models, is_default, created_at, updated_at }`。
+  `api_key` 明文保存，接口只回传「是否已配置」（见下文「Provider API Key 存储」）。
+- `debate`：默认运行配置，含 `default_max_turns` / `default_max_tokens` / `context_runtime`（上下文注入策略）/ `failure_budget`（失败预算）。
+- `search`：搜索服务配置，含 `provider`（当前激活 provider）/ `max_results_per_query` / `providers`；
+  其中 `providers` 为每个已注册 provider 一个 section，字段由该 provider 声明的 `config_fields` 决定，例如
+  `{"tavily": {"api_key": ""}, "custom": {"endpoint": "", "api_key": ""}}`。
+- `video`：视频生成器地址，默认 `http://127.0.0.1:4317`。
+- `logging`：日志配置，含 `level` / `log_dir` / `backup_count`。
+
+未显式声明的字段会按默认值归一化后写回，无法识别的字段会被丢弃。
 
 ### Provider API Key 存储
 

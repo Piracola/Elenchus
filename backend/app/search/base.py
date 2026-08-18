@@ -2,8 +2,8 @@
 Abstract base class for search providers.
 
 A provider declares its own identity and configuration shape as class
-attributes. Everything downstream — config normalization, secret encryption,
-the REST payload, and the settings UI — is derived from those declarations, so
+attributes. Everything downstream — config normalization, secret masking, the
+REST payload, and the settings UI — is derived from those declarations, so
 adding a provider means adding one module and nothing else.
 """
 
@@ -32,7 +32,7 @@ class SearchResult(BaseModel):
 class ProviderFieldSpec:
     """One configurable field of a search provider.
 
-    Drives backend validation, secret handling, and the rendered form field.
+    Drives backend validation, secret masking, and the rendered form field.
     """
 
     key: str
@@ -40,7 +40,7 @@ class ProviderFieldSpec:
     type: FieldType = "text"
     placeholder: str = ""
     helper_text: str = ""
-    #: Secrets are encrypted at rest and never returned to the client.
+    #: Secret values are never returned to the client.
     secret: bool = False
     #: A provider is only instantiated once all required fields are filled in.
     required: bool = False
@@ -64,10 +64,6 @@ class SearchProvider(ABC):
     @classmethod
     def required_field_keys(cls) -> tuple[str, ...]:
         return tuple(field.key for field in cls.config_fields if field.required)
-
-    @classmethod
-    def secret_field_keys(cls) -> tuple[str, ...]:
-        return tuple(field.key for field in cls.config_fields if field.secret)
 
     @classmethod
     def is_configured(cls, settings: Mapping[str, str] | None) -> bool:

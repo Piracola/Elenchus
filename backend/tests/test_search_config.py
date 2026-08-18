@@ -71,7 +71,6 @@ def test_persist_search_settings_updates_provider_section_and_snapshot(monkeypat
         sections = runtime_config["search"]["providers"]
         assert runtime_config["search"]["provider"] == "custom"
         assert sections["custom"]["endpoint"] == "https://search.example.com/query"
-        # In-memory config is decrypted for use.
         assert sections["custom"]["api_key"] == "custom-secret"
 
         snapshot = config_module.get_search_provider_settings_snapshot()
@@ -92,13 +91,9 @@ def test_persist_search_settings_updates_provider_section_and_snapshot(monkeypat
         assert snapshot["custom"]["api_key_configured"] is False
 
 
-def test_search_provider_secrets_are_encrypted_at_rest(monkeypatch):
+def test_search_provider_secrets_are_stored_in_plaintext(monkeypatch):
     with _workspace_runtime_dir() as runtime_root:
         monkeypatch.setenv("ELENCHUS_RUNTIME_DIR", str(runtime_root.resolve()))
-        monkeypatch.delenv("ELENCHUS_ENCRYPTION_KEY", raising=False)
-        from app import crypto
-
-        crypto.reset_crypto_cache()
 
         config_module.persist_search_settings(
             provider_settings={"tavily": {"api_key": "tvly-secret"}}
@@ -106,13 +101,12 @@ def test_search_provider_secrets_are_encrypted_at_rest(monkeypatch):
 
         on_disk = json.loads((runtime_root / "config.json").read_text(encoding="utf-8"))
         stored = on_disk["search"]["providers"]["tavily"]["api_key"]
-        assert stored != "tvly-secret"
-        assert stored.startswith("gAAAA")
+        assert stored == "tvly-secret"
 
-        # Reading it back must not rewrite plaintext to disk.
+        # Reading it back keeps the same value in memory and on disk.
         assert load_runtime_config()["search"]["providers"]["tavily"]["api_key"] == "tvly-secret"
-        still_sealed = json.loads((runtime_root / "config.json").read_text(encoding="utf-8"))
-        assert still_sealed["search"]["providers"]["tavily"]["api_key"] == stored
+        still_plain = json.loads((runtime_root / "config.json").read_text(encoding="utf-8"))
+        assert still_plain["search"]["providers"]["tavily"]["api_key"] == "tvly-secret"
 
 
 def test_legacy_custom_section_is_migrated_to_provider_map(monkeypatch):

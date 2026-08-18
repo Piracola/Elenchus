@@ -11,7 +11,6 @@ from app.search.registry import (
     default_provider_name,
     get_provider_class,
     provider_names,
-    secret_field_paths,
 )
 from app.search.tavily import TavilyProvider
 
@@ -74,8 +73,6 @@ def test_every_api_key_field_is_declared_secret_and_required():
         assert api_key.secret is True
         assert api_key.required is True
         assert api_key.type == "password"
-    # Secrets are what the config layer encrypts, so they must all be listed.
-    assert ("tavily", "api_key") in secret_field_paths()
 
 
 def test_is_configured_requires_all_required_fields():

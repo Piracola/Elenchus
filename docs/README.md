@@ -16,8 +16,7 @@
 
 ## 开发指南
 
-- [开发指南](./development.md)：后端、前端、UI 风格和编码约定。
-- [Python 依赖迁移计划](./dependency-migration-plan.md)：后端 `pyproject.toml + uv.lock` 依赖体系和迁移验收标准。
+- [开发指南](./development.md)：后端、前端、UI 风格、编码约定与依赖体系说明。
 
 ## 维护与排查
 

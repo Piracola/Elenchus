@@ -78,7 +78,6 @@ for package_name in (
     "sqlalchemy",
     "aiosqlite",
     "greenlet",
-    "cryptography",
 ):
     package_datas, package_binaries, package_hiddenimports = collect_all(
         package_name,

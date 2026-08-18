@@ -108,7 +108,7 @@ A directive is persisted to `run_commands` (`pending` → `consumed`/`revoked`) 
 
 ### Configuration
 
-`runtime/config.json` is the single active config source (server, providers, search, logging, debate defaults). Do not reintroduce legacy sources (`.env` config, `config.yaml`, provider DB). Provider API keys are entered in the Web UI and stored there; with the `ELENCHUS_ENCRYPTION_KEY` env var set they are transparently encrypted (see README). Session `agent_configs` reference saved providers by `provider_id` (`{ model, provider_type, provider_id, api_base_url }`), never raw API keys.
+`runtime/config.json` is the single active config source (server, providers, search, logging, debate defaults). Do not reintroduce legacy sources (`.env` config, `config.yaml`, provider DB). Provider API keys are entered in the Web UI and stored there in plaintext (this is a local single-user tool). Session `agent_configs` reference saved providers by `provider_id` (`{ model, provider_type, provider_id, api_base_url }`), never raw API keys.
 
 ### Search providers
 
@@ -117,7 +117,7 @@ module under `backend/app/search/` decorated with `@register_search_provider`
 that declares `name`, `label`, `description`, `config_fields`
 (`ProviderFieldSpec`, including `secret`/`required`), and `fallback_priority`.
 Everything else derives from that declaration: `search.providers.<name>` config
-normalization, at-rest encryption of every `secret` field, the
+normalization, secret masking of every `secret` field, the
 `GET /api/search/config` payload, and the settings form — the UI renders
 whatever fields the backend reports and knows no provider by name. Adding a
 provider means adding one module; do not reintroduce per-provider branches in

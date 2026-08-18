@@ -263,55 +263,6 @@ def _fill_context_runtime_model_from_providers(config: dict[str, Any]) -> None:
         return
 
 
-def _decrypt_provider_keys(providers: list[dict[str, Any]] | None) -> None:
-    from app.crypto import decrypt_value
-    if not providers:
-        return
-    for p in providers:
-        if isinstance(p, dict) and p.get("api_key"):
-            p["api_key"] = decrypt_value(str(p["api_key"]))
-
-
-def _encrypt_provider_keys(providers: list[dict[str, Any]] | None) -> None:
-    from app.crypto import encrypt_value
-    if not providers:
-        return
-    for p in providers:
-        if isinstance(p, dict) and p.get("api_key"):
-            p["api_key"] = encrypt_value(str(p["api_key"]))
-
-
-def _map_search_secrets(config: dict[str, Any] | None, transform) -> None:
-    """Apply `transform` to every field a search provider declared as secret."""
-    if not isinstance(config, dict):
-        return
-    search = config.get("search")
-    if not isinstance(search, dict):
-        return
-    sections = search.get("providers")
-    if not isinstance(sections, dict):
-        return
-
-    from app.search.registry import secret_field_paths
-
-    for provider_name, field_key in secret_field_paths():
-        section = sections.get(provider_name)
-        if isinstance(section, dict) and section.get(field_key):
-            section[field_key] = transform(str(section[field_key]))
-
-
-def _encrypt_search_secrets(config: dict[str, Any] | None) -> None:
-    from app.crypto import encrypt_value
-
-    _map_search_secrets(config, encrypt_value)
-
-
-def _decrypt_search_secrets(config: dict[str, Any] | None) -> None:
-    from app.crypto import decrypt_value
-
-    _map_search_secrets(config, decrypt_value)
-
-
 def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
     runtime_root = get_runtime_paths().runtime_root
     base = _default_config()
@@ -414,22 +365,6 @@ def normalize_runtime_config(config: dict[str, Any] | None) -> dict[str, Any]:
     return base
 
 
-def _decrypted_copy(config: dict[str, Any]) -> dict[str, Any]:
-    """In-memory view with secrets readable."""
-    plain = deepcopy(config)
-    _decrypt_provider_keys(plain.get("providers"))
-    _decrypt_search_secrets(plain)
-    return plain
-
-
-def _encrypted_copy(config: dict[str, Any]) -> dict[str, Any]:
-    """On-disk view with every declared secret encrypted."""
-    sealed = deepcopy(config)
-    _encrypt_provider_keys(sealed.get("providers"))
-    _encrypt_search_secrets(sealed)
-    return sealed
-
-
 def _load_json(path: Path) -> dict[str, Any] | None:
     if not path.exists():
         return None
@@ -443,7 +378,7 @@ def _load_json(path: Path) -> dict[str, Any] | None:
 def _current_or_initial_runtime_config() -> dict[str, Any]:
     current = _load_json(get_runtime_paths().config_json_file)
     if current is not None:
-        return _decrypted_copy(normalize_runtime_config(current))
+        return normalize_runtime_config(current)
     return _default_config()
 
 
@@ -453,12 +388,10 @@ def ensure_runtime_config() -> dict[str, Any]:
     with _CONFIG_WRITE_LOCK:
         current = _load_json(path)
         if current is not None:
-            # Normalization must not decrypt: this rewrite would otherwise put
-            # plaintext secrets back on disk on every load.
             normalized = normalize_runtime_config(current)
             if normalized != current:
                 _write_json_atomic(path, normalized)
-            return _decrypted_copy(normalized)
+            return normalized
 
         initial = _default_config()
         _write_json_atomic(path, initial)
@@ -472,7 +405,7 @@ def load_runtime_config() -> dict[str, Any]:
 def save_runtime_config(config: dict[str, Any]) -> dict[str, Any]:
     normalized = normalize_runtime_config(config)
     with _CONFIG_WRITE_LOCK:
-        _write_json_atomic(get_runtime_paths().config_json_file, _encrypted_copy(normalized))
+        _write_json_atomic(get_runtime_paths().config_json_file, normalized)
     return deepcopy(normalized)
 
 
@@ -481,8 +414,7 @@ def update_runtime_config(mutator) -> dict[str, Any]:
         current = _current_or_initial_runtime_config()
         updated = mutator(deepcopy(current))
         normalized = normalize_runtime_config(updated if isinstance(updated, dict) else current)
-        _write_json_atomic(get_runtime_paths().config_json_file, _encrypted_copy(normalized))
-    # `normalized` still holds plaintext, which is what in-memory callers want.
+        _write_json_atomic(get_runtime_paths().config_json_file, normalized)
     return deepcopy(normalized)
 
 
