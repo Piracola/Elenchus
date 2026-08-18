@@ -17,7 +17,7 @@
   </p>
 </div>
 
-本项目完全由 AI 实现，感谢 [Linux Do](https://linux.do/) 和各家大善人的支持 ❤️。
+本项目大部分由 AI 实现，感谢 [Linux Do](https://linux.do/) 和各家模型厂商的支持 ❤️。
 
 本项目的核心原理是：高质量的输入会让模型产生高质量的输入结果。
 
@@ -37,7 +37,7 @@
 
 构建流程会在前端构建阶段自动从根目录的 `Elenchus.png` 生成 favicon、`apple-touch-icon` 和 Windows 发布包使用的 `.ico` 图标文件，GitHub CI 产物也会同步使用这套新图标。
 
-![Elenchus 界面预览](./docs/2026-04-06_20-30-48.png)
+![Elenchus 界面预览](./docs/PixPin_2026-08-18_16-17-23.png)
 
 ## 示例辩论记录
 
@@ -91,13 +91,13 @@ export ELENCHUS_ENCRYPTION_KEY="<上面生成的密钥>"
 
 在 **设置** → **搜索引擎** 中选择检索 provider 并填写密钥。内置以下几种：
 
-| Provider | 说明 | 需要 |
-| --- | --- | --- |
-| Tavily | 面向 AI 检索的 API，返回已清理的正文摘要 | API Key |
-| Brave Search | 独立索引的通用网页搜索 | API Key |
-| Exa | 语义检索，按含义而非关键词匹配 | API Key |
-| 自定义接口 | 任意 HTTP JSON 搜索服务，自动适配常见字段命名 | Endpoint |
-| DDGS | 内置轻量聚合搜索，随产物分发 | 无 |
+| Provider     | 说明                           | 需要       |
+| ------------ | ---------------------------- | -------- |
+| Tavily       | 面向 AI 检索的 API，返回已清理的正文摘要     | API Key  |
+| Brave Search | 独立索引的通用网页搜索                  | API Key  |
+| Exa          | 语义检索，按含义而非关键词匹配              | API Key  |
+| 自定义接口        | 任意 HTTP JSON 搜索服务，自动适配常见字段命名 | Endpoint |
+| DDGS         | 内置轻量聚合搜索，随产物分发               | 无        |
 
 回退顺序即上表顺序：当前 provider 不可用时依次下移，最终兜底到无需配置的 DDGS。
 未填写必填项的 provider 会保持禁用，不会被选中也不会参与回退。
