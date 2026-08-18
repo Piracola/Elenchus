@@ -10,6 +10,41 @@
 - `elenchus.db`：SQLite 账本，是 Session、Run、事件、投影、检查点和文档记录的权威来源。
 - `logs/`：运行日志。
 
+### config.json 字段
+
+- `server`：服务运行端口。
+- `providers`：自定义 API 供应商。
+- `debate`：默认最大回合数。
+- `search`：搜索服务相关配置。
+- `video`：视频生成器地址（默认 `http://127.0.0.1:4317`）。
+
+### Provider API Key 存储
+
+`runtime/config.json` 中的 API Key（模型 provider 与搜索 provider）以明文存储，无需任何配置。
+
+> 注意：本工具面向本地单机使用，API Key 以明文保存于配置文件中，请勿把
+> `runtime/config.json` 分享给他人或上传到不可信的位置。
+
+### 搜索服务
+
+在 **设置** → **搜索引擎** 中选择检索 provider 并填写密钥。内置以下几种：
+
+| Provider     | 说明                           | 需要       |
+| ------------ | ---------------------------- | -------- |
+| Tavily       | 面向 AI 检索的 API，返回已清理的正文摘要     | API Key  |
+| Brave Search | 独立索引的通用网页搜索                  | API Key  |
+| Exa          | 语义检索，按含义而非关键词匹配              | API Key  |
+| 自定义接口        | 任意 HTTP JSON 搜索服务，自动适配常见字段命名 | Endpoint |
+| DDGS         | 内置轻量聚合搜索，随产物分发               | 无        |
+
+回退顺序即上表顺序：当前 provider 不可用时依次下移，最终兜底到无需配置的 DDGS。
+未填写必填项的 provider 会保持禁用，不会被选中也不会参与回退。
+
+搜索 provider 的 API Key 明文存储在 `runtime/config.json`，
+接口只回传「是否已配置」，不回传密钥本身。
+
+新增搜索 provider 的扩展方式见 [development.md](./development.md)。
+
 旧版按会话分目录的文件布局如果存在，只能作为历史导入或人工排查材料；迁移完成后，新运行不应依赖这些文件作为恢复真相。
 
 可用一次性导入脚本把旧版 `runtime/sessions/<session_id>/session.json`、`events.jsonl`、`documents/*.json` 灌回新版 SQLite：

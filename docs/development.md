@@ -125,7 +125,14 @@ VITE_BACKEND_PORT=8001
 
 运行时文件职责见 [运行时与历史恢复](./runtime.md)。
 
-## 5. 关键入口
+## 5. 扩展搜索 provider
+
+新增一个搜索 provider，只需在 `backend/app/search/` 增加一个模块，并用
+`@register_search_provider` 注册，声明 `name`/`label`/`description`/`config_fields`。
+
+配置归一化、密钥掩码、REST 契约与设置界面表单都会自动跟随，无需改动其他文件。
+
+## 6. 关键入口
 
 ### 后端
 
@@ -150,7 +157,7 @@ VITE_BACKEND_PORT=8001
 - `frontend/src/stores/debateStore.ts`：全局会话与运行状态。
 - `frontend/src/api/client.ts`：统一 API 请求入口。
 
-## 6. 阅读路径
+## 7. 阅读路径
 
 后端建议顺序：
 
@@ -171,7 +178,7 @@ VITE_BACKEND_PORT=8001
 5. `frontend/src/api/client.ts`
 6. `frontend/src/types/index.ts`
 
-## 7. 常见排查
+## 8. 常见排查
 
 ### API 文档
 
@@ -224,7 +231,7 @@ VITE_BACKEND_PORT=8001
 - SQLite 中 `session_documents` 对应记录。
 - `/api/runs/{run_id}` 返回 projection 中的 `shared_knowledge`。
 
-## 8. 前端风格契约
+## 9. 前端风格契约
 
 Elenchus 是辩论、分析、配置和运行观察工具。界面应该冷静、专业、清晰、耐读，帮助用户快速输入、比较、追踪和复盘，而不是展示装饰效果。
 
@@ -239,7 +246,7 @@ Elenchus 是辩论、分析、配置和运行观察工具。界面应该冷静�
 
 修改 UI 前，先明确目标体验、信息层级、布局方向和需要避免的视觉偏差；然后按现有代码风格实现。
 
-## 9. 编码约定
+## 10. 编码约定
 
 统一原则：
 
@@ -272,7 +279,7 @@ Elenchus 是辩论、分析、配置和运行观察工具。界面应该冷静�
 5. 检查导入文件是否为 UTF-8 之外的本地编码。
 6. 检查历史持久化数据是否已经保存成乱码文本。
 
-## 10. 关联文档
+## 11. 关联文档
 
 - [系统架构总览](./architecture.md)
 - [运行时与历史恢复](./runtime.md)
