@@ -4,6 +4,7 @@ Manual test script for debate runner.
 Run with: python backend/manual_tests/manual_test_debate.py
 """
 from app.agents.runner import run_debate
+
 from scripts.test_utils import run_async, setup_backend_path
 
 
